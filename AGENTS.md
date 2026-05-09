@@ -65,7 +65,7 @@
 - 合入前检查是否触碰 usage routes、usage store、usage API client、provider status bar、auth file stats。
 - 如果上游改动会删除或弱化完整统计，优先保留 LTS 统计实现，再单独吸收其他无冲突部分。
 - 后续轻量化改造可以移除广告、赞助描述、无用页面、无用 provider、非目标 release workflow，但不要删除仍被 Core/Panel 统计链路依赖的代码。
-- LTS 发布标签必须使用 `v*-lts.*` 形式；发布时只推送当前标签，不要在跟进上游后执行 `git push --tags`。
+- Panel 发布标签使用自定义 `v*-tls-*` 形式，例如 `v1-tls-0.0.1`；发布时只推送当前标签，不要在跟进上游后执行 `git push --tags`。
 
 ## 常用命令
 

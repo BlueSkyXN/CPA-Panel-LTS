@@ -3,7 +3,7 @@ name: Build and Release
 on:
   push:
     tags:
-      - 'v*-lts.*'
+      - 'v*-tls-*'
 
 jobs:
   build-and-release:
@@ -43,12 +43,15 @@ jobs:
         run: |
           set -euo pipefail
           current_tag="${GITHUB_REF_NAME}"
-          if [[ "${current_tag}" != v*-lts.* ]]; then
-            echo "Only LTS release tags matching v*-lts.* are supported."
+          if [[ "${current_tag}" != v*-tls-* ]]; then
+            echo "Only panel release tags matching v*-tls-* are supported."
             exit 1
           fi
 
-          previous_tag="$(git tag --merged HEAD --list 'v*-lts.*' --sort=-v:refname | grep -v "^${current_tag}$" | head -n 1 || true)"
+          previous_tag="$(git tag --merged HEAD --list 'v*-tls-*' --sort=-v:refname | grep -v "^${current_tag}$" | head -n 1 || true)"
+          if [ -z "${previous_tag}" ]; then
+            previous_tag="$(git tag --merged HEAD --list 'v*-lts.*' --sort=-v:refname | head -n 1 || true)"
+          fi
           if [ -n "${previous_tag}" ]; then
             range="${previous_tag}..${current_tag}"
           elif git rev-parse -q --verify "refs/tags/v1.8.4" >/dev/null; then

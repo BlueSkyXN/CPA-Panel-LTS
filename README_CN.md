@@ -144,8 +144,8 @@ npm run build
 ## 构建与发布说明
 
 - 使用 Vite 输出 **单文件 HTML**（`dist/index.html`），资源全部内联（`vite-plugin-singlefile`）。
-- 打 `v1.8.4-lts.2` 这类 LTS 标签会触发 `.github/workflows/release.yml`，发布 `dist/management.html`。
-- 发布时只推送当前 LTS 标签；跟进上游后不要使用 `git push --tags`。
+- 打 `v1-tls-0.0.1` 这类面板发布标签会触发 `.github/workflows/release.yml`，发布 `dist/management.html`。
+- 发布时只推送当前面板发布标签；跟进上游后不要使用 `git push --tags`。
 - 页脚显示的 UI 版本在构建期注入（优先使用环境变量 `VERSION`，否则使用 git tag / `package.json`）。
 
 ## 安全提示
