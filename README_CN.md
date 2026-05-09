@@ -1,18 +1,42 @@
-# CLI Proxy API 管理中心
+# CPA Panel LTS
 
-用于管理与故障排查 **CLI Proxy API** 的单文件 Web UI（React + TypeScript），通过 **Management API** 完成配置、凭据、日志与统计等管理操作。
+CPA Panel LTS 是 `CPA-Core-LTS` 的长期维护版 Web 管理面板。
+
+它是用于管理与故障排查 **CLI Proxy API / CPA Core LTS** 的单文件 Web UI（React + TypeScript），通过 **Management API** 完成配置、凭据、日志、配额与使用统计等管理操作。
 
 [English](README.md)
 
-**主项目**: https://github.com/router-for-me/CLIProxyAPI  
-**示例地址**: https://remote.router-for.me/  
-**最低版本要求**: ≥ 6.8.0（推荐 ≥ 6.8.15）
+- **LTS 核心项目**: https://github.com/BlueSkyXN/CPA-Core-LTS
+- **原始上游核心项目**: https://github.com/router-for-me/CLIProxyAPI
+- **原始上游面板项目**: https://github.com/router-for-me/Cli-Proxy-API-Management-Center
+- **示例地址**: https://remote.router-for.me/
+- **LTS 基线**: 面板 `v1.8.4` 配套核心 `v6.9.49`
+
+## LTS 计划
+
+本仓库存在的原因是：上游管理面板在后续版本中改为依赖更轻量的 recent requests / API key usage 数据，并移除了完整的使用统计页面。本仓库用于继续维护完整统计 UI。
+
+基线事实：
+
+- 面板基线：`v1.8.4`
+- 面板基线提交：`8ed837c3d734c3970a6d6799c557bb6a6753360d`
+- 核心基线：`CPA-Core-LTS`，基于 `CLIProxyAPI v6.9.49`
+- `v1.9.3` 仍保留完整统计实现，但 `v1.8.4` 是更靠后的 tag，也是统计移除路径开始前最后一个保留完整统计页面的面板 tag。
+- 上游移除路径发生在该基线之后：`b25f722` 将 provider usage tracking 切到 recent requests，`632be0b` 删除了 `src/components/usage/*`、`src/pages/UsagePage.tsx`、`src/services/api/usage.ts`、`src/stores/useUsageStatsStore.ts` 以及相关统计工具。
+
+维护规则：
+
+- `main` 就是 LTS 主线，不再单独维护一个长期“统计分支”。
+- 必须保留 `/usage` 页面、统计图表、请求事件表、模型/API/凭据维度拆分、导入导出、本地模型价格设置。
+- 必须保持与 `CPA-Core-LTS` Management API usage endpoints 的兼容。
+- 可以选择性跟进上游 UI 修复，但不要盲目同步会移除或削弱完整统计能力的上游改动。
+- 后续轻量化改造可以移除推广文案、无用 UI、非 LTS 发布链路，但不能破坏使用统计契约。
 
 从6.0.19版本开始，Web UI 随主程序一起提供；服务运行后，通过 API 端口上的"/management.html"访问它。
 
 ## 这是什么（以及不是什么）
 
-- 本仓库只包含 Web 管理界面本身，通过 CLI Proxy API 的 **Management API**（`/v0/management`）读取/修改配置、上传凭据、查看日志与使用统计。
+- 本仓库只包含 Web 管理界面本身，通过 CPA Core LTS / CLI Proxy API 的 **Management API**（`/v0/management`）读取/修改配置、上传凭据、查看日志与使用统计。
 - 它 **不是** 代理本体，不参与流量转发。
 
 ## 快速开始

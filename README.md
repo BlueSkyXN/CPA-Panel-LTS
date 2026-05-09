@@ -1,18 +1,42 @@
-# CLI Proxy API Management Center
+# CPA Panel LTS
 
-A single-file Web UI (React + TypeScript) for operating and troubleshooting the **CLI Proxy API** via its **Management API** (config, credentials, logs, and usage).
+CPA Panel LTS is the long-term-maintained management panel for `CPA-Core-LTS`.
+
+It is a single-file Web UI (React + TypeScript) for operating and troubleshooting the **CLI Proxy API / CPA Core LTS** via its **Management API** (config, credentials, logs, quota, and usage statistics).
 
 [中文文档](README_CN.md)
 
-**Main Project**: https://github.com/router-for-me/CLIProxyAPI  
-**Example URL**: https://remote.router-for.me/  
-**Minimum Required Version**: ≥ 6.8.0 (recommended ≥ 6.8.15)
+- **LTS Core Project**: https://github.com/BlueSkyXN/CPA-Core-LTS
+- **Original Upstream Core**: https://github.com/router-for-me/CLIProxyAPI
+- **Original Upstream Panel**: https://github.com/router-for-me/Cli-Proxy-API-Management-Center
+- **Example URL**: https://remote.router-for.me/
+- **LTS Baseline**: panel `v1.8.4` paired with core `v6.9.49`
+
+## LTS Plan
+
+This repository exists to keep the full usage statistics UI after upstream changed the management panel to rely on lighter recent-request/API-key usage data.
+
+Baseline facts:
+
+- Panel baseline: `v1.8.4`
+- Panel baseline commit: `8ed837c3d734c3970a6d6799c557bb6a6753360d`
+- Core baseline: `CPA-Core-LTS` based on `CLIProxyAPI v6.9.49`
+- `v1.9.3` still contains the full usage statistics implementation, but `v1.8.4` is the later tag and the last tagged panel version before the removal path.
+- The upstream removal path starts after this baseline: `b25f722` switches provider usage tracking to recent requests, and `632be0b` removes `src/components/usage/*`, `src/pages/UsagePage.tsx`, `src/services/api/usage.ts`, `src/stores/useUsageStatsStore.ts`, and related usage utilities.
+
+Maintenance rules:
+
+- `main` is the LTS line. Do not create a separate long-lived statistics branch.
+- Preserve the `/usage` page, usage charts, request events table, model/API/credential breakdowns, export/import, and local model price settings.
+- Keep compatibility with `CPA-Core-LTS` Management API usage endpoints.
+- Track upstream UI fixes selectively, but do not blindly sync upstream if the change removes or weakens full statistics.
+- Planned cleanup can remove promotional copy, unused UI surfaces, and non-LTS release machinery, but must not break the usage statistics contract.
 
 Since version 6.0.19, the Web UI ships with the main program; access it via `/management.html` on the API port once the service is running.
 
 ## What this is (and isn’t)
 
-- This repository is the Web UI only. It talks to the CLI Proxy API **Management API** (`/v0/management`) to read/update config, upload credentials, view logs, and inspect usage.
+- This repository is the Web UI only. It talks to the CPA Core LTS / CLI Proxy API **Management API** (`/v0/management`) to read/update config, upload credentials, view logs, and inspect usage.
 - It is **not** a proxy and does not forward traffic.
 
 ## Quick start
