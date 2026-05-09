@@ -21,6 +21,7 @@ dist-ssr
 skills
 # Local helper userscripts
 /scripts/*.user.js
+!/scripts/codex-quota-compass.user.js
 
 # Editor directories and files
 settings.local.json
