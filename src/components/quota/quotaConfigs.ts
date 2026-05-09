@@ -5,6 +5,7 @@
 import React from 'react';
 import type { ReactNode } from 'react';
 import type { TFunction } from 'i18next';
+import { IconChevronDown, IconInfo } from '@/components/ui/icons';
 import type {
   AntigravityQuotaGroup,
   AntigravityModelsPayload,
@@ -15,11 +16,18 @@ import type {
   ClaudeQuotaState,
   ClaudeQuotaWindow,
   ClaudeUsagePayload,
+  CodexAnalyticsClientSummary,
+  CodexAnalyticsRange,
+  CodexAnalyticsState,
+  CodexDailyUsageDay,
+  CodexDailyUsageMetrics,
+  CodexDailyUsagePayload,
   CodexRateLimitInfo,
   CodexQuotaState,
   CodexUsageWindow,
   CodexQuotaWindow,
   CodexUsagePayload,
+  CodexWeeklyEstimate,
   GeminiCliCodeAssistPayload,
   GeminiCliCredits,
   GeminiCliParsedBucket,
@@ -38,8 +46,11 @@ import {
   CLAUDE_USAGE_URL,
   CLAUDE_REQUEST_HEADERS,
   CLAUDE_USAGE_WINDOW_KEYS,
+  CODEX_ANALYTICS_ROLLING_DAYS,
+  CODEX_DAILY_USAGE_URL,
   CODEX_USAGE_URL,
   CODEX_REQUEST_HEADERS,
+  CODEX_USD_PER_CREDIT,
   GEMINI_CLI_QUOTA_URL,
   GEMINI_CLI_CODE_ASSIST_URL,
   GEMINI_CLI_REQUEST_HEADERS,
@@ -52,6 +63,7 @@ import {
   normalizeStringValue,
   parseAntigravityPayload,
   parseClaudeUsagePayload,
+  parseCodexDailyUsagePayload,
   parseCodexUsagePayload,
   parseGeminiCliQuotaPayload,
   parseGeminiCliCodeAssistPayload,
@@ -86,10 +98,19 @@ type QuotaType = 'antigravity' | 'claude' | 'codex' | 'gemini-cli' | 'kimi';
 const DEFAULT_ANTIGRAVITY_PROJECT_ID = 'bamboo-precept-lgxtn';
 const QUOTA_PROGRESS_HIGH_THRESHOLD = 70;
 const QUOTA_PROGRESS_MEDIUM_THRESHOLD = 30;
+const CODEX_FIVE_HOUR_SECONDS = 18000;
+const CODEX_WEEK_SECONDS = 604800;
+const CODEX_DAY_MS = 24 * 60 * 60 * 1000;
+const CODEX_TOP_CLIENT_LIMIT = 3;
 const geminiCliSupplementaryRequestIds = new Map<string, number>();
 const geminiCliSupplementaryCache = new Map<
   string,
-  { requestId: number; tierLabel: string | null; tierId: string | null; creditBalance: number | null }
+  {
+    requestId: number;
+    tierLabel: string | null;
+    tierId: string | null;
+    creditBalance: number | null;
+  }
 >();
 
 export interface QuotaStore {
@@ -227,18 +248,62 @@ const fetchAntigravityQuota = async (
   throw createStatusError(lastError || t('common.unknown_error'), priorityStatus ?? lastStatus);
 };
 
+const getCodexWindowSeconds = (window?: CodexUsageWindow | null): number | null => {
+  if (!window) return null;
+  return normalizeNumberValue(window.limit_window_seconds ?? window.limitWindowSeconds);
+};
+
+const pickCodexClassifiedWindows = (
+  limitInfo?: CodexRateLimitInfo | null,
+  options?: { allowOrderFallback?: boolean }
+): { fiveHourWindow: CodexUsageWindow | null; weeklyWindow: CodexUsageWindow | null } => {
+  const allowOrderFallback = options?.allowOrderFallback ?? true;
+  const primaryWindow = limitInfo?.primary_window ?? limitInfo?.primaryWindow ?? null;
+  const secondaryWindow = limitInfo?.secondary_window ?? limitInfo?.secondaryWindow ?? null;
+  const rawWindows = [primaryWindow, secondaryWindow];
+
+  let fiveHourWindow: CodexUsageWindow | null = null;
+  let weeklyWindow: CodexUsageWindow | null = null;
+
+  for (const window of rawWindows) {
+    if (!window) continue;
+    const seconds = getCodexWindowSeconds(window);
+    if (seconds === CODEX_FIVE_HOUR_SECONDS && !fiveHourWindow) {
+      fiveHourWindow = window;
+    } else if (seconds === CODEX_WEEK_SECONDS && !weeklyWindow) {
+      weeklyWindow = window;
+    }
+  }
+
+  if (allowOrderFallback) {
+    if (!fiveHourWindow) {
+      fiveHourWindow = primaryWindow && primaryWindow !== weeklyWindow ? primaryWindow : null;
+    }
+    if (!weeklyWindow) {
+      weeklyWindow = secondaryWindow && secondaryWindow !== fiveHourWindow ? secondaryWindow : null;
+    }
+  }
+
+  return { fiveHourWindow, weeklyWindow };
+};
+
 const buildCodexQuotaWindows = (payload: CodexUsagePayload, t: TFunction): CodexQuotaWindow[] => {
-  const FIVE_HOUR_SECONDS = 18000;
-  const WEEK_SECONDS = 604800;
   const WINDOW_META = {
     codeFiveHour: { id: 'five-hour', labelKey: 'codex_quota.primary_window' },
     codeWeekly: { id: 'weekly', labelKey: 'codex_quota.secondary_window' },
-    codeReviewFiveHour: { id: 'code-review-five-hour', labelKey: 'codex_quota.code_review_primary_window' },
-    codeReviewWeekly: { id: 'code-review-weekly', labelKey: 'codex_quota.code_review_secondary_window' },
+    codeReviewFiveHour: {
+      id: 'code-review-five-hour',
+      labelKey: 'codex_quota.code_review_primary_window',
+    },
+    codeReviewWeekly: {
+      id: 'code-review-weekly',
+      labelKey: 'codex_quota.code_review_secondary_window',
+    },
   } as const;
 
   const rateLimit = payload.rate_limit ?? payload.rateLimit ?? undefined;
-  const codeReviewLimit = payload.code_review_rate_limit ?? payload.codeReviewRateLimit ?? undefined;
+  const codeReviewLimit =
+    payload.code_review_rate_limit ?? payload.codeReviewRateLimit ?? undefined;
   const additionalRateLimits = payload.additional_rate_limits ?? payload.additionalRateLimits ?? [];
   const windows: CodexQuotaWindow[] = [];
 
@@ -266,50 +331,9 @@ const buildCodexQuotaWindows = (payload: CodexUsagePayload, t: TFunction): Codex
     });
   };
 
-  const getWindowSeconds = (window?: CodexUsageWindow | null): number | null => {
-    if (!window) return null;
-    return normalizeNumberValue(window.limit_window_seconds ?? window.limitWindowSeconds);
-  };
-
   const rawLimitReached = rateLimit?.limit_reached ?? rateLimit?.limitReached;
   const rawAllowed = rateLimit?.allowed;
-
-  const pickClassifiedWindows = (
-    limitInfo?: CodexRateLimitInfo | null,
-    options?: { allowOrderFallback?: boolean }
-  ): { fiveHourWindow: CodexUsageWindow | null; weeklyWindow: CodexUsageWindow | null } => {
-    const allowOrderFallback = options?.allowOrderFallback ?? true;
-    const primaryWindow = limitInfo?.primary_window ?? limitInfo?.primaryWindow ?? null;
-    const secondaryWindow = limitInfo?.secondary_window ?? limitInfo?.secondaryWindow ?? null;
-    const rawWindows = [primaryWindow, secondaryWindow];
-
-    let fiveHourWindow: CodexUsageWindow | null = null;
-    let weeklyWindow: CodexUsageWindow | null = null;
-
-    for (const window of rawWindows) {
-      if (!window) continue;
-      const seconds = getWindowSeconds(window);
-      if (seconds === FIVE_HOUR_SECONDS && !fiveHourWindow) {
-        fiveHourWindow = window;
-      } else if (seconds === WEEK_SECONDS && !weeklyWindow) {
-        weeklyWindow = window;
-      }
-    }
-
-    // For legacy payloads without window duration, fallback to primary/secondary ordering.
-    if (allowOrderFallback) {
-      if (!fiveHourWindow) {
-        fiveHourWindow = primaryWindow && primaryWindow !== weeklyWindow ? primaryWindow : null;
-      }
-      if (!weeklyWindow) {
-        weeklyWindow = secondaryWindow && secondaryWindow !== fiveHourWindow ? secondaryWindow : null;
-      }
-    }
-
-    return { fiveHourWindow, weeklyWindow };
-  };
-
-  const rateWindows = pickClassifiedWindows(rateLimit);
+  const rateWindows = pickCodexClassifiedWindows(rateLimit);
   addWindow(
     WINDOW_META.codeFiveHour.id,
     t(WINDOW_META.codeFiveHour.labelKey),
@@ -329,7 +353,7 @@ const buildCodexQuotaWindows = (payload: CodexUsagePayload, t: TFunction): Codex
     rawAllowed
   );
 
-  const codeReviewWindows = pickClassifiedWindows(codeReviewLimit);
+  const codeReviewWindows = pickCodexClassifiedWindows(codeReviewLimit);
   const codeReviewLimitReached = codeReviewLimit?.limit_reached ?? codeReviewLimit?.limitReached;
   const codeReviewAllowed = codeReviewLimit?.allowed;
   addWindow(
@@ -370,7 +394,8 @@ const buildCodexQuotaWindows = (payload: CodexUsagePayload, t: TFunction): Codex
 
       const idPrefix = normalizeWindowId(limitName) || `additional-${index + 1}`;
       const additionalPrimaryWindow = rateInfo.primary_window ?? rateInfo.primaryWindow ?? null;
-      const additionalSecondaryWindow = rateInfo.secondary_window ?? rateInfo.secondaryWindow ?? null;
+      const additionalSecondaryWindow =
+        rateInfo.secondary_window ?? rateInfo.secondaryWindow ?? null;
       const additionalLimitReached = rateInfo.limit_reached ?? rateInfo.limitReached;
       const additionalAllowed = rateInfo.allowed;
 
@@ -398,10 +423,307 @@ const buildCodexQuotaWindows = (payload: CodexUsagePayload, t: TFunction): Codex
   return windows;
 };
 
+const roundCodexNumber = (value: number, digits = 2): number => {
+  const multiplier = 10 ** digits;
+  return Math.round((value + Number.EPSILON) * multiplier) / multiplier;
+};
+
+const metricNumber = (value: unknown): number => normalizeNumberValue(value) ?? 0;
+
+const codexTokenTotal = (metrics?: CodexDailyUsageMetrics | null): number => {
+  if (!metrics) return 0;
+  const explicit = metricNumber(metrics.text_total_tokens ?? metrics.textTotalTokens);
+  if (explicit > 0) return explicit;
+  return (
+    metricNumber(metrics.cached_text_input_tokens ?? metrics.cachedTextInputTokens) +
+    metricNumber(metrics.uncached_text_input_tokens ?? metrics.uncachedTextInputTokens) +
+    metricNumber(metrics.text_output_tokens ?? metrics.textOutputTokens)
+  );
+};
+
+const codexYmdUtc = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
+
+const codexFirstDayOfMonthUtc = (ms: number): string => {
+  const date = new Date(ms);
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-01`;
+};
+
+const formatCodexUtcDateTime = (ms: number): string =>
+  new Date(ms).toISOString().replace('T', ' ').replace('.000Z', ' UTC');
+
+const normalizeCodexEpochMs = (value: number): number => (value > 1e12 ? value : value * 1000);
+
+const getCodexWindowTiming = (
+  window?: CodexUsageWindow | null
+): { resetAtMs: number; windowStartMs: number; serverNowMs: number } | null => {
+  if (!window) return null;
+  const resetAt = normalizeNumberValue(window.reset_at ?? window.resetAt);
+  const windowSeconds = getCodexWindowSeconds(window);
+  if (resetAt === null || windowSeconds === null) return null;
+
+  const resetAfterSeconds = normalizeNumberValue(
+    window.reset_after_seconds ?? window.resetAfterSeconds
+  );
+  const resetAtMs = normalizeCodexEpochMs(resetAt);
+  const windowStartMs = resetAtMs - windowSeconds * 1000;
+  const serverNowMs =
+    resetAfterSeconds === null ? Date.now() : resetAtMs - resetAfterSeconds * 1000;
+
+  return { resetAtMs, windowStartMs, serverNowMs };
+};
+
+const buildCodexClientSummary = (days: CodexDailyUsageDay[]): CodexAnalyticsRange['topClients'] => {
+  const clients = new Map<string, CodexAnalyticsClientSummary>();
+
+  for (const day of days) {
+    for (const client of day.clients ?? []) {
+      const clientId = normalizeStringValue(client.client_id ?? client.clientId) ?? 'UNKNOWN';
+      const current =
+        clients.get(clientId) ??
+        ({
+          clientId,
+          credits: 0,
+          usd: 0,
+          tokens: 0,
+          threads: 0,
+          turns: 0,
+        } satisfies CodexAnalyticsClientSummary);
+
+      const credits = metricNumber(client.credits);
+      current.credits += credits;
+      current.usd += credits * CODEX_USD_PER_CREDIT;
+      current.tokens += codexTokenTotal(client);
+      current.threads += metricNumber(client.threads);
+      current.turns += metricNumber(client.turns);
+      clients.set(clientId, current);
+    }
+  }
+
+  return Array.from(clients.values())
+    .map((client) => ({
+      ...client,
+      credits: roundCodexNumber(client.credits, 6),
+      usd: roundCodexNumber(client.usd, 2),
+      tokens: Math.round(client.tokens),
+      threads: Math.round(client.threads),
+      turns: Math.round(client.turns),
+    }))
+    .sort((left, right) => right.credits - left.credits)
+    .slice(0, CODEX_TOP_CLIENT_LIMIT);
+};
+
+const buildCodexAnalyticsRange = (
+  payload: CodexDailyUsagePayload,
+  id: CodexAnalyticsRange['id'],
+  labelKey: string,
+  startDate: string,
+  endDateExclusive: string
+): CodexAnalyticsRange => {
+  const days = (payload.data ?? [])
+    .slice()
+    .sort((left, right) => String(left.date ?? '').localeCompare(String(right.date ?? '')));
+
+  let credits = 0;
+  let cachedInputTokens = 0;
+  let uncachedInputTokens = 0;
+  let outputTokens = 0;
+  let tokens = 0;
+  let threads = 0;
+  let turns = 0;
+  let users = 0;
+
+  for (const day of days) {
+    const totals = day.totals ?? {};
+    const dayCredits = metricNumber(totals.credits);
+    credits += dayCredits;
+    cachedInputTokens += metricNumber(
+      totals.cached_text_input_tokens ?? totals.cachedTextInputTokens
+    );
+    uncachedInputTokens += metricNumber(
+      totals.uncached_text_input_tokens ?? totals.uncachedTextInputTokens
+    );
+    outputTokens += metricNumber(totals.text_output_tokens ?? totals.textOutputTokens);
+    tokens += codexTokenTotal(totals);
+    threads += metricNumber(totals.threads);
+    turns += metricNumber(totals.turns);
+    users += metricNumber(totals.users);
+  }
+
+  return {
+    id,
+    labelKey,
+    startDate,
+    endDateExclusive,
+    returnedDays: days.length,
+    firstDate: days[0]?.date ?? '',
+    lastDate: days[days.length - 1]?.date ?? '',
+    credits: roundCodexNumber(credits, 6),
+    usd: roundCodexNumber(credits * CODEX_USD_PER_CREDIT, 2),
+    tokens: Math.round(tokens),
+    cachedInputTokens: Math.round(cachedInputTokens),
+    uncachedInputTokens: Math.round(uncachedInputTokens),
+    outputTokens: Math.round(outputTokens),
+    threads: Math.round(threads),
+    turns: Math.round(turns),
+    users: Math.round(users),
+    topClients: buildCodexClientSummary(days),
+  };
+};
+
+const buildCodexWeeklyEstimate = (
+  weeklyWindow: CodexUsageWindow,
+  sinceResetRange: CodexAnalyticsRange,
+  sinceResetPayload: CodexDailyUsagePayload,
+  sinceResetStartDate: string
+): CodexWeeklyEstimate | null => {
+  const usedPercent = normalizeNumberValue(weeklyWindow.used_percent ?? weeklyWindow.usedPercent);
+  if (usedPercent === null || usedPercent <= 0) return null;
+
+  const usedRatio = usedPercent / 100;
+  const includedCredits = sinceResetRange.credits;
+  const resetDay = (sinceResetPayload.data ?? []).find((day) => day.date === sinceResetStartDate);
+  const resetDayCredits = metricNumber(resetDay?.totals?.credits);
+  const excludedCredits = Math.max(0, includedCredits - resetDayCredits);
+  const totalCreditsWithResetDay = includedCredits / usedRatio;
+  const totalCreditsWithoutResetDay = excludedCredits / usedRatio;
+  const remainingCreditsWithResetDay = Math.max(0, totalCreditsWithResetDay - includedCredits);
+  const remainingCreditsWithoutResetDay = Math.max(
+    0,
+    totalCreditsWithoutResetDay - excludedCredits
+  );
+
+  return {
+    usedPercent: roundCodexNumber(usedPercent, 2),
+    usedRatio: roundCodexNumber(usedRatio, 4),
+    remainingRatio: roundCodexNumber(1 - usedRatio, 4),
+    includedCredits: roundCodexNumber(includedCredits, 6),
+    resetDayCredits: roundCodexNumber(resetDayCredits, 6),
+    excludedCredits: roundCodexNumber(excludedCredits, 6),
+    totalCreditsWithResetDay: roundCodexNumber(totalCreditsWithResetDay, 2),
+    totalUsdWithResetDay: roundCodexNumber(totalCreditsWithResetDay * CODEX_USD_PER_CREDIT, 2),
+    totalCreditsWithoutResetDay: roundCodexNumber(totalCreditsWithoutResetDay, 2),
+    totalUsdWithoutResetDay: roundCodexNumber(
+      totalCreditsWithoutResetDay * CODEX_USD_PER_CREDIT,
+      2
+    ),
+    remainingCreditsWithResetDay: roundCodexNumber(remainingCreditsWithResetDay, 2),
+    remainingUsdWithResetDay: roundCodexNumber(
+      remainingCreditsWithResetDay * CODEX_USD_PER_CREDIT,
+      2
+    ),
+    remainingCreditsWithoutResetDay: roundCodexNumber(remainingCreditsWithoutResetDay, 2),
+    remainingUsdWithoutResetDay: roundCodexNumber(
+      remainingCreditsWithoutResetDay * CODEX_USD_PER_CREDIT,
+      2
+    ),
+  };
+};
+
+const fetchCodexDailyUsage = async (
+  authIndex: string,
+  requestHeader: Record<string, string>,
+  startDate: string,
+  endDateExclusive: string,
+  t: TFunction
+): Promise<CodexDailyUsagePayload> => {
+  const query = new URLSearchParams({
+    start_date: startDate,
+    end_date: endDateExclusive,
+    group_by: 'day',
+  });
+
+  const result = await apiCallApi.request({
+    authIndex,
+    method: 'GET',
+    url: `${CODEX_DAILY_USAGE_URL}?${query.toString()}`,
+    header: requestHeader,
+  });
+
+  if (result.statusCode < 200 || result.statusCode >= 300) {
+    throw createStatusError(getApiCallErrorMessage(result), result.statusCode);
+  }
+
+  const payload = parseCodexDailyUsagePayload(result.body ?? result.bodyText);
+  if (!payload) {
+    throw new Error(t('codex_quota.analytics_empty'));
+  }
+
+  return payload;
+};
+
+const fetchCodexAnalytics = async (
+  authIndex: string,
+  requestHeader: Record<string, string>,
+  usagePayload: CodexUsagePayload,
+  t: TFunction
+): Promise<CodexAnalyticsState> => {
+  const rateLimit = usagePayload.rate_limit ?? usagePayload.rateLimit ?? null;
+  const weeklyWindow = pickCodexClassifiedWindows(rateLimit).weeklyWindow;
+  const timing = getCodexWindowTiming(weeklyWindow);
+  if (!weeklyWindow || !timing) {
+    throw new Error(t('codex_quota.analytics_missing_weekly_window'));
+  }
+
+  const apiNowMs = timing.serverNowMs;
+  const endDateExclusive = codexYmdUtc(apiNowMs + CODEX_DAY_MS);
+  const sinceResetStartDate = codexYmdUtc(timing.windowStartMs);
+  const monthStartDate = codexFirstDayOfMonthUtc(apiNowMs);
+  const rollingStartDate = codexYmdUtc(
+    apiNowMs - (CODEX_ANALYTICS_ROLLING_DAYS - 1) * CODEX_DAY_MS
+  );
+
+  const [sinceResetPayload, monthPayload, rollingPayload] = await Promise.all([
+    fetchCodexDailyUsage(authIndex, requestHeader, sinceResetStartDate, endDateExclusive, t),
+    fetchCodexDailyUsage(authIndex, requestHeader, monthStartDate, endDateExclusive, t),
+    fetchCodexDailyUsage(authIndex, requestHeader, rollingStartDate, endDateExclusive, t),
+  ]);
+
+  const sinceResetRange = buildCodexAnalyticsRange(
+    sinceResetPayload,
+    'since-reset',
+    'codex_quota.analytics_since_reset',
+    sinceResetStartDate,
+    endDateExclusive
+  );
+  const monthRange = buildCodexAnalyticsRange(
+    monthPayload,
+    'month-to-date',
+    'codex_quota.analytics_month_to_date',
+    monthStartDate,
+    endDateExclusive
+  );
+  const rollingRange = buildCodexAnalyticsRange(
+    rollingPayload,
+    'rolling',
+    'codex_quota.analytics_rolling_days',
+    rollingStartDate,
+    endDateExclusive
+  );
+
+  return {
+    dateBucket: 'UTC',
+    backendNowLabel: formatCodexUtcDateTime(apiNowMs),
+    windowStartLabel: formatCodexUtcDateTime(timing.windowStartMs),
+    resetAtLabel: formatCodexUtcDateTime(timing.resetAtMs),
+    weeklyEstimate: buildCodexWeeklyEstimate(
+      weeklyWindow,
+      sinceResetRange,
+      sinceResetPayload,
+      sinceResetStartDate
+    ),
+    ranges: [sinceResetRange, monthRange, rollingRange],
+  };
+};
+
 const fetchCodexQuota = async (
   file: AuthFileItem,
   t: TFunction
-): Promise<{ planType: string | null; windows: CodexQuotaWindow[] }> => {
+): Promise<{
+  planType: string | null;
+  windows: CodexQuotaWindow[];
+  analytics: CodexAnalyticsState | null;
+  analyticsError: string | null;
+}> => {
   const rawAuthIndex = file['auth_index'] ?? file.authIndex;
   const authIndex = normalizeAuthIndex(rawAuthIndex);
   if (!authIndex) {
@@ -437,7 +759,21 @@ const fetchCodexQuota = async (
 
   const planTypeFromUsage = normalizePlanType(payload.plan_type ?? payload.planType);
   const windows = buildCodexQuotaWindows(payload, t);
-  return { planType: planTypeFromUsage ?? planTypeFromFile, windows };
+  let analytics: CodexAnalyticsState | null = null;
+  let analyticsError: string | null = null;
+
+  try {
+    analytics = await fetchCodexAnalytics(authIndex, requestHeader, payload, t);
+  } catch (err: unknown) {
+    analyticsError = err instanceof Error ? err.message : t('common.unknown_error');
+  }
+
+  return {
+    planType: planTypeFromUsage ?? planTypeFromFile,
+    windows,
+    analytics,
+    analyticsError,
+  };
 };
 
 const GEMINI_CLI_G1_CREDIT_TYPE = 'GOOGLE_ONE_AI';
@@ -457,8 +793,7 @@ const resolveGeminiCliTierLabel = (
   if (!payload) return null;
   const currentTier: GeminiCliUserTier | null | undefined =
     payload.currentTier ?? payload.current_tier;
-  const paidTier: GeminiCliUserTier | null | undefined =
-    payload.paidTier ?? payload.paid_tier;
+  const paidTier: GeminiCliUserTier | null | undefined = payload.paidTier ?? payload.paid_tier;
   const rawId = normalizeStringValue(paidTier?.id) ?? normalizeStringValue(currentTier?.id);
   if (!rawId) return null;
   const tierId = rawId.toLowerCase();
@@ -466,14 +801,11 @@ const resolveGeminiCliTierLabel = (
   return labelKey ? t(`gemini_cli_quota.${labelKey}`) : rawId;
 };
 
-const resolveGeminiCliTierId = (
-  payload: GeminiCliCodeAssistPayload | null
-): string | null => {
+const resolveGeminiCliTierId = (payload: GeminiCliCodeAssistPayload | null): string | null => {
   if (!payload) return null;
   const currentTier: GeminiCliUserTier | null | undefined =
     payload.currentTier ?? payload.current_tier;
-  const paidTier: GeminiCliUserTier | null | undefined =
-    payload.paidTier ?? payload.paid_tier;
+  const paidTier: GeminiCliUserTier | null | undefined = payload.paidTier ?? payload.paid_tier;
   const rawId = normalizeStringValue(paidTier?.id) ?? normalizeStringValue(currentTier?.id);
   return rawId ? rawId.toLowerCase() : null;
 };
@@ -482,14 +814,12 @@ const resolveGeminiCliCreditBalance = (
   payload: GeminiCliCodeAssistPayload | null
 ): number | null => {
   if (!payload) return null;
-  const paidTier: GeminiCliUserTier | null | undefined =
-    payload.paidTier ?? payload.paid_tier;
+  const paidTier: GeminiCliUserTier | null | undefined = payload.paidTier ?? payload.paid_tier;
   const currentTier: GeminiCliUserTier | null | undefined =
     payload.currentTier ?? payload.current_tier;
   const tier = paidTier ?? currentTier;
   if (!tier) return null;
-  const credits: GeminiCliCredits[] =
-    tier.availableCredits ?? tier.available_credits ?? [];
+  const credits: GeminiCliCredits[] = tier.availableCredits ?? tier.available_credits ?? [];
   let total = 0;
   let found = false;
   for (const credit of credits) {
@@ -734,6 +1064,24 @@ const renderAntigravityItems = (
 
 const PREMIUM_GEMINI_CLI_TIER_IDS = new Set(['g1-ultra-tier']);
 const PREMIUM_CODEX_PLAN_TYPES = new Set(['pro', 'prolite', 'pro-lite', 'pro_lite']);
+const CODEX_STANDARD_NUMBER_FORMATTER = new Intl.NumberFormat(undefined, {
+  maximumFractionDigits: 2,
+});
+
+const formatCodexPlainIntegerNumber = (value: number): string => String(Math.round(value));
+
+const formatCodexStandardNumber = (value: number): string =>
+  CODEX_STANDARD_NUMBER_FORMATTER.format(value);
+
+const formatCodexUsd = (value: number): string => `$${value.toFixed(2)}`;
+
+const formatCodexAnalyticsDateRange = (range: CodexAnalyticsRange): string => {
+  const endMs = Date.parse(`${range.endDateExclusive}T00:00:00Z`);
+  if (!Number.isFinite(endMs)) {
+    return `${range.startDate} - ${range.endDateExclusive}`;
+  }
+  return `${range.startDate} - ${codexYmdUtc(endMs - CODEX_DAY_MS)}`;
+};
 
 const renderCodexItems = (
   quota: CodexQuotaState,
@@ -761,6 +1109,49 @@ const renderCodexItems = (
   const planLabel = getPlanLabel(planType);
   const isPremiumPlan = PREMIUM_CODEX_PLAN_TYPES.has(normalizePlanType(planType) ?? '');
   const nodes: ReactNode[] = [];
+  const analytics = quota.analytics ?? null;
+  const analyticsError = quota.analyticsError ?? null;
+  const analyticsDetailNodes: ReactNode[] = [];
+  const creditsUnit = t('codex_quota.credits_unit');
+  const weeklyEstimate = analytics?.weeklyEstimate ?? null;
+  const weeklyInlineEstimate = weeklyEstimate
+    ? t('codex_quota.weekly_estimate_inline', {
+        total: formatCodexPlainIntegerNumber(weeklyEstimate.totalCreditsWithResetDay),
+      })
+    : null;
+  const weeklyUsdInlineEstimate = weeklyEstimate
+    ? t('codex_quota.weekly_estimate_usd_inline', {
+        usd: formatCodexPlainIntegerNumber(weeklyEstimate.totalUsdWithResetDay),
+      })
+    : null;
+  const weeklyInlineEstimateTitle = weeklyEstimate
+    ? t('codex_quota.weekly_estimate_inline_title', {
+        withoutResetDay: formatCodexPlainIntegerNumber(weeklyEstimate.totalCreditsWithoutResetDay),
+        withResetDay: formatCodexPlainIntegerNumber(weeklyEstimate.totalCreditsWithResetDay),
+      })
+    : null;
+
+  const renderCodexMetric = (
+    key: string,
+    label: string,
+    value: string,
+    tone?: 'strong'
+  ): ReactNode =>
+    h(
+      'div',
+      { key, className: styleMap.codexMetric },
+      h('span', { className: styleMap.codexMetricLabel }, label),
+      h(
+        'span',
+        {
+          className:
+            tone === 'strong'
+              ? `${styleMap.codexMetricValue} ${styleMap.codexMetricValueStrong}`
+              : styleMap.codexMetricValue,
+        },
+        value
+      )
+    );
 
   if (planLabel) {
     const valueClass = isPremiumPlan ? styleMap.premiumPlanValue : styleMap.codexPlanValue;
@@ -769,7 +1160,17 @@ const renderCodexItems = (
         'div',
         { key: 'plan', className: styleMap.codexPlan },
         h('span', { className: styleMap.codexPlanLabel }, t('codex_quota.plan_label')),
-        h('span', { className: valueClass }, planLabel)
+        h('span', { className: valueClass }, planLabel),
+        weeklyUsdInlineEstimate
+          ? h(
+              'span',
+              {
+                className: styleMap.codexPlanEstimate,
+                title: weeklyInlineEstimateTitle ?? undefined,
+              },
+              weeklyUsdInlineEstimate
+            )
+          : null
       )
     );
   }
@@ -778,41 +1179,172 @@ const renderCodexItems = (
     nodes.push(
       h('div', { key: 'empty', className: styleMap.quotaMessage }, t('codex_quota.empty_windows'))
     );
-    return h(Fragment, null, ...nodes);
-  }
+  } else {
+    nodes.push(
+      ...windows.map((window) => {
+        const used = window.usedPercent;
+        const clampedUsed = used === null ? null : Math.max(0, Math.min(100, used));
+        const remaining =
+          clampedUsed === null ? null : Math.max(0, Math.min(100, 100 - clampedUsed));
+        const percentLabel = remaining === null ? '--' : `${Math.round(remaining)}%`;
+        const windowLabel = window.labelKey
+          ? t(window.labelKey, window.labelParams as Record<string, string | number>)
+          : window.label;
+        const windowLabelNode =
+          window.id === 'weekly' && weeklyInlineEstimate
+            ? h(
+                'span',
+                { className: styleMap.codexQuotaLabel },
+                h('span', { className: styleMap.codexQuotaLabelText }, windowLabel),
+                h(
+                  'span',
+                  {
+                    className: styleMap.codexWeeklyInlineEstimate,
+                    title: weeklyInlineEstimateTitle ?? undefined,
+                  },
+                  weeklyInlineEstimate
+                )
+              )
+            : windowLabel;
 
-  nodes.push(
-    ...windows.map((window) => {
-      const used = window.usedPercent;
-      const clampedUsed = used === null ? null : Math.max(0, Math.min(100, used));
-      const remaining = clampedUsed === null ? null : Math.max(0, Math.min(100, 100 - clampedUsed));
-      const percentLabel = remaining === null ? '--' : `${Math.round(remaining)}%`;
-      const windowLabel = window.labelKey
-        ? t(window.labelKey, window.labelParams as Record<string, string | number>)
-        : window.label;
-
-      return h(
-        'div',
-        { key: window.id, className: styleMap.quotaRow },
-        h(
+        return h(
           'div',
-          { className: styleMap.quotaRowHeader },
-          h('span', { className: styleMap.quotaModel }, windowLabel),
+          { key: window.id, className: styleMap.quotaRow },
           h(
             'div',
-            { className: styleMap.quotaMeta },
-            h('span', { className: styleMap.quotaPercent }, percentLabel),
-            h('span', { className: styleMap.quotaReset }, window.resetLabel)
+            { className: styleMap.quotaRowHeader },
+            h('span', { className: styleMap.quotaModel }, windowLabelNode),
+            h(
+              'div',
+              { className: styleMap.quotaMeta },
+              h('span', { className: styleMap.quotaPercent }, percentLabel),
+              h('span', { className: styleMap.quotaReset }, window.resetLabel)
+            )
+          ),
+          h(QuotaProgressBar, {
+            percent: remaining,
+            highThreshold: QUOTA_PROGRESS_HIGH_THRESHOLD,
+            mediumThreshold: QUOTA_PROGRESS_MEDIUM_THRESHOLD,
+          })
+        );
+      })
+    );
+  }
+
+  if (analyticsError) {
+    analyticsDetailNodes.push(
+      h(
+        'div',
+        { key: 'analytics-error', className: styleMap.quotaWarning },
+        t('codex_quota.analytics_load_failed', { message: analyticsError })
+      )
+    );
+  }
+
+  if (analytics) {
+    analyticsDetailNodes.push(
+      h(
+        'div',
+        { key: 'analytics', className: styleMap.codexAnalytics },
+        h(
+          'div',
+          { className: styleMap.codexAnalyticsHeader },
+          h('span', { className: styleMap.codexAnalyticsTitle }, t('codex_quota.analytics_title')),
+          h(
+            'span',
+            { className: styleMap.codexAnalyticsMeta },
+            t('codex_quota.analytics_bucket', { bucket: analytics.dateBucket })
           )
         ),
-        h(QuotaProgressBar, {
-          percent: remaining,
-          highThreshold: QUOTA_PROGRESS_HIGH_THRESHOLD,
-          mediumThreshold: QUOTA_PROGRESS_MEDIUM_THRESHOLD,
-        })
-      );
-    })
-  );
+        h(
+          'div',
+          { className: styleMap.codexWindowFacts },
+          h(
+            'span',
+            null,
+            t('codex_quota.analytics_backend_now', { time: analytics.backendNowLabel })
+          ),
+          h(
+            'span',
+            null,
+            t('codex_quota.analytics_window_start', { time: analytics.windowStartLabel })
+          ),
+          h('span', null, t('codex_quota.analytics_reset_at', { time: analytics.resetAtLabel }))
+        ),
+        h(
+          'div',
+          { className: styleMap.codexUsageRanges },
+          ...analytics.ranges.map((range) => {
+            const rangeLabel =
+              range.id === 'rolling'
+                ? t(range.labelKey, { days: CODEX_ANALYTICS_ROLLING_DAYS })
+                : t(range.labelKey);
+            const dateLabel = formatCodexAnalyticsDateRange(range);
+
+            return h(
+              'div',
+              { key: range.id, className: styleMap.codexUsageRange },
+              h(
+                'div',
+                { className: styleMap.codexUsageRangeHeader },
+                h('span', { className: styleMap.codexUsageRangeTitle }, rangeLabel),
+                h('span', { className: styleMap.codexUsageRangeDates }, dateLabel)
+              ),
+              h(
+                'div',
+                { className: styleMap.codexMetricGrid },
+                renderCodexMetric(
+                  `${range.id}-credits`,
+                  t('codex_quota.analytics_credits'),
+                  `${formatCodexStandardNumber(range.credits)} ${creditsUnit}`,
+                  'strong'
+                ),
+                renderCodexMetric(
+                  `${range.id}-usd`,
+                  t('codex_quota.analytics_usd'),
+                  formatCodexUsd(range.usd)
+                )
+              )
+            );
+          })
+        )
+      )
+    );
+  }
+
+  if (analyticsDetailNodes.length > 0) {
+    nodes.push(
+      h(
+        'details',
+        { key: 'analytics-details', className: styleMap.codexDetails },
+        h(
+          'summary',
+          { className: styleMap.codexDetailsSummary },
+          h(
+            'span',
+            { className: styleMap.codexDetailsSummaryMain },
+            h(
+              'span',
+              { className: styleMap.codexDetailsIcon, 'aria-hidden': true },
+              h(IconInfo, { size: 13 })
+            ),
+            h(
+              'span',
+              { className: styleMap.codexDetailsTitle },
+              t('codex_quota.analytics_details_summary')
+            )
+          ),
+          h(
+            'span',
+            { className: styleMap.codexDetailsHint },
+            t('codex_quota.analytics_details_hint')
+          ),
+          h(IconChevronDown, { size: 14, className: styleMap.codexDetailsChevron })
+        ),
+        h('div', { className: styleMap.codexDetailsBody }, ...analyticsDetailNodes)
+      )
+    );
+  }
 
   return h(Fragment, null, ...nodes);
 };
@@ -860,7 +1392,11 @@ const renderGeminiCliItems = (
 
   if (buckets.length === 0) {
     nodes.push(
-      h('div', { key: 'empty', className: styleMap.quotaMessage }, t('gemini_cli_quota.empty_buckets'))
+      h(
+        'div',
+        { key: 'empty', className: styleMap.quotaMessage },
+        t('gemini_cli_quota.empty_buckets')
+      )
     );
     return h(Fragment, null, ...nodes);
   }
@@ -974,8 +1510,12 @@ const resolveClaudePlanType = (profile: ClaudeProfileResponse | null): string | 
   const hasClaudePro = normalizeFlagValue(profile.account?.has_claude_pro);
   if (hasClaudePro) return 'plan_pro';
 
-  const organizationType = normalizeStringValue(profile.organization?.organization_type)?.toLowerCase();
-  const subscriptionStatus = normalizeStringValue(profile.organization?.subscription_status)?.toLowerCase();
+  const organizationType = normalizeStringValue(
+    profile.organization?.organization_type
+  )?.toLowerCase();
+  const subscriptionStatus = normalizeStringValue(
+    profile.organization?.subscription_status
+  )?.toLowerCase();
 
   if (organizationType === 'claude_team' && subscriptionStatus === 'active') {
     return 'plan_team';
@@ -989,7 +1529,11 @@ const resolveClaudePlanType = (profile: ClaudeProfileResponse | null): string | 
 const fetchClaudeQuota = async (
   file: AuthFileItem,
   t: TFunction
-): Promise<{ windows: ClaudeQuotaWindow[]; extraUsage?: ClaudeExtraUsage | null; planType?: string | null }> => {
+): Promise<{
+  windows: ClaudeQuotaWindow[];
+  extraUsage?: ClaudeExtraUsage | null;
+  planType?: string | null;
+}> => {
   const rawAuthIndex = file['auth_index'] ?? file.authIndex;
   const authIndex = normalizeAuthIndex(rawAuthIndex);
   if (!authIndex) {
@@ -1171,7 +1715,12 @@ export const ANTIGRAVITY_CONFIG: QuotaConfig<AntigravityQuotaState, AntigravityQ
 
 export const CODEX_CONFIG: QuotaConfig<
   CodexQuotaState,
-  { planType: string | null; windows: CodexQuotaWindow[] }
+  {
+    planType: string | null;
+    windows: CodexQuotaWindow[];
+    analytics: CodexAnalyticsState | null;
+    analyticsError: string | null;
+  }
 > = {
   type: 'codex',
   i18nPrefix: 'codex_quota',
@@ -1180,15 +1729,24 @@ export const CODEX_CONFIG: QuotaConfig<
   fetchQuota: fetchCodexQuota,
   storeSelector: (state) => state.codexQuota,
   storeSetter: 'setCodexQuota',
-  buildLoadingState: () => ({ status: 'loading', windows: [] }),
+  buildLoadingState: () => ({
+    status: 'loading',
+    windows: [],
+    analytics: null,
+    analyticsError: null,
+  }),
   buildSuccessState: (data) => ({
     status: 'success',
     windows: data.windows,
     planType: data.planType,
+    analytics: data.analytics,
+    analyticsError: data.analyticsError,
   }),
   buildErrorState: (message, status) => ({
     status: 'error',
     windows: [],
+    analytics: null,
+    analyticsError: null,
     error: message,
     errorStatus: status,
   }),
@@ -1218,7 +1776,13 @@ export const GEMINI_CLI_CONFIG: QuotaConfig<
   fetchQuota: fetchGeminiCliQuota,
   storeSelector: (state) => state.geminiCliQuota,
   storeSetter: 'setGeminiCliQuota',
-  buildLoadingState: () => ({ status: 'loading', buckets: [], tierLabel: null, tierId: null, creditBalance: null }),
+  buildLoadingState: () => ({
+    status: 'loading',
+    buckets: [],
+    tierLabel: null,
+    tierId: null,
+    creditBalance: null,
+  }),
   buildSuccessState: (data) => {
     const supplementarySnapshot = readGeminiCliSupplementarySnapshot(
       data.fileName,
@@ -1246,10 +1810,7 @@ export const GEMINI_CLI_CONFIG: QuotaConfig<
   renderQuotaItems: renderGeminiCliItems,
 };
 
-const fetchKimiQuota = async (
-  file: AuthFileItem,
-  t: TFunction
-): Promise<KimiQuotaRow[]> => {
+const fetchKimiQuota = async (file: AuthFileItem, t: TFunction): Promise<KimiQuotaRow[]> => {
   const rawAuthIndex = file['auth_index'] ?? file.authIndex;
   const authIndex = normalizeAuthIndex(rawAuthIndex);
   if (!authIndex) {
@@ -1300,7 +1861,7 @@ const renderKimiItems = (
     const percentLabel = remaining === null ? '--' : `${remaining}%`;
     const rowLabel = row.labelKey
       ? t(row.labelKey, (row.labelParams ?? {}) as Record<string, string | number>)
-      : row.label ?? '';
+      : (row.label ?? '');
     const resetLabel = formatKimiResetHint(t, row.resetHint);
 
     return h(
@@ -1314,12 +1875,8 @@ const renderKimiItems = (
           'div',
           { className: styleMap.quotaMeta },
           h('span', { className: styleMap.quotaPercent }, percentLabel),
-          limit > 0
-            ? h('span', { className: styleMap.quotaAmount }, `${used} / ${limit}`)
-            : null,
-          resetLabel
-            ? h('span', { className: styleMap.quotaReset }, resetLabel)
-            : null
+          limit > 0 ? h('span', { className: styleMap.quotaAmount }, `${used} / ${limit}`) : null,
+          resetLabel ? h('span', { className: styleMap.quotaReset }, resetLabel) : null
         )
       ),
       h(QuotaProgressBar, {
