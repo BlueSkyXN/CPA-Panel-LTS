@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*-tls-*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag to build and publish, for example v1-tls-0.0.1'
+        required: true
+        type: string
 
 jobs:
   build-and-release:
@@ -31,7 +37,7 @@ jobs:
       - name: Build all-in-one HTML
         run: npm run build
         env:
-          VERSION: ${{ github.ref_name }}
+          VERSION: ${{ github.event.inputs.release_tag || github.ref_name }}
 
       - name: Prepare release assets
         run: |
@@ -42,9 +48,13 @@ jobs:
       - name: Generate release notes
         run: |
           set -euo pipefail
-          current_tag="${GITHUB_REF_NAME}"
+          current_tag="${RELEASE_TAG:-${GITHUB_REF_NAME}}"
           if [[ "${current_tag}" != v*-tls-* ]]; then
             echo "Only panel release tags matching v*-tls-* are supported."
+            exit 1
+          fi
+          if ! git rev-parse -q --verify "refs/tags/${current_tag}" >/dev/null; then
+            echo "Release tag ${current_tag} does not exist."
             exit 1
           fi
 
@@ -62,10 +72,13 @@ jobs:
 
           : > release-notes.md
           git log --pretty=format:"- %h %s" "${range}" >> release-notes.md
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.release_tag || github.ref_name }}
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
           files: dist/management.html
           body_path: release-notes.md
           draft: false
