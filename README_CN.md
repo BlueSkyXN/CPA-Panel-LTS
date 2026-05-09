@@ -9,7 +9,7 @@ CPA Panel LTS 是 `CPA-Core-LTS` 的长期维护版 Web 管理面板。
 - **LTS 核心项目**: https://github.com/BlueSkyXN/CPA-Core-LTS
 - **原始上游核心项目**: https://github.com/router-for-me/CLIProxyAPI
 - **原始上游面板项目**: https://github.com/router-for-me/Cli-Proxy-API-Management-Center
-- **示例地址**: https://remote.router-for.me/
+- **示例地址**: http://localhost:8317/management.html
 - **LTS 基线**: 面板 `v1.8.4` 配套核心 `v6.9.49`
 - **Core 集成**: latest release 发布 `management.html` 供 `CPA-Core-LTS` 下载
 
@@ -144,7 +144,8 @@ npm run build
 ## 构建与发布说明
 
 - 使用 Vite 输出 **单文件 HTML**（`dist/index.html`），资源全部内联（`vite-plugin-singlefile`）。
-- 打 `vX.Y.Z` 标签会触发 `.github/workflows/release.yml`，发布 `dist/management.html`。
+- 打 `v1.8.4-lts.2` 这类 LTS 标签会触发 `.github/workflows/release.yml`，发布 `dist/management.html`。
+- 发布时只推送当前 LTS 标签；跟进上游后不要使用 `git push --tags`。
 - 页脚显示的 UI 版本在构建期注入（优先使用环境变量 `VERSION`，否则使用 git tag / `package.json`）。
 
 ## 安全提示

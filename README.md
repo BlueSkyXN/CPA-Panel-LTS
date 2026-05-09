@@ -9,7 +9,7 @@ It is a single-file Web UI (React + TypeScript) for operating and troubleshootin
 - **LTS Core Project**: https://github.com/BlueSkyXN/CPA-Core-LTS
 - **Original Upstream Core**: https://github.com/router-for-me/CLIProxyAPI
 - **Original Upstream Panel**: https://github.com/router-for-me/Cli-Proxy-API-Management-Center
-- **Example URL**: https://remote.router-for.me/
+- **Example URL**: http://localhost:8317/management.html
 - **LTS Baseline**: panel `v1.8.4` paired with core `v6.9.49`
 - **Core integration**: latest release publishes `management.html` for `CPA-Core-LTS`
 
@@ -145,7 +145,8 @@ The UI language is automatically detected from browser settings and can be manua
 ## Build & release notes
 
 - Vite produces a **single HTML** output (`dist/index.html`) with all assets inlined (via `vite-plugin-singlefile`).
-- Tagging `vX.Y.Z` triggers `.github/workflows/release.yml` to publish `dist/management.html`.
+- Tagging an LTS release such as `v1.8.4-lts.2` triggers `.github/workflows/release.yml` to publish `dist/management.html`.
+- Push only the exact LTS tag being released; do not use `git push --tags` after fetching upstream.
 - The UI version shown in the footer is injected at build time (env `VERSION`, git tag, or `package.json` fallback).
 
 ## Security notes

@@ -19,6 +19,8 @@ dist
 dist-ssr
 *.local
 skills
+# Local helper userscripts
+/scripts/*.user.js
 
 # Editor directories and files
 settings.local.json
