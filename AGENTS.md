@@ -54,6 +54,7 @@
 
 - Core 必须稳定提供 `/usage`、`/usage/export`、`/usage/import` 等 Management API。
 - Panel 必须保留完整使用统计页面，并兼容 Core 的统计响应结构。
+- Panel latest release 必须提供名称严格为 `management.html` 的资产，供 `CPA-Core-LTS` 默认下载。
 - Core 修改统计 schema 时，必须同步检查 Panel。
 - Panel 修改统计 UI 时，必须确认 Core 仍提供对应接口。
 

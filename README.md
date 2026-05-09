@@ -11,6 +11,7 @@ It is a single-file Web UI (React + TypeScript) for operating and troubleshootin
 - **Original Upstream Panel**: https://github.com/router-for-me/Cli-Proxy-API-Management-Center
 - **Example URL**: https://remote.router-for.me/
 - **LTS Baseline**: panel `v1.8.4` paired with core `v6.9.49`
+- **Core integration**: latest release publishes `management.html` for `CPA-Core-LTS`
 
 ## LTS Plan
 
@@ -32,7 +33,7 @@ Maintenance rules:
 - Track upstream UI fixes selectively, but do not blindly sync upstream if the change removes or weakens full statistics.
 - Planned cleanup can remove promotional copy, unused UI surfaces, and non-LTS release machinery, but must not break the usage statistics contract.
 
-Since version 6.0.19, the Web UI ships with the main program; access it via `/management.html` on the API port once the service is running.
+Since version 6.0.19, the Web UI ships with the main program; access it via `/management.html` on the API port once the service is running. `CPA-Core-LTS` downloads the latest release asset named `management.html` from this repository by default.
 
 ## What this is (and isn’t)
 
@@ -67,6 +68,7 @@ npm run build
 
 - Output: `dist/index.html` (all assets are inlined).
 - For CLI Proxy API bundling, the release workflow renames it to `management.html`.
+- `CPA-Core-LTS` expects the latest release to contain an asset named exactly `management.html`.
 - To preview locally: `npm run preview`
 
 Tip: opening `dist/index.html` via `file://` may be blocked by browser CORS; serving it (preview/static server) is more reliable.

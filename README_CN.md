@@ -11,6 +11,7 @@ CPA Panel LTS 是 `CPA-Core-LTS` 的长期维护版 Web 管理面板。
 - **原始上游面板项目**: https://github.com/router-for-me/Cli-Proxy-API-Management-Center
 - **示例地址**: https://remote.router-for.me/
 - **LTS 基线**: 面板 `v1.8.4` 配套核心 `v6.9.49`
+- **Core 集成**: latest release 发布 `management.html` 供 `CPA-Core-LTS` 下载
 
 ## LTS 计划
 
@@ -32,7 +33,7 @@ CPA Panel LTS 是 `CPA-Core-LTS` 的长期维护版 Web 管理面板。
 - 可以选择性跟进上游 UI 修复，但不要盲目同步会移除或削弱完整统计能力的上游改动。
 - 后续轻量化改造可以移除推广文案、无用 UI、非 LTS 发布链路，但不能破坏使用统计契约。
 
-从6.0.19版本开始，Web UI 随主程序一起提供；服务运行后，通过 API 端口上的"/management.html"访问它。
+从6.0.19版本开始，Web UI 随主程序一起提供；服务运行后，通过 API 端口上的"/management.html"访问它。`CPA-Core-LTS` 默认会从本仓库 latest release 下载名为 `management.html` 的资产。
 
 ## 这是什么（以及不是什么）
 
@@ -67,6 +68,7 @@ npm run build
 
 - 构建产物：`dist/index.html`（资源已全部内联）。
 - 在 CLI Proxy API 的发布流程里会重命名为 `management.html`。
+- `CPA-Core-LTS` 期望 latest release 中存在名称严格为 `management.html` 的资产。
 - 本地预览：`npm run preview`
 
 提示：直接用 `file://` 打开 `dist/index.html` 可能遇到浏览器 CORS 限制；更稳妥的方式是用预览/静态服务器打开。
