@@ -23,6 +23,19 @@ interface LoadQuotaResult<TData> {
   errorStatus?: number;
 }
 
+const DEFAULT_BATCH_CONCURRENCY = 4;
+
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => window.setTimeout(resolve, ms));
+
+const normalizeConcurrency = (value: unknown, targetCount: number): number => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return Math.min(DEFAULT_BATCH_CONCURRENCY, targetCount);
+  }
+  return Math.min(Math.max(1, Math.floor(parsed)), targetCount);
+};
+
 export function useQuotaLoader<TState, TData>(config: QuotaConfig<TState, TData>) {
   const { t } = useTranslation();
   const quota = useQuotaStore(config.storeSelector);
@@ -55,35 +68,51 @@ export function useQuotaLoader<TState, TData>(config: QuotaConfig<TState, TData>
           return nextState;
         });
 
-        const results = await Promise.all(
-          targets.map(async (file): Promise<LoadQuotaResult<TData>> => {
-            try {
-              const data = await config.fetchQuota(file, t);
-              return { name: file.name, status: 'success', data };
-            } catch (err: unknown) {
-              const message = err instanceof Error ? err.message : t('common.unknown_error');
-              const errorStatus = getStatusFromError(err);
-              return { name: file.name, status: 'error', error: message, errorStatus };
-            }
-          })
-        );
+        const applyResult = (result: LoadQuotaResult<TData>) => {
+          if (requestId !== requestIdRef.current) return;
 
-        if (requestId !== requestIdRef.current) return;
+          setQuota((prev) => ({
+            ...prev,
+            [result.name]:
+              result.status === 'success'
+                ? config.buildSuccessState(result.data as TData)
+                : config.buildErrorState(
+                    result.error || t('common.unknown_error'),
+                    result.errorStatus
+                  ),
+          }));
+        };
 
-        setQuota((prev) => {
-          const nextState = { ...prev };
-          results.forEach((result) => {
-            if (result.status === 'success') {
-              nextState[result.name] = config.buildSuccessState(result.data as TData);
-            } else {
-              nextState[result.name] = config.buildErrorState(
-                result.error || t('common.unknown_error'),
-                result.errorStatus
-              );
+        const fetchOne = async (file: AuthFileItem): Promise<void> => {
+          try {
+            const data = await config.fetchQuota(file, t);
+            applyResult({ name: file.name, status: 'success', data });
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : t('common.unknown_error');
+            const errorStatus = getStatusFromError(err);
+            applyResult({ name: file.name, status: 'error', error: message, errorStatus });
+          }
+        };
+
+        const concurrency = normalizeConcurrency(config.batchConcurrency, targets.length);
+        const delayMs = Math.max(0, Number(config.batchDelayMs) || 0);
+        let nextIndex = 0;
+
+        const runWorker = async () => {
+          while (requestId === requestIdRef.current) {
+            const currentIndex = nextIndex;
+            nextIndex += 1;
+            if (currentIndex >= targets.length) return;
+
+            if (currentIndex > 0 && delayMs > 0) {
+              await sleep(delayMs);
             }
-          });
-          return nextState;
-        });
+
+            await fetchOne(targets[currentIndex]);
+          }
+        };
+
+        await Promise.all(Array.from({ length: concurrency }, runWorker));
       } finally {
         if (requestId === requestIdRef.current) {
           setLoading(false);

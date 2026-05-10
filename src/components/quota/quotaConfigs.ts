@@ -110,6 +110,8 @@ const CODEX_TEAM_PERMISSION_STATUSES = new Set([401, 403]);
 const CODEX_TEAM_LEADERBOARD_CACHE_TTL_MS = 2 * 60 * 1000;
 const CODEX_TEAM_LEADERBOARD_CACHE_WAIT_MS = 2200;
 const CODEX_TEAM_LEADERBOARD_CACHE_POLL_MS = 100;
+const CODEX_BATCH_CONCURRENCY = 1;
+const CODEX_BATCH_DELAY_MS = 600;
 const geminiCliSupplementaryRequestIds = new Map<string, number>();
 const geminiCliSupplementaryCache = new Map<
   string,
@@ -154,6 +156,8 @@ export interface QuotaConfig<TState, TData> {
   buildLoadingState: () => TState;
   buildSuccessState: (data: TData) => TState;
   buildErrorState: (message: string, status?: number) => TState;
+  batchConcurrency?: number;
+  batchDelayMs?: number;
   cardClassName: string;
   controlsClassName: string;
   controlClassName: string;
@@ -893,10 +897,37 @@ const fetchCodexUsageLeaderboard = async (
   return payload;
 };
 
+const getErrorMessage = (err: unknown, fallback: string): string =>
+  err instanceof Error ? err.message : fallback;
+
+const resolveCodexRequestErrorMessage = (
+  err: unknown,
+  planType: string | null,
+  scope: 'quota' | 'analytics',
+  t: TFunction
+): string => {
+  const status = getStatusFromError(err);
+  const normalizedPlanType = normalizePlanType(planType);
+
+  if (status === 401) return t('codex_quota.auth_required');
+  if (status === 403) {
+    if (normalizedPlanType === 'team') {
+      return t(`codex_quota.${scope}_team_permission_hint`);
+    }
+    return t(`codex_quota.${scope}_permission_hint`);
+  }
+  if (status === 404) return t(`codex_quota.${scope}_unsupported_hint`);
+  if (status === 429) return t('codex_quota.rate_limited');
+  if (status !== undefined && status >= 500) return t('codex_quota.upstream_unavailable');
+
+  return getErrorMessage(err, t('common.unknown_error'));
+};
+
 const fetchCodexAnalytics = async (
   authIndex: string,
   requestHeader: Record<string, string>,
   usagePayload: CodexUsagePayload,
+  planType: string | null,
   t: TFunction
 ): Promise<CodexAnalyticsState> => {
   const rateLimit = usagePayload.rate_limit ?? usagePayload.rateLimit ?? null;
@@ -914,48 +945,68 @@ const fetchCodexAnalytics = async (
     apiNowMs - (CODEX_ANALYTICS_ROLLING_DAYS - 1) * CODEX_DAY_MS
   );
 
-  const [sinceResetPayload, monthPayload, rollingPayload] = await Promise.all([
-    fetchCodexDailyUsage(authIndex, requestHeader, sinceResetStartDate, endDateExclusive, t),
-    fetchCodexDailyUsage(authIndex, requestHeader, monthStartDate, endDateExclusive, t),
-    fetchCodexDailyUsage(authIndex, requestHeader, rollingStartDate, endDateExclusive, t),
-  ]);
+  try {
+    const sinceResetPayload = await fetchCodexDailyUsage(
+      authIndex,
+      requestHeader,
+      sinceResetStartDate,
+      endDateExclusive,
+      t
+    );
+    const monthPayload = await fetchCodexDailyUsage(
+      authIndex,
+      requestHeader,
+      monthStartDate,
+      endDateExclusive,
+      t
+    );
+    const rollingPayload = await fetchCodexDailyUsage(
+      authIndex,
+      requestHeader,
+      rollingStartDate,
+      endDateExclusive,
+      t
+    );
 
-  const sinceResetRange = buildCodexAnalyticsRange(
-    sinceResetPayload,
-    'since-reset',
-    'codex_quota.analytics_since_reset',
-    sinceResetStartDate,
-    endDateExclusive
-  );
-  const monthRange = buildCodexAnalyticsRange(
-    monthPayload,
-    'month-to-date',
-    'codex_quota.analytics_month_to_date',
-    monthStartDate,
-    endDateExclusive
-  );
-  const rollingRange = buildCodexAnalyticsRange(
-    rollingPayload,
-    'rolling',
-    'codex_quota.analytics_rolling_days',
-    rollingStartDate,
-    endDateExclusive
-  );
-
-  return {
-    dateBucket: 'UTC',
-    source: 'daily-workspace',
-    backendNowLabel: formatCodexUtcDateTime(apiNowMs),
-    windowStartLabel: formatCodexUtcDateTime(timing.windowStartMs),
-    resetAtLabel: formatCodexUtcDateTime(timing.resetAtMs),
-    weeklyEstimate: buildCodexWeeklyEstimate(
-      weeklyWindow,
-      sinceResetRange,
+    const sinceResetRange = buildCodexAnalyticsRange(
       sinceResetPayload,
-      sinceResetStartDate
-    ),
-    ranges: [sinceResetRange, monthRange, rollingRange],
-  };
+      'since-reset',
+      'codex_quota.analytics_since_reset',
+      sinceResetStartDate,
+      endDateExclusive
+    );
+    const monthRange = buildCodexAnalyticsRange(
+      monthPayload,
+      'month-to-date',
+      'codex_quota.analytics_month_to_date',
+      monthStartDate,
+      endDateExclusive
+    );
+    const rollingRange = buildCodexAnalyticsRange(
+      rollingPayload,
+      'rolling',
+      'codex_quota.analytics_rolling_days',
+      rollingStartDate,
+      endDateExclusive
+    );
+
+    return {
+      dateBucket: 'UTC',
+      source: 'daily-workspace',
+      backendNowLabel: formatCodexUtcDateTime(apiNowMs),
+      windowStartLabel: formatCodexUtcDateTime(timing.windowStartMs),
+      resetAtLabel: formatCodexUtcDateTime(timing.resetAtMs),
+      weeklyEstimate: buildCodexWeeklyEstimate(
+        weeklyWindow,
+        sinceResetRange,
+        sinceResetPayload,
+        sinceResetStartDate
+      ),
+      ranges: [sinceResetRange, monthRange, rollingRange],
+    };
+  } catch (err: unknown) {
+    throw new Error(resolveCodexRequestErrorMessage(err, planType, 'analytics', t));
+  }
 };
 
 const fetchCodexTeamAnalytics = async (
@@ -1076,7 +1127,7 @@ const fetchCodexTeamAnalyticsWithFallback = async (
   }
 
   try {
-    const fallback = await fetchCodexAnalytics(authIndex, requestHeader, usagePayload, t);
+    const fallback = await fetchCodexAnalytics(authIndex, requestHeader, usagePayload, 'team', t);
     const hasData = fallback.ranges.some((range) => range.returnedDays > 0);
     if (!hasData) {
       throw new Error(t('codex_quota.analytics_empty'));
@@ -1138,7 +1189,8 @@ const fetchCodexQuota = async (
   });
 
   if (result.statusCode < 200 || result.statusCode >= 300) {
-    throw createStatusError(getApiCallErrorMessage(result), result.statusCode);
+    const error = createStatusError(getApiCallErrorMessage(result), result.statusCode);
+    throw new Error(resolveCodexRequestErrorMessage(error, planTypeFromFile, 'quota', t));
   }
 
   const payload = parseCodexUsagePayload(result.body ?? result.bodyText);
@@ -1167,10 +1219,10 @@ const fetchCodexQuota = async (
       analytics = teamAnalytics.analytics;
       analyticsError = teamAnalytics.analyticsError;
     } else {
-      analytics = await fetchCodexAnalytics(authIndex, requestHeader, payload, t);
+      analytics = await fetchCodexAnalytics(authIndex, requestHeader, payload, resolvedPlanType, t);
     }
   } catch (err: unknown) {
-    analyticsError = err instanceof Error ? err.message : t('common.unknown_error');
+    analyticsError = getErrorMessage(err, t('common.unknown_error'));
   }
 
   return {
@@ -2174,6 +2226,8 @@ export const CODEX_CONFIG: QuotaConfig<
   fetchQuota: fetchCodexQuota,
   storeSelector: (state) => state.codexQuota,
   storeSetter: 'setCodexQuota',
+  batchConcurrency: CODEX_BATCH_CONCURRENCY,
+  batchDelayMs: CODEX_BATCH_DELAY_MS,
   buildLoadingState: () => ({
     status: 'loading',
     windows: [],
