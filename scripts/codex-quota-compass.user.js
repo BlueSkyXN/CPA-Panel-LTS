@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Codex Quota Compass
 // @namespace    https://github.com/BlueSkyXN/CPA-Panel-LTS
-// @version      0.1.3
+// @version      0.1.6
 // @description  在 ChatGPT Codex Cloud 页面直接查看 Codex 额度窗口、周额度估算和 daily analytics 汇总。
 // @author       BlueSkyXN
 // @match        https://chatgpt.com/codex/cloud*
@@ -27,6 +27,8 @@
 
     USAGE_PATH: '/backend-api/wham/usage',
     DAILY_USAGE_PATH: '/backend-api/wham/analytics/daily-workspace-usage-counts',
+    TEAM_USAGE_LEADERBOARD_PATH: '/backend-api/wham/analytics/usage-leaderboard',
+    ME_PATH: '/backend-api/me',
     SESSION_PATH: '/api/auth/session',
   };
 
@@ -288,8 +290,13 @@
 
     if (!response.ok) {
       const body = await response.text().catch(() => '');
+      const buildHttpError = (message) => {
+        const error = new Error(message);
+        error.status = response.status;
+        return error;
+      };
       if (response.status === 401) {
-        throw new Error(
+        throw buildHttpError(
           [
             `HTTP 401 Unauthorized: ${path}`,
             '没有拿到有效 Authorization，或当前 ChatGPT session 已过期。',
@@ -297,10 +304,59 @@
           ].join('\n')
         );
       }
-      throw new Error(`HTTP ${response.status} ${response.statusText}: ${path}\n${body.slice(0, 600)}`);
+      throw buildHttpError(`HTTP ${response.status} ${response.statusText}: ${path}\n${body.slice(0, 600)}`);
     }
 
     return response.json();
+  };
+
+  const isHttpStatus = (error, statuses) =>
+    error && typeof error === 'object' && statuses.includes(Number(error.status));
+
+  const errorMessage = (error) => (error instanceof Error ? error.message : String(error));
+
+  const createTypedError = (message, type, cause = '') => {
+    const error = new Error(message);
+    error.type = type;
+    error.causeMessage = cause;
+    return error;
+  };
+
+  const resolveMeInfo = (payload) => {
+    if (!payload || typeof payload !== 'object') return null;
+
+    const orgs = Array.isArray(payload.orgs?.data) ? payload.orgs.data : [];
+    const teamOrgs = orgs.filter((org) => org && org.personal !== true);
+    const roleCandidates = teamOrgs
+      .map((org) => normalizeString(org.role))
+      .filter(Boolean);
+    const normalizedRoles = roleCandidates.map((role) => role.toLowerCase());
+    const adminRoles = new Set(['owner', 'admin', 'administrator']);
+    const isTeamAdmin =
+      normalizedRoles.length > 0 ? normalizedRoles.some((role) => adminRoles.has(role)) : null;
+
+    return {
+      id: normalizeString(payload.id),
+      email: normalizeString(payload.email),
+      name: normalizeString(payload.name ?? payload.first_name ?? payload.firstName),
+      teamRole: roleCandidates[0] || null,
+      isTeamAdmin,
+      teamOrgCount: teamOrgs.length,
+    };
+  };
+
+  const fetchMeInfo = async (headers) => {
+    try {
+      return {
+        info: resolveMeInfo(await apiGet(CONFIG.ME_PATH, headers)),
+        error: '',
+      };
+    } catch (error) {
+      return {
+        info: null,
+        error: errorMessage(error),
+      };
+    }
   };
 
   const getWindowSeconds = (windowInfo) => {
@@ -421,18 +477,17 @@
           normalizeString(item.metered_feature ?? item.meteredFeature) ||
           `Additional ${index + 1}`;
         const idPrefix = normalizeWindowId(limitName) || `additional-${index + 1}`;
-        const primary = rateInfo.primary_window ?? rateInfo.primaryWindow ?? null;
-        const secondary = rateInfo.secondary_window ?? rateInfo.secondaryWindow ?? null;
+        const { fiveHourWindow, weeklyWindow } = pickClassifiedWindows(rateInfo);
         const fiveHour = toQuotaWindow(
           `${idPrefix}-five-hour-${index}`,
           `${limitName} 5 小时`,
-          primary,
+          fiveHourWindow,
           rateInfo
         );
         const weekly = toQuotaWindow(
           `${idPrefix}-weekly-${index}`,
           `${limitName} 7 天`,
-          secondary,
+          weeklyWindow,
           rateInfo
         );
         if (fiveHour) windows.push(fiveHour);
@@ -451,6 +506,47 @@
     });
     const url = `${CONFIG.DAILY_USAGE_PATH}?${query.toString()}`;
     return apiGet(url, headers);
+  };
+
+  const utcDateMs = (date) => Date.parse(`${date}T00:00:00Z`);
+
+  const inclusiveWindowDays = (startDate, endDateInclusive) => {
+    const startMs = utcDateMs(startDate);
+    const endMs = utcDateMs(endDateInclusive);
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) return 1;
+    return Math.max(1, Math.round((endMs - startMs) / DAY_MS) + 1);
+  };
+
+  const endDateExclusiveFromInclusive = (endDateInclusive) => {
+    const endMs = utcDateMs(endDateInclusive);
+    return Number.isFinite(endMs) ? ymdUtc(endMs + DAY_MS) : endDateInclusive;
+  };
+
+  const fetchUsageLeaderboard = async (headers, startDate, endDateInclusive) => {
+    const query = new URLSearchParams({
+      start_date: startDate,
+      end_date: endDateInclusive,
+      window_days: String(inclusiveWindowDays(startDate, endDateInclusive)),
+      page: '1',
+      page_size: '50',
+      client_filter: 'all',
+      sort_by: 'credits',
+      sort_direction: 'desc',
+    });
+    const url = `${CONFIG.TEAM_USAGE_LEADERBOARD_PATH}?${query.toString()}`;
+
+    try {
+      return await apiGet(url, headers);
+    } catch (error) {
+      if (isHttpStatus(error, [401, 403])) {
+        throw createTypedError(
+          'Team 用量排行榜需要 owner/admin 或用量查看权限。',
+          'team-permission-denied',
+          errorMessage(error)
+        );
+      }
+      throw error;
+    }
   };
 
   const sortedDays = (payload) =>
@@ -555,6 +651,83 @@
     };
   };
 
+  const leaderboardUserLabel = (row) => {
+    const email = normalizeString(row.email);
+    const name = normalizeString(row.name);
+    const userId = normalizeString(row.user_id ?? row.userId);
+    if (name && email) return `${name} <${email}>`;
+    return email || name || userId || 'UNKNOWN';
+  };
+
+  const pickLeaderboardUserRow = (rows, currentEmail) => {
+    const normalizedEmail = normalizeString(currentEmail)?.toLowerCase();
+    if (!normalizedEmail) return null;
+    return rows.find((row) => normalizeString(row.email)?.toLowerCase() === normalizedEmail) || null;
+  };
+
+  const buildLeaderboardRange = (payload, id, label, startDate, endDateInclusive, currentEmail) => {
+    const rows = (payload?.data ?? []).slice().sort((left, right) => {
+      const leftRank = normalizeNumber(left.rank) ?? Number.MAX_SAFE_INTEGER;
+      const rightRank = normalizeNumber(right.rank) ?? Number.MAX_SAFE_INTEGER;
+      if (leftRank !== rightRank) return leftRank - rightRank;
+      return num(right.credits) - num(left.credits);
+    });
+
+    let credits = 0;
+    let tokens = 0;
+    let threads = 0;
+    let turns = 0;
+
+    for (const row of rows) {
+      credits += num(row.credits);
+      tokens += num(row.text_tokens ?? row.textTokens);
+      threads += num(row.n_threads ?? row.nThreads);
+      turns += num(row.n_turns ?? row.nTurns);
+    }
+
+    const totalUsers = num(payload?.total_users ?? payload?.totalUsers) || rows.length;
+    const currentUser = pickLeaderboardUserRow(rows, currentEmail);
+    const selectedCredits = currentUser ? num(currentUser.credits) : credits;
+    const selectedTokens = currentUser ? num(currentUser.text_tokens ?? currentUser.textTokens) : tokens;
+    const selectedThreads = currentUser ? num(currentUser.n_threads ?? currentUser.nThreads) : threads;
+    const selectedTurns = currentUser ? num(currentUser.n_turns ?? currentUser.nTurns) : turns;
+
+    return {
+      id,
+      label,
+      startDate,
+      endDateExclusive: endDateExclusiveFromInclusive(endDateInclusive),
+      returnedDays: inclusiveWindowDays(startDate, endDateInclusive),
+      firstDate: startDate,
+      lastDate: endDateInclusive,
+      credits: round(selectedCredits, 6),
+      usd: round(selectedCredits * CONFIG.USD_PER_CREDIT, 2),
+      tokens: Math.round(selectedTokens),
+      cachedInputTokens: 0,
+      uncachedInputTokens: 0,
+      outputTokens: 0,
+      threads: Math.round(selectedThreads),
+      turns: Math.round(selectedTurns),
+      users: Math.round(totalUsers),
+      leaderboardTotalCredits: round(credits, 6),
+      leaderboardTotalUsd: round(credits * CONFIG.USD_PER_CREDIT, 2),
+      matchedEmail: normalizeString(currentEmail),
+      matchedUserFound: Boolean(currentUser),
+      topClients: rows.slice(0, TOP_CLIENT_LIMIT).map((row) => {
+        const rowCredits = num(row.credits);
+        return {
+          clientId: leaderboardUserLabel(row),
+          credits: round(rowCredits, 6),
+          usd: round(rowCredits * CONFIG.USD_PER_CREDIT, 2),
+          tokens: Math.round(num(row.text_tokens ?? row.textTokens)),
+          threads: Math.round(num(row.n_threads ?? row.nThreads)),
+          turns: Math.round(num(row.n_turns ?? row.nTurns)),
+        };
+      }),
+      days: [],
+    };
+  };
+
   const buildWeeklyEstimate = (weeklyWindow, sinceResetRange, sinceResetPayload, sinceResetStartDate) => {
     const usedPercent = normalizeNumber(weeklyWindow.used_percent ?? weeklyWindow.usedPercent);
     if (usedPercent === null || usedPercent <= 0) return null;
@@ -587,6 +760,189 @@
     };
   };
 
+  const buildWeeklyEstimateFromRange = (weeklyWindow, sinceResetRange) => {
+    const usedPercent = normalizeNumber(weeklyWindow.used_percent ?? weeklyWindow.usedPercent);
+    if (usedPercent === null || usedPercent <= 0) return null;
+
+    const usedRatio = usedPercent / 100;
+    const includedCredits = sinceResetRange.credits;
+    const totalCredits = includedCredits / usedRatio;
+    const remainingCredits = Math.max(0, totalCredits - includedCredits);
+
+    return {
+      usedPercent: round(usedPercent, 2),
+      usedRatio: round(usedRatio, 4),
+      remainingRatio: round(1 - usedRatio, 4),
+      includedCredits: round(includedCredits, 6),
+      resetDayCredits: 0,
+      excludedCredits: round(includedCredits, 6),
+      totalCreditsWithResetDay: round(totalCredits, 2),
+      totalUsdWithResetDay: round(totalCredits * CONFIG.USD_PER_CREDIT, 2),
+      totalCreditsWithoutResetDay: round(totalCredits, 2),
+      totalUsdWithoutResetDay: round(totalCredits * CONFIG.USD_PER_CREDIT, 2),
+      remainingCreditsWithResetDay: round(remainingCredits, 2),
+      remainingUsdWithResetDay: round(remainingCredits * CONFIG.USD_PER_CREDIT, 2),
+      remainingCreditsWithoutResetDay: round(remainingCredits, 2),
+      remainingUsdWithoutResetDay: round(remainingCredits * CONFIG.USD_PER_CREDIT, 2),
+      source: 'aggregate-range',
+    };
+  };
+
+  const buildAnalyticsDates = (timing) => {
+    const apiNowMs = timing.serverNowMs;
+    return {
+      apiNowMs,
+      endDateInclusive: ymdUtc(apiNowMs),
+      endDateExclusive: ymdUtc(apiNowMs + DAY_MS),
+      sinceResetStartDate: ymdUtc(timing.windowStartMs),
+      monthStartDate: firstDayOfMonthUtc(apiNowMs),
+      rollingStartDate: ymdUtc(apiNowMs - (CONFIG.ROLLING_DAYS - 1) * DAY_MS),
+    };
+  };
+
+  const buildAnalyticsTimeLabels = (timing) => ({
+    userTimeZone: getUserTimeZone(),
+    backendNowLabel: formatUserDateTime(timing.serverNowMs),
+    backendNowUtcLabel: formatUtcDateTime(timing.serverNowMs),
+    windowStartLabel: formatUserDateTime(timing.windowStartMs),
+    windowStartUtcLabel: formatUtcDateTime(timing.windowStartMs),
+    resetAtLabel: formatUserDateTime(timing.resetAtMs),
+    resetAtUtcLabel: formatUtcDateTime(timing.resetAtMs),
+  });
+
+  const fetchDailyAnalyticsRanges = async (headers, weeklyWindow, timing) => {
+    const dates = buildAnalyticsDates(timing);
+    const [sinceResetPayload, monthPayload, rollingPayload] = await Promise.all([
+      fetchDailyUsage(headers, dates.sinceResetStartDate, dates.endDateExclusive),
+      fetchDailyUsage(headers, dates.monthStartDate, dates.endDateExclusive),
+      fetchDailyUsage(headers, dates.rollingStartDate, dates.endDateExclusive),
+    ]);
+
+    const sinceResetRange = buildAnalyticsRange(
+      sinceResetPayload,
+      'since-reset',
+      '上次重置至今',
+      dates.sinceResetStartDate,
+      dates.endDateExclusive
+    );
+    const monthRange = buildAnalyticsRange(
+      monthPayload,
+      'month-to-date',
+      '本月初至今',
+      dates.monthStartDate,
+      dates.endDateExclusive
+    );
+    const rollingRange = buildAnalyticsRange(
+      rollingPayload,
+      'rolling',
+      `近 ${CONFIG.ROLLING_DAYS} 天`,
+      dates.rollingStartDate,
+      dates.endDateExclusive
+    );
+
+    return {
+      dateBucket: 'UTC',
+      source: 'daily-workspace',
+      ...buildAnalyticsTimeLabels(timing),
+      weeklyEstimate: buildWeeklyEstimate(
+        weeklyWindow,
+        sinceResetRange,
+        sinceResetPayload,
+        dates.sinceResetStartDate
+      ),
+      ranges: [sinceResetRange, monthRange, rollingRange],
+    };
+  };
+
+  const fetchLeaderboardAnalyticsRanges = async (headers, weeklyWindow, timing, currentEmail) => {
+    if (!normalizeString(currentEmail)) {
+      throw createTypedError(
+        'Team 用量排行榜需要当前账号邮箱，但 /backend-api/me 和 /usage 都没有返回邮箱。',
+        'team-leaderboard-missing-email'
+      );
+    }
+
+    const dates = buildAnalyticsDates(timing);
+    const [sinceResetPayload, monthPayload, rollingPayload] = await Promise.all([
+      fetchUsageLeaderboard(headers, dates.sinceResetStartDate, dates.endDateInclusive),
+      fetchUsageLeaderboard(headers, dates.monthStartDate, dates.endDateInclusive),
+      fetchUsageLeaderboard(headers, dates.rollingStartDate, dates.endDateInclusive),
+    ]);
+
+    const sinceResetRange = buildLeaderboardRange(
+      sinceResetPayload,
+      'since-reset',
+      '上次重置至今',
+      dates.sinceResetStartDate,
+      dates.endDateInclusive,
+      currentEmail
+    );
+    const monthRange = buildLeaderboardRange(
+      monthPayload,
+      'month-to-date',
+      '本月初至今',
+      dates.monthStartDate,
+      dates.endDateInclusive,
+      currentEmail
+    );
+    const rollingRange = buildLeaderboardRange(
+      rollingPayload,
+      'rolling',
+      `近 ${CONFIG.ROLLING_DAYS} 天`,
+      dates.rollingStartDate,
+      dates.endDateInclusive,
+      currentEmail
+    );
+    const ranges = [sinceResetRange, monthRange, rollingRange];
+
+    if (!ranges.some((range) => range.matchedUserFound)) {
+      throw createTypedError(
+        `Team 用量排行榜没有找到当前邮箱 ${currentEmail} 的记录。`,
+        'team-leaderboard-missing-user'
+      );
+    }
+
+    return {
+      dateBucket: 'UTC',
+      source: 'team-leaderboard',
+      ...buildAnalyticsTimeLabels(timing),
+      weeklyEstimate: buildWeeklyEstimateFromRange(weeklyWindow, sinceResetRange),
+      ranges,
+    };
+  };
+
+  const fetchTeamAnalyticsWithFallback = async (headers, weeklyWindow, timing, currentEmail) => {
+    let leaderboardError = '';
+
+    try {
+      return {
+        analytics: await fetchLeaderboardAnalyticsRanges(headers, weeklyWindow, timing, currentEmail),
+        warning: '',
+      };
+    } catch (error) {
+      leaderboardError = errorMessage(error);
+    }
+
+    try {
+      const analytics = await fetchDailyAnalyticsRanges(headers, weeklyWindow, timing);
+      if (!analytics.ranges.some((range) => range.returnedDays > 0)) {
+        throw new Error('daily analytics 没有返回可用日期桶。');
+      }
+      return {
+        analytics: {
+          ...analytics,
+          source: 'daily-workspace-fallback',
+          fallbackReason: leaderboardError,
+        },
+        warning: `${leaderboardError} 已回退到 daily analytics；Team 子号或非 owner/admin 账号可能看不到 workspace 排行榜。`,
+      };
+    } catch (fallbackError) {
+      throw new Error(
+        `${leaderboardError} 回退到 daily analytics 也失败：${errorMessage(fallbackError)}`
+      );
+    }
+  };
+
   const collectQuota = async () => {
     const sessionInfo = await getSessionInfo();
     const headers = buildRequestHeaders(sessionInfo);
@@ -596,62 +952,27 @@
     const weeklyWindow = pickClassifiedWindows(rateLimit).weeklyWindow;
     const timing = getWindowTiming(weeklyWindow);
     const windows = buildQuotaWindows(usage);
+    const planType = normalizePlanType(usage.plan_type ?? usage.planType);
+    const isTeamPlan = planType === 'team';
+    const meResult = isTeamPlan ? await fetchMeInfo(headers) : { info: null, error: '' };
+    const userEmail = meResult.info?.email || normalizeString(usage.email);
     let analytics = null;
     let analyticsError = '';
 
     if (weeklyWindow && timing) {
-      const apiNowMs = timing.serverNowMs;
-      const endDateExclusive = ymdUtc(apiNowMs + DAY_MS);
-      const sinceResetStartDate = ymdUtc(timing.windowStartMs);
-      const monthStartDate = firstDayOfMonthUtc(apiNowMs);
-      const rollingStartDate = ymdUtc(apiNowMs - (CONFIG.ROLLING_DAYS - 1) * DAY_MS);
-
       try {
-        const [sinceResetPayload, monthPayload, rollingPayload] = await Promise.all([
-          fetchDailyUsage(headers, sinceResetStartDate, endDateExclusive),
-          fetchDailyUsage(headers, monthStartDate, endDateExclusive),
-          fetchDailyUsage(headers, rollingStartDate, endDateExclusive),
-        ]);
-
-        const sinceResetRange = buildAnalyticsRange(
-          sinceResetPayload,
-          'since-reset',
-          '上次重置至今',
-          sinceResetStartDate,
-          endDateExclusive
-        );
-        const monthRange = buildAnalyticsRange(
-          monthPayload,
-          'month-to-date',
-          '本月初至今',
-          monthStartDate,
-          endDateExclusive
-        );
-        const rollingRange = buildAnalyticsRange(
-          rollingPayload,
-          'rolling',
-          `近 ${CONFIG.ROLLING_DAYS} 天`,
-          rollingStartDate,
-          endDateExclusive
-        );
-
-        analytics = {
-          dateBucket: 'UTC',
-          userTimeZone: getUserTimeZone(),
-          backendNowLabel: formatUserDateTime(apiNowMs),
-          backendNowUtcLabel: formatUtcDateTime(apiNowMs),
-          windowStartLabel: formatUserDateTime(timing.windowStartMs),
-          windowStartUtcLabel: formatUtcDateTime(timing.windowStartMs),
-          resetAtLabel: formatUserDateTime(timing.resetAtMs),
-          resetAtUtcLabel: formatUtcDateTime(timing.resetAtMs),
-          weeklyEstimate: buildWeeklyEstimate(
+        if (isTeamPlan) {
+          const teamResult = await fetchTeamAnalyticsWithFallback(
+            headers,
             weeklyWindow,
-            sinceResetRange,
-            sinceResetPayload,
-            sinceResetStartDate
-          ),
-          ranges: [sinceResetRange, monthRange, rollingRange],
-        };
+            timing,
+            userEmail
+          );
+          analytics = teamResult.analytics;
+          analyticsError = teamResult.warning;
+        } else {
+          analytics = await fetchDailyAnalyticsRanges(headers, weeklyWindow, timing);
+        }
       } catch (error) {
         analyticsError = error instanceof Error ? error.message : String(error);
       }
@@ -663,7 +984,10 @@
       fetchedAt: new Date().toISOString(),
       tokenSource: sessionInfo.tokenSource,
       hasAccountHeader: Boolean(sessionInfo.accountId),
-      planType: normalizePlanType(usage.plan_type ?? usage.planType),
+      planType,
+      userEmail,
+      meInfo: meResult.info,
+      meError: meResult.error,
       windows,
       analytics,
       analyticsError,
@@ -803,33 +1127,60 @@
     `;
   };
 
-  const renderRange = (range) => `
-    <div class="cqc-range">
-      <div class="cqc-range-header">
-        <div>
-          <strong>${escapeHtml(range.label)}</strong>
-          <span>${escapeHtml(rangeDateLabel(range))}</span>
+  const renderRange = (range) => {
+    const isLeaderboard = range.leaderboardTotalCredits !== undefined;
+    const creditsLabel = isLeaderboard ? '当前用户 Credits' : 'Credits';
+    const creditsHint = isLeaderboard
+      ? `${formatUsd(range.usd)} · workspace ${formatNumber(range.leaderboardTotalCredits, 2)}`
+      : `${formatUsd(range.usd)}`;
+    const detailSummary = isLeaderboard ? 'Team 用户排行' : '客户端与最近每日明细';
+
+    return `
+      <div class="cqc-range">
+        <div class="cqc-range-header">
+          <div>
+            <strong>${escapeHtml(range.label)}</strong>
+            <span>${escapeHtml(rangeDateLabel(range))}</span>
+          </div>
+          <em>${escapeHtml(range.returnedDays)} buckets</em>
         </div>
-        <em>${escapeHtml(range.returnedDays)} buckets</em>
+        <div class="cqc-range-grid">
+          ${metricCard(creditsLabel, `${formatNumber(range.credits, 2)}`, creditsHint)}
+          ${metricCard('Tokens', formatInteger(range.tokens), `${formatInteger(range.turns)} turns`)}
+        </div>
+        <details>
+          <summary>${escapeHtml(detailSummary)}</summary>
+          ${renderClientRows(range.topClients)}
+          ${renderDailyRows(range.days)}
+        </details>
       </div>
-      <div class="cqc-range-grid">
-        ${metricCard('Credits', `${formatNumber(range.credits, 2)}`, `${formatUsd(range.usd)}`)}
-        ${metricCard('Tokens', formatInteger(range.tokens), `${formatInteger(range.turns)} turns`)}
-      </div>
-      <details>
-        <summary>客户端与最近每日明细</summary>
-        ${renderClientRows(range.topClients)}
-        ${renderDailyRows(range.days)}
-      </details>
-    </div>
-  `;
+    `;
+  };
+
+  const analyticsSourceLabel = (source) => {
+    if (source === 'team-leaderboard') return 'Team usage leaderboard';
+    if (source === 'daily-workspace-fallback') return 'Daily workspace analytics (fallback)';
+    return 'Daily workspace analytics';
+  };
+
+  const teamRoleLabel = (result) => {
+    if (normalizePlanType(result.planType) !== 'team') return '非 Team';
+    if (result.meInfo?.isTeamAdmin === true) {
+      return result.meInfo.teamRole ? `me: ${result.meInfo.teamRole}` : 'me: owner/admin';
+    }
+    if (result.meInfo?.isTeamAdmin === false) {
+      return result.meInfo.teamRole ? `me: ${result.meInfo.teamRole}` : 'me: non-owner';
+    }
+    if (result.meError) return 'me 查询失败';
+    return 'me 未返回 Team role';
+  };
 
   const renderResult = (result) => {
     const weeklyWindow = result.windows.find((item) => item.id === 'codex-weekly');
     const fiveHourWindow = result.windows.find((item) => item.id === 'codex-five-hour');
     const weeklyEstimate = result.analytics?.weeklyEstimate ?? null;
     const summary = [
-      metricCard('Plan', getPlanLabel(result.planType)),
+      metricCard('Plan', getPlanLabel(result.planType), result.userEmail || ''),
       metricCard(
         '7 天剩余',
         weeklyWindow?.remainingPercent === null || weeklyWindow?.remainingPercent === undefined
@@ -852,7 +1203,18 @@
     ].join('');
 
     const weeklyEstimateBlock = weeklyEstimate
-      ? `
+      ? result.analytics?.source === 'team-leaderboard'
+        ? `
+        <div class="cqc-estimate">
+          <div>
+            <span>Team 当前用户</span>
+            <strong>${formatNumber(weeklyEstimate.totalCreditsWithResetDay, 2)} credits</strong>
+            <em>${formatUsd(weeklyEstimate.totalUsdWithResetDay)} total · remaining ${formatNumber(weeklyEstimate.remainingCreditsWithResetDay, 2)}</em>
+          </div>
+          <p>基于 Team usage leaderboard 中当前邮箱的 credits 和 7 天 used_percent 反推；leaderboard 按日期范围聚合，不能拆分重置日。</p>
+        </div>
+      `
+        : `
         <div class="cqc-estimate">
           <div>
             <span>包含重置日</span>
@@ -892,6 +1254,9 @@
         <h3>Daily Analytics</h3>
         <div class="cqc-facts">
           ${renderFact('日期桶', result.analytics?.dateBucket ?? 'UTC', 'daily analytics 按 UTC 日期桶聚合')}
+          ${renderFact('来源', analyticsSourceLabel(result.analytics?.source))}
+          ${renderFact('当前账号', result.meInfo?.name && result.userEmail ? `${result.meInfo.name} <${result.userEmail}>` : result.userEmail || '-')}
+          ${renderFact('Team role', teamRoleLabel(result), result.meError ? `me error: ${result.meError}` : '')}
           ${renderFact('用户时区', result.analytics?.userTimeZone ?? getUserTimeZone())}
           ${renderFact('后端当前', result.analytics?.backendNowLabel ?? '-', result.analytics?.backendNowUtcLabel ? `UTC: ${result.analytics.backendNowUtcLabel}` : '')}
           ${renderFact('窗口开始', result.analytics?.windowStartLabel ?? '-', result.analytics?.windowStartUtcLabel ? `UTC: ${result.analytics.windowStartUtcLabel}` : '')}

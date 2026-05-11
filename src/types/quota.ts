@@ -120,6 +120,11 @@ export interface CodexAdditionalRateLimit {
 }
 
 export interface CodexUsagePayload {
+  user_id?: string;
+  userId?: string;
+  account_id?: string;
+  accountId?: string;
+  email?: string;
   plan_type?: string;
   planType?: string;
   rate_limit?: CodexRateLimitInfo | null;
@@ -158,6 +163,29 @@ export interface CodexDailyUsageDay {
 
 export interface CodexDailyUsagePayload {
   data?: CodexDailyUsageDay[];
+}
+
+export interface CodexUsageLeaderboardRow {
+  rank?: number | string;
+  user_id?: string;
+  userId?: string;
+  name?: string;
+  email?: string;
+  credits?: number | string;
+  n_threads?: number | string;
+  nThreads?: number | string;
+  n_turns?: number | string;
+  nTurns?: number | string;
+  current_streak?: number | string;
+  currentStreak?: number | string;
+  text_tokens?: number | string;
+  textTokens?: number | string;
+}
+
+export interface CodexUsageLeaderboardPayload {
+  data?: CodexUsageLeaderboardRow[];
+  total_users?: number | string;
+  totalUsers?: number | string;
 }
 
 // Claude API payload types
@@ -297,6 +325,10 @@ export interface CodexAnalyticsRange {
   turns: number;
   users: number;
   topClients: CodexAnalyticsClientSummary[];
+  leaderboardTotalCredits?: number;
+  leaderboardTotalUsd?: number;
+  matchedEmail?: string | null;
+  matchedUserFound?: boolean;
 }
 
 export interface CodexWeeklyEstimate {
@@ -314,21 +346,25 @@ export interface CodexWeeklyEstimate {
   remainingUsdWithResetDay: number;
   remainingCreditsWithoutResetDay: number;
   remainingUsdWithoutResetDay: number;
+  source?: 'daily-buckets' | 'leaderboard-range';
 }
 
 export interface CodexAnalyticsState {
   dateBucket: 'UTC';
+  source?: 'daily-workspace' | 'team-leaderboard' | 'daily-workspace-fallback';
   backendNowLabel: string;
   windowStartLabel: string;
   resetAtLabel: string;
   weeklyEstimate: CodexWeeklyEstimate | null;
   ranges: CodexAnalyticsRange[];
+  fallbackReason?: string | null;
 }
 
 export interface CodexQuotaState {
   status: 'idle' | 'loading' | 'success' | 'error';
   windows: CodexQuotaWindow[];
   planType?: string | null;
+  accountEmail?: string | null;
   analytics?: CodexAnalyticsState | null;
   analyticsError?: string | null;
   error?: string;

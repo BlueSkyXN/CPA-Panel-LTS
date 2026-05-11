@@ -5,6 +5,7 @@
 import type {
   ClaudeUsagePayload,
   CodexDailyUsagePayload,
+  CodexUsageLeaderboardPayload,
   CodexUsagePayload,
   GeminiCliCodeAssistPayload,
   GeminiCliQuotaPayload,
@@ -194,6 +195,25 @@ export function parseCodexDailyUsagePayload(payload: unknown): CodexDailyUsagePa
   }
   if (typeof payload === 'object') {
     return payload as CodexDailyUsagePayload;
+  }
+  return null;
+}
+
+export function parseCodexUsageLeaderboardPayload(
+  payload: unknown
+): CodexUsageLeaderboardPayload | null {
+  if (payload === undefined || payload === null) return null;
+  if (typeof payload === 'string') {
+    const trimmed = payload.trim();
+    if (!trimmed) return null;
+    try {
+      return JSON.parse(trimmed) as CodexUsageLeaderboardPayload;
+    } catch {
+      return null;
+    }
+  }
+  if (typeof payload === 'object') {
+    return payload as CodexUsageLeaderboardPayload;
   }
   return null;
 }

@@ -193,6 +193,9 @@ export const CODEX_USAGE_URL = 'https://chatgpt.com/backend-api/wham/usage';
 export const CODEX_DAILY_USAGE_URL =
   'https://chatgpt.com/backend-api/wham/analytics/daily-workspace-usage-counts';
 
+export const CODEX_TEAM_USAGE_LEADERBOARD_URL =
+  'https://chatgpt.com/backend-api/wham/analytics/usage-leaderboard';
+
 export const CODEX_USD_PER_CREDIT = 40 / 1000;
 
 export const CODEX_ANALYTICS_ROLLING_DAYS = 30;
