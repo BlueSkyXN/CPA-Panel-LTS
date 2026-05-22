@@ -124,6 +124,46 @@ export function useCodexRemoteCloudConnectEnvironments() {
     void load(state.file);
   }, [load, state.file]);
 
+  const confirmDeleteRemoteCloudConnectEnvironment = useCallback(
+    async (file: AuthFileItem, environment: CodexRemoteCloudConnectEnvironment) => {
+      const requestId = ++requestIdRef.current;
+      setState((current) => ({
+        ...current,
+        deletingId: environment.envId,
+      }));
+      try {
+        await codexRemoteCloudConnectEnvironmentsApi.remove(file, environment.envId);
+        if (requestId !== requestIdRef.current) return;
+        showNotification(
+          t('auth_files.codex_remote_cloud_connect_environment_delete_success', {
+            name: environment.name,
+          }),
+          'success'
+        );
+        setState((current) => ({
+          ...current,
+          deletingId: null,
+        }));
+        await load(file);
+      } catch (err: unknown) {
+        if (requestId !== requestIdRef.current) return;
+        const message = getFailureMessage(err);
+        showNotification(
+          t('auth_files.codex_remote_cloud_connect_environment_delete_failed', { message }),
+          'error'
+        );
+      } finally {
+        if (requestId === requestIdRef.current) {
+          setState((current) => ({
+            ...current,
+            deletingId: null,
+          }));
+        }
+      }
+    },
+    [getFailureMessage, load, showNotification, t]
+  );
+
   const deleteRemoteCloudConnectEnvironment = useCallback(
     (environment: CodexRemoteCloudConnectEnvironment) => {
       const file = state.file;
@@ -137,45 +177,28 @@ export function useCodexRemoteCloudConnectEnvironments() {
         }),
         variant: 'danger',
         confirmText: t('auth_files.codex_remote_cloud_connect_environment_delete_confirm_button'),
-        onConfirm: async () => {
-          const requestId = ++requestIdRef.current;
-          setState((current) => ({
-            ...current,
-            deletingId: environment.envId,
-          }));
-          try {
-            await codexRemoteCloudConnectEnvironmentsApi.remove(file, environment.envId);
-            if (requestId !== requestIdRef.current) return;
-            showNotification(
-              t('auth_files.codex_remote_cloud_connect_environment_delete_success', {
+        onConfirm: () =>
+          new Promise<void>((resolve) => {
+            showConfirmation({
+              title: t('auth_files.codex_remote_cloud_connect_environment_delete_second_title'),
+              message: t('auth_files.codex_remote_cloud_connect_environment_delete_second_message', {
                 name: environment.name,
+                envId: environment.envId,
               }),
-              'success'
-            );
-            setState((current) => ({
-              ...current,
-              deletingId: null,
-            }));
-            await load(file);
-          } catch (err: unknown) {
-            if (requestId !== requestIdRef.current) return;
-            const message = getFailureMessage(err);
-            showNotification(
-              t('auth_files.codex_remote_cloud_connect_environment_delete_failed', { message }),
-              'error'
-            );
-          } finally {
-            if (requestId === requestIdRef.current) {
-              setState((current) => ({
-                ...current,
-                deletingId: null,
-              }));
-            }
-          }
-        },
+              variant: 'danger',
+              confirmText: t(
+                'auth_files.codex_remote_cloud_connect_environment_delete_second_confirm_button'
+              ),
+              onCancel: resolve,
+              onConfirm: async () => {
+                await confirmDeleteRemoteCloudConnectEnvironment(file, environment);
+                resolve();
+              },
+            });
+          }),
       });
     },
-    [getFailureMessage, load, showConfirmation, showNotification, state.file, t]
+    [confirmDeleteRemoteCloudConnectEnvironment, showConfirmation, state.file, t]
   );
 
   const close = useCallback(() => {
