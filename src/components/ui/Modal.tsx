@@ -16,6 +16,7 @@ interface ModalProps {
   title?: ReactNode;
   onClose: () => void;
   footer?: ReactNode;
+  headerActions?: ReactNode;
   width?: number | string;
   className?: string;
   closeDisabled?: boolean;
@@ -121,6 +122,7 @@ export function Modal({
   title,
   onClose,
   footer,
+  headerActions,
   width = 520,
   className,
   closeDisabled = false,
@@ -283,6 +285,7 @@ export function Modal({
         aria-labelledby={title ? titleId : undefined}
         tabIndex={-1}
       >
+        {headerActions && <div className="modal-floating-actions">{headerActions}</div>}
         <button
           ref={closeButtonRef}
           type="button"

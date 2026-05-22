@@ -1386,9 +1386,26 @@
   max-height: min(90vh, 920px);
 }
 
+.codexRemoteCloudConnectEnvironmentModal :global(.modal-header) {
+  padding-right: 96px;
+}
+
 .codexRemoteCloudConnectEnvironmentModal :global(.modal-body) {
   padding: 14px;
   max-height: min(72vh, calc(100vh - 176px));
+}
+
+.codexRemoteCloudConnectEnvironmentHeaderRefresh:global(.btn.btn-sm) {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 999px;
+
+  > span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
 }
 
 .codexRemoteCloudConnectEnvironmentPanel {
@@ -1469,12 +1486,14 @@
 }
 
 .codexRemoteCloudConnectEnvironmentListDense,
+.codexRemoteCloudConnectEnvironmentListTable,
 .codexRemoteCloudConnectEnvironmentListVertical {
   display: flex;
   flex-direction: column;
 }
 
-.codexRemoteCloudConnectEnvironmentListDense {
+.codexRemoteCloudConnectEnvironmentListDense,
+.codexRemoteCloudConnectEnvironmentListTable {
   gap: 6px;
 }
 
@@ -1487,6 +1506,99 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: start;
   gap: 10px;
+}
+
+.codexRemoteCloudConnectEnvironmentTableWrapper {
+  min-width: 0;
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 62%, transparent);
+}
+
+.codexRemoteCloudConnectEnvironmentTable {
+  width: 100%;
+  min-width: 1040px;
+  border-collapse: separate;
+  border-spacing: 0;
+
+  th,
+  td {
+    padding: 9px 10px;
+    border-bottom: 1px solid color-mix(in srgb, var(--border-color) 52%, transparent);
+    text-align: left;
+    vertical-align: middle;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    color: var(--text-tertiary);
+    font-size: 11px;
+    font-weight: 800;
+    background: color-mix(in srgb, var(--bg-primary) 88%, transparent);
+    white-space: nowrap;
+  }
+
+  td {
+    color: var(--text-secondary);
+  }
+
+  tbody tr:last-child td {
+    border-bottom: 0;
+  }
+
+  tbody tr:hover td {
+    background: color-mix(in srgb, var(--bg-hover) 54%, transparent);
+  }
+
+  td:first-child {
+    min-width: 150px;
+
+    strong,
+    span {
+      display: block;
+      max-width: 210px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    strong {
+      color: var(--text-primary);
+      font-weight: 800;
+    }
+
+    span {
+      margin-top: 2px;
+      color: var(--text-tertiary);
+      font-size: 11px;
+    }
+  }
+
+  code {
+    display: inline-block;
+    max-width: 180px;
+    overflow: hidden;
+    color: var(--text-primary);
+    text-overflow: ellipsis;
+    vertical-align: middle;
+    white-space: nowrap;
+  }
+}
+
+.codexRemoteCloudConnectEnvironmentRowStale td {
+  background: color-mix(in srgb, var(--warning-bg) 18%, transparent);
+}
+
+.codexRemoteCloudConnectEnvironmentRowActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
 }
 
 .codexRemoteCloudConnectEnvironmentWarning,

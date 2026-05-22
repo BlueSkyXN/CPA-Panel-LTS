@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   codexRemoteCloudConnectEnvironmentsApi,
@@ -35,6 +35,7 @@ export function useCodexRemoteCloudConnectEnvironments() {
   const showNotification = useNotificationStore((state) => state.showNotification);
   const showConfirmation = useNotificationStore((state) => state.showConfirmation);
   const [state, setState] = useState<CodexRemoteCloudConnectEnvironmentsState>(initialState);
+  const requestIdRef = useRef(0);
 
   const getFailureMessage = useCallback(
     (err: unknown) => {
@@ -55,6 +56,7 @@ export function useCodexRemoteCloudConnectEnvironments() {
 
   const load = useCallback(
     async (file: AuthFileItem) => {
+      const requestId = ++requestIdRef.current;
       setState((current) => ({
         ...current,
         file,
@@ -66,6 +68,7 @@ export function useCodexRemoteCloudConnectEnvironments() {
 
       try {
         const result = await codexRemoteCloudConnectEnvironmentsApi.list(file);
+        if (requestId !== requestIdRef.current) return;
         setState((current) => ({
           ...current,
           file,
@@ -76,6 +79,7 @@ export function useCodexRemoteCloudConnectEnvironments() {
           truncated: result.truncated,
         }));
       } catch (err: unknown) {
+        if (requestId !== requestIdRef.current) return;
         const message = getFailureMessage(err);
         setState((current) => ({
           ...current,
@@ -134,30 +138,39 @@ export function useCodexRemoteCloudConnectEnvironments() {
         variant: 'danger',
         confirmText: t('auth_files.codex_remote_cloud_connect_environment_delete_confirm_button'),
         onConfirm: async () => {
+          const requestId = ++requestIdRef.current;
           setState((current) => ({
             ...current,
             deletingId: environment.envId,
           }));
           try {
             await codexRemoteCloudConnectEnvironmentsApi.remove(file, environment.envId);
+            if (requestId !== requestIdRef.current) return;
             showNotification(
               t('auth_files.codex_remote_cloud_connect_environment_delete_success', {
                 name: environment.name,
               }),
               'success'
             );
+            setState((current) => ({
+              ...current,
+              deletingId: null,
+            }));
             await load(file);
           } catch (err: unknown) {
+            if (requestId !== requestIdRef.current) return;
             const message = getFailureMessage(err);
             showNotification(
               t('auth_files.codex_remote_cloud_connect_environment_delete_failed', { message }),
               'error'
             );
           } finally {
-            setState((current) => ({
-              ...current,
-              deletingId: null,
-            }));
+            if (requestId === requestIdRef.current) {
+              setState((current) => ({
+                ...current,
+                deletingId: null,
+              }));
+            }
           }
         },
       });
@@ -166,6 +179,7 @@ export function useCodexRemoteCloudConnectEnvironments() {
   );
 
   const close = useCallback(() => {
+    requestIdRef.current += 1;
     setState(initialState);
   }, []);
 

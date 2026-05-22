@@ -496,6 +496,16 @@ textarea {
   }
 }
 
+.modal-floating-actions {
+  position: absolute;
+  top: 12px;
+  right: 52px;
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: $spacing-xs;
+}
+
 .modal-header {
   display: flex;
   align-items: center;

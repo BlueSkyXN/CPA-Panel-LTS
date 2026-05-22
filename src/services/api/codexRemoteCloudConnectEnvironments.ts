@@ -1,10 +1,6 @@
 import type { AuthFileItem } from '@/types';
-import {
-  createStatusError,
-  normalizeStringValue,
-  parseIdTokenPayload,
-  resolveCodexChatgptAccountId,
-} from '@/utils/quota';
+import { createStatusError, normalizeStringValue } from '@/utils/quota';
+import { resolveCodexRemoteCloudConnectAccountId } from '@/utils/codexAuth';
 import { normalizeAuthIndex } from '@/utils/usage';
 import { apiCallApi, getApiCallErrorMessage, type ApiCallResult } from './apiCall';
 
@@ -12,7 +8,6 @@ const CODEX_REMOTE_CLOUD_CONNECT_ENVIRONMENTS_URL =
   'https://chatgpt.com/backend-api/codex/remote/control/environments';
 const CODEX_REMOTE_CLOUD_CONNECT_ENVIRONMENTS_LIMIT = 100;
 const CODEX_REMOTE_CLOUD_CONNECT_ENVIRONMENTS_MAX_PAGES = 10;
-const CODEX_REMOTE_CLOUD_CONNECT_ENVIRONMENTS_ACCOUNT_CLAIM = 'https://api.openai.com/auth';
 const CODEX_DESKTOP_USER_AGENT = 'Codex Desktop/26.513.20950 (Macintosh; arm64)';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -34,54 +29,6 @@ const normalizeBooleanValue = (value: unknown): boolean | null => {
     if (normalized === 'false') return false;
   }
   return null;
-};
-
-const resolveNestedRecord = (value: unknown): Record<string, unknown> | null =>
-  isRecord(value) ? value : null;
-
-const extractCodexRemoteCloudConnectEnvironmentAccountId = (token: unknown): string | null => {
-  const payload = parseIdTokenPayload(token);
-  if (!payload) return null;
-
-  const authClaim = resolveNestedRecord(
-    payload[CODEX_REMOTE_CLOUD_CONNECT_ENVIRONMENTS_ACCOUNT_CLAIM]
-  );
-  return firstString(
-    authClaim?.chatgpt_account_id,
-    authClaim?.chatgptAccountId,
-    payload.chatgpt_account_id,
-    payload.chatgptAccountId
-  );
-};
-
-const resolveCodexRemoteCloudConnectEnvironmentAccountId = (file: AuthFileItem): string | null => {
-  const metadata = resolveNestedRecord(file.metadata);
-  const attributes = resolveNestedRecord(file.attributes);
-  const tokens = resolveNestedRecord(file.tokens);
-  const metadataTokens = resolveNestedRecord(metadata?.tokens);
-  const attributeTokens = resolveNestedRecord(attributes?.tokens);
-
-  const candidates = [
-    tokens?.access_token,
-    tokens?.accessToken,
-    file.access_token,
-    file.accessToken,
-    metadataTokens?.access_token,
-    metadataTokens?.accessToken,
-    metadata?.access_token,
-    metadata?.accessToken,
-    attributeTokens?.access_token,
-    attributeTokens?.accessToken,
-    attributes?.access_token,
-    attributes?.accessToken,
-  ];
-
-  for (const candidate of candidates) {
-    const accountId = extractCodexRemoteCloudConnectEnvironmentAccountId(candidate);
-    if (accountId) return accountId;
-  }
-
-  return resolveCodexChatgptAccountId(file);
 };
 
 const resolvePageItems = (payload: unknown): Record<string, unknown>[] => {
@@ -159,12 +106,10 @@ export interface CodexRemoteCloudConnectEnvironment {
   clientVersion: string | null;
   lastSeenAt: string | null;
   isLikelyStale: boolean;
-  raw: Record<string, unknown>;
 }
 
 export interface CodexRemoteCloudConnectEnvironmentsResult {
   environments: CodexRemoteCloudConnectEnvironment[];
-  rawPages: unknown[];
   nextCursor: string | null;
   fetchedPages: number;
   truncated: boolean;
@@ -217,7 +162,6 @@ export const normalizeCodexRemoteCloudConnectEnvironment = (
     clientVersion,
     lastSeenAt,
     isLikelyStale,
-    raw,
   };
 };
 
@@ -228,10 +172,10 @@ export const codexRemoteCloudConnectEnvironmentsApi = {
       throw createStatusError('Auth file missing auth_index', 400);
     }
 
-    const accountId = resolveCodexRemoteCloudConnectEnvironmentAccountId(file);
+    const accountId = resolveCodexRemoteCloudConnectAccountId(file);
     const header = buildCodexRemoteCloudConnectEnvironmentHeaders(accountId);
     const environments: CodexRemoteCloudConnectEnvironment[] = [];
-    const rawPages: unknown[] = [];
+    let fetchedPages = 0;
     const seenCursors = new Set<string>();
     let cursor: string | null = null;
     let nextCursor: string | null = null;
@@ -253,7 +197,7 @@ export const codexRemoteCloudConnectEnvironmentsApi = {
       }
 
       const raw = result.body ?? result.bodyText;
-      rawPages.push(raw);
+      fetchedPages += 1;
       const baseIndex = environments.length;
       environments.push(
         ...resolvePageItems(raw).map((record, index) =>
@@ -265,9 +209,8 @@ export const codexRemoteCloudConnectEnvironmentsApi = {
       if (!nextCursor) {
         return {
           environments,
-          rawPages,
           nextCursor: null,
-          fetchedPages: rawPages.length,
+          fetchedPages,
           truncated: false,
         };
       }
@@ -287,9 +230,8 @@ export const codexRemoteCloudConnectEnvironmentsApi = {
 
     return {
       environments,
-      rawPages,
       nextCursor,
-      fetchedPages: rawPages.length,
+      fetchedPages,
       truncated,
     };
   },
@@ -305,7 +247,7 @@ export const codexRemoteCloudConnectEnvironmentsApi = {
       throw createStatusError('Codex remote cloud connect environment id is required', 400);
     }
 
-    const accountId = resolveCodexRemoteCloudConnectEnvironmentAccountId(file);
+    const accountId = resolveCodexRemoteCloudConnectAccountId(file);
     const result = await apiCallApi.request({
       authIndex,
       method: 'DELETE',
