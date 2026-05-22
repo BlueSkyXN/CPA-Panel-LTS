@@ -46,6 +46,10 @@ import { CodexRemoteCloudConnectEnvironmentsModal } from '@/features/authFiles/c
 import { OAuthExcludedCard } from '@/features/authFiles/components/OAuthExcludedCard';
 import { OAuthModelAliasCard } from '@/features/authFiles/components/OAuthModelAliasCard';
 import { useCodexRemoteCloudConnectEnvironments } from '@/features/authFiles/hooks/useCodexRemoteCloudConnectEnvironments';
+import {
+  areCodexRemoteCloudConnectEnvironmentSummariesEqual,
+  type CodexRemoteCloudConnectEnvironmentSummary,
+} from '@/features/authFiles/utils/codexRemoteCloudConnectEnvironmentView';
 import { useAuthFilesData } from '@/features/authFiles/hooks/useAuthFilesData';
 import { useAuthFilesModels } from '@/features/authFiles/hooks/useAuthFilesModels';
 import { useAuthFilesOauth } from '@/features/authFiles/hooks/useAuthFilesOauth';
@@ -100,6 +104,9 @@ export function AuthFilesPage() {
   const [pageSizeInput, setPageSizeInput] = useState('9');
   const [viewMode, setViewMode] = useState<'diagram' | 'list'>('list');
   const [sortMode, setSortMode] = useState<AuthFilesSortMode>('default');
+  const [codexRemoteCloudConnectSummaryCache, setCodexRemoteCloudConnectSummaryCache] = useState<
+    Map<string, CodexRemoteCloudConnectEnvironmentSummary>
+  >(() => new Map());
   const [batchActionBarVisible, setBatchActionBarVisible] = useState(false);
   const [uiStateHydrated, setUiStateHydrated] = useState(false);
   const floatingBatchActionsRef = useRef<HTMLDivElement>(null);
@@ -187,6 +194,21 @@ export function AuthFilesPage() {
     closeCodexRemoteCloudConnectEnvironments,
     deleteCodexRemoteCloudConnectEnvironment,
   } = useCodexRemoteCloudConnectEnvironments();
+
+  useEffect(() => {
+    const { fileName, summary } = codexRemoteCloudConnectEnvironments;
+    if (!fileName || !summary) return;
+
+    setCodexRemoteCloudConnectSummaryCache((current) => {
+      const existing = current.get(fileName);
+      if (areCodexRemoteCloudConnectEnvironmentSummariesEqual(existing ?? null, summary)) {
+        return current;
+      }
+      const next = new Map(current);
+      next.set(fileName, summary);
+      return next;
+    });
+  }, [codexRemoteCloudConnectEnvironments]);
 
   const disableControls = connectionStatus !== 'connected';
   const normalizedFilter = normalizeProviderKey(String(filter));
@@ -838,6 +860,9 @@ export function AuthFilesPage() {
                     quotaFilterType={quotaFilterType}
                     keyStats={keyStats}
                     statusBarCache={statusBarCache}
+                    codexRemoteCloudConnectSummary={codexRemoteCloudConnectSummaryCache.get(
+                      file.name
+                    )}
                     onShowModels={showModels}
                     onShowCodexRemoteCloudConnectEnvironments={
                       openCodexRemoteCloudConnectEnvironments
@@ -929,6 +954,7 @@ export function AuthFilesPage() {
         environments={codexRemoteCloudConnectEnvironments.environments}
         truncated={codexRemoteCloudConnectEnvironments.truncated}
         deletingId={codexRemoteCloudConnectEnvironments.deletingId}
+        lastAction={codexRemoteCloudConnectEnvironments.lastAction}
         onClose={closeCodexRemoteCloudConnectEnvironments}
         onRefresh={refreshCodexRemoteCloudConnectEnvironments}
         onCopyText={copyTextWithNotification}

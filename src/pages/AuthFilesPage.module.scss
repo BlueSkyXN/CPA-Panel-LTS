@@ -1182,6 +1182,21 @@
   border-color: color-mix(in srgb, var(--primary-color) 36%, var(--border-color));
 }
 
+.codexRemoteCloudConnectEnvironmentCardSummary {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  padding: 3px 7px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--primary-color) 18%, var(--border-color));
+  background: color-mix(in srgb, var(--primary-color) 8%, var(--bg-secondary));
+  color: color-mix(in srgb, var(--primary-color) 80%, var(--text-primary));
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 .cardBadgeRow {
   display: flex;
   flex-wrap: wrap;
@@ -1712,6 +1727,40 @@
   flex-direction: column;
   gap: 10px;
   min-width: 0;
+  position: relative;
+}
+
+.codexRemoteCloudConnectEnvironmentSummaryBar,
+.codexRemoteCloudConnectEnvironmentActionBanner {
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.codexRemoteCloudConnectEnvironmentSummaryBar {
+  border: 1px solid color-mix(in srgb, var(--primary-color) 18%, var(--border-color));
+  background: color-mix(in srgb, var(--primary-color) 8%, var(--bg-secondary));
+  color: color-mix(in srgb, var(--primary-color) 80%, var(--text-primary));
+}
+
+.codexRemoteCloudConnectEnvironmentActionInfo {
+  border: 1px solid color-mix(in srgb, var(--primary-color) 20%, var(--border-color));
+  background: color-mix(in srgb, var(--primary-color) 9%, var(--bg-secondary));
+  color: color-mix(in srgb, var(--primary-color) 82%, var(--text-primary));
+}
+
+.codexRemoteCloudConnectEnvironmentActionWarning {
+  border: 1px solid color-mix(in srgb, var(--warning-border) 70%, transparent);
+  background: color-mix(in srgb, var(--warning-bg) 62%, transparent);
+  color: var(--warning-text);
+}
+
+.codexRemoteCloudConnectEnvironmentActionError {
+  border: 1px solid color-mix(in srgb, var(--danger-color) 65%, transparent);
+  background: rgba($error-color, 0.1);
+  color: var(--danger-color);
 }
 
 .codexRemoteCloudConnectEnvironmentToolbar {
@@ -1724,6 +1773,22 @@
   border-radius: 8px;
   border: 1px solid color-mix(in srgb, var(--border-color) 66%, transparent);
   background: color-mix(in srgb, var(--bg-secondary) 64%, transparent);
+}
+
+.codexRemoteCloudConnectEnvironmentToolbarActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.codexRemoteCloudConnectEnvironmentToggleLabel {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .codexRemoteCloudConnectEnvironmentCount {
@@ -1817,7 +1882,7 @@
 
 .codexRemoteCloudConnectEnvironmentTable {
   width: 100%;
-  min-width: 1040px;
+  min-width: 980px;
   border-collapse: separate;
   border-spacing: 0;
 
@@ -1889,6 +1954,48 @@
   }
 }
 
+.codexRemoteCloudConnectEnvironmentGroupRow td {
+  padding: 0;
+  background: color-mix(in srgb, var(--bg-primary) 70%, transparent);
+}
+
+.codexRemoteCloudConnectEnvironmentGroupHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
+  background: color-mix(in srgb, var(--bg-primary) 78%, transparent);
+
+  strong {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 800;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  span {
+    flex: 0 0 auto;
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+}
+
+.codexRemoteCloudConnectEnvironmentStatusPair {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
 .codexRemoteCloudConnectEnvironmentRowStale td {
   background: color-mix(in srgb, var(--warning-bg) 18%, transparent);
 }
@@ -1896,6 +2003,7 @@
 .codexRemoteCloudConnectEnvironmentRowActions {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   white-space: nowrap;
 }
@@ -1913,6 +2021,17 @@
 
 .codexRemoteCloudConnectEnvironmentWarning {
   grid-column: 1 / -1;
+}
+
+.codexRemoteCloudConnectEnvironmentGroupSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.codexRemoteCloudConnectEnvironmentGroupList {
+  min-width: 0;
 }
 
 .codexRemoteCloudConnectEnvironmentItem {
@@ -2061,6 +2180,54 @@
   border-color: color-mix(in srgb, var(--warning-border) 72%, transparent);
 }
 
+.codexRemoteCloudConnectEnvironmentAdviceBadge {
+  font-weight: 800;
+}
+
+.codexRemoteCloudConnectEnvironmentAdviceKeep {
+  color: var(--success-badge-text, #065f46);
+  background: var(--success-badge-bg, #d1fae5);
+  border-color: var(--success-badge-border, #6ee7b7);
+}
+
+.codexRemoteCloudConnectEnvironmentAdviceCleanable {
+  color: var(--warning-text);
+  background: color-mix(in srgb, var(--warning-bg) 84%, transparent);
+  border-color: color-mix(in srgb, var(--warning-border) 74%, transparent);
+}
+
+.codexRemoteCloudConnectEnvironmentAdviceCaution {
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-tertiary) 86%, transparent);
+  border-color: color-mix(in srgb, var(--border-color) 76%, transparent);
+}
+
+.codexRemoteCloudConnectEnvironmentReasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+
+  span {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    min-height: 20px;
+    padding: 0 6px;
+    border-radius: 5px;
+    border: 1px solid color-mix(in srgb, var(--border-color) 58%, transparent);
+    background: color-mix(in srgb, var(--bg-primary) 62%, transparent);
+    color: var(--text-tertiary);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+  }
+}
+
+.codexRemoteCloudConnectEnvironmentReasonsCompact {
+  margin-top: 4px;
+}
+
 .codexRemoteCloudConnectEnvironmentMetaGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -2133,12 +2300,171 @@
   grid-column: auto;
 }
 
+.codexRemoteCloudConnectEnvironmentDetailOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  justify-content: flex-end;
+  background: color-mix(in srgb, var(--bg-overlay, rgba(0, 0, 0, 0.28)) 58%, transparent);
+  border-radius: 8px;
+}
+
+.codexRemoteCloudConnectEnvironmentDetailDrawer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(420px, 100%);
+  min-width: 0;
+  max-height: 100%;
+  padding: 14px;
+  overflow: auto;
+  border-left: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+  background: var(--bg-primary);
+  box-shadow: -18px 0 34px rgba(0, 0, 0, 0.18);
+}
+
+.codexRemoteCloudConnectEnvironmentDetailHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+
+  > div {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 3px;
+  }
+
+  span {
+    color: var(--text-tertiary);
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  strong {
+    overflow: hidden;
+    color: var(--text-primary);
+    font-size: 15px;
+    font-weight: 850;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.codexRemoteCloudConnectEnvironmentDetailAdvice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.codexRemoteCloudConnectEnvironmentDetailGrid,
+.codexRemoteCloudConnectEnvironmentDeleteDetails dl {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 7px;
+  margin: 0;
+
+  > div {
+    min-width: 0;
+    padding: 8px 9px;
+    border-radius: 7px;
+    border: 1px solid color-mix(in srgb, var(--border-color) 50%, transparent);
+    background: color-mix(in srgb, var(--bg-secondary) 70%, transparent);
+  }
+
+  dt {
+    margin: 0 0 3px;
+    color: var(--text-tertiary);
+    font-size: 10px;
+    font-weight: 800;
+    line-height: 1.2;
+  }
+
+  dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 650;
+    line-height: 1.4;
+  }
+}
+
+.codexRemoteCloudConnectEnvironmentDetailActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.codexRemoteCloudConnectEnvironmentDeleteDetails {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+}
+
+.codexRemoteCloudConnectEnvironmentDeleteActiveWarning {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--danger-color) 68%, transparent);
+  background: rgba($error-color, 0.1);
+  color: var(--danger-color);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.codexRemoteCloudConnectEnvironmentDeleteReasons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  > span {
+    color: var(--text-tertiary);
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  li {
+    padding: 4px 7px;
+    border-radius: 5px;
+    border: 1px solid color-mix(in srgb, var(--border-color) 56%, transparent);
+    background: color-mix(in srgb, var(--bg-secondary) 72%, transparent);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 700;
+  }
+}
+
 @include mobile {
   .codexRemoteCloudConnectEnvironmentModal :global(.modal-body) {
     padding: 12px;
   }
 
   .codexRemoteCloudConnectEnvironmentToolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .codexRemoteCloudConnectEnvironmentToolbarActions {
     align-items: stretch;
     flex-direction: column;
   }
@@ -2171,6 +2497,16 @@
 
   .codexRemoteCloudConnectEnvironmentMetaGrid {
     grid-template-columns: 1fr;
+  }
+
+  .codexRemoteCloudConnectEnvironmentDetailDrawer {
+    width: 100%;
+    border-left: 0;
+  }
+
+  .codexRemoteCloudConnectEnvironmentGroupHeader {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 

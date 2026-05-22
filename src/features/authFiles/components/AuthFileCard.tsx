@@ -31,6 +31,7 @@ import {
 } from '@/features/authFiles/constants';
 import type { AuthFileStatusBarData } from '@/features/authFiles/hooks/useAuthFilesStatusBarCache';
 import { AuthFileQuotaSection } from '@/features/authFiles/components/AuthFileQuotaSection';
+import type { CodexRemoteCloudConnectEnvironmentSummary } from '@/features/authFiles/utils/codexRemoteCloudConnectEnvironmentView';
 import styles from '@/pages/AuthFilesPage.module.scss';
 
 const HEALTHY_STATUS_MESSAGES = new Set(['ok', 'healthy', 'ready', 'success', 'available']);
@@ -46,6 +47,7 @@ export type AuthFileCardProps = {
   quotaFilterType: QuotaProviderType | null;
   keyStats: KeyStats;
   statusBarCache: Map<string, AuthFileStatusBarData>;
+  codexRemoteCloudConnectSummary?: CodexRemoteCloudConnectEnvironmentSummary;
   onShowModels: (file: AuthFileItem) => void;
   onShowCodexRemoteCloudConnectEnvironments: (file: AuthFileItem) => void;
   onDownload: (name: string) => void;
@@ -74,6 +76,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
     quotaFilterType,
     keyStats,
     statusBarCache,
+    codexRemoteCloudConnectSummary,
     onShowModels,
     onShowCodexRemoteCloudConnectEnvironments,
     onDownload,
@@ -192,6 +195,15 @@ export function AuthFileCard(props: AuthFileCardProps) {
                 <div className={styles.noteText} title={noteValue}>
                   <span className={styles.noteLabel}>{t('auth_files.note_display')}</span>
                   <span className={styles.noteValue}>{noteValue}</span>
+                </div>
+              )}
+              {isCodexFile && !isRuntimeOnly && codexRemoteCloudConnectSummary && (
+                <div className={styles.codexRemoteCloudConnectEnvironmentCardSummary}>
+                  {t('auth_files.codex_remote_cloud_connect_environment_card_summary', {
+                    count: codexRemoteCloudConnectSummary.total,
+                    online: codexRemoteCloudConnectSummary.online,
+                    cleanable: codexRemoteCloudConnectSummary.cleanable,
+                  })}
                 </div>
               )}
             </div>
