@@ -11,5 +11,6 @@ export * from './usage';
 export * from './logs';
 export * from './version';
 export * from './models';
+export * from './codexEnvironments';
 export * from './transformers';
 export * from './vertex';

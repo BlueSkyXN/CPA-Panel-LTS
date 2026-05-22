@@ -18,6 +18,7 @@ node_modules
 dist
 dist-ssr
 *.local
+local/
 skills
 # Local helper userscripts
 /scripts/*.user.js

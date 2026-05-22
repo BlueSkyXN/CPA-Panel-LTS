@@ -7,6 +7,7 @@ import {
   IconDownload,
   IconInfo,
   IconModelCluster,
+  IconSatellite,
   IconSettings,
   IconTrash2,
 } from '@/components/ui/icons';
@@ -46,6 +47,7 @@ export type AuthFileCardProps = {
   keyStats: KeyStats;
   statusBarCache: Map<string, AuthFileStatusBarData>;
   onShowModels: (file: AuthFileItem) => void;
+  onShowCodexEnvironments: (file: AuthFileItem) => void;
   onDownload: (name: string) => void;
   onOpenPrefixProxyEditor: (file: AuthFileItem) => void;
   onDelete: (name: string) => void;
@@ -73,6 +75,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
     keyStats,
     statusBarCache,
     onShowModels,
+    onShowCodexEnvironments,
     onDownload,
     onOpenPrefixProxyEditor,
     onDelete,
@@ -82,6 +85,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
 
   const fileStats = resolveAuthFileStats(file, keyStats);
   const isRuntimeOnly = isRuntimeOnlyAuthFile(file);
+  const isCodexFile = resolveAuthProvider(file) === 'codex';
   const isAistudio = (file.type || '').toLowerCase() === 'aistudio';
   const showModelsButton = !isRuntimeOnly || isAistudio;
   const typeColor = getTypeColor(file.type || 'unknown', resolvedTheme);
@@ -191,6 +195,21 @@ export function AuthFileCard(props: AuthFileCardProps) {
                 </div>
               )}
             </div>
+            {isCodexFile && !isRuntimeOnly && (
+              <div className={styles.cardHeaderActions}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => onShowCodexEnvironments(file)}
+                  className={styles.codexEnvironmentHeaderButton}
+                  title={t('auth_files.codex_env_button')}
+                  aria-label={t('auth_files.codex_env_button')}
+                  disabled={disableControls}
+                >
+                  <IconSatellite className={styles.actionIcon} size={16} />
+                </Button>
+              </div>
+            )}
           </div>
 
           <div className={`${styles.cardMeta} ${compact ? styles.cardMetaCompact : ''}`}>

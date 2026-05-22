@@ -42,8 +42,10 @@ import {
 import { AuthFileCard } from '@/features/authFiles/components/AuthFileCard';
 import { AuthFileModelsModal } from '@/features/authFiles/components/AuthFileModelsModal';
 import { AuthFilesPrefixProxyEditorModal } from '@/features/authFiles/components/AuthFilesPrefixProxyEditorModal';
+import { CodexEnvironmentsModal } from '@/features/authFiles/components/CodexEnvironmentsModal';
 import { OAuthExcludedCard } from '@/features/authFiles/components/OAuthExcludedCard';
 import { OAuthModelAliasCard } from '@/features/authFiles/components/OAuthModelAliasCard';
+import { useCodexEnvironments } from '@/features/authFiles/hooks/useCodexEnvironments';
 import { useAuthFilesData } from '@/features/authFiles/hooks/useAuthFilesData';
 import { useAuthFilesModels } from '@/features/authFiles/hooks/useAuthFilesModels';
 import { useAuthFilesOauth } from '@/features/authFiles/hooks/useAuthFilesOauth';
@@ -178,6 +180,13 @@ export function AuthFilesPage() {
     loadFiles,
     loadKeyStats: refreshKeyStats,
   });
+
+  const {
+    codexEnvironments,
+    openCodexEnvironments,
+    refreshCodexEnvironments,
+    closeCodexEnvironments,
+  } = useCodexEnvironments();
 
   const disableControls = connectionStatus !== 'connected';
   const normalizedFilter = normalizeProviderKey(String(filter));
@@ -833,6 +842,7 @@ export function AuthFilesPage() {
                     keyStats={keyStats}
                     statusBarCache={statusBarCache}
                     onShowModels={showModels}
+                    onShowCodexEnvironments={openCodexEnvironments}
                     onDownload={handleDownload}
                     onOpenPrefixProxyEditor={openPrefixProxyEditor}
                     onDelete={handleDelete}
@@ -909,6 +919,18 @@ export function AuthFilesPage() {
         models={modelsList}
         excluded={excluded}
         onClose={closeModelsModal}
+        onCopyText={copyTextWithNotification}
+      />
+
+      <CodexEnvironmentsModal
+        open={codexEnvironments.open}
+        fileName={codexEnvironments.fileName}
+        loading={codexEnvironments.loading}
+        error={codexEnvironments.error}
+        environments={codexEnvironments.environments}
+        truncated={codexEnvironments.truncated}
+        onClose={closeCodexEnvironments}
+        onRefresh={refreshCodexEnvironments}
         onCopyText={copyTextWithNotification}
       />
 

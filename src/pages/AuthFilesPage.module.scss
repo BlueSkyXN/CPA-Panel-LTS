@@ -734,6 +734,10 @@
     gap: 3px;
   }
 
+  .cardHeaderActions {
+    margin-top: 1px;
+  }
+
   .cardBadgeRow {
     gap: 4px;
   }
@@ -852,6 +856,33 @@
   gap: 6px;
   flex: 1;
   min-width: 0;
+}
+
+.cardHeaderActions {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.codexEnvironmentHeaderButton:global(.btn.btn-sm) {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  padding: 0;
+  box-sizing: border-box;
+  border-radius: 8px;
+  color: color-mix(in srgb, var(--primary-color) 80%, var(--text-primary));
+  background: color-mix(in srgb, var(--primary-color) 9%, var(--bg-secondary));
+  border-color: color-mix(in srgb, var(--primary-color) 20%, var(--border-color));
+  gap: 0;
+}
+
+.codexEnvironmentHeaderButton:global(.btn.btn-sm):hover {
+  color: var(--primary-color);
+  background: color-mix(in srgb, var(--primary-color) 14%, var(--bg-secondary));
+  border-color: color-mix(in srgb, var(--primary-color) 36%, var(--border-color));
 }
 
 .cardBadgeRow {
@@ -1341,6 +1372,184 @@
   background-color: rgba($error-color, 0.1);
   color: var(--danger-color);
   font-size: 12px;
+}
+
+.codexEnvironmentLoading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: $spacing-sm;
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: $spacing-lg 0;
+}
+
+.codexEnvironmentList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: min(66vh, 720px);
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.codexEnvironmentWarning,
+.codexEnvironmentStaleHint {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--warning-border) 68%, transparent);
+  background: color-mix(in srgb, var(--warning-bg) 58%, transparent);
+  color: var(--warning-text);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.codexEnvironmentItem {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 62%, transparent);
+}
+
+.codexEnvironmentItemStale {
+  border-color: color-mix(in srgb, var(--warning-border) 70%, var(--border-color));
+  background: color-mix(in srgb, var(--warning-bg) 22%, var(--bg-secondary));
+}
+
+.codexEnvironmentHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.codexEnvironmentTitle {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.codexEnvironmentName {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.codexEnvironmentSubhead {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+.codexEnvironmentBadges {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 0 0 auto;
+  max-width: 48%;
+}
+
+.codexEnvironmentBadge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.codexEnvironmentBadgeOnline {
+  color: var(--success-badge-text, #065f46);
+  background: var(--success-badge-bg, #d1fae5);
+  border-color: var(--success-badge-border, #6ee7b7);
+}
+
+.codexEnvironmentBadgeOffline,
+.codexEnvironmentBadgeIdle,
+.codexEnvironmentBadgeUnknown {
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-tertiary) 82%, transparent);
+  border-color: color-mix(in srgb, var(--border-color) 70%, transparent);
+}
+
+.codexEnvironmentBadgeBusy {
+  color: var(--warning-text);
+  background: color-mix(in srgb, var(--warning-bg) 70%, transparent);
+  border-color: color-mix(in srgb, var(--warning-border) 70%, transparent);
+}
+
+.codexEnvironmentBadgeStale {
+  color: var(--warning-text);
+  background: color-mix(in srgb, var(--warning-bg) 82%, transparent);
+  border-color: color-mix(in srgb, var(--warning-border) 72%, transparent);
+}
+
+.codexEnvironmentMetaGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.codexEnvironmentMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-color) 48%, transparent);
+
+  span {
+    color: var(--text-tertiary);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  strong {
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 650;
+    line-height: 1.45;
+    word-break: break-word;
+  }
+}
+
+.codexEnvironmentMetaWide {
+  grid-column: 1 / -1;
+}
+
+@include mobile {
+  .codexEnvironmentList {
+    max-height: 70vh;
+  }
+
+  .codexEnvironmentHeader {
+    flex-direction: column;
+  }
+
+  .codexEnvironmentBadges {
+    justify-content: flex-start;
+    max-width: 100%;
+  }
+
+  .codexEnvironmentMetaGrid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .prefixProxyJsonWrapper {
