@@ -42,10 +42,10 @@ import {
 import { AuthFileCard } from '@/features/authFiles/components/AuthFileCard';
 import { AuthFileModelsModal } from '@/features/authFiles/components/AuthFileModelsModal';
 import { AuthFilesPrefixProxyEditorModal } from '@/features/authFiles/components/AuthFilesPrefixProxyEditorModal';
-import { CodexEnvironmentsModal } from '@/features/authFiles/components/CodexEnvironmentsModal';
+import { CodexRemoteCloudConnectEnvironmentsModal } from '@/features/authFiles/components/CodexRemoteCloudConnectEnvironmentsModal';
 import { OAuthExcludedCard } from '@/features/authFiles/components/OAuthExcludedCard';
 import { OAuthModelAliasCard } from '@/features/authFiles/components/OAuthModelAliasCard';
-import { useCodexEnvironments } from '@/features/authFiles/hooks/useCodexEnvironments';
+import { useCodexRemoteCloudConnectEnvironments } from '@/features/authFiles/hooks/useCodexRemoteCloudConnectEnvironments';
 import { useAuthFilesData } from '@/features/authFiles/hooks/useAuthFilesData';
 import { useAuthFilesModels } from '@/features/authFiles/hooks/useAuthFilesModels';
 import { useAuthFilesOauth } from '@/features/authFiles/hooks/useAuthFilesOauth';
@@ -70,8 +70,7 @@ const BATCH_BAR_HIDDEN_TRANSFORM = 'translateX(-50%) translateY(56px)';
 const DEFAULT_REGULAR_PAGE_SIZE = 9;
 const DEFAULT_COMPACT_PAGE_SIZE = 12;
 
-const escapeWildcardSearchSegment = (value: string) =>
-  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const escapeWildcardSearchSegment = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const buildWildcardSearch = (value: string): RegExp | null => {
   if (!value.includes('*')) return null;
@@ -182,11 +181,12 @@ export function AuthFilesPage() {
   });
 
   const {
-    codexEnvironments,
-    openCodexEnvironments,
-    refreshCodexEnvironments,
-    closeCodexEnvironments,
-  } = useCodexEnvironments();
+    codexRemoteCloudConnectEnvironments,
+    openCodexRemoteCloudConnectEnvironments,
+    refreshCodexRemoteCloudConnectEnvironments,
+    closeCodexRemoteCloudConnectEnvironments,
+    deleteCodexRemoteCloudConnectEnvironment,
+  } = useCodexRemoteCloudConnectEnvironments();
 
   const disableControls = connectionStatus !== 'connected';
   const normalizedFilter = normalizeProviderKey(String(filter));
@@ -214,10 +214,7 @@ export function AuthFilesPage() {
       if (typeof persisted.disabledOnly === 'boolean') {
         setDisabledOnly(persisted.disabledOnly);
       }
-      if (
-        typeof persistedCompactMode !== 'boolean' &&
-        typeof persisted.compactMode === 'boolean'
-      ) {
+      if (typeof persistedCompactMode !== 'boolean' && typeof persisted.compactMode === 'boolean') {
         setCompactMode(persisted.compactMode);
       }
       if (typeof persisted.search === 'string') {
@@ -233,11 +230,11 @@ export function AuthFilesPage() {
       const regularPageSize =
         typeof persisted.regularPageSize === 'number' && Number.isFinite(persisted.regularPageSize)
           ? clampCardPageSize(persisted.regularPageSize)
-          : legacyPageSize ?? DEFAULT_REGULAR_PAGE_SIZE;
+          : (legacyPageSize ?? DEFAULT_REGULAR_PAGE_SIZE);
       const compactPageSize =
         typeof persisted.compactPageSize === 'number' && Number.isFinite(persisted.compactPageSize)
           ? clampCardPageSize(persisted.compactPageSize)
-          : legacyPageSize ?? DEFAULT_COMPACT_PAGE_SIZE;
+          : (legacyPageSize ?? DEFAULT_COMPACT_PAGE_SIZE);
       setPageSizeByMode({
         regular: regularPageSize,
         compact: compactPageSize,
@@ -842,7 +839,9 @@ export function AuthFilesPage() {
                     keyStats={keyStats}
                     statusBarCache={statusBarCache}
                     onShowModels={showModels}
-                    onShowCodexEnvironments={openCodexEnvironments}
+                    onShowCodexRemoteCloudConnectEnvironments={
+                      openCodexRemoteCloudConnectEnvironments
+                    }
                     onDownload={handleDownload}
                     onOpenPrefixProxyEditor={openPrefixProxyEditor}
                     onDelete={handleDelete}
@@ -922,16 +921,18 @@ export function AuthFilesPage() {
         onCopyText={copyTextWithNotification}
       />
 
-      <CodexEnvironmentsModal
-        open={codexEnvironments.open}
-        fileName={codexEnvironments.fileName}
-        loading={codexEnvironments.loading}
-        error={codexEnvironments.error}
-        environments={codexEnvironments.environments}
-        truncated={codexEnvironments.truncated}
-        onClose={closeCodexEnvironments}
-        onRefresh={refreshCodexEnvironments}
+      <CodexRemoteCloudConnectEnvironmentsModal
+        open={codexRemoteCloudConnectEnvironments.open}
+        fileName={codexRemoteCloudConnectEnvironments.fileName}
+        loading={codexRemoteCloudConnectEnvironments.loading}
+        error={codexRemoteCloudConnectEnvironments.error}
+        environments={codexRemoteCloudConnectEnvironments.environments}
+        truncated={codexRemoteCloudConnectEnvironments.truncated}
+        deletingId={codexRemoteCloudConnectEnvironments.deletingId}
+        onClose={closeCodexRemoteCloudConnectEnvironments}
+        onRefresh={refreshCodexRemoteCloudConnectEnvironments}
         onCopyText={copyTextWithNotification}
+        onDelete={deleteCodexRemoteCloudConnectEnvironment}
       />
 
       <AuthFilesPrefixProxyEditorModal

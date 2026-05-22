@@ -8,11 +8,11 @@ import {
 import { normalizeAuthIndex } from '@/utils/usage';
 import { apiCallApi, getApiCallErrorMessage, type ApiCallResult } from './apiCall';
 
-const CODEX_REMOTE_ENVIRONMENTS_URL =
+const CODEX_REMOTE_CLOUD_CONNECT_ENVIRONMENTS_URL =
   'https://chatgpt.com/backend-api/codex/remote/control/environments';
-const CODEX_REMOTE_ENVIRONMENTS_LIMIT = 100;
-const CODEX_REMOTE_ENVIRONMENTS_MAX_PAGES = 10;
-const CODEX_REMOTE_ENVIRONMENTS_ACCOUNT_CLAIM = 'https://api.openai.com/auth';
+const CODEX_REMOTE_CLOUD_CONNECT_ENVIRONMENTS_LIMIT = 100;
+const CODEX_REMOTE_CLOUD_CONNECT_ENVIRONMENTS_MAX_PAGES = 10;
+const CODEX_REMOTE_CLOUD_CONNECT_ENVIRONMENTS_ACCOUNT_CLAIM = 'https://api.openai.com/auth';
 const CODEX_DESKTOP_USER_AGENT = 'Codex Desktop/26.513.20950 (Macintosh; arm64)';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -39,11 +39,13 @@ const normalizeBooleanValue = (value: unknown): boolean | null => {
 const resolveNestedRecord = (value: unknown): Record<string, unknown> | null =>
   isRecord(value) ? value : null;
 
-const extractCodexEnvironmentAccountId = (token: unknown): string | null => {
+const extractCodexRemoteCloudConnectEnvironmentAccountId = (token: unknown): string | null => {
   const payload = parseIdTokenPayload(token);
   if (!payload) return null;
 
-  const authClaim = resolveNestedRecord(payload[CODEX_REMOTE_ENVIRONMENTS_ACCOUNT_CLAIM]);
+  const authClaim = resolveNestedRecord(
+    payload[CODEX_REMOTE_CLOUD_CONNECT_ENVIRONMENTS_ACCOUNT_CLAIM]
+  );
   return firstString(
     authClaim?.chatgpt_account_id,
     authClaim?.chatgptAccountId,
@@ -52,7 +54,7 @@ const extractCodexEnvironmentAccountId = (token: unknown): string | null => {
   );
 };
 
-const resolveCodexEnvironmentAccountId = (file: AuthFileItem): string | null => {
+const resolveCodexRemoteCloudConnectEnvironmentAccountId = (file: AuthFileItem): string | null => {
   const metadata = resolveNestedRecord(file.metadata);
   const attributes = resolveNestedRecord(file.attributes);
   const tokens = resolveNestedRecord(file.tokens);
@@ -75,7 +77,7 @@ const resolveCodexEnvironmentAccountId = (file: AuthFileItem): string | null => 
   ];
 
   for (const candidate of candidates) {
-    const accountId = extractCodexEnvironmentAccountId(candidate);
+    const accountId = extractCodexRemoteCloudConnectEnvironmentAccountId(candidate);
     if (accountId) return accountId;
   }
 
@@ -84,7 +86,7 @@ const resolveCodexEnvironmentAccountId = (file: AuthFileItem): string | null => 
 
 const resolvePageItems = (payload: unknown): Record<string, unknown>[] => {
   if (!isRecord(payload) || !Array.isArray(payload.items)) {
-    throw createStatusError('Invalid Codex environments response', 502);
+    throw createStatusError('Invalid Codex remote cloud connect environments response', 502);
   }
   return payload.items.filter(isRecord);
 };
@@ -94,7 +96,9 @@ const resolveNextCursor = (payload: unknown): string | null => {
   return normalizeStringValue(payload.cursor);
 };
 
-const buildCodexEnvironmentHeaders = (accountId: string | null): Record<string, string> => {
+const buildCodexRemoteCloudConnectEnvironmentHeaders = (
+  accountId: string | null
+): Record<string, string> => {
   const headers: Record<string, string> = {
     Accept: 'application/json',
     Authorization: 'Bearer $TOKEN$',
@@ -110,22 +114,22 @@ const buildCodexEnvironmentHeaders = (accountId: string | null): Record<string, 
   return headers;
 };
 
-const buildCodexEnvironmentUrl = (cursor: string | null): string => {
+const buildCodexRemoteCloudConnectEnvironmentUrl = (cursor: string | null): string => {
   const query = new URLSearchParams({
-    limit: String(CODEX_REMOTE_ENVIRONMENTS_LIMIT),
+    limit: String(CODEX_REMOTE_CLOUD_CONNECT_ENVIRONMENTS_LIMIT),
   });
 
   if (cursor) {
     query.set('cursor', cursor);
   }
 
-  return `${CODEX_REMOTE_ENVIRONMENTS_URL}?${query.toString()}`;
+  return `${CODEX_REMOTE_CLOUD_CONNECT_ENVIRONMENTS_URL}?${query.toString()}`;
 };
 
-const buildCodexEnvironmentDeleteUrl = (envId: string): string =>
-  `${CODEX_REMOTE_ENVIRONMENTS_URL}/${encodeURIComponent(envId)}`;
+const buildCodexRemoteCloudConnectEnvironmentDeleteUrl = (envId: string): string =>
+  `${CODEX_REMOTE_CLOUD_CONNECT_ENVIRONMENTS_URL}/${encodeURIComponent(envId)}`;
 
-const getCodexEnvironmentErrorMessage = (result: ApiCallResult): string => {
+const getCodexRemoteCloudConnectEnvironmentErrorMessage = (result: ApiCallResult): string => {
   if (isRecord(result.body) && typeof result.body.detail === 'string') {
     return result.statusCode
       ? `${result.statusCode} ${result.body.detail}`.trim()
@@ -134,7 +138,7 @@ const getCodexEnvironmentErrorMessage = (result: ApiCallResult): string => {
   return getApiCallErrorMessage(result);
 };
 
-export interface CodexRemoteEnvironment {
+export interface CodexRemoteCloudConnectEnvironment {
   id: string;
   envId: string;
   kind: string | null;
@@ -158,19 +162,25 @@ export interface CodexRemoteEnvironment {
   raw: Record<string, unknown>;
 }
 
-export interface CodexRemoteEnvironmentsResult {
-  environments: CodexRemoteEnvironment[];
+export interface CodexRemoteCloudConnectEnvironmentsResult {
+  environments: CodexRemoteCloudConnectEnvironment[];
   rawPages: unknown[];
   nextCursor: string | null;
   fetchedPages: number;
   truncated: boolean;
 }
 
-export const normalizeCodexRemoteEnvironment = (
+export const normalizeCodexRemoteCloudConnectEnvironment = (
   raw: Record<string, unknown>,
   index: number
-): CodexRemoteEnvironment => {
-  const envId = firstString(raw.env_id, raw.envId, raw.id) ?? `environment-${index + 1}`;
+): CodexRemoteCloudConnectEnvironment => {
+  const envId = firstString(raw.env_id, raw.envId);
+  if (!envId) {
+    throw createStatusError(
+      `Invalid Codex remote cloud connect environment item at index ${index + 1}`,
+      502
+    );
+  }
   const displayName = firstString(raw.display_name, raw.displayName);
   const hostName = firstString(raw.host_name, raw.hostName);
   const name = firstString(displayName, raw.name, hostName, envId) ?? envId;
@@ -211,32 +221,35 @@ export const normalizeCodexRemoteEnvironment = (
   };
 };
 
-export const codexEnvironmentsApi = {
-  list: async (file: AuthFileItem): Promise<CodexRemoteEnvironmentsResult> => {
+export const codexRemoteCloudConnectEnvironmentsApi = {
+  list: async (file: AuthFileItem): Promise<CodexRemoteCloudConnectEnvironmentsResult> => {
     const authIndex = normalizeAuthIndex(file['auth_index'] ?? file.authIndex);
     if (!authIndex) {
       throw createStatusError('Auth file missing auth_index', 400);
     }
 
-    const accountId = resolveCodexEnvironmentAccountId(file);
-    const header = buildCodexEnvironmentHeaders(accountId);
-    const environments: CodexRemoteEnvironment[] = [];
+    const accountId = resolveCodexRemoteCloudConnectEnvironmentAccountId(file);
+    const header = buildCodexRemoteCloudConnectEnvironmentHeaders(accountId);
+    const environments: CodexRemoteCloudConnectEnvironment[] = [];
     const rawPages: unknown[] = [];
     const seenCursors = new Set<string>();
     let cursor: string | null = null;
     let nextCursor: string | null = null;
     let truncated = false;
 
-    for (let page = 0; page < CODEX_REMOTE_ENVIRONMENTS_MAX_PAGES; page += 1) {
+    for (let page = 0; page < CODEX_REMOTE_CLOUD_CONNECT_ENVIRONMENTS_MAX_PAGES; page += 1) {
       const result = await apiCallApi.request({
         authIndex,
         method: 'GET',
-        url: buildCodexEnvironmentUrl(cursor),
+        url: buildCodexRemoteCloudConnectEnvironmentUrl(cursor),
         header,
       });
 
       if (result.statusCode < 200 || result.statusCode >= 300) {
-        throw createStatusError(getCodexEnvironmentErrorMessage(result), result.statusCode);
+        throw createStatusError(
+          getCodexRemoteCloudConnectEnvironmentErrorMessage(result),
+          result.statusCode
+        );
       }
 
       const raw = result.body ?? result.bodyText;
@@ -244,7 +257,7 @@ export const codexEnvironmentsApi = {
       const baseIndex = environments.length;
       environments.push(
         ...resolvePageItems(raw).map((record, index) =>
-          normalizeCodexRemoteEnvironment(record, baseIndex + index)
+          normalizeCodexRemoteCloudConnectEnvironment(record, baseIndex + index)
         )
       );
 
@@ -289,19 +302,22 @@ export const codexEnvironmentsApi = {
 
     const normalizedEnvId = normalizeStringValue(envId);
     if (!normalizedEnvId) {
-      throw createStatusError('Codex environment id is required', 400);
+      throw createStatusError('Codex remote cloud connect environment id is required', 400);
     }
 
-    const accountId = resolveCodexEnvironmentAccountId(file);
+    const accountId = resolveCodexRemoteCloudConnectEnvironmentAccountId(file);
     const result = await apiCallApi.request({
       authIndex,
       method: 'DELETE',
-      url: buildCodexEnvironmentDeleteUrl(normalizedEnvId),
-      header: buildCodexEnvironmentHeaders(accountId),
+      url: buildCodexRemoteCloudConnectEnvironmentDeleteUrl(normalizedEnvId),
+      header: buildCodexRemoteCloudConnectEnvironmentHeaders(accountId),
     });
 
     if (result.statusCode < 200 || result.statusCode >= 300) {
-      throw createStatusError(getCodexEnvironmentErrorMessage(result), result.statusCode);
+      throw createStatusError(
+        getCodexRemoteCloudConnectEnvironmentErrorMessage(result),
+        result.statusCode
+      );
     }
   },
 };

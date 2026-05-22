@@ -47,7 +47,7 @@ export type AuthFileCardProps = {
   keyStats: KeyStats;
   statusBarCache: Map<string, AuthFileStatusBarData>;
   onShowModels: (file: AuthFileItem) => void;
-  onShowCodexEnvironments: (file: AuthFileItem) => void;
+  onShowCodexRemoteCloudConnectEnvironments: (file: AuthFileItem) => void;
   onDownload: (name: string) => void;
   onOpenPrefixProxyEditor: (file: AuthFileItem) => void;
   onDelete: (name: string) => void;
@@ -75,7 +75,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
     keyStats,
     statusBarCache,
     onShowModels,
-    onShowCodexEnvironments,
+    onShowCodexRemoteCloudConnectEnvironments,
     onDownload,
     onOpenPrefixProxyEditor,
     onDelete,
@@ -200,10 +200,10 @@ export function AuthFileCard(props: AuthFileCardProps) {
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={() => onShowCodexEnvironments(file)}
-                  className={styles.codexEnvironmentHeaderButton}
-                  title={t('auth_files.codex_env_button')}
-                  aria-label={t('auth_files.codex_env_button')}
+                  onClick={() => onShowCodexRemoteCloudConnectEnvironments(file)}
+                  className={styles.codexRemoteCloudConnectEnvironmentHeaderButton}
+                  title={t('auth_files.codex_remote_cloud_connect_environment_button')}
+                  aria-label={t('auth_files.codex_remote_cloud_connect_environment_button')}
                   disabled={disableControls}
                 >
                   <IconSatellite className={styles.actionIcon} size={16} />
