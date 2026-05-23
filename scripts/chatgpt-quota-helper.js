@@ -1,0 +1,960 @@
+// ==UserScript==
+// @name         ChatGPT Quota Helper
+// @namespace    https://github.com/BlueSkyXN/CPA-Panel-LTS
+// @version      1.0.0
+// @author       BlueSkyXN
+// @description  在 chatgpt.com 实时显示 DR / Agent / Codex 5h / Codex 7d 配额：折叠式面板、状态指示灯、自动与手动刷新。
+// @match        https://chatgpt.com/*
+// @run-at       document-start
+// @grant        none
+// @homepageURL  https://github.com/BlueSkyXN/CPA-Panel-LTS/blob/main/scripts/chatgpt-quota-helper.js
+// @supportURL   https://github.com/BlueSkyXN/CPA-Panel-LTS/issues
+// @downloadURL  https://raw.githubusercontent.com/BlueSkyXN/CPA-Panel-LTS/main/scripts/chatgpt-quota-helper.js
+// @updateURL    https://raw.githubusercontent.com/BlueSkyXN/CPA-Panel-LTS/main/scripts/chatgpt-quota-helper.js
+// ==/UserScript==
+
+(function () {
+  'use strict';
+
+  // ========== 配置 ==========
+
+  const PATHS = {
+    CONVERSATION_INIT: '/backend-api/conversation/init',
+    SESSION: '/api/auth/session',
+    CODEX_USAGE: '/backend-api/wham/usage'
+  };
+
+  const FIVE_HOUR_SECONDS = 5 * 60 * 60;
+  const WEEK_SECONDS = 7 * 24 * 60 * 60;
+
+  // Codex 自动刷新间隔：5 分钟
+  const CODEX_AUTO_REFRESH_MS = 5 * 60 * 1000;
+
+  // 指示灯阈值
+  const DR_AGENT_LOW = 5;        // DR / Agent 剩余 < 5 视为低水位
+  const CODEX_LOW_PERCENT = 20;  // Codex 剩余百分比 < 20% 视为低水位
+
+  // 不在这些路径前缀下挂载面板（chatgpt.com 是 SPA，这里在脚本内部判断而非 @exclude）
+  const EXCLUDED_PATH_PREFIXES = ['/codex/'];
+
+  // ========== 状态 ==========
+
+  const state = {
+    dr: null,
+    agent: null,
+    codex5h: null,
+    codex7d: null,
+    codexError: '',
+    codexLoading: false,
+    lastUpdated: 0
+  };
+
+  let capturedConversationInitOnce = false;
+  let codexTimer = null;
+
+  // 在脚本插桩前抓住原始 fetch，避免后续被站点或自身 patch 影响
+  const originalFetch = window.fetch;
+
+  // ========== 工具函数 ==========
+
+  function isConversationInitUrl(input) {
+    try {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input && input.url
+            ? input.url
+            : '';
+
+      if (!url) return false;
+
+      const u = new URL(url, location.origin);
+      return u.origin === location.origin && u.pathname === PATHS.CONVERSATION_INIT;
+    } catch {
+      return false;
+    }
+  }
+
+  function getLimit(data, featureName) {
+    const arr = Array.isArray(data?.limits_progress) ? data.limits_progress : [];
+    return arr.find(x => x && x.feature_name === featureName) || null;
+  }
+
+  function normalizeNumber(value) {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+
+    if (typeof value === 'string') {
+      const parsed = Number(value.trim());
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    return null;
+  }
+
+  function normalizeEpochMs(value) {
+    const n = normalizeNumber(value);
+    if (n === null) return null;
+    return n > 1e12 ? n : n * 1000;
+  }
+
+  function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function round(value, digits = 2) {
+    const multiplier = 10 ** digits;
+    return Math.round((Number(value) + Number.EPSILON) * multiplier) / multiplier;
+  }
+
+  function formatDurationMs(ms) {
+    if (!Number.isFinite(ms)) return '-';
+    if (ms <= 0) return '0H';
+
+    const HOUR = 60 * 60 * 1000;
+    const DAY = 24 * HOUR;
+
+    if (ms >= DAY) {
+      return `${Math.ceil(ms / DAY)}D`;
+    }
+
+    return `${Math.max(1, Math.ceil(ms / HOUR))}H`;
+  }
+
+  function formatIsoReset(value) {
+    if (!value) return '-';
+
+    const resetMs = new Date(value).getTime();
+    if (!Number.isFinite(resetMs)) return '-';
+
+    return formatDurationMs(resetMs - Date.now());
+  }
+
+  function formatWindowReset(quota) {
+    if (!quota) return '-';
+
+    if (quota.resetAfterSeconds !== null && quota.resetAfterSeconds !== undefined) {
+      return formatDurationMs(quota.resetAfterSeconds * 1000);
+    }
+
+    if (Number.isFinite(quota.resetAtMs)) {
+      return formatDurationMs(quota.resetAtMs - Date.now());
+    }
+
+    return '-';
+  }
+
+  function formatRemaining(value) {
+    const n = normalizeNumber(value);
+    return n === null ? '-' : String(Math.round(n));
+  }
+
+  function formatPercent(value) {
+    const n = normalizeNumber(value);
+    if (n === null) return '-';
+    return `${Math.round(n)}%`;
+  }
+
+  function formatClock(ms) {
+    if (!ms) return '未更新';
+    const d = new Date(ms);
+    const h = String(d.getHours()).padStart(2, '0');
+    const m = String(d.getMinutes()).padStart(2, '0');
+    const s = String(d.getSeconds()).padStart(2, '0');
+    return `更新于 ${h}:${m}:${s}`;
+  }
+
+  // ========== Codex usage 解析 ==========
+
+  function getWindowSeconds(windowInfo) {
+    if (!windowInfo) return null;
+
+    return normalizeNumber(
+      windowInfo.limit_window_seconds ??
+      windowInfo.limitWindowSeconds
+    );
+  }
+
+  function pickCodexWindows(rateLimit) {
+    const primaryWindow =
+      rateLimit?.primary_window ??
+      rateLimit?.primaryWindow ??
+      null;
+
+    const secondaryWindow =
+      rateLimit?.secondary_window ??
+      rateLimit?.secondaryWindow ??
+      null;
+
+    const rawWindows = [primaryWindow, secondaryWindow].filter(Boolean);
+
+    let fiveHourWindow = null;
+    let weeklyWindow = null;
+
+    for (const windowInfo of rawWindows) {
+      const seconds = getWindowSeconds(windowInfo);
+
+      if (seconds === FIVE_HOUR_SECONDS && !fiveHourWindow) {
+        fiveHourWindow = windowInfo;
+      }
+
+      if (seconds === WEEK_SECONDS && !weeklyWindow) {
+        weeklyWindow = windowInfo;
+      }
+    }
+
+    // 兼容字段缺失：通常 primary 是 5h，secondary 是 7d。
+    if (!fiveHourWindow && primaryWindow && primaryWindow !== weeklyWindow) {
+      fiveHourWindow = primaryWindow;
+    }
+
+    if (!weeklyWindow && secondaryWindow && secondaryWindow !== fiveHourWindow) {
+      weeklyWindow = secondaryWindow;
+    }
+
+    return { fiveHourWindow, weeklyWindow };
+  }
+
+  function toCodexQuota(windowInfo, rateLimit) {
+    if (!windowInfo) return null;
+
+    const remainingPercentRaw = normalizeNumber(
+      windowInfo.remaining_percent ??
+      windowInfo.remainingPercent
+    );
+
+    const usedPercentRaw = normalizeNumber(
+      windowInfo.used_percent ??
+      windowInfo.usedPercent
+    );
+
+    const limitReached = Boolean(
+      rateLimit?.limit_reached ??
+      rateLimit?.limitReached
+    );
+
+    let remainingPercent = null;
+
+    if (remainingPercentRaw !== null) {
+      remainingPercent = remainingPercentRaw;
+    } else if (usedPercentRaw !== null) {
+      remainingPercent = 100 - usedPercentRaw;
+    } else if (limitReached) {
+      remainingPercent = 0;
+    }
+
+    if (remainingPercent !== null) {
+      remainingPercent = round(clamp(remainingPercent, 0, 100), 2);
+    }
+
+    const resetAfterSeconds = normalizeNumber(
+      windowInfo.reset_after_seconds ??
+      windowInfo.resetAfterSeconds ??
+      windowInfo.remaining_seconds ??
+      windowInfo.remainingSeconds
+    );
+
+    const resetAtMs = normalizeEpochMs(
+      windowInfo.reset_at ??
+      windowInfo.resetAt
+    );
+
+    return {
+      remainingPercent,
+      resetAfterSeconds,
+      resetAtMs
+    };
+  }
+
+  // ========== Session / JWT ==========
+
+  function looksLikeJwt(value) {
+    return typeof value === 'string' &&
+      /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(value.trim());
+  }
+
+  function decodeBase64Url(value) {
+    const base64 = value
+      .replaceAll('-', '+')
+      .replaceAll('_', '/')
+      .padEnd(value.length + ((4 - value.length % 4) % 4), '=');
+
+    const binary = atob(base64);
+
+    try {
+      return decodeURIComponent(
+        Array.from(binary)
+          .map(ch => `%${ch.charCodeAt(0).toString(16).padStart(2, '0')}`)
+          .join('')
+      );
+    } catch {
+      return binary;
+    }
+  }
+
+  function decodeJwtPayload(token) {
+    try {
+      const parts = String(token).split('.');
+      if (parts.length < 2) return null;
+      return JSON.parse(decodeBase64Url(parts[1]));
+    } catch {
+      return null;
+    }
+  }
+
+  function findAccessToken(value, depth = 0) {
+    if (!value || typeof value !== 'object' || depth > 8) return '';
+
+    for (const [key, child] of Object.entries(value)) {
+      if (typeof child === 'string' && /access/i.test(key) && looksLikeJwt(child)) {
+        return child.trim();
+      }
+
+      if (child && typeof child === 'object') {
+        const found = findAccessToken(child, depth + 1);
+        if (found) return found;
+      }
+    }
+
+    return '';
+  }
+
+  function findChatgptAccountId(value, depth = 0) {
+    if (!value || typeof value !== 'object' || depth > 8) return '';
+
+    for (const [key, child] of Object.entries(value)) {
+      if (
+        typeof child === 'string' &&
+        /chatgpt[_-]?account[_-]?id/i.test(key) &&
+        child.trim()
+      ) {
+        return child.trim();
+      }
+
+      if (child && typeof child === 'object') {
+        const found = findChatgptAccountId(child, depth + 1);
+        if (found) return found;
+      }
+    }
+
+    return '';
+  }
+
+  async function getSessionInfo() {
+    try {
+      if (typeof originalFetch !== 'function') {
+        return { accessToken: '', accountId: '' };
+      }
+
+      const response = await originalFetch.call(window, PATHS.SESSION, {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          accept: 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        return { accessToken: '', accountId: '' };
+      }
+
+      const session = await response.json();
+      const accessToken = findAccessToken(session);
+
+      const tokenPayload = accessToken ? decodeJwtPayload(accessToken) || {} : {};
+
+      const accountId =
+        findChatgptAccountId(session) ||
+        findChatgptAccountId(tokenPayload) ||
+        '';
+
+      return { accessToken, accountId };
+    } catch {
+      return { accessToken: '', accountId: '' };
+    }
+  }
+
+  function buildCodexHeaders(sessionInfo) {
+    const headers = {
+      accept: 'application/json'
+    };
+
+    if (sessionInfo.accessToken) {
+      headers.authorization = `Bearer ${sessionInfo.accessToken}`;
+    }
+
+    if (sessionInfo.accountId) {
+      headers['Chatgpt-Account-Id'] = sessionInfo.accountId;
+    }
+
+    return headers;
+  }
+
+  async function fetchCodexUsage() {
+    if (typeof originalFetch !== 'function') {
+      throw new Error('fetch unavailable');
+    }
+
+    const sessionInfo = await getSessionInfo();
+    const headers = buildCodexHeaders(sessionInfo);
+
+    const response = await originalFetch.call(window, PATHS.CODEX_USAGE, {
+      method: 'GET',
+      credentials: 'include',
+      headers
+    });
+
+    if (!response.ok) {
+      throw new Error(`Codex usage HTTP ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  async function loadCodexUsage() {
+    if (state.codexLoading) return;
+
+    state.codexLoading = true;
+    renderPanel();
+
+    try {
+      const usage = await fetchCodexUsage();
+
+      const rateLimit =
+        usage.rate_limit ??
+        usage.rateLimit ??
+        null;
+
+      const { fiveHourWindow, weeklyWindow } = pickCodexWindows(rateLimit);
+
+      state.codex5h = toCodexQuota(fiveHourWindow, rateLimit);
+      state.codex7d = toCodexQuota(weeklyWindow, rateLimit);
+      state.codexError = '';
+      state.lastUpdated = Date.now();
+    } catch (error) {
+      state.codexError = error instanceof Error ? error.message : String(error);
+      // 出错时保留旧的 codex5h/codex7d，便于继续展示，但若从未拿到也置空
+      if (!state.lastUpdated) {
+        state.codex5h = null;
+        state.codex7d = null;
+      }
+    } finally {
+      state.codexLoading = false;
+      renderPanel();
+    }
+  }
+
+  function startCodexAutoRefresh() {
+    if (codexTimer) return;
+    codexTimer = setInterval(() => {
+      loadCodexUsage();
+    }, CODEX_AUTO_REFRESH_MS);
+  }
+
+  function stopCodexAutoRefresh() {
+    if (!codexTimer) return;
+    clearInterval(codexTimer);
+    codexTimer = null;
+  }
+
+  // ========== UI ==========
+
+  function injectStyle() {
+    if (document.getElementById('cqh-style')) return;
+
+    const style = document.createElement('style');
+    style.id = 'cqh-style';
+
+    style.textContent = `
+      .cqh-panel {
+        position: fixed;
+        right: 14px;
+        top: 72px;
+        z-index: 100;
+        box-sizing: border-box;
+
+        min-width: 168px;
+        max-width: calc(100vw - 28px);
+        padding: 8px 12px;
+
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        font-size: 12px;
+        line-height: 1.4;
+
+        color: rgba(20, 20, 20, 0.86);
+        background: rgba(255, 255, 255, 0.78);
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+
+        opacity: 0.85;
+        max-height: 36px;
+        overflow: hidden;
+        transition: opacity 0.18s ease, max-height 0.22s ease;
+      }
+
+      .cqh-panel:hover,
+      .cqh-panel.cqh-expanded {
+        opacity: 1;
+        max-height: 360px;
+      }
+
+      .cqh-summary {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        white-space: nowrap;
+        font-weight: 600;
+        font-size: 12px;
+        user-select: none;
+      }
+
+      .cqh-indicator {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        background: #94a3b8;
+        transition: background-color 0.2s ease;
+      }
+
+      .cqh-indicator.cqh-ok   { background: #10b981; }
+      .cqh-indicator.cqh-warn { background: #f59e0b; }
+      .cqh-indicator.cqh-bad  { background: #ef4444; }
+
+      .cqh-panel.cqh-loading .cqh-indicator {
+        animation: cqh-pulse 1s ease-in-out infinite;
+      }
+
+      @keyframes cqh-pulse {
+        0%, 100% { transform: scale(1);   opacity: 1;   }
+        50%      { transform: scale(1.3); opacity: 0.55; }
+      }
+
+      .cqh-summary-text {
+        font-variant-numeric: tabular-nums;
+      }
+
+      .cqh-details {
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px dashed rgba(0, 0, 0, 0.10);
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .cqh-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        white-space: nowrap;
+      }
+
+      .cqh-row-label {
+        font-weight: 600;
+        color: rgba(71, 85, 105, 0.95);
+        min-width: 56px;
+      }
+
+      .cqh-row-value {
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+      }
+
+      .cqh-footer {
+        margin-top: 8px;
+        padding-top: 6px;
+        border-top: 1px dashed rgba(0, 0, 0, 0.06);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        color: rgba(100, 116, 139, 0.95);
+        font-size: 11px;
+      }
+
+      .cqh-refresh {
+        appearance: none;
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        background: transparent;
+        cursor: pointer;
+        color: #2563eb;
+        font-size: 11px;
+        padding: 2px 8px;
+        border-radius: 6px;
+        line-height: 1.4;
+      }
+
+      .cqh-refresh:hover:not(:disabled) {
+        background: rgba(37, 99, 235, 0.08);
+      }
+
+      .cqh-refresh:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .cqh-row-value.cqh-error-text {
+        color: #dc2626;
+      }
+
+      .cqh-error-line {
+        margin-top: 4px;
+        color: #dc2626;
+        font-size: 11px;
+        line-height: 1.4;
+        white-space: normal;
+        word-break: break-all;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        .cqh-panel {
+          color: rgba(229, 231, 235, 0.92);
+          background: rgba(28, 28, 28, 0.78);
+          border-color: rgba(255, 255, 255, 0.08);
+          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.30);
+        }
+        .cqh-details {
+          border-top-color: rgba(255, 255, 255, 0.10);
+        }
+        .cqh-footer {
+          border-top-color: rgba(255, 255, 255, 0.06);
+          color: rgba(148, 163, 184, 0.95);
+        }
+        .cqh-row-label {
+          color: rgba(148, 163, 184, 0.95);
+        }
+        .cqh-refresh {
+          color: #60a5fa;
+          border-color: rgba(255, 255, 255, 0.10);
+        }
+        .cqh-refresh:hover:not(:disabled) {
+          background: rgba(96, 165, 250, 0.10);
+        }
+      }
+    `;
+
+    document.documentElement.appendChild(style);
+  }
+
+  function ensurePanel() {
+    let panel = document.getElementById('cqh-panel');
+    if (panel) return panel;
+
+    injectStyle();
+
+    panel = document.createElement('div');
+    panel.id = 'cqh-panel';
+    panel.className = 'cqh-panel';
+    panel.setAttribute('role', 'status');
+    panel.innerHTML = `
+      <div class="cqh-summary" data-cqh="summary" title="点击切换详情">
+        <span class="cqh-indicator" data-cqh="indicator"></span>
+        <span class="cqh-summary-text" data-cqh="summary-text">加载中…</span>
+      </div>
+      <div class="cqh-details">
+        <div class="cqh-row">
+          <span class="cqh-row-label">DR</span>
+          <span class="cqh-row-value" data-cqh="dr">-</span>
+        </div>
+        <div class="cqh-row">
+          <span class="cqh-row-label">Agent</span>
+          <span class="cqh-row-value" data-cqh="agent">-</span>
+        </div>
+        <div class="cqh-row">
+          <span class="cqh-row-label">Codex5H</span>
+          <span class="cqh-row-value" data-cqh="codex5h">-</span>
+        </div>
+        <div class="cqh-row">
+          <span class="cqh-row-label">Codex7D</span>
+          <span class="cqh-row-value" data-cqh="codex7d">-</span>
+        </div>
+        <div class="cqh-error-line" data-cqh="error-line" hidden></div>
+        <div class="cqh-footer">
+          <span data-cqh="updated">未更新</span>
+          <button type="button" class="cqh-refresh" data-cqh="refresh">刷新</button>
+        </div>
+      </div>
+    `;
+
+    (document.body || document.documentElement).appendChild(panel);
+
+    const summary = panel.querySelector('[data-cqh="summary"]');
+    summary.addEventListener('click', () => {
+      panel.classList.toggle('cqh-expanded');
+    });
+
+    const refreshButton = panel.querySelector('[data-cqh="refresh"]');
+    refreshButton.addEventListener('click', (event) => {
+      event.stopPropagation();
+      loadCodexUsage();
+    });
+
+    return panel;
+  }
+
+  function computeIndicatorClass() {
+    // 首次加载、什么数据都没有：保持中性灰
+    if (!state.lastUpdated && !state.dr && !state.agent) {
+      if (state.codexError) return 'cqh-warn';
+      return '';
+    }
+
+    const drRemaining = normalizeNumber(state.dr?.remaining);
+    const agentRemaining = normalizeNumber(state.agent?.remaining);
+    const codex5hPct = state.codex5h?.remainingPercent ?? null;
+    const codex7dPct = state.codex7d?.remainingPercent ?? null;
+
+    const anyZero =
+      drRemaining === 0 ||
+      agentRemaining === 0 ||
+      codex5hPct === 0 ||
+      codex7dPct === 0;
+    if (anyZero) return 'cqh-bad';
+
+    const anyLow =
+      (drRemaining !== null && drRemaining < DR_AGENT_LOW) ||
+      (agentRemaining !== null && agentRemaining < DR_AGENT_LOW) ||
+      (codex5hPct !== null && codex5hPct < CODEX_LOW_PERCENT) ||
+      (codex7dPct !== null && codex7dPct < CODEX_LOW_PERCENT);
+    if (anyLow) return 'cqh-warn';
+
+    return 'cqh-ok';
+  }
+
+  function buildSummaryText() {
+    if (!state.lastUpdated && !state.dr && !state.agent) {
+      if (state.codexLoading) return '加载中…';
+      if (state.codexError) return '错误';
+      return '等待数据';
+    }
+
+    const drText = state.dr ? `DR${formatRemaining(state.dr.remaining)}` : 'DR-';
+
+    const codex5hText =
+      state.codex5h?.remainingPercent !== null && state.codex5h?.remainingPercent !== undefined
+        ? formatPercent(state.codex5h.remainingPercent)
+        : '-';
+
+    const codex7dText =
+      state.codex7d?.remainingPercent !== null && state.codex7d?.remainingPercent !== undefined
+        ? formatPercent(state.codex7d.remainingPercent)
+        : '-';
+
+    return `${drText}｜${codex5hText}｜${codex7dText}`;
+  }
+
+  function renderPanel() {
+    if (!document.body && !document.documentElement) return;
+
+    const panel = ensurePanel();
+
+    panel.classList.toggle('cqh-loading', state.codexLoading);
+
+    // 指示灯颜色
+    const indicator = panel.querySelector('[data-cqh="indicator"]');
+    indicator.classList.remove('cqh-ok', 'cqh-warn', 'cqh-bad');
+    const cls = computeIndicatorClass();
+    if (cls) indicator.classList.add(cls);
+
+    // 摘要文本
+    panel.querySelector('[data-cqh="summary-text"]').textContent = buildSummaryText();
+
+    // 详情：DR
+    const drCell = panel.querySelector('[data-cqh="dr"]');
+    if (state.dr) {
+      drCell.textContent = `${formatRemaining(state.dr.remaining)} (${formatIsoReset(state.dr.reset_after)})`;
+    } else {
+      drCell.textContent = '等待对话';
+    }
+
+    // 详情：Agent
+    const agentCell = panel.querySelector('[data-cqh="agent"]');
+    if (state.agent) {
+      agentCell.textContent = `${formatRemaining(state.agent.remaining)} (${formatIsoReset(state.agent.reset_after)})`;
+    } else {
+      agentCell.textContent = '等待对话';
+    }
+
+    // 详情：Codex 5H
+    const codex5hCell = panel.querySelector('[data-cqh="codex5h"]');
+    codex5hCell.classList.remove('cqh-error-text');
+    if (state.codex5h) {
+      codex5hCell.textContent = `${formatPercent(state.codex5h.remainingPercent)} (${formatWindowReset(state.codex5h)})`;
+    } else if (state.codexError) {
+      codex5hCell.textContent = '错误';
+      codex5hCell.classList.add('cqh-error-text');
+    } else if (state.codexLoading) {
+      codex5hCell.textContent = '加载中…';
+    } else {
+      codex5hCell.textContent = '-';
+    }
+
+    // 详情：Codex 7D
+    const codex7dCell = panel.querySelector('[data-cqh="codex7d"]');
+    codex7dCell.classList.remove('cqh-error-text');
+    if (state.codex7d) {
+      codex7dCell.textContent = `${formatPercent(state.codex7d.remainingPercent)} (${formatWindowReset(state.codex7d)})`;
+    } else if (state.codexError) {
+      codex7dCell.textContent = '错误';
+      codex7dCell.classList.add('cqh-error-text');
+    } else if (state.codexLoading) {
+      codex7dCell.textContent = '加载中…';
+    } else {
+      codex7dCell.textContent = '-';
+    }
+
+    // 错误详情（仅在有错误时显示）
+    const errorLine = panel.querySelector('[data-cqh="error-line"]');
+    if (state.codexError) {
+      errorLine.textContent = state.codexError;
+      errorLine.hidden = false;
+    } else {
+      errorLine.textContent = '';
+      errorLine.hidden = true;
+    }
+
+    // 更新时间
+    panel.querySelector('[data-cqh="updated"]').textContent = formatClock(state.lastUpdated);
+
+    // 刷新按钮
+    const refreshButton = panel.querySelector('[data-cqh="refresh"]');
+    refreshButton.disabled = state.codexLoading;
+    refreshButton.textContent = state.codexLoading ? '加载中' : '刷新';
+  }
+
+  // ========== 数据捕获 ==========
+
+  function handleConversationInitData(data) {
+    if (capturedConversationInitOnce) return;
+
+    if (!data || typeof data !== 'object') return;
+    if (!Array.isArray(data.limits_progress)) return;
+
+    const dr = getLimit(data, 'deep_research');
+
+    const agent =
+      getLimit(data, 'odyssey') ||
+      getLimit(data, 'agent') ||
+      getLimit(data, 'agent_mode');
+
+    if (!dr && !agent) return;
+
+    state.dr = dr;
+    state.agent = agent;
+
+    capturedConversationInitOnce = true;
+    renderPanel();
+  }
+
+  if (typeof originalFetch === 'function') {
+    window.fetch = async function patchedFetch(input) {
+      const response = await originalFetch.apply(this, arguments);
+
+      try {
+        if (isConversationInitUrl(input)) {
+          response
+            .clone()
+            .json()
+            .then(handleConversationInitData)
+            .catch(() => {});
+        }
+      } catch {
+        // ignore
+      }
+
+      return response;
+    };
+  }
+
+  const originalOpen = XMLHttpRequest.prototype.open;
+  const originalSend = XMLHttpRequest.prototype.send;
+
+  XMLHttpRequest.prototype.open = function patchedOpen(_method, url) {
+    this.__cqhUrl = url;
+    return originalOpen.apply(this, arguments);
+  };
+
+  XMLHttpRequest.prototype.send = function patchedSend() {
+    try {
+      if (isConversationInitUrl(this.__cqhUrl)) {
+        this.addEventListener('loadend', function () {
+          try {
+            if (!this.responseText) return;
+            handleConversationInitData(JSON.parse(this.responseText));
+          } catch {
+            // ignore
+          }
+        });
+      }
+    } catch {
+      // ignore
+    }
+
+    return originalSend.apply(this, arguments);
+  };
+
+  // ========== 路径守卫 / SPA 路由 ==========
+
+  function isExcludedPath() {
+    const path = location.pathname || '/';
+    return EXCLUDED_PATH_PREFIXES.some(prefix => path.startsWith(prefix));
+  }
+
+  function removePanel() {
+    const panel = document.getElementById('cqh-panel');
+    if (panel) panel.remove();
+  }
+
+  function applyForCurrentPath() {
+    if (isExcludedPath()) {
+      stopCodexAutoRefresh();
+      removePanel();
+      return;
+    }
+
+    ensurePanel();
+    renderPanel();
+
+    if (!state.lastUpdated && !state.codexLoading) {
+      loadCodexUsage();
+    }
+
+    startCodexAutoRefresh();
+  }
+
+  function installRouteObserver() {
+    const notify = () => setTimeout(applyForCurrentPath, 0);
+
+    const patchHistoryMethod = (methodName) => {
+      const original = window.history[methodName];
+      if (typeof original !== 'function') return;
+      window.history[methodName] = function patchedHistoryMethod(...args) {
+        const result = original.apply(this, args);
+        notify();
+        return result;
+      };
+    };
+
+    patchHistoryMethod('pushState');
+    patchHistoryMethod('replaceState');
+    window.addEventListener('popstate', notify);
+  }
+
+  // ========== 启动 ==========
+
+  function boot() {
+    installRouteObserver();
+    applyForCurrentPath();
+  }
+
+  if (document.readyState === 'loading') {
+    window.addEventListener('DOMContentLoaded', boot, { once: true });
+  } else {
+    boot();
+  }
+})();
