@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatGPT Quota Helper
 // @namespace    https://github.com/BlueSkyXN/CPA-Panel-LTS
-// @version      1.0.0
+// @version      1.1.0
 // @author       BlueSkyXN
 // @description  在 chatgpt.com 实时显示 DR / Agent / Codex 5h / Codex 7d 配额：折叠式面板、状态指示灯、自动与手动刷新。
 // @match        https://chatgpt.com/*
@@ -27,7 +27,12 @@
   const FIVE_HOUR_SECONDS = 5 * 60 * 60;
   const WEEK_SECONDS = 7 * 24 * 60 * 60;
 
-  // Codex 自动刷新间隔：5 分钟
+  // Codex 自动刷新开关：默认关闭。
+  // 设为 true 才会按 CODEX_AUTO_REFRESH_MS 周期自动刷新；
+  // 关闭时仍保留「首次进入拉取」与「手动点刷新」，只是不再周期性请求。
+  const CODEX_AUTO_REFRESH_ENABLED = false;
+
+  // Codex 自动刷新间隔：5 分钟（仅在 CODEX_AUTO_REFRESH_ENABLED 为 true 时生效）
   const CODEX_AUTO_REFRESH_MS = 5 * 60 * 1000;
 
   // 指示灯阈值
@@ -444,6 +449,7 @@
   }
 
   function startCodexAutoRefresh() {
+    if (!CODEX_AUTO_REFRESH_ENABLED) return;
     if (codexTimer) return;
     codexTimer = setInterval(() => {
       loadCodexUsage();
