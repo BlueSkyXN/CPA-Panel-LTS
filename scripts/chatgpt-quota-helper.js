@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatGPT Quota Helper
 // @namespace    https://github.com/BlueSkyXN/CPA-Panel-LTS
-// @version      1.0.0
+// @version      1.0.1
 // @author       BlueSkyXN
 // @description  在 chatgpt.com 实时显示 DR / Agent / Codex 5h / Codex 7d 配额：折叠式面板、状态指示灯、自动与手动刷新。
 // @match        https://chatgpt.com/*
@@ -27,8 +27,8 @@
   const FIVE_HOUR_SECONDS = 5 * 60 * 60;
   const WEEK_SECONDS = 7 * 24 * 60 * 60;
 
-  // Codex 自动刷新间隔：5 分钟
-  const CODEX_AUTO_REFRESH_MS = 5 * 60 * 1000;
+  // Codex 自动刷新间隔：60 秒
+  const CODEX_AUTO_REFRESH_MS = 60 * 1000;
 
   // 指示灯阈值
   const DR_AGENT_LOW = 5;        // DR / Agent 剩余 < 5 视为低水位
