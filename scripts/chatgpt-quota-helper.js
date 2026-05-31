@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatGPT Quota Helper
 // @namespace    https://github.com/BlueSkyXN/CPA-Panel-LTS
-// @version      1.0.1
+// @version      1.1.0
 // @author       BlueSkyXN
 // @description  在 chatgpt.com 实时显示 DR / Agent / Codex 5h / Codex 7d 配额：折叠式面板、状态指示灯、自动与手动刷新。
 // @match        https://chatgpt.com/*
@@ -29,6 +29,15 @@
 
   // Codex 自动刷新间隔：60 秒
   const CODEX_AUTO_REFRESH_MS = 60 * 1000;
+  const CODEX_AUTO_REFRESH_JITTER = 0.10;
+  const CODEX_AUTO_BACKOFF_BASE_MS = 60 * 1000;
+  const CODEX_AUTO_BACKOFF_MAX_MS = 5 * 60 * 1000;
+  const CODEX_AUTO_MAX_CONSECUTIVE_ERRORS = 3;
+  const SESSION_INFO_FALLBACK_TTL_MS = 60 * 1000;
+  const SESSION_INFO_EXP_SKEW_MS = 30 * 1000;
+  const RECOVERY_QUERY_PARAM = 'cqh_recover';
+  const RECOVERY_STORAGE_KEY = 'cqh_recovery';
+  const RECOVERY_MARKER_TTL_MS = 2 * 60 * 1000;
 
   // 指示灯阈值
   const DR_AGENT_LOW = 5;        // DR / Agent 剩余 < 5 视为低水位
@@ -46,14 +55,23 @@
     codex7d: null,
     codexError: '',
     codexLoading: false,
+    codexBackoffUntil: 0,
+    codexAutoPaused: false,
+    consecutiveCodexErrors: 0,
+    pageIssue: null,
+    recoveryRecommended: false,
+    recoveryNotice: '',
     lastUpdated: 0
   };
 
   let capturedConversationInitOnce = false;
   let codexTimer = null;
+  let sessionInfoCache = null;
 
   // 在脚本插桩前抓住原始 fetch，避免后续被站点或自身 patch 影响
   const originalFetch = window.fetch;
+
+  installRecoveryShortcut();
 
   // ========== 工具函数 ==========
 
@@ -120,6 +138,20 @@
     return `${Math.max(1, Math.ceil(ms / HOUR))}H`;
   }
 
+  function formatRetryDurationMs(ms) {
+    if (!Number.isFinite(ms)) return '-';
+    if (ms <= 0) return '0M';
+
+    const MINUTE = 60 * 1000;
+    const HOUR = 60 * MINUTE;
+
+    if (ms < HOUR) {
+      return `${Math.max(1, Math.ceil(ms / MINUTE))}M`;
+    }
+
+    return formatDurationMs(ms);
+  }
+
   function formatIsoReset(value) {
     if (!value) return '-';
 
@@ -161,6 +193,179 @@
     const m = String(d.getMinutes()).padStart(2, '0');
     const s = String(d.getSeconds()).padStart(2, '0');
     return `更新于 ${h}:${m}:${s}`;
+  }
+
+  function sanitizeErrorMessage(value) {
+    return String(value || '')
+      .replace(/\bBearer\s+[^\s"'<>]+/gi, 'Bearer [redacted]')
+      .replace(/[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '[jwt]')
+      .replace(/https?:\/\/[^\s"'<>]+/g, rawUrl => {
+        try {
+          const url = new URL(rawUrl);
+          return `${url.origin}${url.pathname}`;
+        } catch {
+          return '[url]';
+        }
+      })
+      .slice(0, 180);
+  }
+
+  function getResponseHeader(response, name) {
+    try {
+      return response?.headers?.get(name) || '';
+    } catch {
+      return '';
+    }
+  }
+
+  function isCloudflareChallengeHeaders(status, cfMitigated, cfRay, contentType) {
+    if (String(cfMitigated || '').toLowerCase() === 'challenge') return true;
+
+    const statusCode = normalizeNumber(status);
+    return (
+      (statusCode === 403 || statusCode === 503) &&
+      Boolean(cfRay) &&
+      String(contentType || '').toLowerCase().includes('text/html')
+    );
+  }
+
+  function isCloudflareChallengeResponse(response) {
+    return isCloudflareChallengeHeaders(
+      response?.status,
+      getResponseHeader(response, 'cf-mitigated'),
+      getResponseHeader(response, 'cf-ray'),
+      getResponseHeader(response, 'content-type')
+    );
+  }
+
+  function createCodexError(message, options = {}) {
+    const error = new Error(message);
+    error.cqhCode = options.code || '';
+    error.cqhPauseAuto = Boolean(options.pauseAuto);
+    error.cqhRecoveryRecommended = Boolean(options.recoveryRecommended);
+    return error;
+  }
+
+  function getCodexErrorInfo(error) {
+    return {
+      message: sanitizeErrorMessage(error instanceof Error ? error.message : String(error)),
+      code: error?.cqhCode || '',
+      pauseAuto: Boolean(error?.cqhPauseAuto),
+      recoveryRecommended: Boolean(error?.cqhRecoveryRecommended)
+    };
+  }
+
+  function getCodexAutoBackoffMs(errorCount) {
+    const exponent = Math.max(0, Math.min(errorCount - 1, 3));
+    return Math.min(
+      CODEX_AUTO_BACKOFF_MAX_MS,
+      CODEX_AUTO_BACKOFF_BASE_MS * (2 ** exponent)
+    );
+  }
+
+  function getCodexAutoRefreshDelayMs() {
+    const now = Date.now();
+    if (state.codexBackoffUntil && state.codexBackoffUntil > now) {
+      return state.codexBackoffUntil - now;
+    }
+
+    const jitter = 1 - CODEX_AUTO_REFRESH_JITTER + (Math.random() * CODEX_AUTO_REFRESH_JITTER * 2);
+    return Math.max(1000, Math.round(CODEX_AUTO_REFRESH_MS * jitter));
+  }
+
+  function canScheduleCodexAutoRefresh() {
+    return !document.hidden && !state.codexAutoPaused && !isExcludedPath();
+  }
+
+  function clearSessionInfoCache() {
+    sessionInfoCache = null;
+  }
+
+  function clearRecoveryState() {
+    state.pageIssue = null;
+    state.recoveryRecommended = false;
+    state.recoveryNotice = '';
+  }
+
+  function recordPageIssue(kind, message) {
+    const now = Date.now();
+    const current = state.pageIssue;
+    if (current && current.kind === kind && now - current.detectedAt < 5000) return;
+
+    state.pageIssue = {
+      kind,
+      message,
+      detectedAt: now
+    };
+    state.recoveryRecommended = true;
+    state.codexAutoPaused = true;
+    state.codexBackoffUntil = 0;
+    stopCodexAutoRefresh();
+
+    if (!isExcludedPath()) {
+      renderPanel();
+    }
+  }
+
+  function isChunkLikeMessage(value) {
+    const text = sanitizeErrorMessage(value).toLowerCase();
+    return (
+      text.includes('chunkloaderror') ||
+      text.includes('loading chunk') ||
+      text.includes('failed to fetch dynamically imported module') ||
+      text.includes('importing a module script failed') ||
+      text.includes('error loading dynamically imported module') ||
+      text.includes('css_chunk_load_failed')
+    );
+  }
+
+  function getErrorEventText(event) {
+    const parts = [];
+    if (event?.message) parts.push(event.message);
+    if (event?.error?.message) parts.push(event.error.message);
+    return parts.join(' ');
+  }
+
+  function getRejectionText(reason) {
+    if (!reason) return '';
+    if (typeof reason === 'string') return reason;
+    if (reason instanceof Error) return reason.message;
+    if (typeof reason.message === 'string') return reason.message;
+    return String(reason);
+  }
+
+  function isResourceChunkErrorTarget(target) {
+    if (!target || target === window) return false;
+
+    const tag = String(target.tagName || '').toLowerCase();
+    if (tag !== 'script' && tag !== 'link') return false;
+
+    const url = target.src || target.href || '';
+    return (
+      /\/_next\/static\//i.test(url) ||
+      /chunk/i.test(url)
+    );
+  }
+
+  function inspectFetchResponseForPageIssue(response) {
+    if (isCloudflareChallengeResponse(response)) {
+      recordPageIssue('cf-challenge', '检测到 Cloudflare challenge，建议恢复页面');
+    }
+  }
+
+  function inspectXhrForPageIssue(xhr) {
+    try {
+      if (isCloudflareChallengeHeaders(
+        xhr.status,
+        xhr.getResponseHeader('cf-mitigated'),
+        xhr.getResponseHeader('cf-ray'),
+        xhr.getResponseHeader('content-type')
+      )) {
+        recordPageIssue('cf-challenge', '检测到 Cloudflare challenge，建议恢复页面');
+      }
+    } catch {
+      // ignore
+    }
   }
 
   // ========== Codex usage 解析 ==========
@@ -339,8 +544,27 @@
     return '';
   }
 
-  async function getSessionInfo() {
+  function getSessionInfoExpiresAt(tokenPayload, now) {
+    const expMs = normalizeEpochMs(tokenPayload?.exp);
+
+    if (expMs && expMs > now + SESSION_INFO_EXP_SKEW_MS) {
+      return expMs - SESSION_INFO_EXP_SKEW_MS;
+    }
+
+    return now + SESSION_INFO_FALLBACK_TTL_MS;
+  }
+
+  async function getSessionInfo(options = {}) {
     try {
+      const now = Date.now();
+      if (
+        !options.force &&
+        sessionInfoCache &&
+        sessionInfoCache.expiresAt > now
+      ) {
+        return sessionInfoCache.value;
+      }
+
       if (typeof originalFetch !== 'function') {
         return { accessToken: '', accountId: '' };
       }
@@ -348,12 +572,24 @@
       const response = await originalFetch.call(window, PATHS.SESSION, {
         method: 'GET',
         credentials: 'include',
+        cache: 'no-store',
         headers: {
           accept: 'application/json'
         }
       });
 
+      if (isCloudflareChallengeResponse(response)) {
+        throw createCodexError('检测到 Cloudflare challenge，已暂停自动刷新', {
+          code: 'cf-challenge',
+          pauseAuto: true,
+          recoveryRecommended: true
+        });
+      }
+
       if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          clearSessionInfoCache();
+        }
         return { accessToken: '', accountId: '' };
       }
 
@@ -367,8 +603,15 @@
         findChatgptAccountId(tokenPayload) ||
         '';
 
-      return { accessToken, accountId };
-    } catch {
+      const result = { accessToken, accountId };
+      sessionInfoCache = {
+        value: result,
+        expiresAt: getSessionInfoExpiresAt(tokenPayload, now)
+      };
+
+      return result;
+    } catch (error) {
+      if (error?.cqhCode) throw error;
       return { accessToken: '', accountId: '' };
     }
   }
@@ -389,35 +632,89 @@
     return headers;
   }
 
-  async function fetchCodexUsage() {
+  async function fetchCodexUsage(options = {}) {
     if (typeof originalFetch !== 'function') {
       throw new Error('fetch unavailable');
     }
 
-    const sessionInfo = await getSessionInfo();
+    const sessionInfo = await getSessionInfo({ force: Boolean(options.forceSession) });
     const headers = buildCodexHeaders(sessionInfo);
 
     const response = await originalFetch.call(window, PATHS.CODEX_USAGE, {
       method: 'GET',
       credentials: 'include',
+      cache: 'no-store',
       headers
     });
 
-    if (!response.ok) {
-      throw new Error(`Codex usage HTTP ${response.status}`);
+    if (isCloudflareChallengeResponse(response)) {
+      throw createCodexError('检测到 Cloudflare challenge，已暂停自动刷新', {
+        code: 'cf-challenge',
+        pauseAuto: true,
+        recoveryRecommended: true
+      });
     }
 
-    return response.json();
+    const contentType = getResponseHeader(response, 'content-type').toLowerCase();
+
+    if (!response.ok) {
+      if (response.status === 401 && !options.forceSession) {
+        clearSessionInfoCache();
+        return fetchCodexUsage({ ...options, forceSession: true });
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        clearSessionInfoCache();
+      }
+
+      throw createCodexError(`Codex usage HTTP ${response.status}`, {
+        code: 'http'
+      });
+    }
+
+    if (contentType.includes('text/html')) {
+      throw createCodexError('Codex usage 返回 HTML，建议恢复页面', {
+        code: 'html-response',
+        pauseAuto: true,
+        recoveryRecommended: true
+      });
+    }
+
+    try {
+      return await response.json();
+    } catch (error) {
+      throw createCodexError(`Codex usage JSON 解析失败: ${sanitizeErrorMessage(error.message)}`, {
+        code: 'json-parse'
+      });
+    }
   }
 
-  async function loadCodexUsage() {
+  async function loadCodexUsage(options = {}) {
+    const source = options.source || 'auto';
+    const isManual = source === 'manual';
+
+    if (!isManual) {
+      if (document.hidden || state.codexAutoPaused) {
+        renderPanel();
+        return;
+      }
+
+      if (state.codexBackoffUntil && Date.now() < state.codexBackoffUntil) {
+        renderPanel();
+        return;
+      }
+    }
+
     if (state.codexLoading) return;
 
     state.codexLoading = true;
+    if (isManual) {
+      state.codexBackoffUntil = 0;
+    }
     renderPanel();
 
     try {
-      const usage = await fetchCodexUsage();
+      const usage = await fetchCodexUsage({ forceSession: Boolean(options.forceSession) });
 
       const rateLimit =
         usage.rate_limit ??
@@ -429,9 +726,40 @@
       state.codex5h = toCodexQuota(fiveHourWindow, rateLimit);
       state.codex7d = toCodexQuota(weeklyWindow, rateLimit);
       state.codexError = '';
+      state.codexAutoPaused = false;
+      state.codexBackoffUntil = 0;
+      state.consecutiveCodexErrors = 0;
+      if (state.pageIssue?.kind !== 'chunk-load') {
+        clearRecoveryState();
+      } else {
+        state.recoveryNotice = '';
+      }
       state.lastUpdated = Date.now();
     } catch (error) {
-      state.codexError = error instanceof Error ? error.message : String(error);
+      const info = getCodexErrorInfo(error);
+      state.codexError = info.message || 'Codex usage 请求失败';
+      state.consecutiveCodexErrors += 1;
+
+      if (info.pauseAuto) {
+        state.codexAutoPaused = true;
+      }
+
+      if (info.recoveryRecommended) {
+        state.pageIssue = {
+          kind: info.code || 'codex-recovery',
+          message: state.codexError,
+          detectedAt: Date.now()
+        };
+        state.recoveryRecommended = true;
+      } else if (!isManual) {
+        if (state.consecutiveCodexErrors >= CODEX_AUTO_MAX_CONSECUTIVE_ERRORS) {
+          state.codexAutoPaused = true;
+          state.codexBackoffUntil = 0;
+        } else {
+          state.codexBackoffUntil = Date.now() + getCodexAutoBackoffMs(state.consecutiveCodexErrors);
+        }
+      }
+
       // 出错时保留旧的 codex5h/codex7d，便于继续展示，但若从未拿到也置空
       if (!state.lastUpdated) {
         state.codex5h = null;
@@ -444,15 +772,17 @@
   }
 
   function startCodexAutoRefresh() {
-    if (codexTimer) return;
-    codexTimer = setInterval(() => {
-      loadCodexUsage();
-    }, CODEX_AUTO_REFRESH_MS);
+    if (codexTimer || !canScheduleCodexAutoRefresh()) return;
+
+    codexTimer = setTimeout(() => {
+      codexTimer = null;
+      loadCodexUsage({ source: 'auto' }).finally(startCodexAutoRefresh);
+    }, getCodexAutoRefreshDelayMs());
   }
 
   function stopCodexAutoRefresh() {
     if (!codexTimer) return;
-    clearInterval(codexTimer);
+    clearTimeout(codexTimer);
     codexTimer = null;
   }
 
@@ -577,7 +907,13 @@
         font-size: 11px;
       }
 
-      .cqh-refresh {
+      .cqh-footer-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .cqh-action {
         appearance: none;
         border: 1px solid rgba(0, 0, 0, 0.08);
         background: transparent;
@@ -589,11 +925,15 @@
         line-height: 1.4;
       }
 
-      .cqh-refresh:hover:not(:disabled) {
+      .cqh-action[hidden] {
+        display: none;
+      }
+
+      .cqh-action:hover:not(:disabled) {
         background: rgba(37, 99, 235, 0.08);
       }
 
-      .cqh-refresh:disabled {
+      .cqh-action:disabled {
         opacity: 0.5;
         cursor: not-allowed;
       }
@@ -628,11 +968,11 @@
         .cqh-row-label {
           color: rgba(148, 163, 184, 0.95);
         }
-        .cqh-refresh {
+        .cqh-action {
           color: #60a5fa;
           border-color: rgba(255, 255, 255, 0.10);
         }
-        .cqh-refresh:hover:not(:disabled) {
+        .cqh-action:hover:not(:disabled) {
           background: rgba(96, 165, 250, 0.10);
         }
       }
@@ -676,7 +1016,10 @@
         <div class="cqh-error-line" data-cqh="error-line" hidden></div>
         <div class="cqh-footer">
           <span data-cqh="updated">未更新</span>
-          <button type="button" class="cqh-refresh" data-cqh="refresh">刷新</button>
+          <span class="cqh-footer-actions">
+            <button type="button" class="cqh-action cqh-recover" data-cqh="recover" hidden>恢复</button>
+            <button type="button" class="cqh-action cqh-refresh" data-cqh="refresh">刷新</button>
+          </span>
         </div>
       </div>
     `;
@@ -691,13 +1034,22 @@
     const refreshButton = panel.querySelector('[data-cqh="refresh"]');
     refreshButton.addEventListener('click', (event) => {
       event.stopPropagation();
-      loadCodexUsage();
+      loadCodexUsage({ source: 'manual' }).finally(startCodexAutoRefresh);
+    });
+
+    const recoverButton = panel.querySelector('[data-cqh="recover"]');
+    recoverButton.addEventListener('click', (event) => {
+      event.stopPropagation();
+      recoverPage();
     });
 
     return panel;
   }
 
   function computeIndicatorClass() {
+    if (state.pageIssue?.kind === 'chunk-load') return 'cqh-bad';
+    if (state.pageIssue || state.codexAutoPaused) return 'cqh-warn';
+
     // 首次加载、什么数据都没有：保持中性灰
     if (!state.lastUpdated && !state.dr && !state.agent) {
       if (state.codexError) return 'cqh-warn';
@@ -728,8 +1080,10 @@
 
   function buildSummaryText() {
     if (!state.lastUpdated && !state.dr && !state.agent) {
+      if (state.pageIssue) return '需恢复';
       if (state.codexLoading) return '加载中…';
       if (state.codexError) return '错误';
+      if (state.recoveryNotice) return '恢复中';
       return '等待数据';
     }
 
@@ -746,6 +1100,30 @@
         : '-';
 
     return `${drText}｜${codex5hText}｜${codex7dText}`;
+  }
+
+  function buildStatusLineText() {
+    const parts = [];
+
+    if (state.pageIssue?.message) {
+      parts.push(state.pageIssue.message);
+    } else if (state.codexError) {
+      parts.push(state.codexError);
+    } else if (state.recoveryNotice) {
+      parts.push(state.recoveryNotice);
+    }
+
+    if (state.codexAutoPaused) {
+      parts.push('自动刷新已暂停');
+    } else if (state.codexBackoffUntil && Date.now() < state.codexBackoffUntil) {
+      parts.push(`自动刷新 ${formatRetryDurationMs(state.codexBackoffUntil - Date.now())} 后重试`);
+    }
+
+    return parts.join('；');
+  }
+
+  function shouldShowRecoveryButton() {
+    return true;
   }
 
   function renderPanel() {
@@ -808,10 +1186,11 @@
       codex7dCell.textContent = '-';
     }
 
-    // 错误详情（仅在有错误时显示）
+    // 错误和恢复提示（只显示净化后的短消息）
     const errorLine = panel.querySelector('[data-cqh="error-line"]');
-    if (state.codexError) {
-      errorLine.textContent = state.codexError;
+    const statusLineText = buildStatusLineText();
+    if (statusLineText) {
+      errorLine.textContent = statusLineText;
       errorLine.hidden = false;
     } else {
       errorLine.textContent = '';
@@ -825,6 +1204,122 @@
     const refreshButton = panel.querySelector('[data-cqh="refresh"]');
     refreshButton.disabled = state.codexLoading;
     refreshButton.textContent = state.codexLoading ? '加载中' : '刷新';
+
+    const recoverButton = panel.querySelector('[data-cqh="recover"]');
+    recoverButton.hidden = !shouldShowRecoveryButton();
+    recoverButton.disabled = false;
+    recoverButton.textContent = state.recoveryRecommended || state.pageIssue ? '恢复加载' : '恢复';
+  }
+
+  function installRecoveryShortcut() {
+    window.addEventListener('keydown', (event) => {
+      if (
+        event.altKey &&
+        event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        event.code === 'KeyR'
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        recoverPage();
+      }
+    }, true);
+  }
+
+  function setRecoveryMarker(kind) {
+    try {
+      sessionStorage.setItem(RECOVERY_STORAGE_KEY, JSON.stringify({
+        ts: Date.now(),
+        kind: kind || 'manual'
+      }));
+    } catch {
+      // ignore
+    }
+  }
+
+  function consumeRecoveryMarker() {
+    try {
+      const raw = sessionStorage.getItem(RECOVERY_STORAGE_KEY);
+      if (!raw) return;
+
+      sessionStorage.removeItem(RECOVERY_STORAGE_KEY);
+      const marker = JSON.parse(raw);
+      if (marker?.ts && Date.now() - marker.ts <= RECOVERY_MARKER_TTL_MS) {
+        state.recoveryNotice = '已尝试恢复页面，等待数据刷新';
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  function cleanupRecoveryQueryParam() {
+    try {
+      const url = new URL(location.href);
+      if (!url.searchParams.has(RECOVERY_QUERY_PARAM)) return;
+
+      url.searchParams.delete(RECOVERY_QUERY_PARAM);
+      const cleanUrl = `${url.pathname}${url.search}${url.hash}`;
+      history.replaceState(history.state, '', cleanUrl);
+    } catch {
+      // ignore
+    }
+  }
+
+  function buildRecoveryUrl() {
+    const url = new URL(location.href);
+    url.searchParams.set(RECOVERY_QUERY_PARAM, String(Date.now()));
+    return url.toString();
+  }
+
+  function recoverPage() {
+    const kind = state.pageIssue?.kind || 'manual';
+
+    if (!state.pageIssue && !state.recoveryRecommended) {
+      const confirmed = window.confirm('恢复加载会重新加载当前页面，可能丢失未发送内容。继续吗？');
+      if (!confirmed) return;
+    }
+
+    clearSessionInfoCache();
+    state.codexBackoffUntil = 0;
+    state.codexAutoPaused = false;
+    state.consecutiveCodexErrors = 0;
+
+    setRecoveryMarker(kind);
+    location.replace(buildRecoveryUrl());
+  }
+
+  function installPageHealthObserver() {
+    window.addEventListener('error', (event) => {
+      if (isResourceChunkErrorTarget(event.target)) {
+        recordPageIssue('chunk-load', '检测到前端资源加载失败，建议恢复页面');
+        return;
+      }
+
+      if (isChunkLikeMessage(getErrorEventText(event))) {
+        recordPageIssue('chunk-load', '检测到前端资源加载失败，建议恢复页面');
+      }
+    }, true);
+
+    window.addEventListener('unhandledrejection', (event) => {
+      if (isChunkLikeMessage(getRejectionText(event.reason))) {
+        recordPageIssue('chunk-load', '检测到前端资源加载失败，建议恢复页面');
+      }
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden || isExcludedPath()) {
+        stopCodexAutoRefresh();
+        renderPanel();
+        return;
+      }
+
+      if (!state.codexAutoPaused && !state.codexLoading) {
+        loadCodexUsage({ source: 'auto' }).finally(startCodexAutoRefresh);
+      } else {
+        startCodexAutoRefresh();
+      }
+    });
   }
 
   // ========== 数据捕获 ==========
@@ -856,6 +1351,8 @@
       const response = await originalFetch.apply(this, arguments);
 
       try {
+        inspectFetchResponseForPageIssue(response);
+
         if (isConversationInitUrl(input)) {
           response
             .clone()
@@ -881,16 +1378,18 @@
 
   XMLHttpRequest.prototype.send = function patchedSend() {
     try {
-      if (isConversationInitUrl(this.__cqhUrl)) {
-        this.addEventListener('loadend', function () {
-          try {
+      this.addEventListener('loadend', function () {
+        try {
+          inspectXhrForPageIssue(this);
+
+          if (isConversationInitUrl(this.__cqhUrl)) {
             if (!this.responseText) return;
             handleConversationInitData(JSON.parse(this.responseText));
-          } catch {
-            // ignore
           }
-        });
-      }
+        } catch {
+          // ignore
+        }
+      });
     } catch {
       // ignore
     }
@@ -921,7 +1420,7 @@
     renderPanel();
 
     if (!state.lastUpdated && !state.codexLoading) {
-      loadCodexUsage();
+      loadCodexUsage({ source: 'auto' });
     }
 
     startCodexAutoRefresh();
@@ -948,9 +1447,13 @@
   // ========== 启动 ==========
 
   function boot() {
+    cleanupRecoveryQueryParam();
+    consumeRecoveryMarker();
     installRouteObserver();
     applyForCurrentPath();
   }
+
+  installPageHealthObserver();
 
   if (document.readyState === 'loading') {
     window.addEventListener('DOMContentLoaded', boot, { once: true });
