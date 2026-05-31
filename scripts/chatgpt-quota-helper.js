@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatGPT Quota Helper
 // @namespace    https://github.com/BlueSkyXN/CPA-Panel-LTS
-// @version      1.2.0
+// @version      1.2.3
 // @author       BlueSkyXN
 // @description  在 chatgpt.com 实时显示 DR / Agent / Codex 5h / Codex 7d 配额：折叠式面板、状态指示灯、自动与手动刷新。
 // @match        https://chatgpt.com/*
@@ -43,6 +43,7 @@
   const RECOVERY_QUERY_PARAM = 'cqh_recover';
   const RECOVERY_STORAGE_KEY = 'cqh_recovery';
   const RECOVERY_MARKER_TTL_MS = 2 * 60 * 1000;
+  const DEEP_RECOVERY_TIMEOUT_MS = 2500;
 
   // 指示灯阈值
   const DR_AGENT_LOW = 5;        // DR / Agent 剩余 < 5 视为低水位
@@ -72,6 +73,7 @@
   let capturedConversationInitOnce = false;
   let codexTimer = null;
   let sessionInfoCache = null;
+  let recoveryInProgress = false;
 
   // 在脚本插桩前抓住原始 fetch，避免后续被站点或自身 patch 影响
   const originalFetch = window.fetch;
@@ -826,12 +828,13 @@
         opacity: 0.85;
         max-height: 36px;
         overflow: hidden;
-        transition: opacity 0.18s ease, max-height 0.22s ease, max-width 0.22s ease;
+        transition: opacity 0.18s ease, max-height 0.22s ease, max-width 0.22s ease, min-width 0.22s ease;
       }
 
       .cqh-panel:hover,
       .cqh-panel.cqh-expanded {
         opacity: 1;
+        min-width: 210px;
         max-height: 360px;
         max-width: min(320px, calc(100vw - 28px));
       }
@@ -882,8 +885,12 @@
       }
 
       .cqh-details {
-        margin-top: 8px;
-        padding-top: 8px;
+        position: absolute;
+        top: 36px;
+        left: 0;
+        right: 0;
+        box-sizing: border-box;
+        padding: 8px 12px 8px;
         border-top: 1px dashed rgba(0, 0, 0, 0.10);
         display: flex;
         flex-direction: column;
@@ -918,10 +925,9 @@
         padding-top: 6px;
         border-top: 1px dashed rgba(0, 0, 0, 0.06);
         display: flex;
-        align-items: center;
-        justify-content: space-between;
-        flex-wrap: wrap;
-        gap: 4px 8px;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 4px;
         color: rgba(100, 116, 139, 0.95);
         font-size: 11px;
       }
@@ -1035,11 +1041,11 @@
         </div>
         <div class="cqh-error-line" data-cqh="error-line" hidden></div>
         <div class="cqh-footer">
-          <span data-cqh="updated">未更新</span>
           <span class="cqh-footer-actions">
             <button type="button" class="cqh-action cqh-recover" data-cqh="recover" hidden>恢复</button>
             <button type="button" class="cqh-action cqh-refresh" data-cqh="refresh">刷新</button>
           </span>
+          <span data-cqh="updated">未更新</span>
         </div>
       </div>
     `;
@@ -1238,7 +1244,14 @@
     const recoverButton = panel.querySelector('[data-cqh="recover"]');
     recoverButton.hidden = !shouldShowRecoveryButton();
     recoverButton.disabled = false;
-    recoverButton.textContent = state.recoveryRecommended || state.pageIssue ? '恢复加载' : '恢复';
+    recoverButton.textContent = isDeepRecoveryRecommended()
+      ? '深度恢复'
+      : state.recoveryRecommended || state.pageIssue
+        ? '恢复加载'
+        : '恢复';
+    recoverButton.title = isDeepRecoveryRecommended()
+      ? '注销 Service Worker 并清空 CacheStorage 后重新加载；无法清普通 HTTP cache'
+      : '';
   }
 
   function installRecoveryShortcut() {
@@ -1257,11 +1270,13 @@
     }, true);
   }
 
-  function setRecoveryMarker(kind) {
+  function setRecoveryMarker(mode, extra = {}) {
     try {
       sessionStorage.setItem(RECOVERY_STORAGE_KEY, JSON.stringify({
         ts: Date.now(),
-        kind: kind || 'manual'
+        mode: mode === 'deep' ? 'deep' : 'normal',
+        kind: mode === 'deep' ? 'deep' : 'normal',
+        ...extra
       }));
     } catch {
       // ignore
@@ -1276,7 +1291,10 @@
       sessionStorage.removeItem(RECOVERY_STORAGE_KEY);
       const marker = JSON.parse(raw);
       if (marker?.ts && Date.now() - marker.ts <= RECOVERY_MARKER_TTL_MS) {
-        state.recoveryNotice = '已尝试恢复页面，等待数据刷新';
+        const mode = marker.mode || marker.kind;
+        state.recoveryNotice = mode === 'deep'
+          ? '已尝试深度恢复：清理 Service Worker / CacheStorage 后重新加载，等待数据刷新'
+          : '已尝试恢复页面，等待数据刷新';
       }
     } catch {
       // ignore
@@ -1296,27 +1314,100 @@
     }
   }
 
-  function buildRecoveryUrl() {
+  function buildRecoveryUrl(mode = 'normal') {
     const url = new URL(location.href);
-    url.searchParams.set(RECOVERY_QUERY_PARAM, String(Date.now()));
+    const recoveryMode = mode === 'deep' ? 'deep' : 'normal';
+    url.searchParams.set(RECOVERY_QUERY_PARAM, `${recoveryMode}-${Date.now().toString(36)}`);
     return url.toString();
   }
 
-  function recoverPage() {
-    const kind = state.pageIssue?.kind || 'manual';
+  function withTimeout(promise, ms) {
+    return Promise.race([
+      promise,
+      new Promise(resolve => {
+        setTimeout(() => resolve({ timedOut: true }), ms);
+      })
+    ]);
+  }
 
-    if (!state.pageIssue && !state.recoveryRecommended) {
-      const confirmed = window.confirm('恢复加载会重新加载当前页面，可能丢失未发送内容。继续吗？');
-      if (!confirmed) return;
+  function isDeepRecoveryRecommended() {
+    return state.pageIssue?.kind === 'chunk-load';
+  }
+
+  function getRecoveryMode(requestedMode) {
+    if (requestedMode === 'deep' || requestedMode === 'normal') {
+      return requestedMode;
     }
 
+    return isDeepRecoveryRecommended() ? 'deep' : 'normal';
+  }
+
+  function prepareForRecovery() {
+    stopCodexAutoRefresh();
     clearSessionInfoCache();
+    state.codexLoading = false;
     state.codexBackoffUntil = 0;
     state.codexAutoPaused = false;
     state.consecutiveCodexErrors = 0;
+  }
 
-    setRecoveryMarker(kind);
-    location.replace(buildRecoveryUrl());
+  async function unregisterServiceWorkers() {
+    if (!navigator.serviceWorker?.getRegistrations) return [];
+
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    return Promise.allSettled(registrations.map(registration => registration.unregister()));
+  }
+
+  async function clearCacheStorage() {
+    if (typeof caches === 'undefined' || typeof caches.keys !== 'function') return [];
+
+    const keys = await caches.keys();
+    return Promise.allSettled(keys.map(key => caches.delete(key)));
+  }
+
+  async function runDeepRecoveryCleanup() {
+    await Promise.allSettled([
+      unregisterServiceWorkers(),
+      clearCacheStorage()
+    ]);
+  }
+
+  async function recoverPage(requestedMode) {
+    const mode = getRecoveryMode(requestedMode);
+    const deep = mode === 'deep';
+    const reason = state.pageIssue?.kind || (state.recoveryRecommended ? 'recommended' : 'manual');
+
+    if (!state.pageIssue && !state.recoveryRecommended) {
+      const confirmed = window.confirm(
+        deep
+          ? '深度恢复会注销 ChatGPT 的 Service Worker、清空 CacheStorage 并重新加载页面，可能丢失未发送内容。继续吗？'
+          : '恢复加载会重新加载当前页面，可能丢失未发送内容。继续吗？'
+      );
+      if (!confirmed) return;
+    }
+
+    if (recoveryInProgress) return;
+    recoveryInProgress = true;
+
+    try {
+      prepareForRecovery();
+
+      setRecoveryMarker(mode, {
+        reason,
+        attemptedServiceWorkerCleanup: deep,
+        attemptedCacheStorageCleanup: deep
+      });
+
+      // 深度恢复只处理前端 chunk / dynamic import 类故障。
+      // 页面脚本只能清 Service Worker / CacheStorage，不能清普通 HTTP disk cache。
+      if (deep) {
+        await withTimeout(runDeepRecoveryCleanup(), DEEP_RECOVERY_TIMEOUT_MS);
+      }
+    } catch {
+      // 恢复流程不能因为清理失败而中断 reload
+    } finally {
+      location.replace(buildRecoveryUrl(mode));
+    }
   }
 
   function installPageHealthObserver() {
