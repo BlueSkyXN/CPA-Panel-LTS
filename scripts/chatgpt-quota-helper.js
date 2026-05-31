@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatGPT Quota Helper
 // @namespace    https://github.com/BlueSkyXN/CPA-Panel-LTS
-// @version      1.1.0
+// @version      1.2.0
 // @author       BlueSkyXN
 // @description  在 chatgpt.com 实时显示 DR / Agent / Codex 5h / Codex 7d 配额：折叠式面板、状态指示灯、自动与手动刷新。
 // @match        https://chatgpt.com/*
@@ -807,8 +807,8 @@
         z-index: 100;
         box-sizing: border-box;
 
-        min-width: 168px;
-        max-width: calc(100vw - 28px);
+        min-width: 130px;
+        max-width: min(240px, calc(100vw - 28px));
         padding: 8px 12px;
 
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -826,13 +826,14 @@
         opacity: 0.85;
         max-height: 36px;
         overflow: hidden;
-        transition: opacity 0.18s ease, max-height 0.22s ease;
+        transition: opacity 0.18s ease, max-height 0.22s ease, max-width 0.22s ease;
       }
 
       .cqh-panel:hover,
       .cqh-panel.cqh-expanded {
         opacity: 1;
         max-height: 360px;
+        max-width: min(320px, calc(100vw - 28px));
       }
 
       .cqh-summary {
@@ -872,6 +873,14 @@
         font-variant-numeric: tabular-nums;
       }
 
+      .cqh-warn-badge {
+        flex-shrink: 0;
+        font-size: 11px;
+        line-height: 1;
+        margin-left: 2px;
+        transition: color 0.2s ease;
+      }
+
       .cqh-details {
         margin-top: 8px;
         padding-top: 8px;
@@ -887,6 +896,7 @@
         justify-content: space-between;
         gap: 12px;
         white-space: nowrap;
+        min-width: 0;
       }
 
       .cqh-row-label {
@@ -898,6 +908,9 @@
       .cqh-row-value {
         font-variant-numeric: tabular-nums;
         text-align: right;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
       }
 
       .cqh-footer {
@@ -907,7 +920,8 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 8px;
+        flex-wrap: wrap;
+        gap: 4px 8px;
         color: rgba(100, 116, 139, 0.95);
         font-size: 11px;
       }
@@ -1000,6 +1014,7 @@
       <div class="cqh-summary" data-cqh="summary" title="点击切换详情">
         <span class="cqh-indicator" data-cqh="indicator"></span>
         <span class="cqh-summary-text" data-cqh="summary-text">加载中…</span>
+        <span class="cqh-warn-badge" data-cqh="warn-badge" hidden>⚠</span>
       </div>
       <div class="cqh-details">
         <div class="cqh-row">
@@ -1143,6 +1158,16 @@
     indicator.classList.remove('cqh-ok', 'cqh-warn', 'cqh-bad');
     const cls = computeIndicatorClass();
     if (cls) indicator.classList.add(cls);
+
+    // 警告徽标（折叠状态下可见，不展开也能感知异常，不影响折叠宽度）
+    const warnBadge = panel.querySelector('[data-cqh="warn-badge"]');
+    if (warnBadge) {
+      const hasIssue = Boolean(state.pageIssue || state.codexAutoPaused);
+      warnBadge.hidden = !hasIssue;
+      if (hasIssue) {
+        warnBadge.style.color = state.pageIssue ? '#ef4444' : '#f59e0b';
+      }
+    }
 
     // 摘要文本
     panel.querySelector('[data-cqh="summary-text"]').textContent = buildSummaryText();
