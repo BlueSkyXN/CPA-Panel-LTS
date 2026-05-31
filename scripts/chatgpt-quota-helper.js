@@ -27,8 +27,13 @@
   const FIVE_HOUR_SECONDS = 5 * 60 * 60;
   const WEEK_SECONDS = 7 * 24 * 60 * 60;
 
-  // Codex 自动刷新间隔：60 秒
-  const CODEX_AUTO_REFRESH_MS = 60 * 1000;
+  // Codex 自动刷新开关：默认关闭。
+  // 设为 true 才会按 CODEX_AUTO_REFRESH_MS 周期自动刷新；
+  // 关闭时仍保留「首次进入拉取」与「手动点刷新」，只是不再周期性请求。
+  const CODEX_AUTO_REFRESH_ENABLED = false;
+
+  // Codex 自动刷新间隔：5 分钟（仅在 CODEX_AUTO_REFRESH_ENABLED 为 true 时生效）
+  const CODEX_AUTO_REFRESH_MS = 5 * 60 * 1000;
   const CODEX_AUTO_REFRESH_JITTER = 0.10;
   const CODEX_AUTO_BACKOFF_BASE_MS = 60 * 1000;
   const CODEX_AUTO_BACKOFF_MAX_MS = 5 * 60 * 1000;
@@ -274,7 +279,7 @@
   }
 
   function canScheduleCodexAutoRefresh() {
-    return !document.hidden && !state.codexAutoPaused && !isExcludedPath();
+    return CODEX_AUTO_REFRESH_ENABLED && !document.hidden && !state.codexAutoPaused && !isExcludedPath();
   }
 
   function clearSessionInfoCache() {
@@ -1310,6 +1315,11 @@
     document.addEventListener('visibilitychange', () => {
       if (document.hidden || isExcludedPath()) {
         stopCodexAutoRefresh();
+        renderPanel();
+        return;
+      }
+
+      if (!CODEX_AUTO_REFRESH_ENABLED) {
         renderPanel();
         return;
       }
