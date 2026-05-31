@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatGPT Quota Helper
 // @namespace    https://github.com/BlueSkyXN/CPA-Panel-LTS
-// @version      1.2.3
+// @version      1.2.4
 // @author       BlueSkyXN
 // @description  在 chatgpt.com 实时显示 DR / Agent / Codex 5h / Codex 7d 配额：折叠式面板、状态指示灯、自动与手动刷新。
 // @match        https://chatgpt.com/*
@@ -885,12 +885,8 @@
       }
 
       .cqh-details {
-        position: absolute;
-        top: 36px;
-        left: 0;
-        right: 0;
-        box-sizing: border-box;
-        padding: 8px 12px 8px;
+        margin-top: 8px;
+        padding-top: 8px;
         border-top: 1px dashed rgba(0, 0, 0, 0.10);
         display: flex;
         flex-direction: column;
