@@ -1,0 +1,84 @@
+maintenance_model:
+  type: protected-selective-port
+  product_branch: main
+  upstream_source: router-for-me/Cli-Proxy-API-Management-Center main
+  paired_core: BlueSkyXN/CPA-Core-LTS main
+  release_asset: management.html
+
+protected_deltas:
+  - id: full-usage-statistics-ui
+    reason: CPA-Panel-LTS exists to preserve the full usage statistics UI after upstream moved toward recent requests and API-key summaries.
+    must_keep:
+      - /usage route
+      - UsagePage
+      - complete usage components
+      - usage API client
+      - usage Zustand store
+      - usage aggregation utilities
+      - import/export
+      - request events table
+      - model/API/credential breakdowns
+      - cached/reasoning token breakdown
+      - local model price settings
+  - id: cpa-core-lts-management-api-compatibility
+    reason: The panel is shipped as the management UI for CPA-Core-LTS.
+    must_keep:
+      - /v0/management/usage
+      - /v0/management/usage/export
+      - /v0/management/usage/import
+      - usage-statistics-enabled config visibility
+      - auth file/provider status surfaces backed by complete usage details
+  - id: panel-release-contract
+    reason: CPA-Core-LTS downloads the latest panel release asset by exact name.
+    must_keep:
+      - release asset named management.html
+      - npm/package-lock based build
+      - v*-tls-* release tag guard
+      - codex-quota-compass.user.js release asset unless deliberately removed by user-approved release scope
+  - id: local-downstream-customizations
+    reason: This repository contains downstream panel work that is not present upstream.
+    must_keep:
+      - CPA-Panel-LTS documentation and release links
+      - Codex quota helper/userscript assets
+      - Codex remote cloud connect environment UI unless intentionally replaced
+      - local i18n and panel compatibility fixes
+
+upstream_boundaries:
+  baseline_tag: v1.8.4
+  baseline_commit: 8ed837c3d734c3970a6d6799c557bb6a6753360d
+  known_full_usage_retained_tag: v1.9.3
+  removal_start_commits:
+    - b25f722
+    - 632be0b
+  unsafe_upstream_directions:
+    - replacing complete usage statistics with recent requests only
+    - replacing complete usage statistics with API-key summaries only
+    - deleting src/components/usage
+    - deleting src/pages/UsagePage.tsx
+    - deleting src/services/api/usage.ts
+    - deleting src/stores/useUsageStatsStore.ts
+    - deleting src/utils/usage.ts
+    - deleting src/utils/usageIndex.ts
+
+sentinel_markers:
+  paths:
+    - src/router/MainRoutes.tsx
+    - src/pages/UsagePage.tsx
+    - src/pages/UsagePage.module.scss
+    - src/components/usage/
+    - src/services/api/usage.ts
+    - src/stores/useUsageStatsStore.ts
+    - src/types/usage.ts
+    - src/utils/usage.ts
+    - src/utils/usageIndex.ts
+    - src/utils/usage/
+    - .github/workflows/release.yml
+  strings:
+    - /usage
+    - /usage/export
+    - /usage/import
+    - usage-statistics-enabled
+    - CPA-Core-LTS
+    - management.html
+    - v*-tls-*
+    - full-usage-statistics-ui
