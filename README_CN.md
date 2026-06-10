@@ -32,6 +32,13 @@ CPA Panel LTS 是 `CPA-Core-LTS` 的长期维护版 Web 管理面板。
 - 必须保持与 `CPA-Core-LTS` Management API usage endpoints 的兼容。
 - 可以选择性跟进上游 UI 修复，但不要盲目同步会移除或削弱完整统计能力的上游改动。
 - 后续轻量化改造可以移除推广文案、无用 UI、非 LTS 发布链路，但不能破坏使用统计契约。
+- Panel 的上游处理模式是 protected selective-port，不是 Core 那种 protected full-sync，因为 Panel upstream 直接删除了完整统计 UI 本身。
+
+维护参考：
+
+- `docs/lts/sync-runbook.md`
+- `docs/lts/panel-protected-deltas.yaml`
+- `scripts/check-lts-panel-contract.sh`
 
 从6.0.19版本开始，Web UI 随主程序一起提供；服务运行后，通过 API 端口上的"/management.html"访问它。`CPA-Core-LTS` 默认会从本仓库 latest release 下载名为 `management.html` 的资产。
 
@@ -170,6 +177,7 @@ npm run preview    # 本地预览 dist
 npm run lint       # ESLint（warnings 视为失败）
 npm run format     # Prettier
 npm run type-check # tsc --noEmit
+scripts/check-lts-panel-contract.sh # LTS 统计/发布契约检查
 ```
 
 ## 贡献

@@ -32,6 +32,13 @@ Maintenance rules:
 - Keep compatibility with `CPA-Core-LTS` Management API usage endpoints.
 - Track upstream UI fixes selectively, but do not blindly sync upstream if the change removes or weakens full statistics.
 - Planned cleanup can remove promotional copy, unused UI surfaces, and non-LTS release machinery, but must not break the usage statistics contract.
+- Panel upstream handling uses protected selective-port, not Core-style protected full-sync, because upstream deletes the full usage UI itself.
+
+Maintenance references:
+
+- `docs/lts/sync-runbook.md`
+- `docs/lts/panel-protected-deltas.yaml`
+- `scripts/check-lts-panel-contract.sh`
 
 Since version 6.0.19, the Web UI ships with the main program; access it via `/management.html` on the API port once the service is running. `CPA-Core-LTS` downloads the latest release asset named `management.html` from this repository by default.
 
@@ -171,6 +178,7 @@ npm run preview    # serve dist locally
 npm run lint       # ESLint (fails on warnings)
 npm run format     # Prettier
 npm run type-check # tsc --noEmit
+scripts/check-lts-panel-contract.sh # LTS protected usage/release contract guard
 ```
 
 ## Contributing

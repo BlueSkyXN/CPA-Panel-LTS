@@ -97,6 +97,8 @@ Confirmed upstream removal boundary:
 - `b25f722` starts switching provider usage tracking to recent requests.
 - `632be0b` removes the full usage UI, store, API client, and usage utilities at large scale.
 
+Panel maintenance mode is protected selective-port, not protected full-sync. `CPA-Core-LTS` can full-sync because its protected delta is small and localized; this Panel cannot, because upstream deletes the protected usage UI itself. Port compatible upstream fixes deliberately, and reject or adapt changes that weaken complete usage statistics.
+
 When following upstream:
 
 - Do not use GitHub `Sync fork` blindly.
@@ -104,6 +106,8 @@ When following upstream:
 - Before merging an upstream change, check whether it touches usage routes, usage store, usage API client, provider status bar, auth-file stats, quota display, or release workflow.
 - If an upstream change removes or weakens full statistics, preserve the LTS implementation first and port only unrelated compatible pieces.
 - Lightweight cleanup may remove promotional copy, sponsorship text, unused pages, unused providers, or non-target release machinery, but must not remove code still needed by the Core/Panel statistics contract.
+- Run `scripts/check-lts-panel-contract.sh` before opening or merging upstream-port PRs.
+- For detailed upstream handling rules, read `docs/lts/sync-runbook.md` and `docs/lts/panel-protected-deltas.yaml`.
 
 ## CPA-Core-LTS contract
 
@@ -132,6 +136,7 @@ All commands below are confirmed from `package.json`, `.github/workflows/release
 | `npm run lint` | Run ESLint on `ts,tsx` files | repo | Does not validate `scripts/*.js` userscripts |
 | `npm run type-check` | Run `tsc --noEmit` | repo | Good first validation for TypeScript-only changes |
 | `npm run format` | Run Prettier over `src/**/*.{ts,tsx,css,scss}` | `src/` only | Writes files; use only when formatting source changes is intended |
+| `scripts/check-lts-panel-contract.sh` | Check Panel LTS sentinel paths, release asset contract, and npm lockfile policy | repo | Lightweight guard; does not replace browser or Core compatibility smoke |
 
 There is no configured `npm test` script in this repository. Do not claim tests passed unless a real test command is added or provided by the user.
 
@@ -152,10 +157,11 @@ For TypeScript or UI changes:
 For usage statistics changes:
 
 1. Read `src/components/usage/AGENTS.md`.
-2. Run `npm run type-check`.
-3. Run `npm run build`.
-4. Inspect `src/router/MainRoutes.tsx`, `src/pages/UsagePage.tsx`, `src/services/api/usage.ts`, `src/stores/useUsageStatsStore.ts`, `src/types/usage.ts`, `src/utils/usage.ts`, and `src/utils/usageIndex.ts` for contract drift.
-5. If the change depends on Core behavior, verify against current `CPA-Core-LTS` Management API code or live endpoint; do not infer fields from memory.
+2. Run `scripts/check-lts-panel-contract.sh`.
+3. Run `npm run type-check`.
+4. Run `npm run build`.
+5. Inspect `src/router/MainRoutes.tsx`, `src/pages/UsagePage.tsx`, `src/services/api/usage.ts`, `src/stores/useUsageStatsStore.ts`, `src/types/usage.ts`, `src/utils/usage.ts`, and `src/utils/usageIndex.ts` for contract drift.
+6. If the change depends on Core behavior, verify against current `CPA-Core-LTS` Management API code or live endpoint; do not infer fields from memory.
 
 For release workflow changes:
 
