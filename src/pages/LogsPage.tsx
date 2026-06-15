@@ -26,17 +26,12 @@ import {
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { useAuthStore, useConfigStore, useNotificationStore } from '@/stores';
-import { logsApi } from '@/services/api/logs';
+import { logsApi, type LogsQuery } from '@/services/api/logs';
 import { copyToClipboard } from '@/utils/clipboard';
 import { downloadBlob } from '@/utils/download';
 import { MANAGEMENT_API_PREFIX } from '@/utils/constants';
 import { formatUnixTimestamp } from '@/utils/format';
-import {
-  HTTP_METHODS,
-  STATUS_GROUPS,
-  resolveStatusGroup,
-  type LogState,
-} from './hooks/logTypes';
+import { HTTP_METHODS, STATUS_GROUPS, resolveStatusGroup, type LogState } from './hooks/logTypes';
 import { parseLogLine } from './hooks/logParsing';
 import { useLogFilters } from './hooks/useLogFilters';
 import { isNearBottom, useLogScroller } from './hooks/useLogScroller';
@@ -54,6 +49,37 @@ const INITIAL_DISPLAY_LINES = 100;
 const MAX_BUFFER_LINES = 10000;
 const LONG_PRESS_MS = 650;
 const LONG_PRESS_MOVE_THRESHOLD = 10;
+
+const getIncrementalAfter = (cursor: LogsQuery['after']): LogsQuery['after'] => {
+  if (typeof cursor !== 'number') return cursor;
+  return cursor > 1 ? cursor - 1 : undefined;
+};
+
+const findLineOverlap = (currentLines: string[], incomingLines: string[]): number => {
+  const maxOverlap = Math.min(currentLines.length, incomingLines.length);
+
+  for (let size = maxOverlap; size > 0; size -= 1) {
+    let matched = true;
+    for (let index = 0; index < size; index += 1) {
+      if (currentLines[currentLines.length - size + index] !== incomingLines[index]) {
+        matched = false;
+        break;
+      }
+    }
+    if (matched) return size;
+  }
+
+  return 0;
+};
+
+const mergeIncrementalLines = (currentLines: string[], incomingLines: string[]): string[] => {
+  if (currentLines.length === 0 || incomingLines.length === 0) {
+    return [...currentLines, ...incomingLines];
+  }
+
+  const overlap = findLineOverlap(currentLines, incomingLines);
+  return [...currentLines, ...incomingLines.slice(overlap)];
+};
 
 const getErrorMessage = (err: unknown): string => {
   if (err instanceof Error) return err.message;
@@ -121,10 +147,11 @@ export function LogsPage() {
     traceScopeKey,
     connectionStatus,
     config,
-    requestLogDownloading
+    requestLogDownloading,
   });
 
   const logScrollerRef = useRef<ReturnType<typeof useLogScroller> | null>(null);
+  const requestLogHomeIpByIdRef = useRef<Record<string, string>>({});
   const longPressRef = useRef<{
     timer: number | null;
     startX: number;
@@ -135,8 +162,8 @@ export function LogsPage() {
   const logRequestInFlightRef = useRef(false);
   const pendingFullReloadRef = useRef(false);
 
-  // 保存最新时间戳用于增量获取
-  const latestTimestampRef = useRef<number>(0);
+  // 保存最新游标用于增量获取
+  const latestCursorRef = useRef<LogsQuery['after']>(undefined);
 
   const disableControls = connectionStatus !== 'connected';
 
@@ -168,13 +195,25 @@ export function LogsPage() {
         scrollerInstance?.requestScrollToBottom();
       }
 
-      const params =
-        incremental && latestTimestampRef.current > 0 ? { after: latestTimestampRef.current } : {};
+      const params: LogsQuery =
+        incremental && latestCursorRef.current
+          ? { after: getIncrementalAfter(latestCursorRef.current), limit: MAX_BUFFER_LINES }
+          : { limit: MAX_BUFFER_LINES };
       const data = await logsApi.fetchLogs(params);
 
-      // 更新时间戳
-      if (data['latest-timestamp']) {
-        latestTimestampRef.current = data['latest-timestamp'];
+      // 更新游标
+      if (data.latestCursor) {
+        latestCursorRef.current = data.latestCursor;
+      } else if (!incremental) {
+        latestCursorRef.current = undefined;
+      }
+
+      if (data.requestLogHomeIpById) {
+        requestLogHomeIpByIdRef.current = incremental
+          ? { ...requestLogHomeIpByIdRef.current, ...data.requestLogHomeIpById }
+          : data.requestLogHomeIpById;
+      } else if (!incremental) {
+        requestLogHomeIpByIdRef.current = {};
       }
 
       const newLines = Array.isArray(data.lines) ? data.lines : [];
@@ -183,7 +222,7 @@ export function LogsPage() {
         // 增量更新：追加新日志并限制缓冲区大小（避免内存与渲染膨胀）
         setLogState((prev) => {
           const prevRenderedCount = prev.buffer.length - prev.visibleFrom;
-          const combined = [...prev.buffer, ...newLines];
+          const combined = mergeIncrementalLines(prev.buffer, newLines);
           const dropCount = Math.max(combined.length - MAX_BUFFER_LINES, 0);
           const buffer = dropCount > 0 ? combined.slice(dropCount) : combined;
           let visibleFrom = Math.max(prev.visibleFrom - dropCount, 0);
@@ -230,7 +269,8 @@ export function LogsPage() {
         try {
           await logsApi.clearLogs();
           setLogState({ buffer: [], visibleFrom: 0 });
-          latestTimestampRef.current = 0;
+          latestCursorRef.current = undefined;
+          requestLogHomeIpByIdRef.current = {};
           showNotification(t('logs.clear_success'), 'success');
         } catch (err: unknown) {
           const message = getErrorMessage(err);
@@ -333,7 +373,8 @@ export function LogsPage() {
 
   useEffect(() => {
     if (connectionStatus === 'connected') {
-      latestTimestampRef.current = 0;
+      latestCursorRef.current = undefined;
+      requestLogHomeIpByIdRef.current = {};
       loadLogs(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -413,14 +454,14 @@ export function LogsPage() {
     return {
       filteredParsedLines: filteredParsed,
       filteredLines: filteredParsed.map((line) => line.raw),
-      removedCount: Math.max(baseLines.length - filteredParsed.length, 0)
+      removedCount: Math.max(baseLines.length - filteredParsed.length, 0),
     };
   }, [
     baseLines,
     filters.methodFilterSet,
     filters.pathFilterSet,
     filters.statusFilterSet,
-    parsedSearchLines
+    parsedSearchLines,
   ]);
 
   const parsedVisibleLines = useMemo(
@@ -437,7 +478,7 @@ export function LogsPage() {
     isSearching,
     filteredLineCount: filteredLines.length,
     hasStructuredFilters: filters.hasStructuredFilters,
-    showRawLogs
+    showRawLogs,
   });
 
   logScrollerRef.current = scroller;
@@ -500,10 +541,13 @@ export function LogsPage() {
   const downloadRequestLog = async (id: string) => {
     setRequestLogDownloading(true);
     try {
-      const response = await logsApi.downloadRequestLogById(id);
+      const response = await logsApi.downloadRequestLogById(
+        id,
+        requestLogHomeIpByIdRef.current[id]
+      );
       downloadBlob({
         filename: `request-${id}.log`,
-        blob: new Blob([response.data], { type: 'text/plain' })
+        blob: new Blob([response.data], { type: 'text/plain' }),
       });
       showNotification(t('logs.request_log_download_success'), 'success');
       setRequestLogId(null);
@@ -807,17 +851,11 @@ export function LogsPage() {
                   className={styles.actionButton}
                   aria-pressed={fullscreenLogs}
                   title={
-                    fullscreenLogs
-                      ? t('logs.exit_fullscreen_button')
-                      : t('logs.fullscreen_button')
+                    fullscreenLogs ? t('logs.exit_fullscreen_button') : t('logs.fullscreen_button')
                   }
                 >
                   <span className={styles.buttonContent}>
-                    {fullscreenLogs ? (
-                      <IconMinimize2 size={16} />
-                    ) : (
-                      <IconMaximize2 size={16} />
-                    )}
+                    {fullscreenLogs ? <IconMinimize2 size={16} /> : <IconMaximize2 size={16} />}
                     {fullscreenLogs
                       ? t('logs.exit_fullscreen_button')
                       : t('logs.fullscreen_button')}
@@ -840,9 +878,7 @@ export function LogsPage() {
                   <div className={styles.loadMoreBanner}>
                     <span>{t('logs.load_more_hint')}</span>
                     <div className={styles.loadMoreStats}>
-                      <span>
-                        {t('logs.loaded_lines', { count: filteredLines.length })}
-                      </span>
+                      <span>{t('logs.loaded_lines', { count: filteredLines.length })}</span>
                       {removedCount > 0 && (
                         <span className={styles.loadMoreCount}>
                           {t('logs.filtered_lines', { count: removedCount })}
@@ -1004,7 +1040,9 @@ export function LogsPage() {
 
               {requestLogEnabled && (
                 <div>
-                  <div className="status-badge warning">{t('logs.error_logs_request_log_enabled')}</div>
+                  <div className="status-badge warning">
+                    {t('logs.error_logs_request_log_enabled')}
+                  </div>
                 </div>
               )}
 
@@ -1231,7 +1269,7 @@ export function LogsPage() {
                         {candidate.timeDeltaMs !== null && (
                           <span className={styles.traceDelta}>
                             {t('logs.trace_delta_seconds', {
-                              seconds: (candidate.timeDeltaMs / 1000).toFixed(2)
+                              seconds: (candidate.timeDeltaMs / 1000).toFixed(2),
                             })}
                           </span>
                         )}
@@ -1239,11 +1277,15 @@ export function LogsPage() {
                       <div className={styles.traceCandidateGrid}>
                         <div className={styles.traceInfoItem}>
                           <span className={styles.traceInfoLabel}>{t('logs.trace_endpoint')}</span>
-                          <span className={styles.traceInfoValue}>{candidate.detail.__endpoint}</span>
+                          <span className={styles.traceInfoValue}>
+                            {candidate.detail.__endpoint}
+                          </span>
                         </div>
                         <div className={styles.traceInfoItem}>
                           <span className={styles.traceInfoLabel}>{t('logs.trace_model')}</span>
-                          <span className={styles.traceInfoValue}>{candidate.detail.__modelName || '-'}</span>
+                          <span className={styles.traceInfoValue}>
+                            {candidate.detail.__modelName || '-'}
+                          </span>
                         </div>
                         <div className={styles.traceInfoItem}>
                           <span className={styles.traceInfoLabel}>{t('logs.trace_source')}</span>
@@ -1258,7 +1300,9 @@ export function LogsPage() {
                           </span>
                         </div>
                         <div className={styles.traceInfoItem}>
-                          <span className={styles.traceInfoLabel}>{t('logs.trace_auth_index')}</span>
+                          <span className={styles.traceInfoLabel}>
+                            {t('logs.trace_auth_index')}
+                          </span>
                           <span className={styles.traceInfoValue}>
                             {candidate.detail.auth_index ?? '-'}
                           </span>
@@ -1291,7 +1335,11 @@ export function LogsPage() {
         title={t('logs.request_log_download_title')}
         footer={
           <>
-            <Button variant="secondary" onClick={closeRequestLogModal} disabled={requestLogDownloading}>
+            <Button
+              variant="secondary"
+              onClick={closeRequestLogModal}
+              disabled={requestLogDownloading}
+            >
               {t('common.cancel')}
             </Button>
             <Button
