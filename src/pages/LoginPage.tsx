@@ -33,7 +33,9 @@ function getLocalizedErrorMessage(error: unknown, t: (key: string) => string): s
           : '';
 
   const withHttpStatus = (summary: string) => {
-    if (!status) return summary;
+    if (!status) {
+      return summary;
+    }
 
     const genericAxiosMessage = `Request failed with status code ${status}`;
     const detail = message.trim();
@@ -108,7 +110,7 @@ export function LoginPage() {
     () =>
       LANGUAGE_ORDER.map((lang) => ({
         value: lang,
-        label: t(LANGUAGE_LABEL_KEYS[lang]),
+        label: t(LANGUAGE_LABEL_KEYS[lang])
       })),
     [t]
   );
@@ -139,9 +141,8 @@ export function LoginPage() {
           setRememberPassword(storedRememberPassword || Boolean(storedKey));
         }
       } finally {
-        if (!autoLoginSuccess) {
-          setAutoLoading(false);
-        }
+        // 自动登录成功时 showSplash 仍由 autoLoginSuccess 维持，可无条件结束 loading
+        setAutoLoading(false);
       }
     };
 
@@ -162,7 +163,7 @@ export function LoginPage() {
       await login({
         apiBase: baseToUse,
         managementKey: managementKey.trim(),
-        rememberPassword,
+        rememberPassword
       });
       showNotification(t('common.connected_status'), 'success');
       navigate('/', { replace: true });
@@ -173,16 +174,7 @@ export function LoginPage() {
     } finally {
       setLoading(false);
     }
-  }, [
-    apiBase,
-    detectedBase,
-    login,
-    managementKey,
-    navigate,
-    rememberPassword,
-    showNotification,
-    t,
-  ]);
+  }, [apiBase, detectedBase, login, managementKey, navigate, rememberPassword, showNotification, t]);
 
   const handleSubmitKeyDown = useCallback(
     (event: React.KeyboardEvent) => {

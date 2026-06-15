@@ -41,8 +41,6 @@ export interface HomeLogsResponse {
 
 export interface LogsResponse {
   lines: string[];
-  'line-count': number;
-  'latest-timestamp': number;
   lineCount: number;
   latestCursor?: LogCursor;
   logBackendKind: LogBackendKind;
@@ -61,14 +59,6 @@ export interface ErrorLogFile {
 export interface ErrorLogsResponse {
   files?: ErrorLogFile[];
 }
-
-const emptyLogsResponse = (logBackendKind: LogBackendKind = 'unknown'): LogsResponse => ({
-  lines: [],
-  'line-count': 0,
-  'latest-timestamp': 0,
-  lineCount: 0,
-  logBackendKind,
-});
 
 const stringValue = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
 
@@ -100,7 +90,8 @@ const unixSecondsFromValue = (value: unknown): number => {
 const homeCursorFromRecord = (record: HomeLogRecord): string => {
   const timestamp = stringValue(record.timestamp);
   if (timestamp) return timestamp;
-  return stringValue(record.created_at);
+  const createdAt = stringValue(record.created_at);
+  return createdAt;
 };
 
 const normalizeCPALogs = (data: Record<string, unknown>): LogsResponse => {
@@ -108,15 +99,13 @@ const normalizeCPALogs = (data: Record<string, unknown>): LogsResponse => {
     ? data.lines.filter((line): line is string => typeof line === 'string')
     : [];
   const latestTimestamp = unixSecondsFromValue(data['latest-timestamp']);
-  const lineCount = numberValue(data['line-count']) ?? lines.length;
+  const lineCount = Number(data['line-count']);
 
   return {
     lines,
-    'line-count': lineCount,
-    'latest-timestamp': latestTimestamp,
-    lineCount,
+    lineCount: Number.isFinite(lineCount) ? lineCount : lines.length,
     latestCursor: latestTimestamp > 0 ? latestTimestamp : undefined,
-    logBackendKind: 'file',
+    logBackendKind: 'file'
   };
 };
 
@@ -126,7 +115,6 @@ const normalizeHomeLogs = (data: Record<string, unknown>): LogsResponse => {
   const lines = orderedLogs
     .map((record) => record.line)
     .filter((line): line is string => typeof line === 'string' && line.length > 0);
-
   const requestLogHomeIpById = orderedLogs.reduce<Record<string, string>>((acc, record) => {
     const requestId = stringValue(record.request_id);
     const homeIp = stringValue(record.home_ip);
@@ -135,7 +123,6 @@ const normalizeHomeLogs = (data: Record<string, unknown>): LogsResponse => {
     }
     return acc;
   }, {});
-
   const latestCursor = rawLogs.reduce<string | undefined>((latest, record) => {
     const cursor = homeCursorFromRecord(record);
     if (!cursor) return latest;
@@ -146,31 +133,29 @@ const normalizeHomeLogs = (data: Record<string, unknown>): LogsResponse => {
     return cursorTime > latestTime ? cursor : latest;
   }, undefined);
 
-  const total = numberValue(data.total);
-  const limit = numberValue(data.limit);
-  const offset = numberValue(data.offset);
-  const lineCount = total ?? lines.length;
-  const latestTimestamp = latestCursor ? unixSecondsFromValue(latestCursor) : 0;
+  const total = Number(data.total);
+  const limit = Number(data.limit);
+  const offset = Number(data.offset);
 
   return {
     lines,
-    'line-count': lineCount,
-    'latest-timestamp': latestTimestamp,
-    lineCount,
+    lineCount: Number.isFinite(total) ? total : lines.length,
     latestCursor,
     logBackendKind: 'home-db',
     requestLogHomeIpById,
-    total,
-    limit,
-    offset,
+    total: Number.isFinite(total) ? total : undefined,
+    limit: Number.isFinite(limit) ? limit : undefined,
+    offset: Number.isFinite(offset) ? offset : undefined
   };
 };
 
 const normalizeLogsResponse = (data: unknown): LogsResponse => {
-  if (!isRecord(data)) return emptyLogsResponse();
+  if (!isRecord(data)) {
+    return { lines: [], lineCount: 0, logBackendKind: 'unknown' };
+  }
   if (Array.isArray(data.logs)) return normalizeHomeLogs(data);
   if (Array.isArray(data.lines)) return normalizeCPALogs(data);
-  return emptyLogsResponse();
+  return { lines: [], lineCount: 0, logBackendKind: 'unknown' };
 };
 
 const fetchCompleteHomeLogs = async (
@@ -237,13 +222,13 @@ export const logsApi = {
   downloadErrorLog: (filename: string) =>
     apiClient.getRaw(`/request-error-logs/${encodeURIComponent(filename)}`, {
       responseType: 'blob',
-      timeout: LOGS_TIMEOUT_MS,
+      timeout: LOGS_TIMEOUT_MS
     }),
 
   downloadRequestLogById: (id: string, homeIp?: string) =>
     apiClient.getRaw(`/request-log-by-id/${encodeURIComponent(id)}`, {
       params: homeIp ? { home_ip: homeIp } : undefined,
       responseType: 'blob',
-      timeout: LOGS_TIMEOUT_MS,
+      timeout: LOGS_TIMEOUT_MS
     }),
 };

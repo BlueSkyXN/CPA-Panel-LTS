@@ -4,6 +4,7 @@
 
 import type { AxiosRequestConfig } from 'axios';
 import { apiClient } from './client';
+import { isRecord } from '@/utils/helpers';
 
 export interface ApiCallRequest {
   authIndex?: string;
@@ -46,9 +47,6 @@ const normalizeBody = (input: unknown): { bodyText: string; body: unknown | null
 };
 
 export const getApiCallErrorMessage = (result: ApiCallResult): string => {
-  const isRecord = (value: unknown): value is Record<string, unknown> =>
-    value !== null && typeof value === 'object';
-
   const status = result.statusCode;
   const body = result.body;
   const bodyText = result.bodyText;
@@ -83,8 +81,8 @@ export const apiCallApi = {
     config?: AxiosRequestConfig
   ): Promise<ApiCallResult> => {
     const response = await apiClient.post<Record<string, unknown>>('/api-call', payload, config);
-    const statusCode = Number(response?.status_code ?? response?.statusCode ?? 0);
-    const header = (response?.header ?? response?.headers ?? {}) as Record<string, string[]>;
+    const statusCode = Number(response?.status_code ?? 0);
+    const header = (response?.header ?? {}) as Record<string, string[]>;
     const { bodyText, body } = normalizeBody(response?.body);
 
     return {

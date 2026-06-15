@@ -11,7 +11,11 @@ import { SecondaryScreenShell } from '@/components/common/SecondaryScreenShell';
 import { useEdgeSwipeBack } from '@/hooks/useEdgeSwipeBack';
 import { useAuthStore, useNotificationStore } from '@/stores';
 import { authFilesApi } from '@/services/api';
-import { getTypeLabel, normalizeProviderKey } from '@/features/authFiles/constants';
+import {
+  buildOAuthProviderOptions,
+  getTypeLabel,
+  normalizeProviderKey,
+} from '@/features/authFiles/constants';
 import type { AuthFileItem, OAuthModelAliasEntry } from '@/types';
 import { generateId } from '@/utils/helpers';
 import styles from './AuthFilesOAuthModelAliasEditPage.module.scss';
@@ -21,20 +25,6 @@ type AuthFileModelItem = { id: string; display_name?: string; type?: string; own
 type LocationState = { fromAuthFiles?: boolean } | null;
 
 type OAuthModelMappingFormEntry = OAuthModelAliasEntry & { id: string };
-
-const OAUTH_PROVIDER_PRESETS = [
-  'gemini-cli',
-  'vertex',
-  'aistudio',
-  'antigravity',
-  'claude',
-  'codex',
-  'qwen',
-  'kimi',
-  'iflow',
-];
-
-const OAUTH_PROVIDER_EXCLUDES = new Set(['all', 'unknown', 'empty']);
 
 const buildEmptyMappingEntry = (): OAuthModelMappingFormEntry => ({
   id: generateId(),
@@ -100,19 +90,14 @@ export function AuthFilesOAuthModelAliasEditPage() {
       }
     });
 
-    const normalizedExtras = Array.from(extraProviders)
-      .map((value) => value.trim())
-      .filter((value) => value && !OAUTH_PROVIDER_EXCLUDES.has(value.toLowerCase()));
-
-    const baseSet = new Set(OAUTH_PROVIDER_PRESETS.map((value) => value.toLowerCase()));
-    const extraList = normalizedExtras
-      .filter((value) => !baseSet.has(value.toLowerCase()))
-      .sort((a, b) => a.localeCompare(b));
-
-    return [...OAUTH_PROVIDER_PRESETS, ...extraList];
+    return buildOAuthProviderOptions(extraProviders);
   }, [excluded, files, modelAlias]);
 
   const resolvedProviderKey = useMemo(() => normalizeProviderKey(provider), [provider]);
+  const isEditing = useMemo(() => {
+    if (!resolvedProviderKey) return false;
+    return Object.prototype.hasOwnProperty.call(modelAlias, resolvedProviderKey);
+  }, [modelAlias, resolvedProviderKey]);
   const title = useMemo(() => t('oauth_model_alias.add_title'), [t]);
   const headerHint = useMemo(() => {
     if (!provider.trim()) {
@@ -238,7 +223,7 @@ export function AuthFilesOAuthModelAliasEditPage() {
             ? (err as { status?: unknown }).status
             : undefined;
 
-        if (status === 404) {
+        if (status === 400 || status === 404) {
           setModelsList([]);
           setModelsError('unsupported');
           return;
@@ -293,30 +278,39 @@ export function AuthFilesOAuthModelAliasEditPage() {
   }, []);
 
   const handleSave = useCallback(async () => {
-    const channel = provider.trim();
+    const channel = normalizeProviderKey(provider);
     if (!channel) {
       showNotification(t('oauth_model_alias.provider_required'), 'error');
       return;
     }
 
-    const seen = new Set<string>();
+    const seenAlias = new Set<string>();
+    let hasDuplicateAlias = false;
     const normalized = mappings
       .map((entry) => {
         const name = String(entry.name ?? '').trim();
         const alias = String(entry.alias ?? '').trim();
         if (!name || !alias) return null;
-        const key = `${name.toLowerCase()}::${alias.toLowerCase()}::${entry.fork ? '1' : '0'}`;
-        if (seen.has(key)) return null;
-        seen.add(key);
+        const aliasKey = alias.toLowerCase();
+        if (seenAlias.has(aliasKey)) {
+          hasDuplicateAlias = true;
+          return null;
+        }
+        seenAlias.add(aliasKey);
         return entry.fork ? { name, alias, fork: true } : { name, alias };
       })
       .filter(Boolean) as OAuthModelAliasEntry[];
+
+    if (hasDuplicateAlias) {
+      showNotification(t('oauth_model_alias.duplicate_alias'), 'error');
+      return;
+    }
 
     setSaving(true);
     try {
       if (normalized.length) {
         await authFilesApi.saveOauthModelAlias(channel, normalized);
-      } else {
+      } else if (isEditing) {
         await authFilesApi.deleteOauthModelAlias(channel);
       }
       showNotification(t('oauth_model_alias.save_success'), 'success');
@@ -327,7 +321,7 @@ export function AuthFilesOAuthModelAliasEditPage() {
     } finally {
       setSaving(false);
     }
-  }, [handleBack, mappings, provider, showNotification, t]);
+  }, [handleBack, isEditing, mappings, provider, showNotification, t]);
 
   const canSave = !disableControls && !saving && !modelAliasUnsupported;
 

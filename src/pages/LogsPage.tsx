@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
+import { lockScroll, unlockScroll } from '@/components/ui/scrollLock';
 import {
   IconChevronDown,
   IconChevronUp,
@@ -27,7 +28,9 @@ import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { useAuthStore, useConfigStore, useNotificationStore } from '@/stores';
 import { logsApi, type LogsQuery } from '@/services/api/logs';
+import { versionApi } from '@/services/api/version';
 import { copyToClipboard } from '@/utils/clipboard';
+import { getErrorMessage } from '@/utils/helpers';
 import { downloadBlob } from '@/utils/download';
 import { MANAGEMENT_API_PREFIX } from '@/utils/constants';
 import { formatUnixTimestamp } from '@/utils/format';
@@ -35,7 +38,6 @@ import { HTTP_METHODS, STATUS_GROUPS, resolveStatusGroup, type LogState } from '
 import { parseLogLine } from './hooks/logParsing';
 import { useLogFilters } from './hooks/useLogFilters';
 import { isNearBottom, useLogScroller } from './hooks/useLogScroller';
-import { isTraceableRequestPath, useTraceResolver } from './hooks/useTraceResolver';
 import styles from './LogsPage.module.scss';
 
 interface ErrorLogItem {
@@ -60,8 +62,8 @@ const findLineOverlap = (currentLines: string[], incomingLines: string[]): numbe
 
   for (let size = maxOverlap; size > 0; size -= 1) {
     let matched = true;
-    for (let index = 0; index < size; index += 1) {
-      if (currentLines[currentLines.length - size + index] !== incomingLines[index]) {
+    for (let i = 0; i < size; i += 1) {
+      if (currentLines[currentLines.length - size + i] !== incomingLines[i]) {
         matched = false;
         break;
       }
@@ -81,14 +83,27 @@ const mergeIncrementalLines = (currentLines: string[], incomingLines: string[]):
   return [...currentLines, ...incomingLines.slice(overlap)];
 };
 
-const getErrorMessage = (err: unknown): string => {
-  if (err instanceof Error) return err.message;
-  if (typeof err === 'string') return err;
+const getErrorPayloadText = (err: unknown): string => {
   if (typeof err !== 'object' || err === null) return '';
-  if (!('message' in err)) return '';
+  const payloads = [
+    (err as { data?: unknown }).data,
+    (err as { details?: unknown }).details,
+  ].filter((payload) => payload !== undefined);
+  return payloads
+    .map((payload) => {
+      if (typeof payload === 'string') return payload;
+      try {
+        return JSON.stringify(payload);
+      } catch {
+        return '';
+      }
+    })
+    .join(' ');
+};
 
-  const message = (err as { message?: unknown }).message;
-  return typeof message === 'string' ? message : '';
+const isLoggingToFileDisabledError = (err: unknown): boolean => {
+  const text = `${getErrorMessage(err)} ${getErrorPayloadText(err)}`.toLowerCase();
+  return text.includes('logging to file disabled');
 };
 
 const responseDataToText = async (data: unknown): Promise<string> => {
@@ -110,11 +125,15 @@ export function LogsPage() {
   const { t } = useTranslation();
   const { showNotification, showConfirmation } = useNotificationStore();
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
-  const apiBase = useAuthStore((state) => state.apiBase);
-  const managementKey = useAuthStore((state) => state.managementKey);
-  const traceScopeKey = `${apiBase}::${managementKey}`;
+  const serverRuntimeKind = useAuthStore((state) => state.serverRuntimeKind);
+  const updateServerRuntimeKind = useAuthStore((state) => state.updateServerRuntimeKind);
   const config = useConfigStore((state) => state.config);
   const requestLogEnabled = config?.requestLog ?? false;
+  const loggingToFileEnabled = config?.loggingToFile ?? false;
+  const cpaNeedsFileLogging = serverRuntimeKind === 'cpa' && !loggingToFileEnabled;
+  const isHomeRuntime = serverRuntimeKind === 'home';
+  const [fileLoggingRequired, setFileLoggingRequired] = useState(false);
+  const showFileLoggingRequired = cpaNeedsFileLogging || fileLoggingRequired;
 
   const [activeTab, setActiveTab] = useState<TabType>('logs');
   const [logState, setLogState] = useState<LogState>({ buffer: [], visibleFrom: 0 });
@@ -143,22 +162,15 @@ export function LogsPage() {
   const [requestLogDownloading, setRequestLogDownloading] = useState(false);
   const [fullscreenLogs, setFullscreenLogs] = useState(false);
 
-  const trace = useTraceResolver({
-    traceScopeKey,
-    connectionStatus,
-    config,
-    requestLogDownloading,
-  });
-
   const logScrollerRef = useRef<ReturnType<typeof useLogScroller> | null>(null);
   const requestLogHomeIpByIdRef = useRef<Record<string, string>>({});
+  const errorLogViewRequestRef = useRef(0);
   const longPressRef = useRef<{
     timer: number | null;
     startX: number;
     startY: number;
     fired: boolean;
   } | null>(null);
-  const errorLogViewRequestRef = useRef(0);
   const logRequestInFlightRef = useRef(false);
   const pendingFullReloadRef = useRef(false);
 
@@ -166,10 +178,25 @@ export function LogsPage() {
   const latestCursorRef = useRef<LogsQuery['after']>(undefined);
 
   const disableControls = connectionStatus !== 'connected';
+  const refreshDisabled = disableControls || loading || cpaNeedsFileLogging;
+  const autoRefreshDisabled = disableControls || showFileLoggingRequired;
+  const clearDisabled = disableControls || showFileLoggingRequired || isHomeRuntime;
 
   const loadLogs = async (incremental = false) => {
     if (connectionStatus !== 'connected') {
       setLoading(false);
+      return;
+    }
+
+    if (cpaNeedsFileLogging) {
+      if (!incremental) {
+        latestCursorRef.current = undefined;
+        requestLogHomeIpByIdRef.current = {};
+        setFileLoggingRequired(false);
+        setLogState({ buffer: [], visibleFrom: 0 });
+        setError('');
+        setLoading(false);
+      }
       return;
     }
 
@@ -200,6 +227,7 @@ export function LogsPage() {
           ? { after: getIncrementalAfter(latestCursorRef.current), limit: MAX_BUFFER_LINES }
           : { limit: MAX_BUFFER_LINES };
       const data = await logsApi.fetchLogs(params);
+      setFileLoggingRequired(false);
 
       // 更新游标
       if (data.latestCursor) {
@@ -207,7 +235,6 @@ export function LogsPage() {
       } else if (!incremental) {
         latestCursorRef.current = undefined;
       }
-
       if (data.requestLogHomeIpById) {
         requestLogHomeIpByIdRef.current = incremental
           ? { ...requestLogHomeIpByIdRef.current, ...data.requestLogHomeIpById }
@@ -242,6 +269,16 @@ export function LogsPage() {
       }
     } catch (err: unknown) {
       console.error('Failed to load logs:', err);
+      if (isLoggingToFileDisabledError(err)) {
+        if (!incremental) {
+          latestCursorRef.current = undefined;
+          requestLogHomeIpByIdRef.current = {};
+          setFileLoggingRequired(true);
+          setLogState({ buffer: [], visibleFrom: 0 });
+          setError('');
+        }
+        return;
+      }
       if (!incremental) {
         setError(getErrorMessage(err) || t('logs.load_error'));
       }
@@ -260,6 +297,18 @@ export function LogsPage() {
   useHeaderRefresh(() => loadLogs(false));
 
   const clearLogs = async () => {
+    if (isHomeRuntime) {
+      showNotification(t('logs.home_clear_unavailable'), 'warning');
+      return;
+    }
+    if (cpaNeedsFileLogging) {
+      showNotification(t('logs.cpa_file_logging_required'), 'warning');
+      return;
+    }
+    if (fileLoggingRequired) {
+      showNotification(t('logs.file_logging_required'), 'warning');
+      return;
+    }
     showConfirmation({
       title: t('logs.clear_confirm_title', { defaultValue: 'Clear Logs' }),
       message: t('logs.clear_confirm'),
@@ -271,6 +320,7 @@ export function LogsPage() {
           setLogState({ buffer: [], visibleFrom: 0 });
           latestCursorRef.current = undefined;
           requestLogHomeIpByIdRef.current = {};
+          setFileLoggingRequired(false);
           showNotification(t('logs.clear_success'), 'success');
         } catch (err: unknown) {
           const message = getErrorMessage(err);
@@ -292,6 +342,12 @@ export function LogsPage() {
   const loadErrorLogs = async () => {
     if (connectionStatus !== 'connected') {
       setLoadingErrors(false);
+      return;
+    }
+    if (isHomeRuntime) {
+      setLoadingErrors(false);
+      setErrorLogs([]);
+      setErrorLogsError('');
       return;
     }
 
@@ -375,10 +431,26 @@ export function LogsPage() {
     if (connectionStatus === 'connected') {
       latestCursorRef.current = undefined;
       requestLogHomeIpByIdRef.current = {};
+      setFileLoggingRequired(false);
       loadLogs(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connectionStatus]);
+  }, [connectionStatus, loggingToFileEnabled]);
+
+  useEffect(() => {
+    if (connectionStatus !== 'connected' || serverRuntimeKind !== 'unknown') return;
+    let cancelled = false;
+    const detectRuntime = async () => {
+      const runtimeKind = await versionApi.detectRuntimeKind();
+      if (!cancelled && (runtimeKind === 'cpa' || runtimeKind === 'home')) {
+        updateServerRuntimeKind(runtimeKind);
+      }
+    };
+    void detectRuntime();
+    return () => {
+      cancelled = true;
+    };
+  }, [connectionStatus, serverRuntimeKind, updateServerRuntimeKind]);
 
   useEffect(() => {
     if (activeTab !== 'errors') return;
@@ -388,7 +460,7 @@ export function LogsPage() {
   }, [activeTab, connectionStatus, requestLogEnabled]);
 
   useEffect(() => {
-    if (!autoRefresh || connectionStatus !== 'connected') {
+    if (!autoRefresh || connectionStatus !== 'connected' || showFileLoggingRequired) {
       return;
     }
     const id = window.setInterval(() => {
@@ -396,7 +468,7 @@ export function LogsPage() {
     }, 8000);
     return () => window.clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoRefresh, connectionStatus]);
+  }, [autoRefresh, connectionStatus, showFileLoggingRequired]);
 
   const visibleLines = useMemo(
     () => logState.buffer.slice(logState.visibleFrom),
@@ -574,14 +646,13 @@ export function LogsPage() {
   useEffect(() => {
     if (!fullscreenLogs) return;
 
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
     document.body.classList.add('logs-fullscreen-active');
+    lockScroll();
 
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setFullscreenLogs(false);
-      }
+      if (event.key !== 'Escape') return;
+      if (document.querySelector('.modal-overlay')) return;
+      setFullscreenLogs(false);
     };
 
     document.addEventListener('keydown', handleEscape);
@@ -589,13 +660,16 @@ export function LogsPage() {
     return () => {
       document.removeEventListener('keydown', handleEscape);
       document.body.classList.remove('logs-fullscreen-active');
-      document.body.style.overflow = previousOverflow;
+      unlockScroll();
     };
   }, [fullscreenLogs]);
 
   return (
     <div className={styles.container}>
-      <h1 className={styles.pageTitle}>{t('logs.title')}</h1>
+      <div className={styles.pageHeader}>
+        <h1 className={styles.pageTitle}>{t('logs.title')}</h1>
+        <div className={styles.runtimeNotice}>{t(`logs.runtime_${serverRuntimeKind}`)}</div>
+      </div>
 
       <div className={styles.tabBar}>
         <button
@@ -624,6 +698,15 @@ export function LogsPage() {
               .filter(Boolean)
               .join(' ')}
           >
+            {showFileLoggingRequired && (
+              <div className="status-badge warning">
+                {t(
+                  cpaNeedsFileLogging
+                    ? 'logs.cpa_file_logging_required'
+                    : 'logs.file_logging_required'
+                )}
+              </div>
+            )}
             {error && <div className="error-box">{error}</div>}
 
             <div className={styles.filters}>
@@ -801,7 +884,7 @@ export function LogsPage() {
                   variant="secondary"
                   size="sm"
                   onClick={() => loadLogs(false)}
-                  disabled={disableControls || loading}
+                  disabled={refreshDisabled}
                   className={styles.actionButton}
                 >
                   <span className={styles.buttonContent}>
@@ -812,7 +895,7 @@ export function LogsPage() {
                 <ToggleSwitch
                   checked={autoRefresh}
                   onChange={(value) => setAutoRefresh(value)}
-                  disabled={disableControls}
+                  disabled={autoRefreshDisabled}
                   label={
                     <span className={styles.switchLabel}>
                       <IconTimer size={16} />
@@ -836,7 +919,7 @@ export function LogsPage() {
                   variant="danger"
                   size="sm"
                   onClick={clearLogs}
-                  disabled={disableControls}
+                  disabled={clearDisabled}
                   className={styles.actionButton}
                 >
                   <span className={styles.buttonContent}>
@@ -897,7 +980,6 @@ export function LogsPage() {
                 ) : (
                   <div className={styles.logList}>
                     {parsedVisibleLines.map((line, index) => {
-                      const canTraceRequest = isTraceableRequestPath(line.path);
                       const rowClassNames = [styles.logRow];
                       if (line.level === 'warn') rowClassNames.push(styles.rowWarn);
                       if (line.level === 'error' || line.level === 'fatal')
@@ -988,21 +1070,6 @@ export function LogsPage() {
                             )}
 
                             {line.message && <span className={styles.message}>{line.message}</span>}
-
-                            {canTraceRequest && (
-                              <button
-                                type="button"
-                                className={styles.traceButton}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  cancelLongPress();
-                                  trace.openTraceModal(line);
-                                }}
-                                title={t('logs.trace_button')}
-                              >
-                                {t('logs.trace_button')}
-                              </button>
-                            )}
                           </div>
                         </div>
                       );
@@ -1014,6 +1081,19 @@ export function LogsPage() {
               <EmptyState
                 title={t('logs.search_empty_title')}
                 description={t('logs.search_empty_desc')}
+              />
+            ) : showFileLoggingRequired ? (
+              <EmptyState
+                title={t(
+                  cpaNeedsFileLogging
+                    ? 'logs.cpa_file_logging_required_title'
+                    : 'logs.file_logging_required_title'
+                )}
+                description={t(
+                  cpaNeedsFileLogging
+                    ? 'logs.cpa_file_logging_required_desc'
+                    : 'logs.file_logging_required_desc'
+                )}
               />
             ) : (
               <EmptyState title={t('logs.empty_title')} description={t('logs.empty_desc')} />
@@ -1038,7 +1118,11 @@ export function LogsPage() {
             <div className="stack">
               <div className="hint">{t('logs.error_logs_description')}</div>
 
-              {requestLogEnabled && (
+              {isHomeRuntime && (
+                <div className="status-badge warning">{t('logs.error_logs_home_unavailable')}</div>
+              )}
+
+              {requestLogEnabled && !isHomeRuntime && (
                 <div>
                   <div className="status-badge warning">
                     {t('logs.error_logs_request_log_enabled')}
@@ -1153,180 +1237,6 @@ export function LogsPage() {
             <div className="hint">{t('logs.error_log_empty_content')}</div>
           ) : null}
         </div>
-      </Modal>
-
-      <Modal
-        open={Boolean(trace.traceLogLine)}
-        onClose={trace.closeTraceModal}
-        title={t('logs.trace_title')}
-        footer={
-          <>
-            {trace.traceLogLine?.requestId && (
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  if (trace.traceLogLine?.requestId) {
-                    void downloadRequestLog(trace.traceLogLine.requestId);
-                  }
-                }}
-                loading={requestLogDownloading}
-              >
-                {t('logs.trace_download_request_log')}
-              </Button>
-            )}
-            <Button
-              variant="secondary"
-              onClick={trace.closeTraceModal}
-              disabled={requestLogDownloading}
-            >
-              {t('common.close')}
-            </Button>
-          </>
-        }
-      >
-        {trace.traceLogLine && (
-          <div className={styles.tracePanel}>
-            <div className={styles.traceNotice}>{t('logs.trace_notice')}</div>
-
-            <h3 className={styles.traceSectionTitle}>{t('logs.trace_log_info')}</h3>
-            <div className={styles.traceInfoGrid}>
-              <div className={styles.traceInfoItem}>
-                <span className={styles.traceInfoLabel}>{t('logs.trace_request_id')}</span>
-                <span className={styles.traceInfoValue}>{trace.traceLogLine.requestId || '-'}</span>
-              </div>
-              <div className={styles.traceInfoItem}>
-                <span className={styles.traceInfoLabel}>{t('logs.trace_method')}</span>
-                <span className={styles.traceInfoValue}>{trace.traceLogLine.method || '-'}</span>
-              </div>
-              <div className={styles.traceInfoItem}>
-                <span className={styles.traceInfoLabel}>{t('logs.trace_path')}</span>
-                <span className={styles.traceInfoValue}>{trace.traceLogLine.path || '-'}</span>
-              </div>
-              <div className={styles.traceInfoItem}>
-                <span className={styles.traceInfoLabel}>{t('logs.trace_status_code')}</span>
-                <span className={styles.traceInfoValue}>
-                  {typeof trace.traceLogLine.statusCode === 'number'
-                    ? trace.traceLogLine.statusCode
-                    : '-'}
-                </span>
-              </div>
-              <div className={styles.traceInfoItem}>
-                <span className={styles.traceInfoLabel}>{t('logs.trace_latency')}</span>
-                <span className={styles.traceInfoValue}>{trace.traceLogLine.latency || '-'}</span>
-              </div>
-              <div className={styles.traceInfoItem}>
-                <span className={styles.traceInfoLabel}>{t('logs.trace_ip')}</span>
-                <span className={styles.traceInfoValue}>{trace.traceLogLine.ip || '-'}</span>
-              </div>
-              <div className={styles.traceInfoItem}>
-                <span className={styles.traceInfoLabel}>{t('logs.trace_timestamp')}</span>
-                <span className={styles.traceInfoValue}>{trace.traceLogLine.timestamp || '-'}</span>
-              </div>
-              <div className={`${styles.traceInfoItem} ${styles.traceInfoItemWide}`}>
-                <span className={styles.traceInfoLabel}>{t('logs.trace_message')}</span>
-                <span className={styles.traceInfoValue}>{trace.traceLogLine.message || '-'}</span>
-              </div>
-            </div>
-
-            <div className={styles.traceCandidatesHeader}>
-              <h3 className={styles.traceSectionTitle}>{t('logs.trace_candidates_title')}</h3>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  void trace.refreshTraceUsageDetails().catch(() => {});
-                }}
-                loading={trace.traceLoading}
-                disabled={requestLogDownloading}
-              >
-                {t('common.refresh')}
-              </Button>
-            </div>
-            {trace.traceLoading ? (
-              <div className="hint">{t('logs.trace_loading')}</div>
-            ) : trace.traceError ? (
-              <div className="error-box">{trace.traceError}</div>
-            ) : trace.traceCandidates.length === 0 ? (
-              <div className="hint">{t('logs.trace_no_match')}</div>
-            ) : (
-              <div className={styles.traceCandidates}>
-                {trace.traceCandidates.map((candidate) => {
-                  const sourceInfo = trace.resolveTraceSourceInfo(
-                    String(candidate.detail.source ?? ''),
-                    candidate.detail.auth_index
-                  );
-                  return (
-                    <div
-                      key={`${candidate.detail.__endpoint}-${candidate.detail.__modelName}-${candidate.detail.timestamp}-${candidate.detail.source}`}
-                      className={styles.traceCandidate}
-                    >
-                      <div className={styles.traceCandidateHeader}>
-                        {candidate.modelMatched && (
-                          <span className={styles.traceModelBadge}>
-                            {t('logs.trace_model_matched')}
-                          </span>
-                        )}
-                        {candidate.timeDeltaMs !== null && (
-                          <span className={styles.traceDelta}>
-                            {t('logs.trace_delta_seconds', {
-                              seconds: (candidate.timeDeltaMs / 1000).toFixed(2),
-                            })}
-                          </span>
-                        )}
-                      </div>
-                      <div className={styles.traceCandidateGrid}>
-                        <div className={styles.traceInfoItem}>
-                          <span className={styles.traceInfoLabel}>{t('logs.trace_endpoint')}</span>
-                          <span className={styles.traceInfoValue}>
-                            {candidate.detail.__endpoint}
-                          </span>
-                        </div>
-                        <div className={styles.traceInfoItem}>
-                          <span className={styles.traceInfoLabel}>{t('logs.trace_model')}</span>
-                          <span className={styles.traceInfoValue}>
-                            {candidate.detail.__modelName || '-'}
-                          </span>
-                        </div>
-                        <div className={styles.traceInfoItem}>
-                          <span className={styles.traceInfoLabel}>{t('logs.trace_source')}</span>
-                          <span
-                            className={styles.traceInfoValue}
-                            title={String(candidate.detail.source || '-')}
-                          >
-                            <span>{sourceInfo.displayName}</span>
-                            {sourceInfo.type && (
-                              <span className={styles.traceSourceType}>{sourceInfo.type}</span>
-                            )}
-                          </span>
-                        </div>
-                        <div className={styles.traceInfoItem}>
-                          <span className={styles.traceInfoLabel}>
-                            {t('logs.trace_auth_index')}
-                          </span>
-                          <span className={styles.traceInfoValue}>
-                            {candidate.detail.auth_index ?? '-'}
-                          </span>
-                        </div>
-                        <div className={styles.traceInfoItem}>
-                          <span className={styles.traceInfoLabel}>{t('logs.trace_timestamp')}</span>
-                          <span className={styles.traceInfoValue}>
-                            {candidate.detail.timestamp || '-'}
-                          </span>
-                        </div>
-                        <div className={styles.traceInfoItem}>
-                          <span className={styles.traceInfoLabel}>{t('logs.trace_result')}</span>
-                          <span className={styles.traceInfoValue}>
-                            {candidate.detail.failed ? t('stats.failure') : t('stats.success')}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
       </Modal>
 
       <Modal

@@ -3,6 +3,8 @@
  * 基于原项目 src/modules/auth-files.js
  */
 
+import type { RecentRequestBucket } from '@/utils/recentRequests';
+
 export type AuthFileType =
   | 'qwen'
   | 'kimi'
@@ -12,6 +14,7 @@ export type AuthFileType =
   | 'claude'
   | 'codex'
   | 'antigravity'
+  | 'xai'
   | 'iflow'
   | 'vertex'
   | 'empty'
@@ -30,6 +33,10 @@ export interface AuthFileItem {
   statusMessage?: string;
   lastRefresh?: string | number;
   modified?: number;
+  success?: unknown;
+  failed?: unknown;
+  recent_requests?: RecentRequestBucket[];
+  recentRequests?: RecentRequestBucket[];
   [key: string]: unknown;
 }
 

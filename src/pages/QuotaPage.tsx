@@ -77,6 +77,12 @@ export function QuotaPage() {
         disabled={disableControls}
       />
       <QuotaSection
+        config={XAI_CONFIG}
+        files={files}
+        loading={loading}
+        disabled={disableControls}
+      />
+      <QuotaSection
         config={GEMINI_CLI_CONFIG}
         files={files}
         loading={loading}
@@ -84,12 +90,6 @@ export function QuotaPage() {
       />
       <QuotaSection
         config={KIMI_CONFIG}
-        files={files}
-        loading={loading}
-        disabled={disableControls}
-      />
-      <QuotaSection
-        config={XAI_CONFIG}
         files={files}
         loading={loading}
         disabled={disableControls}

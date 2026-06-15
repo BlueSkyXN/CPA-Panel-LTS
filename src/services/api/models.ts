@@ -6,15 +6,13 @@ import axios from 'axios';
 import { normalizeModelList } from '@/utils/models';
 import { normalizeApiBase } from '@/utils/connection';
 import { apiCallApi, getApiCallErrorMessage } from './apiCall';
+import { isRecord } from '@/utils/helpers';
 
 const DEFAULT_CLAUDE_BASE_URL = 'https://api.anthropic.com';
 const DEFAULT_GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com';
 const DEFAULT_ANTHROPIC_VERSION = '2023-06-01';
 const CLAUDE_MODELS_IN_FLIGHT = new Map<string, Promise<ReturnType<typeof normalizeModelList>>>();
 const GEMINI_MODELS_IN_FLIGHT = new Map<string, Promise<ReturnType<typeof normalizeModelList>>>();
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  value !== null && typeof value === 'object' && !Array.isArray(value);
 
 const buildRequestSignature = (
   url: string,
@@ -99,7 +97,7 @@ export const modelsApi = {
     }
 
     const response = await axios.get(endpoint, {
-      headers: Object.keys(resolvedHeaders).length ? resolvedHeaders : undefined,
+      headers: Object.keys(resolvedHeaders).length ? resolvedHeaders : undefined
     });
     const payload = response.data?.data ?? response.data?.models ?? response.data;
     return normalizeModelList(payload, { dedupe: true });
@@ -132,7 +130,7 @@ export const modelsApi = {
       authIndex: trimmedAuthIndex,
       method: 'GET',
       url: endpoint,
-      header: Object.keys(resolvedHeaders).length ? resolvedHeaders : undefined,
+      header: Object.keys(resolvedHeaders).length ? resolvedHeaders : undefined
     });
 
     if (result.statusCode < 200 || result.statusCode >= 300) {
@@ -169,7 +167,7 @@ export const modelsApi = {
       authIndex: trimmedAuthIndex,
       method: 'GET',
       url: endpoint,
-      header: Object.keys(resolvedHeaders).length ? resolvedHeaders : undefined,
+      header: Object.keys(resolvedHeaders).length ? resolvedHeaders : undefined
     });
 
     if (result.statusCode < 200 || result.statusCode >= 300) {
@@ -232,7 +230,7 @@ export const modelsApi = {
         authIndex: trimmedAuthIndex,
         method: 'GET',
         url: endpoint,
-        header: Object.keys(resolvedHeaders).length ? resolvedHeaders : undefined,
+        header: Object.keys(resolvedHeaders).length ? resolvedHeaders : undefined
       });
 
       if (result.statusCode < 200 || result.statusCode >= 300) {
@@ -294,7 +292,7 @@ export const modelsApi = {
           authIndex: trimmedAuthIndex,
           method: 'GET',
           url: url.toString(),
-          header: Object.keys(resolvedHeaders).length ? resolvedHeaders : undefined,
+          header: Object.keys(resolvedHeaders).length ? resolvedHeaders : undefined
         });
 
         if (result.statusCode < 200 || result.statusCode >= 300) {
@@ -316,9 +314,7 @@ export const modelsApi = {
         });
 
         const nextToken =
-          isRecord(payload) && typeof payload.nextPageToken === 'string'
-            ? payload.nextPageToken
-            : '';
+          isRecord(payload) && typeof payload.nextPageToken === 'string' ? payload.nextPageToken : '';
         if (!nextToken) {
           break;
         }

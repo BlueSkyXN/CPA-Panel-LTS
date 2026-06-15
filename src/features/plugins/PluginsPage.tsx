@@ -4,8 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
-import { Modal } from '@/components/ui/Modal';
 import { Select } from '@/components/ui/Select';
+import { Sheet } from '@/components/ui/Sheet';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import {
   IconGithub,
@@ -920,17 +920,18 @@ export function PluginsPage() {
         </div>
       )}
 
-      {/* Config modal */}
-      <Modal
+      {/* ── Config Sheet ── */}
+      <Sheet
         open={Boolean(editingPlugin && draft)}
         onClose={closeConfigSheet}
+        size="lg"
         title={
           editingPlugin
             ? t('plugin_management.config_title', { name: getPluginTitle(editingPlugin) })
             : t('plugin_management.edit_config')
         }
+        description={editingPlugin?.id}
         closeDisabled={savingConfig}
-        width={720}
         footer={
           <div className={styles.sheetFooter}>
             <Button variant="secondary" onClick={closeConfigSheet} disabled={savingConfig}>
@@ -944,7 +945,6 @@ export function PluginsPage() {
       >
         {draft && editingPlugin ? (
           <div className={styles.configForm}>
-            <div className={styles.configPluginId}>{editingPlugin.id}</div>
             <section className={styles.formSection}>
               <h3>{t('plugin_management.base_settings')}</h3>
               <div className={styles.fieldRow}>
@@ -979,7 +979,7 @@ export function PluginsPage() {
             </section>
           </div>
         ) : null}
-      </Modal>
+      </Sheet>
     </div>
   );
 }

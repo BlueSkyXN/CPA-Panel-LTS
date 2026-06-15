@@ -496,16 +496,6 @@ textarea {
   }
 }
 
-.modal-floating-actions {
-  position: absolute;
-  top: 12px;
-  right: 52px;
-  z-index: 10;
-  display: inline-flex;
-  align-items: center;
-  gap: $spacing-xs;
-}
-
 .modal-header {
   display: flex;
   align-items: center;
@@ -607,14 +597,20 @@ textarea {
   .empty-icon {
     width: 42px;
     height: 42px;
+    flex: 0 0 42px;
     border-radius: $radius-full;
     border: 2px solid var(--border-color);
-    display: grid;
-    place-items: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 0;
     color: var(--text-secondary);
 
     svg {
       display: block;
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
     }
   }
 
@@ -626,6 +622,19 @@ textarea {
   .empty-desc {
     color: var(--text-secondary);
     margin-top: 4px;
+  }
+
+  .empty-action .btn > span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    line-height: 1;
+  }
+
+  .empty-action .btn svg {
+    display: block;
+    flex-shrink: 0;
   }
 }
 

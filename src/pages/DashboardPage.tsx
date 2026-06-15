@@ -5,7 +5,7 @@ import { IconKey, IconBot, IconFileText, IconSatellite } from '@/components/ui/i
 import { useAuthStore, useConfigStore, useModelsStore } from '@/stores';
 import { authFilesApi } from '@/services/api';
 import { useApiKeysForModels } from '@/hooks/useApiKeysForModels';
-import type { AmpcodeConfig } from '@/types';
+import { formatDateValue } from '@/utils/format';
 import styles from './DashboardPage.module.scss';
 
 interface QuickStat {
@@ -18,17 +18,6 @@ interface QuickStat {
 }
 
 type TimeOfDay = 'morning' | 'afternoon' | 'evening' | 'night';
-
-const countAmpcodeConfig = (value: AmpcodeConfig | undefined): number => {
-  if (!value) return 0;
-  const configured =
-    Boolean(value.upstreamUrl?.trim()) ||
-    Boolean(value.upstreamApiKey?.trim()) ||
-    (value.upstreamApiKeys?.length ?? 0) > 0 ||
-    (value.modelMappings?.length ?? 0) > 0 ||
-    value.forceModelMappings === true;
-  return configured ? 1 : 0;
-};
 
 function getTimeOfDay(): TimeOfDay {
   const hour = new Date().getHours();
@@ -98,10 +87,11 @@ export function DashboardPage() {
       } catch {
         if (!cancelled) setAuthFilesCount(null);
       } finally {
-        if (!cancelled) setAuthFilesLoading(false);
+        setAuthFilesLoading(false);
       }
     };
 
+    // 提供商/密钥统计直接来自 config store；这里只需保证配置已加载并取认证文件数。
     fetchConfig().catch(() => undefined);
     fetchModels();
     void loadAuthFiles();
@@ -119,7 +109,6 @@ export function DashboardPage() {
         claude: config.claudeApiKeys?.length ?? 0,
         vertex: config.vertexApiKeys?.length ?? 0,
         openai: config.openaiCompatibility?.length ?? 0,
-        ampcode: countAmpcodeConfig(config.ampcode),
       }
     : null;
   const totalProviderKeys = providerStats
@@ -148,7 +137,6 @@ export function DashboardPage() {
             claude: providerStats.claude,
             vertex: providerStats.vertex,
             openai: providerStats.openai,
-            ampcode: providerStats.ampcode,
           })
         : undefined,
     },
@@ -201,6 +189,7 @@ export function DashboardPage() {
     hour: '2-digit',
     minute: '2-digit',
   });
+  const serverBuildDateDisplay = formatDateValue(serverBuildDate, i18n.language);
 
   return (
     <div className={styles.dashboard}>
@@ -247,10 +236,8 @@ export function DashboardPage() {
                   )}
             </span>
           </div>
-          {serverBuildDate && (
-            <span className={styles.buildDate}>
-              {new Date(serverBuildDate).toLocaleDateString(i18n.language)}
-            </span>
+          {serverBuildDateDisplay && (
+            <span className={styles.buildDate}>{serverBuildDateDisplay}</span>
           )}
         </div>
       </section>
@@ -290,16 +277,6 @@ export function DashboardPage() {
                 className={`${styles.configPillValue} ${config.debug ? styles.on : styles.off}`}
               >
                 {config.debug ? t('common.yes') : t('common.no')}
-              </span>
-            </div>
-            <div className={styles.configPill}>
-              <span className={styles.configPillLabel}>
-                {t('basic_settings.usage_statistics_enable')}
-              </span>
-              <span
-                className={`${styles.configPillValue} ${config.usageStatisticsEnabled ? styles.on : styles.off}`}
-              >
-                {config.usageStatisticsEnabled ? t('common.yes') : t('common.no')}
               </span>
             </div>
             <div className={styles.configPill}>

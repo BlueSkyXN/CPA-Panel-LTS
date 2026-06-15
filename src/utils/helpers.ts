@@ -4,78 +4,6 @@
  */
 
 /**
- * 规范化数组响应（处理后端可能返回非数组的情况）
- */
-export function normalizeArrayResponse<T>(data: T | T[] | null | undefined): T[] {
-  if (!data) return [];
-  if (Array.isArray(data)) return data;
-  return [data];
-}
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-export function getErrorMessage(error: unknown, fallback = 'Request failed'): string {
-  if (error instanceof Error && error.message.trim()) return error.message;
-  if (typeof error === 'string' && error.trim()) return error;
-  if (isRecord(error)) {
-    const message = error.message;
-    if (typeof message === 'string' && message.trim()) return message;
-    const details = error.details;
-    if (isRecord(details)) {
-      const detailMessage = details.message;
-      if (typeof detailMessage === 'string' && detailMessage.trim()) return detailMessage;
-      const detailError = details.error;
-      if (typeof detailError === 'string' && detailError.trim()) return detailError;
-    }
-  }
-  return fallback;
-}
-
-/**
- * 防抖函数
- */
-export function debounce<This, Args extends unknown[], Return>(
-  func: (this: This, ...args: Args) => Return,
-  delay: number
-): (this: This, ...args: Args) => void {
-  let timeoutId: ReturnType<typeof setTimeout>;
-
-  return function (this: This, ...args: Args) {
-    clearTimeout(timeoutId);
-    timeoutId = setTimeout(() => func.apply(this, args), delay);
-  };
-}
-
-/**
- * 节流函数
- */
-export function throttle<This, Args extends unknown[], Return>(
-  func: (this: This, ...args: Args) => Return,
-  limit: number
-): (this: This, ...args: Args) => void {
-  let inThrottle: boolean;
-
-  return function (this: This, ...args: Args) {
-    if (!inThrottle) {
-      func.apply(this, args);
-      inThrottle = true;
-      setTimeout(() => (inThrottle = false), limit);
-    }
-  };
-}
-
-/**
- * HTML 转义（防 XSS）
- */
-export function escapeHtml(text: string): string {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-/**
  * 生成唯一 ID
  */
 export function generateId(): string {
@@ -83,27 +11,17 @@ export function generateId(): string {
 }
 
 /**
- * 深拷贝对象
+ * 判断是否为普通对象（排除 null 与数组）
  */
-export function deepClone<T>(obj: T): T {
-  if (obj === null || typeof obj !== 'object') return obj;
-
-  if (obj instanceof Date) return new Date(obj.getTime()) as unknown as T;
-  if (Array.isArray(obj)) return obj.map((item) => deepClone(item)) as unknown as T;
-
-  const source = obj as Record<string, unknown>;
-  const cloned: Record<string, unknown> = {};
-  for (const key in source) {
-    if (Object.prototype.hasOwnProperty.call(source, key)) {
-      cloned[key] = deepClone(source[key]);
-    }
-  }
-  return cloned as unknown as T;
-}
+export const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
 
 /**
- * 延迟函数
+ * 从 unknown 错误中提取可读消息
  */
-export function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+export const getErrorMessage = (error: unknown, fallback = ''): string => {
+  if (error instanceof Error) return error.message || fallback;
+  if (typeof error === 'string') return error || fallback;
+  if (isRecord(error) && typeof error.message === 'string') return error.message || fallback;
+  return fallback;
+};

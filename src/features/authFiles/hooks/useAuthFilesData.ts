@@ -11,6 +11,7 @@ import {
   getTypeLabel,
   hasAuthFileStatusMessage,
   isRuntimeOnlyAuthFile,
+  normalizeProviderKey,
 } from '@/features/authFiles/constants';
 
 type DeleteAllOptions = {
@@ -50,12 +51,7 @@ export type UseAuthFilesDataResult = {
   batchDelete: (names: string[]) => void;
 };
 
-export type UseAuthFilesDataOptions = {
-  refreshKeyStats: () => Promise<void>;
-};
-
-export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFilesDataResult {
-  const { refreshKeyStats } = options;
+export function useAuthFilesData(): UseAuthFilesDataResult {
   const { t } = useTranslation();
   const { showNotification, showConfirmation } = useNotificationStore();
 
@@ -230,7 +226,6 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
             result.failed.length ? 'warning' : 'success'
           );
           await loadFiles();
-          await refreshKeyStats();
         }
 
         if (result.failed.length > 0) {
@@ -247,7 +242,7 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
         event.target.value = '';
       }
     },
-    [loadFiles, refreshKeyStats, showNotification, t]
+    [loadFiles, showNotification, t]
   );
 
   const handleDelete = useCallback(
@@ -316,7 +311,12 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
             } else {
               const filesToDelete = files.filter((file) => {
                 if (isRuntimeOnlyAuthFile(file)) return false;
-                if (isFiltered && file.type !== filter) return false;
+                if (
+                  isFiltered &&
+                  normalizeProviderKey(String(file.type ?? file.provider ?? '')) !== filter
+                ) {
+                  return false;
+                }
                 if (isProblemOnly && !hasAuthFileStatusMessage(file)) return false;
                 if (isDisabledOnly && file.disabled !== true) return false;
                 return true;

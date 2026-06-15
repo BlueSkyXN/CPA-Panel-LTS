@@ -7,14 +7,18 @@ import {
   IconDownload,
   IconInfo,
   IconModelCluster,
-  IconSatellite,
   IconSettings,
   IconTrash2,
 } from '@/components/ui/icons';
 import { ProviderStatusBar } from '@/components/providers/ProviderStatusBar';
 import type { AuthFileItem } from '@/types';
 import { resolveAuthProvider } from '@/utils/quota';
-import { calculateStatusBarData, normalizeAuthIndex, type KeyStats } from '@/utils/usage';
+import {
+  normalizeRecentRequestAuthIndex,
+  normalizeRecentRequestBuckets,
+  normalizeUsageTotal,
+  statusBarDataFromRecentRequests,
+} from '@/utils/recentRequests';
 import { formatFileSize } from '@/utils/format';
 import {
   QUOTA_PROVIDER_TYPES,
@@ -24,14 +28,13 @@ import {
   getTypeColor,
   getTypeLabel,
   isRuntimeOnlyAuthFile,
+  normalizeProviderKey,
   parsePriorityValue,
-  resolveAuthFileStats,
   type QuotaProviderType,
   type ResolvedTheme,
 } from '@/features/authFiles/constants';
 import type { AuthFileStatusBarData } from '@/features/authFiles/hooks/useAuthFilesStatusBarCache';
 import { AuthFileQuotaSection } from '@/features/authFiles/components/AuthFileQuotaSection';
-import type { CodexRemoteCloudConnectEnvironmentSummary } from '@/features/authFiles/utils/codexRemoteCloudConnectEnvironmentView';
 import styles from '@/pages/AuthFilesPage.module.scss';
 
 const HEALTHY_STATUS_MESSAGES = new Set(['ok', 'healthy', 'ready', 'success', 'available']);
@@ -45,11 +48,8 @@ export type AuthFileCardProps = {
   deleting: string | null;
   statusUpdating: Record<string, boolean>;
   quotaFilterType: QuotaProviderType | null;
-  keyStats: KeyStats;
   statusBarCache: Map<string, AuthFileStatusBarData>;
-  codexRemoteCloudConnectSummary?: CodexRemoteCloudConnectEnvironmentSummary;
   onShowModels: (file: AuthFileItem) => void;
-  onShowCodexRemoteCloudConnectEnvironments: (file: AuthFileItem) => void;
   onDownload: (name: string) => void;
   onOpenPrefixProxyEditor: (file: AuthFileItem) => void;
   onDelete: (name: string) => void;
@@ -74,11 +74,8 @@ export function AuthFileCard(props: AuthFileCardProps) {
     deleting,
     statusUpdating,
     quotaFilterType,
-    keyStats,
     statusBarCache,
-    codexRemoteCloudConnectSummary,
     onShowModels,
-    onShowCodexRemoteCloudConnectEnvironments,
     onDownload,
     onOpenPrefixProxyEditor,
     onDelete,
@@ -86,14 +83,18 @@ export function AuthFileCard(props: AuthFileCardProps) {
     onToggleSelect,
   } = props;
 
-  const fileStats = resolveAuthFileStats(file, keyStats);
+  const recentBuckets = normalizeRecentRequestBuckets(file.recent_requests ?? file.recentRequests);
+  const fileStats = {
+    success: normalizeUsageTotal(file.success),
+    failure: normalizeUsageTotal(file.failed),
+  };
   const isRuntimeOnly = isRuntimeOnlyAuthFile(file);
-  const isCodexFile = resolveAuthProvider(file) === 'codex';
-  const isAistudio = (file.type || '').toLowerCase() === 'aistudio';
+  const providerKey = normalizeProviderKey(String(file.type ?? file.provider ?? 'unknown'));
+  const isAistudio = providerKey === 'aistudio';
   const showModelsButton = !isRuntimeOnly || isAistudio;
-  const typeColor = getTypeColor(file.type || 'unknown', resolvedTheme);
-  const typeLabel = getTypeLabel(t, file.type || 'unknown');
-  const providerIcon = getAuthFileIcon(file.type || 'unknown', resolvedTheme);
+  const typeColor = getTypeColor(providerKey, resolvedTheme);
+  const typeLabel = getTypeLabel(t, providerKey);
+  const providerIcon = getAuthFileIcon(providerKey, resolvedTheme);
 
   const quotaType =
     quotaFilterType && resolveQuotaType(file) === quotaFilterType ? quotaFilterType : null;
@@ -116,9 +117,10 @@ export function AuthFileCard(props: AuthFileCardProps) {
                 : '';
 
   const rawAuthIndex = file['auth_index'] ?? file.authIndex;
-  const authIndexKey = normalizeAuthIndex(rawAuthIndex);
+  const authIndexKey = normalizeRecentRequestAuthIndex(rawAuthIndex);
   const statusData =
-    (authIndexKey && statusBarCache.get(authIndexKey)) || calculateStatusBarData([]);
+    (authIndexKey && statusBarCache.get(authIndexKey)) ||
+    statusBarDataFromRecentRequests(recentBuckets);
   const rawStatusMessage = getAuthFileStatusMessage(file);
   const hasStatusWarning =
     Boolean(rawStatusMessage) && !HEALTHY_STATUS_MESSAGES.has(rawStatusMessage.toLowerCase());
@@ -199,31 +201,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
                   <span className={styles.noteValue}>{noteValue}</span>
                 </div>
               )}
-              {isCodexFile && !isRuntimeOnly && codexRemoteCloudConnectSummary && (
-                <div className={styles.codexRemoteCloudConnectEnvironmentCardSummary}>
-                  {t('auth_files.codex_remote_cloud_connect_environment_card_summary', {
-                    count: codexRemoteCloudConnectSummary.total,
-                    online: codexRemoteCloudConnectSummary.online,
-                    cleanable: codexRemoteCloudConnectSummary.cleanable,
-                  })}
-                </div>
-              )}
             </div>
-            {isCodexFile && !isRuntimeOnly && (
-              <div className={styles.cardHeaderActions}>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => onShowCodexRemoteCloudConnectEnvironments(file)}
-                  className={styles.codexRemoteCloudConnectEnvironmentHeaderButton}
-                  title={t('auth_files.codex_remote_cloud_connect_environment_button')}
-                  aria-label={t('auth_files.codex_remote_cloud_connect_environment_button')}
-                  disabled={disableControls}
-                >
-                  <IconSatellite className={styles.actionIcon} size={16} />
-                </Button>
-              </div>
-            )}
           </div>
 
           <div className={`${styles.cardMeta} ${compact ? styles.cardMetaCompact : ''}`}>
