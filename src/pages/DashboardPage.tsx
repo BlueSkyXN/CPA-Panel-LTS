@@ -1,14 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import {
-  IconKey,
-  IconBot,
-  IconFileText,
-  IconSatellite
-} from '@/components/ui/icons';
+import { IconKey, IconBot, IconFileText, IconSatellite } from '@/components/ui/icons';
 import { useAuthStore, useConfigStore, useModelsStore } from '@/stores';
-import { apiKeysApi, providersApi, authFilesApi } from '@/services/api';
+import { authFilesApi } from '@/services/api';
+import { useApiKeysForModels } from '@/hooks/useApiKeysForModels';
+import type { AmpcodeConfig } from '@/types';
 import styles from './DashboardPage.module.scss';
 
 interface QuickStat {
@@ -20,14 +17,18 @@ interface QuickStat {
   sublabel?: string;
 }
 
-interface ProviderStats {
-  gemini: number | null;
-  codex: number | null;
-  claude: number | null;
-  openai: number | null;
-}
-
 type TimeOfDay = 'morning' | 'afternoon' | 'evening' | 'night';
+
+const countAmpcodeConfig = (value: AmpcodeConfig | undefined): number => {
+  if (!value) return 0;
+  const configured =
+    Boolean(value.upstreamUrl?.trim()) ||
+    Boolean(value.upstreamApiKey?.trim()) ||
+    (value.upstreamApiKeys?.length ?? 0) > 0 ||
+    (value.modelMappings?.length ?? 0) > 0 ||
+    value.forceModelMappings === true;
+  return configured ? 1 : 0;
+};
 
 function getTimeOfDay(): TimeOfDay {
   const hour = new Date().getHours();
@@ -44,37 +45,18 @@ export function DashboardPage() {
   const serverBuildDate = useAuthStore((state) => state.serverBuildDate);
   const apiBase = useAuthStore((state) => state.apiBase);
   const config = useConfigStore((state) => state.config);
+  const fetchConfig = useConfigStore((state) => state.fetchConfig);
 
   const models = useModelsStore((state) => state.models);
   const modelsLoading = useModelsStore((state) => state.loading);
   const fetchModelsFromStore = useModelsStore((state) => state.fetchModels);
 
-  const [stats, setStats] = useState<{
-    apiKeys: number | null;
-    authFiles: number | null;
-  }>({
-    apiKeys: null,
-    authFiles: null
-  });
-
-  const [providerStats, setProviderStats] = useState<ProviderStats>({
-    gemini: null,
-    codex: null,
-    claude: null,
-    openai: null
-  });
-
-  const [loading, setLoading] = useState(true);
+  const [authFilesCount, setAuthFilesCount] = useState<number | null>(null);
+  const [authFilesLoading, setAuthFilesLoading] = useState(false);
 
   // Time-of-day state for dynamic greeting
   const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>(getTimeOfDay);
   const [currentTime, setCurrentTime] = useState(() => new Date());
-
-  const apiKeysCache = useRef<string[]>([]);
-
-  useEffect(() => {
-    apiKeysCache.current = [];
-  }, [apiBase, config?.apiKeys]);
 
   // Update time every 60 seconds
   useEffect(() => {
@@ -85,53 +67,7 @@ export function DashboardPage() {
     return () => clearInterval(id);
   }, []);
 
-  const normalizeApiKeyList = (input: unknown): string[] => {
-    if (!Array.isArray(input)) return [];
-    const seen = new Set<string>();
-    const keys: string[] = [];
-
-    input.forEach((item) => {
-      const record =
-        item !== null && typeof item === 'object' && !Array.isArray(item)
-          ? (item as Record<string, unknown>)
-          : null;
-      const value =
-        typeof item === 'string'
-          ? item
-          : record
-            ? (record['api-key'] ?? record['apiKey'] ?? record.key ?? record.Key)
-            : '';
-      const trimmed = String(value ?? '').trim();
-      if (!trimmed || seen.has(trimmed)) return;
-      seen.add(trimmed);
-      keys.push(trimmed);
-    });
-
-    return keys;
-  };
-
-  const resolveApiKeysForModels = useCallback(async () => {
-    if (apiKeysCache.current.length) {
-      return apiKeysCache.current;
-    }
-
-    const configKeys = normalizeApiKeyList(config?.apiKeys);
-    if (configKeys.length) {
-      apiKeysCache.current = configKeys;
-      return configKeys;
-    }
-
-    try {
-      const list = await apiKeysApi.list();
-      const normalized = normalizeApiKeyList(list);
-      if (normalized.length) {
-        apiKeysCache.current = normalized;
-      }
-      return normalized;
-    } catch {
-      return [];
-    }
-  }, [config?.apiKeys]);
+  const resolveApiKeysForModels = useApiKeysForModels();
 
   const fetchModels = useCallback(async () => {
     if (connectionStatus !== 'connected' || !apiBase) {
@@ -148,91 +84,81 @@ export function DashboardPage() {
   }, [connectionStatus, apiBase, resolveApiKeysForModels, fetchModelsFromStore]);
 
   useEffect(() => {
-    const fetchStats = async () => {
-      setLoading(true);
+    if (connectionStatus !== 'connected') {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadAuthFiles = async () => {
+      setAuthFilesLoading(true);
       try {
-        const [keysRes, filesRes, geminiRes, codexRes, claudeRes, openaiRes] = await Promise.allSettled([
-          apiKeysApi.list(),
-          authFilesApi.list(),
-          providersApi.getGeminiKeys(),
-          providersApi.getCodexConfigs(),
-          providersApi.getClaudeConfigs(),
-          providersApi.getOpenAIProviders()
-        ]);
-
-        setStats({
-          apiKeys: keysRes.status === 'fulfilled' ? keysRes.value.length : null,
-          authFiles: filesRes.status === 'fulfilled' ? filesRes.value.files.length : null
-        });
-
-        setProviderStats({
-          gemini: geminiRes.status === 'fulfilled' ? geminiRes.value.length : null,
-          codex: codexRes.status === 'fulfilled' ? codexRes.value.length : null,
-          claude: claudeRes.status === 'fulfilled' ? claudeRes.value.length : null,
-          openai: openaiRes.status === 'fulfilled' ? openaiRes.value.length : null
-        });
+        const res = await authFilesApi.list();
+        if (!cancelled) setAuthFilesCount(res.files.length);
+      } catch {
+        if (!cancelled) setAuthFilesCount(null);
       } finally {
-        setLoading(false);
+        if (!cancelled) setAuthFilesLoading(false);
       }
     };
 
-    if (connectionStatus === 'connected') {
-      fetchStats();
-      fetchModels();
-    } else {
-      setLoading(false);
-    }
-  }, [connectionStatus, fetchModels]);
+    fetchConfig().catch(() => undefined);
+    fetchModels();
+    void loadAuthFiles();
 
-  // Calculate total provider keys only when all provider stats are available.
-  const providerStatsReady =
-    providerStats.gemini !== null &&
-    providerStats.codex !== null &&
-    providerStats.claude !== null &&
-    providerStats.openai !== null;
-  const hasProviderStats =
-    providerStats.gemini !== null ||
-    providerStats.codex !== null ||
-    providerStats.claude !== null ||
-    providerStats.openai !== null;
-  const totalProviderKeys = providerStatsReady
-    ? (providerStats.gemini ?? 0) +
-      (providerStats.codex ?? 0) +
-      (providerStats.claude ?? 0) +
-      (providerStats.openai ?? 0)
+    return () => {
+      cancelled = true;
+    };
+  }, [connectionStatus, fetchConfig, fetchModels]);
+
+  const configLoading = !config;
+  const providerStats = config
+    ? {
+        gemini: config.geminiApiKeys?.length ?? 0,
+        codex: config.codexApiKeys?.length ?? 0,
+        claude: config.claudeApiKeys?.length ?? 0,
+        vertex: config.vertexApiKeys?.length ?? 0,
+        openai: config.openaiCompatibility?.length ?? 0,
+        ampcode: countAmpcodeConfig(config.ampcode),
+      }
+    : null;
+  const totalProviderKeys = providerStats
+    ? Object.values(providerStats).reduce((sum, count) => sum + count, 0)
     : 0;
 
   const quickStats: QuickStat[] = [
     {
       label: t('dashboard.management_keys'),
-      value: stats.apiKeys ?? '-',
+      value: config ? (config.apiKeys?.length ?? 0) : '-',
       icon: <IconKey size={24} />,
       path: '/config',
-      loading: loading && stats.apiKeys === null,
-      sublabel: t('nav.config_management')
+      loading: configLoading,
+      sublabel: t('nav.config_management'),
     },
     {
       label: t('nav.ai_providers'),
-      value: loading ? '-' : providerStatsReady ? totalProviderKeys : '-',
+      value: providerStats ? totalProviderKeys : '-',
       icon: <IconBot size={24} />,
       path: '/ai-providers',
-      loading: loading,
-      sublabel: hasProviderStats
+      loading: configLoading,
+      sublabel: providerStats
         ? t('dashboard.provider_keys_detail', {
-            gemini: providerStats.gemini ?? '-',
-            codex: providerStats.codex ?? '-',
-            claude: providerStats.claude ?? '-',
-            openai: providerStats.openai ?? '-'
+            gemini: providerStats.gemini,
+            codex: providerStats.codex,
+            claude: providerStats.claude,
+            vertex: providerStats.vertex,
+            openai: providerStats.openai,
+            ampcode: providerStats.ampcode,
           })
-        : undefined
+        : undefined,
     },
     {
       label: t('nav.auth_files'),
-      value: stats.authFiles ?? '-',
+      value: authFilesCount ?? '-',
       icon: <IconFileText size={24} />,
       path: '/auth-files',
-      loading: loading && stats.authFiles === null,
-      sublabel: t('dashboard.oauth_credentials')
+      loading: authFilesLoading && authFilesCount === null,
+      sublabel: t('dashboard.oauth_credentials'),
     },
     {
       label: t('dashboard.available_models'),
@@ -240,8 +166,8 @@ export function DashboardPage() {
       icon: <IconSatellite size={24} />,
       path: '/system',
       loading: modelsLoading,
-      sublabel: t('dashboard.available_models_desc')
-    }
+      sublabel: t('dashboard.available_models_desc'),
+    },
   ];
 
   const routingStrategyRaw = config?.routingStrategy?.trim() || '';
@@ -268,12 +194,12 @@ export function DashboardPage() {
     weekday: 'long',
     year: 'numeric',
     month: 'long',
-    day: 'numeric'
+    day: 'numeric',
   });
 
   const formattedTime = currentTime.toLocaleTimeString(i18n.language, {
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
   });
 
   return (
@@ -342,9 +268,7 @@ export function DashboardPage() {
             >
               <div className={styles.bentoIcon}>{stat.icon}</div>
               <div className={styles.bentoContent}>
-                <span className={styles.bentoValue}>
-                  {stat.loading ? '...' : stat.value}
-                </span>
+                <span className={styles.bentoValue}>{stat.loading ? '...' : stat.value}</span>
                 <span className={styles.bentoLabel}>{stat.label}</span>
                 {stat.sublabel && !stat.loading && (
                   <span className={styles.bentoSublabel}>{stat.sublabel}</span>
@@ -362,29 +286,43 @@ export function DashboardPage() {
           <div className={styles.configPillGrid}>
             <div className={styles.configPill}>
               <span className={styles.configPillLabel}>{t('basic_settings.debug_enable')}</span>
-              <span className={`${styles.configPillValue} ${config.debug ? styles.on : styles.off}`}>
+              <span
+                className={`${styles.configPillValue} ${config.debug ? styles.on : styles.off}`}
+              >
                 {config.debug ? t('common.yes') : t('common.no')}
               </span>
             </div>
             <div className={styles.configPill}>
-              <span className={styles.configPillLabel}>{t('basic_settings.usage_statistics_enable')}</span>
-              <span className={`${styles.configPillValue} ${config.usageStatisticsEnabled ? styles.on : styles.off}`}>
+              <span className={styles.configPillLabel}>
+                {t('basic_settings.usage_statistics_enable')}
+              </span>
+              <span
+                className={`${styles.configPillValue} ${config.usageStatisticsEnabled ? styles.on : styles.off}`}
+              >
                 {config.usageStatisticsEnabled ? t('common.yes') : t('common.no')}
               </span>
             </div>
             <div className={styles.configPill}>
-              <span className={styles.configPillLabel}>{t('basic_settings.logging_to_file_enable')}</span>
-              <span className={`${styles.configPillValue} ${config.loggingToFile ? styles.on : styles.off}`}>
+              <span className={styles.configPillLabel}>
+                {t('basic_settings.logging_to_file_enable')}
+              </span>
+              <span
+                className={`${styles.configPillValue} ${config.loggingToFile ? styles.on : styles.off}`}
+              >
                 {config.loggingToFile ? t('common.yes') : t('common.no')}
               </span>
             </div>
             <div className={styles.configPill}>
-              <span className={styles.configPillLabel}>{t('basic_settings.retry_count_label')}</span>
+              <span className={styles.configPillLabel}>
+                {t('basic_settings.retry_count_label')}
+              </span>
               <span className={styles.configPillValue}>{config.requestRetry ?? 0}</span>
             </div>
             <div className={styles.configPill}>
               <span className={styles.configPillLabel}>{t('basic_settings.ws_auth_enable')}</span>
-              <span className={`${styles.configPillValue} ${config.wsAuth ? styles.on : styles.off}`}>
+              <span
+                className={`${styles.configPillValue} ${config.wsAuth ? styles.on : styles.off}`}
+              >
                 {config.wsAuth ? t('common.yes') : t('common.no')}
               </span>
             </div>
@@ -396,7 +334,9 @@ export function DashboardPage() {
             </div>
             {config.proxyUrl && (
               <div className={`${styles.configPill} ${styles.configPillWide}`}>
-                <span className={styles.configPillLabel}>{t('basic_settings.proxy_url_label')}</span>
+                <span className={styles.configPillLabel}>
+                  {t('basic_settings.proxy_url_label')}
+                </span>
                 <span className={styles.configPillMono}>{config.proxyUrl}</span>
               </div>
             )}

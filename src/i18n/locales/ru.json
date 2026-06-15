@@ -131,7 +131,7 @@
     "quick_actions": "Быстрые действия",
     "current_config": "Текущая конфигурация",
     "management_keys": "Ключи управления",
-    "provider_keys_detail": "G:{{gemini}} C:{{codex}} Cl:{{claude}} O:{{openai}}",
+    "provider_keys_detail": "G:{{gemini}} C:{{codex}} Cl:{{claude}} V:{{vertex}} O:{{openai}} A:{{ampcode}}",
     "oauth_credentials": "Учётные данные OAuth",
     "usage_overview": "Обзор использования",
     "total_requests": "Всего запросов",

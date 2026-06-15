@@ -131,7 +131,7 @@
     "quick_actions": "Quick Actions",
     "current_config": "Current Configuration",
     "management_keys": "Management Keys",
-    "provider_keys_detail": "G:{{gemini}} C:{{codex}} Cl:{{claude}} O:{{openai}}",
+    "provider_keys_detail": "G:{{gemini}} C:{{codex}} Cl:{{claude}} V:{{vertex}} O:{{openai}} A:{{ampcode}}",
     "oauth_credentials": "OAuth Credentials",
     "usage_overview": "Usage Overview",
     "total_requests": "Total Requests",

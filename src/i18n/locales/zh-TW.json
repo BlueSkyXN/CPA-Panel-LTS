@@ -131,7 +131,7 @@
     "quick_actions": "快速操作",
     "current_config": "目前設定",
     "management_keys": "管理金鑰",
-    "provider_keys_detail": "G:{{gemini}} C:{{codex}} Cl:{{claude}} O:{{openai}}",
+    "provider_keys_detail": "G:{{gemini}} C:{{codex}} Cl:{{claude}} V:{{vertex}} O:{{openai}} A:{{ampcode}}",
     "oauth_credentials": "OAuth 憑證",
     "usage_overview": "使用概覽",
     "total_requests": "總請求數",
