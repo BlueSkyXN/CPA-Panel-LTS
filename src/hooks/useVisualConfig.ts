@@ -620,6 +620,9 @@ function getNextDirtyFields(
       nextValues.usageStatisticsEnabled === baselineValues.usageStatisticsEnabled
     );
   }
+  if (Object.prototype.hasOwnProperty.call(patch, 'pluginsEnabled')) {
+    updateDirty('pluginsEnabled', nextValues.pluginsEnabled === baselineValues.pluginsEnabled);
+  }
   if (Object.prototype.hasOwnProperty.call(patch, 'proxyUrl')) {
     updateDirty('proxyUrl', nextValues.proxyUrl === baselineValues.proxyUrl);
   }
@@ -815,6 +818,7 @@ export function useVisualConfig() {
       const remoteManagement = asRecord(parsed['remote-management']);
       const quotaExceeded = asRecord(parsed['quota-exceeded']);
       const routing = asRecord(parsed.routing);
+      const plugins = asRecord(parsed.plugins);
       const payload = asRecord(parsed.payload);
       const streaming = asRecord(parsed.streaming);
 
@@ -847,6 +851,7 @@ export function useVisualConfig() {
         loggingToFile: Boolean(parsed['logging-to-file']),
         logsMaxTotalSizeMb: String(parsed['logs-max-total-size-mb'] ?? ''),
         usageStatisticsEnabled: Boolean(parsed['usage-statistics-enabled']),
+        pluginsEnabled: Boolean(plugins?.enabled),
 
         proxyUrl: typeof parsed['proxy-url'] === 'string' ? parsed['proxy-url'] : '',
         forceModelPrefix: Boolean(parsed['force-model-prefix']),
@@ -962,6 +967,11 @@ export function useVisualConfig() {
         setBooleanInDoc(doc, ['logging-to-file'], values.loggingToFile);
         setIntFromStringInDoc(doc, ['logs-max-total-size-mb'], values.logsMaxTotalSizeMb);
         setBooleanInDoc(doc, ['usage-statistics-enabled'], values.usageStatisticsEnabled);
+        if (shouldWriteManagedField(doc, ['plugins', 'enabled'], dirtyFields, 'pluginsEnabled')) {
+          ensureMapInDoc(doc, ['plugins']);
+          setBooleanInDoc(doc, ['plugins', 'enabled'], values.pluginsEnabled);
+          deleteIfMapEmpty(doc, ['plugins']);
+        }
 
         setStringInDoc(doc, ['proxy-url'], values.proxyUrl);
         setBooleanInDoc(doc, ['force-model-prefix'], values.forceModelPrefix);

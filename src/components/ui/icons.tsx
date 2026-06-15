@@ -174,6 +174,25 @@ export function IconDownload({ size = 20, ...props }: IconProps) {
   );
 }
 
+export function IconPlus({ size = 20, ...props }: IconProps) {
+  return (
+    <svg {...baseSvgProps} width={size} height={size} {...props}>
+      <path d="M5 12h14" />
+      <path d="M12 5v14" />
+    </svg>
+  );
+}
+
+export function IconAlertTriangle({ size = 20, ...props }: IconProps) {
+  return (
+    <svg {...baseSvgProps} width={size} height={size} {...props}>
+      <path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+      <path d="M12 9v4" />
+      <path d="M12 17h.01" />
+    </svg>
+  );
+}
+
 export function IconTrash2({ size = 20, ...props }: IconProps) {
   return (
     <svg {...baseSvgProps} width={size} height={size} {...props}>
@@ -350,6 +369,17 @@ export function IconCode({ size = 20, ...props }: IconProps) {
   );
 }
 
+export function IconPlug({ size = 20, ...props }: IconProps) {
+  return (
+    <svg {...baseSvgProps} width={size} height={size} {...props}>
+      <path d="M12 22v-5" />
+      <path d="M9 8V2" />
+      <path d="M15 8V2" />
+      <path d="M18 8v5a6 6 0 0 1-12 0V8Z" />
+    </svg>
+  );
+}
+
 export function IconLayoutDashboard({ size = 20, ...props }: IconProps) {
   return (
     <svg {...baseSvgProps} width={size} height={size} {...props}>
@@ -444,6 +474,28 @@ export function IconSidebarUsage({ size = 20, ...props }: IconProps) {
         fillOpacity="0.12"
       />
       <rect x="15.5" y="10" width="3.5" height="10" rx="0.5" />
+    </svg>
+  );
+}
+
+export function IconSidebarPlugins({ size = 20, ...props }: IconProps) {
+  return (
+    <svg {...sidebarSvgProps} width={size} height={size} {...props}>
+      <path d="M12 21v-5" />
+      <path d="M8.5 7.5V3" />
+      <path d="M15.5 7.5V3" />
+      <path d="M18.5 7.5v5.25a6.5 6.5 0 0 1-13 0V7.5Z" />
+      <path d="M9 16h6" />
+    </svg>
+  );
+}
+
+export function IconSidebarStore({ size = 20, ...props }: IconProps) {
+  return (
+    <svg {...sidebarSvgProps} width={size} height={size} {...props}>
+      <path d="M6 8V6a6 6 0 0 1 12 0v2" />
+      <rect x="4" y="8" width="16" height="13" rx="2" />
+      <path d="M9 13h6" fill="currentColor" fillOpacity="0.12" />
     </svg>
   );
 }

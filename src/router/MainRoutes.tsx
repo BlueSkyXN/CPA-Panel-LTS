@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Navigate, useRoutes, type Location } from 'react-router-dom';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { AiProvidersPage } from '@/pages/AiProvidersPage';
@@ -20,6 +21,15 @@ import { UsagePage } from '@/pages/UsagePage';
 import { ConfigPage } from '@/pages/ConfigPage';
 import { LogsPage } from '@/pages/LogsPage';
 import { SystemPage } from '@/pages/SystemPage';
+import { PluginsPage } from '@/features/plugins/PluginsPage';
+import { PluginStorePage } from '@/features/plugins/PluginStorePage';
+import { PluginResourcePage } from '@/features/plugins/PluginResourcePage';
+import { useAuthStore } from '@/stores';
+
+function RequirePluginSupport({ children }: { children: ReactNode }) {
+  const supportsPlugin = useAuthStore((state) => state.supportsPlugin);
+  return supportsPlugin ? <>{children}</> : <Navigate to="/" replace />;
+}
 
 const mainRoutes = [
   { path: '/', element: <DashboardPage /> },
@@ -73,6 +83,30 @@ const mainRoutes = [
   { path: '/oauth', element: <OAuthPage /> },
   { path: '/quota', element: <QuotaPage /> },
   { path: '/usage', element: <UsagePage /> },
+  {
+    path: '/plugins',
+    element: (
+      <RequirePluginSupport>
+        <PluginsPage />
+      </RequirePluginSupport>
+    ),
+  },
+  {
+    path: '/plugin-store',
+    element: (
+      <RequirePluginSupport>
+        <PluginStorePage />
+      </RequirePluginSupport>
+    ),
+  },
+  {
+    path: '/plugin-pages/:pluginId/:menuIndex',
+    element: (
+      <RequirePluginSupport>
+        <PluginResourcePage />
+      </RequirePluginSupport>
+    ),
+  },
   { path: '/config', element: <ConfigPage /> },
   { path: '/logs', element: <LogsPage /> },
   { path: '/system', element: <SystemPage /> },

@@ -796,6 +796,13 @@ export function VisualConfigEditor({
                   disabled={disabled}
                   onChange={(usageStatisticsEnabled) => onChange({ usageStatisticsEnabled })}
                 />
+                <ToggleRow
+                  title={t('config_management.visual.sections.system.plugins_enabled')}
+                  description={t('config_management.visual.sections.system.plugins_enabled_desc')}
+                  checked={values.pluginsEnabled}
+                  disabled={disabled}
+                  onChange={(pluginsEnabled) => onChange({ pluginsEnabled })}
+                />
               </SectionGrid>
 
               <SectionGrid>

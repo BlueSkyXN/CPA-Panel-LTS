@@ -18,8 +18,10 @@ import {
   IconSidebarDashboard,
   IconSidebarLogs,
   IconSidebarOauth,
+  IconSidebarPlugins,
   IconSidebarProviders,
   IconSidebarQuota,
+  IconSidebarStore,
   IconSidebarSystem,
   IconSidebarUsage,
 } from '@/components/ui/icons';
@@ -32,6 +34,12 @@ import {
   useThemeStore,
 } from '@/stores';
 import { triggerHeaderRefresh } from '@/hooks/useHeaderRefresh';
+import { pluginsApi } from '@/services/api';
+import {
+  collectPluginResourceEntries,
+  PLUGIN_RESOURCES_REFRESH_EVENT,
+  type PluginResourceEntry,
+} from '@/features/plugins/pluginResources';
 import { LANGUAGE_LABEL_KEYS, LANGUAGE_ORDER } from '@/utils/constants';
 import { isSupportedLanguage } from '@/utils/language';
 import type { Theme } from '@/types';
@@ -43,6 +51,8 @@ const sidebarIcons: Record<string, ReactNode> = {
   oauth: <IconSidebarOauth size={18} />,
   quota: <IconSidebarQuota size={18} />,
   usage: <IconSidebarUsage size={18} />,
+  plugins: <IconSidebarPlugins size={18} />,
+  pluginStore: <IconSidebarStore size={18} />,
   config: <IconSidebarConfig size={18} />,
   logs: <IconSidebarLogs size={18} />,
   system: <IconSidebarSystem size={18} />,
@@ -208,6 +218,8 @@ export function MainLayout() {
   const location = useLocation();
 
   const logout = useAuthStore((state) => state.logout);
+  const supportsPlugin = useAuthStore((state) => state.supportsPlugin);
+  const connectionStatus = useAuthStore((state) => state.connectionStatus);
 
   const config = useConfigStore((state) => state.config);
   const fetchConfig = useConfigStore((state) => state.fetchConfig);
@@ -222,6 +234,7 @@ export function MainLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [languageMenuOpen, setLanguageMenuOpen] = useState(false);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
+  const [pluginResourceEntries, setPluginResourceEntries] = useState<PluginResourceEntry[]>([]);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const languageMenuRef = useRef<HTMLDivElement | null>(null);
   const themeMenuRef = useRef<HTMLDivElement | null>(null);
@@ -231,6 +244,21 @@ export function MainLayout() {
   const abbrBrandName = t('title.abbr');
   const isLogsPage = location.pathname.startsWith('/logs');
   const showSidebarLabels = !sidebarCollapsed || sidebarOpen;
+  const canLoadPlugins = supportsPlugin && connectionStatus === 'connected';
+
+  const loadPluginResources = useCallback(async () => {
+    if (!canLoadPlugins) {
+      setPluginResourceEntries([]);
+      return;
+    }
+
+    try {
+      const plugins = await pluginsApi.list();
+      setPluginResourceEntries(collectPluginResourceEntries(plugins.plugins));
+    } catch {
+      setPluginResourceEntries([]);
+    }
+  }, [canLoadPlugins]);
 
   // 将顶部悬浮控制区高度写入 CSS 变量，供移动端粘性元素和浮层避让。
   useLayoutEffect(() => {
@@ -380,6 +408,22 @@ export function MainLayout() {
     });
   }, [fetchConfig]);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadPluginResources();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [loadPluginResources]);
+
+  useEffect(() => {
+    window.addEventListener(PLUGIN_RESOURCES_REFRESH_EVENT, loadPluginResources);
+
+    return () => {
+      window.removeEventListener(PLUGIN_RESOURCES_REFRESH_EVENT, loadPluginResources);
+    };
+  }, [loadPluginResources]);
+
   const navItems = [
     { path: '/', label: t('nav.dashboard'), icon: sidebarIcons.dashboard },
     { path: '/config', label: t('nav.config_management'), icon: sidebarIcons.config },
@@ -388,6 +432,17 @@ export function MainLayout() {
     { path: '/oauth', label: t('nav.oauth', { defaultValue: 'OAuth' }), icon: sidebarIcons.oauth },
     { path: '/quota', label: t('nav.quota_management'), icon: sidebarIcons.quota },
     { path: '/usage', label: t('nav.usage_stats'), icon: sidebarIcons.usage },
+    ...(supportsPlugin
+      ? [
+          { path: '/plugins', label: t('nav.plugins'), icon: sidebarIcons.plugins },
+          { path: '/plugin-store', label: t('nav.plugin_store'), icon: sidebarIcons.pluginStore },
+          ...pluginResourceEntries.map((entry) => ({
+            path: entry.route,
+            label: entry.label,
+            icon: sidebarIcons.plugins,
+          })),
+        ]
+      : []),
     ...(config?.loggingToFile
       ? [{ path: '/logs', label: t('nav.logs'), icon: sidebarIcons.logs }]
       : []),
@@ -444,8 +499,13 @@ export function MainLayout() {
       pathname === '/auth-files' || pathname.startsWith('/auth-files/');
     const isAiProviders = (pathname: string) =>
       pathname === '/ai-providers' || pathname.startsWith('/ai-providers/');
+    const isPlugins = (pathname: string) =>
+      pathname === '/plugins' ||
+      pathname === '/plugin-store' ||
+      pathname.startsWith('/plugin-pages/');
     if (isAuthFiles(from) && isAuthFiles(to)) return 'ios';
     if (isAiProviders(from) && isAiProviders(to)) return 'ios';
+    if (isPlugins(from) && isPlugins(to)) return 'ios';
     return 'vertical';
   }, []);
 
@@ -454,6 +514,7 @@ export function MainLayout() {
     const results = await Promise.allSettled([
       fetchConfig(undefined, true),
       triggerHeaderRefresh(),
+      loadPluginResources(),
     ]);
     const rejected = results.find((result) => result.status === 'rejected');
     if (rejected && rejected.status === 'rejected') {
