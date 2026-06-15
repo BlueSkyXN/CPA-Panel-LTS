@@ -12,7 +12,10 @@ import {
   IconChevronUp,
   IconCode,
   IconDownload,
+  IconEye,
   IconEyeOff,
+  IconMaximize2,
+  IconMinimize2,
   IconRefreshCw,
   IconSearch,
   IconSlidersHorizontal,
@@ -62,6 +65,19 @@ const getErrorMessage = (err: unknown): string => {
   return typeof message === 'string' ? message : '';
 };
 
+const responseDataToText = async (data: unknown): Promise<string> => {
+  if (data instanceof Blob) return data.text();
+  if (data instanceof ArrayBuffer) return new TextDecoder().decode(data);
+  if (typeof data === 'string') return data;
+  if (data === undefined || data === null) return '';
+
+  try {
+    return JSON.stringify(data, null, 2);
+  } catch {
+    return String(data);
+  }
+};
+
 type TabType = 'logs' | 'errors';
 
 export function LogsPage() {
@@ -93,8 +109,13 @@ export function LogsPage() {
   const [errorLogs, setErrorLogs] = useState<ErrorLogItem[]>([]);
   const [loadingErrors, setLoadingErrors] = useState(false);
   const [errorLogsError, setErrorLogsError] = useState('');
+  const [selectedErrorLog, setSelectedErrorLog] = useState<ErrorLogItem | null>(null);
+  const [selectedErrorLogText, setSelectedErrorLogText] = useState('');
+  const [selectedErrorLogError, setSelectedErrorLogError] = useState('');
+  const [selectedErrorLogLoading, setSelectedErrorLogLoading] = useState(false);
   const [requestLogId, setRequestLogId] = useState<string | null>(null);
   const [requestLogDownloading, setRequestLogDownloading] = useState(false);
+  const [fullscreenLogs, setFullscreenLogs] = useState(false);
 
   const trace = useTraceResolver({
     traceScopeKey,
@@ -110,6 +131,7 @@ export function LogsPage() {
     startY: number;
     fired: boolean;
   } | null>(null);
+  const errorLogViewRequestRef = useRef(0);
   const logRequestInFlightRef = useRef(false);
   const pendingFullReloadRef = useRef(false);
 
@@ -263,6 +285,50 @@ export function LogsPage() {
         'error'
       );
     }
+  };
+
+  const openErrorLog = async (item: ErrorLogItem) => {
+    const requestId = errorLogViewRequestRef.current + 1;
+    errorLogViewRequestRef.current = requestId;
+    setSelectedErrorLog(item);
+    setSelectedErrorLogText('');
+    setSelectedErrorLogError('');
+    setSelectedErrorLogLoading(true);
+
+    try {
+      const response = await logsApi.downloadErrorLog(item.name);
+      const text = await responseDataToText(response.data);
+      if (errorLogViewRequestRef.current !== requestId) return;
+      setSelectedErrorLogText(text);
+    } catch (err: unknown) {
+      if (errorLogViewRequestRef.current !== requestId) return;
+      const message = getErrorMessage(err);
+      setSelectedErrorLogError(
+        message ? `${t('logs.error_log_open_failed')}: ${message}` : t('logs.error_log_open_failed')
+      );
+    } finally {
+      if (errorLogViewRequestRef.current === requestId) {
+        setSelectedErrorLogLoading(false);
+      }
+    }
+  };
+
+  const closeErrorLogViewer = () => {
+    errorLogViewRequestRef.current += 1;
+    setSelectedErrorLog(null);
+    setSelectedErrorLogText('');
+    setSelectedErrorLogError('');
+    setSelectedErrorLogLoading(false);
+  };
+
+  const copySelectedErrorLog = async () => {
+    const ok = await copyToClipboard(selectedErrorLogText);
+    showNotification(
+      ok
+        ? t('logs.error_log_copy_success')
+        : t('logs.copy_failed', { defaultValue: 'Copy failed' }),
+      ok ? 'success' : 'error'
+    );
   };
 
   useEffect(() => {
@@ -461,6 +527,28 @@ export function LogsPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!fullscreenLogs) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.body.classList.add('logs-fullscreen-active');
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setFullscreenLogs(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.body.classList.remove('logs-fullscreen-active');
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [fullscreenLogs]);
+
   return (
     <div className={styles.container}>
       <h1 className={styles.pageTitle}>{t('logs.title')}</h1>
@@ -476,7 +564,10 @@ export function LogsPage() {
         <button
           type="button"
           className={`${styles.tabItem} ${activeTab === 'errors' ? styles.tabActive : ''}`}
-          onClick={() => setActiveTab('errors')}
+          onClick={() => {
+            setFullscreenLogs(false);
+            setActiveTab('errors');
+          }}
         >
           {t('logs.error_logs_modal_title')}
         </button>
@@ -484,67 +575,75 @@ export function LogsPage() {
 
       <div className={styles.content}>
         {activeTab === 'logs' && (
-          <Card className={styles.logCard}>
+          <Card
+            className={[styles.logCard, fullscreenLogs ? styles.logCardFullscreen : '']
+              .filter(Boolean)
+              .join(' ')}
+          >
             {error && <div className="error-box">{error}</div>}
 
             <div className={styles.filters}>
-              <div className={styles.searchWrapper}>
-                <Input
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder={t('logs.search_placeholder')}
-                  className={styles.searchInput}
-                  rightElement={
-                    searchQuery ? (
-                      <button
-                        type="button"
-                        className={styles.searchClear}
-                        onClick={() => setSearchQuery('')}
-                        title="Clear"
-                        aria-label="Clear"
-                      >
-                        <IconX size={16} />
-                      </button>
-                    ) : (
-                      <IconSearch size={16} className={styles.searchIcon} />
-                    )
-                  }
-                />
-              </div>
+              {!fullscreenLogs && (
+                <>
+                  <div className={styles.searchWrapper}>
+                    <Input
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder={t('logs.search_placeholder')}
+                      className={styles.searchInput}
+                      rightElement={
+                        searchQuery ? (
+                          <button
+                            type="button"
+                            className={styles.searchClear}
+                            onClick={() => setSearchQuery('')}
+                            title="Clear"
+                            aria-label="Clear"
+                          >
+                            <IconX size={16} />
+                          </button>
+                        ) : (
+                          <IconSearch size={16} className={styles.searchIcon} />
+                        )
+                      }
+                    />
+                  </div>
 
-              <div className={styles.filterPanelHeader}>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  className={styles.filterPanelToggle}
-                  onClick={() => setStructuredFiltersExpanded((prev) => !prev)}
-                  aria-expanded={structuredFiltersExpanded}
-                  aria-controls={structuredFiltersPanelId}
-                  title={
-                    structuredFiltersExpanded
-                      ? t('logs.filter_panel_collapse')
-                      : t('logs.filter_panel_expand')
-                  }
-                >
-                  <span className={styles.filterPanelButtonContent}>
-                    <IconSlidersHorizontal size={16} />
-                    <span>{t('logs.filter_panel_title')}</span>
-                    {structuredFilterCount > 0 && (
-                      <span className={styles.filterPanelCount}>
-                        {t('logs.filter_panel_active_count', { count: structuredFilterCount })}
+                  <div className={styles.filterPanelHeader}>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className={styles.filterPanelToggle}
+                      onClick={() => setStructuredFiltersExpanded((prev) => !prev)}
+                      aria-expanded={structuredFiltersExpanded}
+                      aria-controls={structuredFiltersPanelId}
+                      title={
+                        structuredFiltersExpanded
+                          ? t('logs.filter_panel_collapse')
+                          : t('logs.filter_panel_expand')
+                      }
+                    >
+                      <span className={styles.filterPanelButtonContent}>
+                        <IconSlidersHorizontal size={16} />
+                        <span>{t('logs.filter_panel_title')}</span>
+                        {structuredFilterCount > 0 && (
+                          <span className={styles.filterPanelCount}>
+                            {t('logs.filter_panel_active_count', { count: structuredFilterCount })}
+                          </span>
+                        )}
+                        {structuredFiltersExpanded ? (
+                          <IconChevronUp size={16} />
+                        ) : (
+                          <IconChevronDown size={16} />
+                        )}
                       </span>
-                    )}
-                    {structuredFiltersExpanded ? (
-                      <IconChevronUp size={16} />
-                    ) : (
-                      <IconChevronDown size={16} />
-                    )}
-                  </span>
-                </Button>
-              </div>
+                    </Button>
+                  </div>
+                </>
+              )}
 
-              {structuredFiltersExpanded && (
+              {!fullscreenLogs && structuredFiltersExpanded && (
                 <div id={structuredFiltersPanelId} className={styles.structuredFilters}>
                   <div className={styles.filterChipGroup}>
                     <span className={styles.filterChipLabel}>{t('logs.filter_method')}</span>
@@ -701,6 +800,29 @@ export function LogsPage() {
                     {t('logs.clear_button')}
                   </span>
                 </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setFullscreenLogs((prev) => !prev)}
+                  className={styles.actionButton}
+                  aria-pressed={fullscreenLogs}
+                  title={
+                    fullscreenLogs
+                      ? t('logs.exit_fullscreen_button')
+                      : t('logs.fullscreen_button')
+                  }
+                >
+                  <span className={styles.buttonContent}>
+                    {fullscreenLogs ? (
+                      <IconMinimize2 size={16} />
+                    ) : (
+                      <IconMaximize2 size={16} />
+                    )}
+                    {fullscreenLogs
+                      ? t('logs.exit_fullscreen_button')
+                      : t('logs.fullscreen_button')}
+                  </span>
+                </Button>
               </div>
             </div>
 
@@ -709,7 +831,9 @@ export function LogsPage() {
             ) : logState.buffer.length > 0 && filteredLines.length > 0 ? (
               <div
                 ref={scroller.logViewerRef}
-                className={styles.logPanel}
+                className={[styles.logPanel, fullscreenLogs ? styles.logPanelFullscreen : '']
+                  .filter(Boolean)
+                  .join(' ')}
                 onScroll={scroller.handleLogScroll}
               >
                 {scroller.canLoadMore && (
@@ -906,6 +1030,19 @@ export function LogsPage() {
                           <Button
                             variant="secondary"
                             size="sm"
+                            onClick={() => {
+                              void openErrorLog(item);
+                            }}
+                            disabled={disableControls}
+                          >
+                            <span className={styles.buttonContent}>
+                              <IconEye size={16} />
+                              {t('logs.error_logs_open')}
+                            </span>
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
                             onClick={() => downloadErrorLog(item.name)}
                             disabled={disableControls}
                           >
@@ -921,6 +1058,64 @@ export function LogsPage() {
           </Card>
         )}
       </div>
+
+      <Modal
+        open={Boolean(selectedErrorLog)}
+        onClose={closeErrorLogViewer}
+        title={selectedErrorLog?.name ?? t('logs.error_log_view_title')}
+        width={960}
+        footer={
+          <>
+            <Button variant="secondary" onClick={closeErrorLogViewer}>
+              {t('common.close')}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                void copySelectedErrorLog();
+              }}
+              disabled={!selectedErrorLogText || selectedErrorLogLoading}
+            >
+              {t('common.copy')}
+            </Button>
+            <Button
+              onClick={() => {
+                if (selectedErrorLog) {
+                  void downloadErrorLog(selectedErrorLog.name);
+                }
+              }}
+              disabled={!selectedErrorLog || selectedErrorLogLoading}
+            >
+              {t('logs.error_logs_download')}
+            </Button>
+          </>
+        }
+      >
+        <div className={styles.errorLogViewer}>
+          {selectedErrorLog && (
+            <div className={styles.errorLogViewerMeta}>
+              <span>
+                {t('logs.error_logs_size')}:{' '}
+                {selectedErrorLog.size ? `${(selectedErrorLog.size / 1024).toFixed(1)} KB` : '-'}
+              </span>
+              <span>
+                {t('logs.error_logs_modified')}:{' '}
+                {selectedErrorLog.modified ? formatUnixTimestamp(selectedErrorLog.modified) : '-'}
+              </span>
+            </div>
+          )}
+          {selectedErrorLogError && <div className="error-box">{selectedErrorLogError}</div>}
+          {selectedErrorLogLoading ? (
+            <div className="hint">{t('common.loading')}</div>
+          ) : selectedErrorLogText ? (
+            <pre className={styles.errorLogContent} spellCheck={false}>
+              {selectedErrorLogText}
+            </pre>
+          ) : !selectedErrorLogError ? (
+            <div className="hint">{t('logs.error_log_empty_content')}</div>
+          ) : null}
+        </div>
+      </Modal>
 
       <Modal
         open={Boolean(trace.traceLogLine)}
