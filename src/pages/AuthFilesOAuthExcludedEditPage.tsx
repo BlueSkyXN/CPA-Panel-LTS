@@ -12,6 +12,7 @@ import { SecondaryScreenShell } from '@/components/common/SecondaryScreenShell';
 import { useEdgeSwipeBack } from '@/hooks/useEdgeSwipeBack';
 import { useAuthStore, useNotificationStore } from '@/stores';
 import { authFilesApi } from '@/services/api';
+import { getTypeLabel, normalizeProviderKey } from '@/features/authFiles/constants';
 import type { AuthFileItem, OAuthModelAliasEntry } from '@/types';
 import styles from './AuthFilesOAuthExcludedEditPage.module.scss';
 
@@ -32,8 +33,6 @@ const OAUTH_PROVIDER_PRESETS = [
 ];
 
 const OAUTH_PROVIDER_EXCLUDES = new Set(['all', 'unknown', 'empty']);
-
-const normalizeProviderKey = (value: string) => value.trim().toLowerCase();
 
 export function AuthFilesOAuthExcludedEditPage() {
   const { t } = useTranslation();
@@ -87,17 +86,6 @@ export function AuthFilesOAuthExcludedEditPage() {
 
     return [...OAUTH_PROVIDER_PRESETS, ...extraList];
   }, [excluded, files, modelAlias]);
-
-  const getTypeLabel = useCallback(
-    (type: string): string => {
-      const key = `auth_files.filter_${type}`;
-      const translated = t(key);
-      if (translated !== key) return translated;
-      if (type.toLowerCase() === 'iflow') return 'iFlow';
-      return type.charAt(0).toUpperCase() + type.slice(1);
-    },
-    [t]
-  );
 
   const resolvedProviderKey = useMemo(() => normalizeProviderKey(provider), [provider]);
   const isEditing = useMemo(() => {
@@ -352,7 +340,8 @@ export function AuthFilesOAuthExcludedEditPage() {
               {providerOptions.length > 0 && (
                 <div className={styles.tagList}>
                   {providerOptions.map((option) => {
-                    const isActive = normalizeProviderKey(provider) === option.toLowerCase();
+                    const isActive =
+                      normalizeProviderKey(provider) === normalizeProviderKey(option);
                     return (
                       <button
                         key={option}
@@ -361,7 +350,7 @@ export function AuthFilesOAuthExcludedEditPage() {
                         onClick={() => updateProvider(option)}
                         disabled={disableControls || saving}
                       >
-                        {getTypeLabel(option)}
+                        {getTypeLabel(t, option)}
                       </button>
                     );
                   })}

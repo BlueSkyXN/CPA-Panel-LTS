@@ -11,6 +11,7 @@ import { SecondaryScreenShell } from '@/components/common/SecondaryScreenShell';
 import { useEdgeSwipeBack } from '@/hooks/useEdgeSwipeBack';
 import { useAuthStore, useNotificationStore } from '@/stores';
 import { authFilesApi } from '@/services/api';
+import { getTypeLabel, normalizeProviderKey } from '@/features/authFiles/constants';
 import type { AuthFileItem, OAuthModelAliasEntry } from '@/types';
 import { generateId } from '@/utils/helpers';
 import styles from './AuthFilesOAuthModelAliasEditPage.module.scss';
@@ -34,8 +35,6 @@ const OAUTH_PROVIDER_PRESETS = [
 ];
 
 const OAUTH_PROVIDER_EXCLUDES = new Set(['all', 'unknown', 'empty']);
-
-const normalizeProviderKey = (value: string) => value.trim().toLowerCase();
 
 const buildEmptyMappingEntry = (): OAuthModelMappingFormEntry => ({
   id: generateId(),
@@ -76,7 +75,9 @@ export function AuthFilesOAuthModelAliasEditPage() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [modelAliasUnsupported, setModelAliasUnsupported] = useState(false);
 
-  const [mappings, setMappings] = useState<OAuthModelMappingFormEntry[]>([buildEmptyMappingEntry()]);
+  const [mappings, setMappings] = useState<OAuthModelMappingFormEntry[]>([
+    buildEmptyMappingEntry(),
+  ]);
   const [modelsList, setModelsList] = useState<AuthFileModelItem[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelsError, setModelsError] = useState<'unsupported' | null>(null);
@@ -110,17 +111,6 @@ export function AuthFilesOAuthModelAliasEditPage() {
 
     return [...OAUTH_PROVIDER_PRESETS, ...extraList];
   }, [excluded, files, modelAlias]);
-
-  const getTypeLabel = useCallback(
-    (type: string): string => {
-      const key = `auth_files.filter_${type}`;
-      const translated = t(key);
-      if (translated !== key) return translated;
-      if (type.toLowerCase() === 'iflow') return 'iFlow';
-      return type.charAt(0).toUpperCase() + type.slice(1);
-    },
-    [t]
-  );
 
   const resolvedProviderKey = useMemo(() => normalizeProviderKey(provider), [provider]);
   const title = useMemo(() => t('oauth_model_alias.add_title'), [t]);
@@ -378,7 +368,9 @@ export function AuthFilesOAuthModelAliasEditPage() {
             <div className={styles.settingsSection}>
               <div className={styles.settingsRow}>
                 <div className={styles.settingsInfo}>
-                  <div className={styles.settingsLabel}>{t('oauth_model_alias.provider_label')}</div>
+                  <div className={styles.settingsLabel}>
+                    {t('oauth_model_alias.provider_label')}
+                  </div>
                   <div className={styles.settingsDesc}>{t('oauth_model_alias.provider_hint')}</div>
                 </div>
                 <div className={styles.settingsControl}>
@@ -397,7 +389,8 @@ export function AuthFilesOAuthModelAliasEditPage() {
               {providerOptions.length > 0 && (
                 <div className={styles.tagList}>
                   {providerOptions.map((option) => {
-                    const isActive = normalizeProviderKey(provider) === option.toLowerCase();
+                    const isActive =
+                      normalizeProviderKey(provider) === normalizeProviderKey(option);
                     return (
                       <button
                         key={option}
@@ -406,7 +399,7 @@ export function AuthFilesOAuthModelAliasEditPage() {
                         onClick={() => updateProvider(option)}
                         disabled={disableControls || saving}
                       >
-                        {getTypeLabel(option)}
+                        {getTypeLabel(t, option)}
                       </button>
                     );
                   })}
