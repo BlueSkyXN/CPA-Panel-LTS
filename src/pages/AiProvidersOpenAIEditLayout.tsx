@@ -12,6 +12,7 @@ import { buildHeaderObject, headersToEntries, normalizeHeaderEntries } from '@/u
 import { areKeyValueEntriesEqual, areModelEntriesEqual } from '@/utils/compare';
 import { buildApiKeyEntry } from '@/components/providers/utils';
 import type { ModelEntry, OpenAIFormState } from '@/components/providers/types';
+import { parseRouteIndexParam } from '@/utils/routeParams';
 import type { KeyTestStatus, OpenAIEditBaseline } from '@/stores/useOpenAIEditDraftStore';
 
 type LocationState = { fromAiProviders?: boolean } | null;
@@ -51,12 +52,6 @@ const buildEmptyForm = (): OpenAIFormState => ({
   modelEntries: [{ name: '', alias: '' }],
   testModel: undefined,
 });
-
-const parseIndexParam = (value: string | undefined) => {
-  if (!value) return null;
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? parsed : null;
-};
 
 const getErrorMessage = (err: unknown) => {
   if (err instanceof Error) return err.message;
@@ -140,7 +135,7 @@ export function AiProvidersOpenAIEditLayout() {
 
   const params = useParams<{ index?: string }>();
   const hasIndexParam = typeof params.index === 'string';
-  const editIndex = useMemo(() => parseIndexParam(params.index), [params.index]);
+  const editIndex = useMemo(() => parseRouteIndexParam(params.index), [params.index]);
   const invalidIndexParam = hasIndexParam && editIndex === null;
 
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
