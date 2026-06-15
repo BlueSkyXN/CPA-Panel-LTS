@@ -726,7 +726,14 @@ export const PayloadRulesEditor = memo(function PayloadRulesEditor({
 
               return (
                 <div key={param.id} className={styles.payloadRuleParamGroup}>
-                  <div className={styles.payloadRuleParamRow}>
+                  <div
+                    className={[
+                      styles.payloadRuleParamRow,
+                      rawJsonValues ? styles.payloadRuleRawParamRow : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
+                  >
                     <ExpandableInput
                       placeholder={t('config_management.visual.payload_rules.json_path')}
                       ariaLabel={t('config_management.visual.payload_rules.json_path')}

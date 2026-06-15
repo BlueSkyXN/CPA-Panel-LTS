@@ -816,6 +816,10 @@
   align-items: center;
 }
 
+.payloadRuleRawParamRow {
+  grid-template-columns: minmax(240px, 1fr) minmax(320px, 1fr) auto;
+}
+
 .payloadRuleParamGroup {
   display: flex;
   flex-direction: column;
@@ -832,6 +836,10 @@
 
 .payloadParamError {
   margin: 0;
+}
+
+.payloadRowActionButton {
+  justify-self: start;
 }
 
 .payloadFilterModelRow {
