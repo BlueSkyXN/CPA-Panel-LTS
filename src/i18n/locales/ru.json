@@ -786,7 +786,7 @@
     "additional_secondary_window": "{{name}}: недельный лимит",
     "additional_monthly_window": "{{name}}: месячный лимит",
     "plan_label": "Тариф",
-    "expires_label": "Действует до",
+    "expires_label": "Время продления",
     "plan_plus": "Plus",
     "plan_team": "Team",
     "plan_free": "Free",

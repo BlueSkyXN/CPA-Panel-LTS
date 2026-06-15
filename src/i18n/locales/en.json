@@ -791,7 +791,7 @@
     "additional_secondary_window": "{{name}} weekly limit",
     "additional_monthly_window": "{{name}} monthly limit",
     "plan_label": "Plan",
-    "expires_label": "Expires",
+    "expires_label": "Renewal time",
     "plan_plus": "Plus",
     "plan_team": "Team",
     "plan_free": "Free",

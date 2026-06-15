@@ -791,7 +791,7 @@
     "additional_secondary_window": "{{name}} 週限額",
     "additional_monthly_window": "{{name}} 月限額",
     "plan_label": "方案",
-    "expires_label": "到期時間",
+    "expires_label": "續期時間",
     "plan_plus": "Plus",
     "plan_team": "Team",
     "plan_free": "Free",
