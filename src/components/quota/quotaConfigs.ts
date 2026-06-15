@@ -38,6 +38,9 @@ import type {
   GeminiCliUserTier,
   KimiQuotaRow,
   KimiQuotaState,
+  XaiBillingConfig,
+  XaiBillingSummary,
+  XaiQuotaState,
 } from '@/types';
 import { apiCallApi, authFilesApi, getApiCallErrorMessage } from '@/services/api';
 import { useQuotaStore } from '@/stores';
@@ -59,6 +62,8 @@ import {
   GEMINI_CLI_REQUEST_HEADERS,
   KIMI_USAGE_URL,
   KIMI_REQUEST_HEADERS,
+  XAI_BILLING_URL,
+  XAI_REQUEST_HEADERS,
   normalizeGeminiCliModelId,
   normalizeNumberValue,
   normalizePlanType,
@@ -72,6 +77,7 @@ import {
   parseGeminiCliQuotaPayload,
   parseGeminiCliCodeAssistPayload,
   parseKimiUsagePayload,
+  parseXaiBillingPayload,
   resolveCodexChatgptAccountId,
   resolveCodexPlanType,
   resolveCodexSubscriptionActiveUntil,
@@ -91,6 +97,7 @@ import {
   isGeminiCliFile,
   isKimiFile,
   isRuntimeOnlyAuthFile,
+  isXaiFile,
 } from '@/utils/quota';
 import { normalizeAuthIndex } from '@/utils/usage';
 import { formatUnixTimestamp } from '@/utils/format';
@@ -99,7 +106,7 @@ import styles from '@/pages/QuotaPage.module.scss';
 
 type QuotaUpdater<T> = T | ((prev: T) => T);
 
-type QuotaType = 'antigravity' | 'claude' | 'codex' | 'gemini-cli' | 'kimi';
+type QuotaType = 'antigravity' | 'claude' | 'codex' | 'gemini-cli' | 'kimi' | 'xai';
 
 const DEFAULT_ANTIGRAVITY_PROJECT_ID = 'bamboo-precept-lgxtn';
 const QUOTA_PROGRESS_HIGH_THRESHOLD = 70;
@@ -141,11 +148,13 @@ export interface QuotaStore {
   codexQuota: Record<string, CodexQuotaState>;
   geminiCliQuota: Record<string, GeminiCliQuotaState>;
   kimiQuota: Record<string, KimiQuotaState>;
+  xaiQuota: Record<string, XaiQuotaState>;
   setAntigravityQuota: (updater: QuotaUpdater<Record<string, AntigravityQuotaState>>) => void;
   setClaudeQuota: (updater: QuotaUpdater<Record<string, ClaudeQuotaState>>) => void;
   setCodexQuota: (updater: QuotaUpdater<Record<string, CodexQuotaState>>) => void;
   setGeminiCliQuota: (updater: QuotaUpdater<Record<string, GeminiCliQuotaState>>) => void;
   setKimiQuota: (updater: QuotaUpdater<Record<string, KimiQuotaState>>) => void;
+  setXaiQuota: (updater: QuotaUpdater<Record<string, XaiQuotaState>>) => void;
   clearQuotaCache: () => void;
 }
 
@@ -280,9 +289,7 @@ const getCodexWindowSeconds = (window?: CodexUsageWindow | null): number | null 
 const isCodexMonthlyWindow = (window?: CodexUsageWindow | null): boolean => {
   const seconds = getCodexWindowSeconds(window);
   return (
-    seconds !== null &&
-    seconds >= CODEX_MIN_MONTH_SECONDS &&
-    seconds <= CODEX_MAX_MONTH_SECONDS
+    seconds !== null && seconds >= CODEX_MIN_MONTH_SECONDS && seconds <= CODEX_MAX_MONTH_SECONDS
   );
 };
 
@@ -676,7 +683,9 @@ const waitForCodexTeamLeaderboardCache = async (
   while (Date.now() - startedAt < CODEX_TEAM_LEADERBOARD_CACHE_WAIT_MS) {
     const cached = readCodexTeamLeaderboardCache(cacheKey);
     if (cached) return cached;
-    await new Promise((resolve) => window.setTimeout(resolve, CODEX_TEAM_LEADERBOARD_CACHE_POLL_MS));
+    await new Promise((resolve) =>
+      window.setTimeout(resolve, CODEX_TEAM_LEADERBOARD_CACHE_POLL_MS)
+    );
   }
   return readCodexTeamLeaderboardCache(cacheKey);
 };
@@ -695,7 +704,9 @@ const pickCodexLeaderboardUserRow = (
 ): CodexUsageLeaderboardRow | null => {
   const normalizedEmail = normalizeStringValue(accountEmail)?.toLowerCase();
   if (!normalizedEmail) return null;
-  return rows.find((row) => normalizeStringValue(row.email)?.toLowerCase() === normalizedEmail) ?? null;
+  return (
+    rows.find((row) => normalizeStringValue(row.email)?.toLowerCase() === normalizedEmail) ?? null
+  );
 };
 
 const buildCodexLeaderboardRange = (
@@ -1719,13 +1730,7 @@ const renderCodexItems = (
       );
     }
 
-    nodes.push(
-      h(
-        'div',
-        { key: 'plan', className: styleMap.codexPlan },
-        ...planNodes
-      )
-    );
+    nodes.push(h('div', { key: 'plan', className: styleMap.codexPlan }, ...planNodes));
   }
 
   if (accountEmail) {
@@ -1822,7 +1827,7 @@ const renderCodexItems = (
                 ? 'codex_quota.team_analytics_bucket'
                 : analytics.source === 'daily-workspace-fallback'
                   ? 'codex_quota.team_analytics_fallback_bucket'
-                : 'codex_quota.analytics_bucket',
+                  : 'codex_quota.analytics_bucket',
               { bucket: analytics.dateBucket }
             )
           )
@@ -2475,6 +2480,151 @@ const renderKimiItems = (
   });
 };
 
+const normalizeXaiCentValue = (value: XaiBillingConfig['monthlyLimit']): number | null => {
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    return normalizeNumberValue((value as { val?: unknown }).val);
+  }
+  return normalizeNumberValue(value);
+};
+
+const buildXaiBillingSummary = (
+  config: XaiBillingConfig | null | undefined
+): XaiBillingSummary | null => {
+  if (!config || typeof config !== 'object') return null;
+
+  const monthlyLimitCents = normalizeXaiCentValue(config.monthlyLimit ?? config.monthly_limit);
+  const usedCents = normalizeXaiCentValue(config.used);
+  const onDemandCapCents = normalizeXaiCentValue(config.onDemandCap ?? config.on_demand_cap);
+  const billingPeriodStart =
+    normalizeStringValue(config.billingPeriodStart ?? config.billing_period_start) ?? undefined;
+  const billingPeriodEnd =
+    normalizeStringValue(config.billingPeriodEnd ?? config.billing_period_end) ?? undefined;
+
+  if (
+    monthlyLimitCents === null &&
+    usedCents === null &&
+    onDemandCapCents === null &&
+    !billingPeriodEnd
+  ) {
+    return null;
+  }
+
+  const usedPercent =
+    monthlyLimitCents !== null && monthlyLimitCents > 0 && usedCents !== null
+      ? (usedCents / monthlyLimitCents) * 100
+      : null;
+
+  return {
+    monthlyLimitCents,
+    usedCents,
+    onDemandCapCents,
+    billingPeriodStart,
+    billingPeriodEnd,
+    usedPercent,
+  };
+};
+
+const fetchXaiQuota = async (file: AuthFileItem, t: TFunction): Promise<XaiBillingSummary> => {
+  const rawAuthIndex = file['auth_index'] ?? file.authIndex;
+  const authIndex = normalizeAuthIndex(rawAuthIndex);
+  if (!authIndex) {
+    throw new Error(t('xai_quota.missing_auth_index'));
+  }
+
+  const result = await apiCallApi.request({
+    authIndex,
+    method: 'GET',
+    url: XAI_BILLING_URL,
+    header: { ...XAI_REQUEST_HEADERS },
+  });
+
+  if (result.statusCode < 200 || result.statusCode >= 300) {
+    throw createStatusError(getApiCallErrorMessage(result), result.statusCode);
+  }
+
+  const payload = parseXaiBillingPayload(result.body ?? result.bodyText);
+  const summary = buildXaiBillingSummary(payload?.config);
+  if (!summary) {
+    throw new Error(t('xai_quota.empty_data'));
+  }
+
+  return summary;
+};
+
+const formatUsdFromCents = (cents: number | null): string => {
+  if (cents === null) return '--';
+  return new Intl.NumberFormat(undefined, {
+    style: 'currency',
+    currency: 'USD',
+  }).format(cents / 100);
+};
+
+const formatXaiUsageAmount = (billing: XaiBillingSummary): string => {
+  const used = formatUsdFromCents(billing.usedCents);
+  const limit = formatUsdFromCents(billing.monthlyLimitCents);
+  if (billing.monthlyLimitCents === null) return used;
+  return `${used} / ${limit}`;
+};
+
+const renderXaiItems = (
+  quota: XaiQuotaState,
+  t: TFunction,
+  helpers: QuotaRenderHelpers
+): ReactNode => {
+  const { styles: styleMap, QuotaProgressBar } = helpers;
+  const { createElement: h, Fragment } = React;
+  const billing = quota.billing;
+
+  if (!billing) {
+    return h('div', { className: styleMap.quotaMessage }, t('xai_quota.empty_data'));
+  }
+
+  const clampedUsed =
+    billing.usedPercent === null ? null : Math.max(0, Math.min(100, billing.usedPercent));
+  const remaining = clampedUsed === null ? null : Math.max(0, Math.min(100, 100 - clampedUsed));
+  const percentLabel = remaining === null ? '--' : `${Math.round(remaining)}%`;
+  const amountLabel = formatXaiUsageAmount(billing);
+  const resetLabel = formatQuotaResetTime(billing.billingPeriodEnd);
+  const onDemandCap = billing.onDemandCapCents ?? 0;
+  const payAsYouGoLabel =
+    onDemandCap > 0
+      ? t('xai_quota.pay_as_you_go_enabled', { cap: formatUsdFromCents(onDemandCap) })
+      : t('xai_quota.pay_as_you_go_disabled');
+
+  return h(
+    Fragment,
+    null,
+    h(
+      'div',
+      { key: 'pay-as-you-go', className: styleMap.codexPlan },
+      h('span', { className: styleMap.codexPlanLabel }, t('xai_quota.pay_as_you_go_label')),
+      h('span', { className: styleMap.codexPlanValue }, payAsYouGoLabel)
+    ),
+    h(
+      'div',
+      { key: 'monthly-credits', className: styleMap.quotaRow },
+      h(
+        'div',
+        { className: styleMap.quotaRowHeader },
+        h('span', { className: styleMap.quotaModel }, t('xai_quota.monthly_credits')),
+        h(
+          'div',
+          { className: styleMap.quotaMeta },
+          h('span', { className: styleMap.quotaPercent }, percentLabel),
+          h('span', { className: styleMap.quotaAmount }, amountLabel),
+          h('span', { className: styleMap.quotaReset }, resetLabel)
+        )
+      ),
+      h(QuotaProgressBar, {
+        percent: remaining,
+        highThreshold: QUOTA_PROGRESS_HIGH_THRESHOLD,
+        mediumThreshold: QUOTA_PROGRESS_MEDIUM_THRESHOLD,
+      })
+    )
+  );
+};
+
 export const KIMI_CONFIG: QuotaConfig<KimiQuotaState, KimiQuotaRow[]> = {
   type: 'kimi',
   i18nPrefix: 'kimi_quota',
@@ -2496,4 +2646,27 @@ export const KIMI_CONFIG: QuotaConfig<KimiQuotaState, KimiQuotaRow[]> = {
   controlClassName: styles.kimiControl,
   gridClassName: styles.kimiGrid,
   renderQuotaItems: renderKimiItems,
+};
+
+export const XAI_CONFIG: QuotaConfig<XaiQuotaState, XaiBillingSummary> = {
+  type: 'xai',
+  i18nPrefix: 'xai_quota',
+  cardIdleMessageKey: 'quota_management.card_idle_hint',
+  filterFn: (file) => isXaiFile(file) && !isDisabledAuthFile(file),
+  fetchQuota: fetchXaiQuota,
+  storeSelector: (state) => state.xaiQuota,
+  storeSetter: 'setXaiQuota',
+  buildLoadingState: () => ({ status: 'loading', billing: null }),
+  buildSuccessState: (billing) => ({ status: 'success', billing }),
+  buildErrorState: (message, status) => ({
+    status: 'error',
+    billing: null,
+    error: message,
+    errorStatus: status,
+  }),
+  cardClassName: styles.xaiCard,
+  controlsClassName: styles.xaiControls,
+  controlClassName: styles.xaiControl,
+  gridClassName: styles.xaiGrid,
+  renderQuotaItems: renderXaiItems,
 };
