@@ -74,6 +74,7 @@ import {
   parseKimiUsagePayload,
   resolveCodexChatgptAccountId,
   resolveCodexPlanType,
+  resolveCodexSubscriptionActiveUntil,
   resolveGeminiCliProjectId,
   formatCodexResetLabel,
   formatQuotaResetTime,
@@ -92,6 +93,7 @@ import {
   isRuntimeOnlyAuthFile,
 } from '@/utils/quota';
 import { normalizeAuthIndex } from '@/utils/usage';
+import { formatUnixTimestamp } from '@/utils/format';
 import type { QuotaRenderHelpers } from './QuotaCard';
 import styles from '@/pages/QuotaPage.module.scss';
 
@@ -277,8 +279,21 @@ const getCodexWindowSeconds = (window?: CodexUsageWindow | null): number | null 
 
 const isCodexMonthlyWindow = (window?: CodexUsageWindow | null): boolean => {
   const seconds = getCodexWindowSeconds(window);
-  return seconds !== null && seconds >= CODEX_MIN_MONTH_SECONDS && seconds <= CODEX_MAX_MONTH_SECONDS;
+  return (
+    seconds !== null &&
+    seconds >= CODEX_MIN_MONTH_SECONDS &&
+    seconds <= CODEX_MAX_MONTH_SECONDS
+  );
 };
+
+const selectCodexSecondaryWindowMeta = <
+  TWeekly extends { id: string; labelKey: string },
+  TMonthly extends { id: string; labelKey: string },
+>(
+  window: CodexUsageWindow | null | undefined,
+  weeklyMeta: TWeekly,
+  monthlyMeta: TMonthly
+): TWeekly | TMonthly => (isCodexMonthlyWindow(window) ? monthlyMeta : weeklyMeta);
 
 const pickCodexClassifiedWindows = (
   limitInfo?: CodexRateLimitInfo | null,
@@ -318,6 +333,7 @@ const buildCodexQuotaWindows = (payload: CodexUsagePayload, t: TFunction): Codex
   const WINDOW_META = {
     codeFiveHour: { id: 'five-hour', labelKey: 'codex_quota.primary_window' },
     codeWeekly: { id: 'weekly', labelKey: 'codex_quota.secondary_window' },
+    codeMonthly: { id: 'monthly', labelKey: 'codex_quota.monthly_window' },
     codeReviewFiveHour: {
       id: 'code-review-five-hour',
       labelKey: 'codex_quota.code_review_primary_window',
@@ -325,6 +341,10 @@ const buildCodexQuotaWindows = (payload: CodexUsagePayload, t: TFunction): Codex
     codeReviewWeekly: {
       id: 'code-review-weekly',
       labelKey: 'codex_quota.code_review_secondary_window',
+    },
+    codeReviewMonthly: {
+      id: 'code-review-monthly',
+      labelKey: 'codex_quota.code_review_monthly_window',
     },
   } as const;
 
@@ -370,10 +390,15 @@ const buildCodexQuotaWindows = (payload: CodexUsagePayload, t: TFunction): Codex
     rawLimitReached,
     rawAllowed
   );
+  const codeSecondaryWindowMeta = selectCodexSecondaryWindowMeta(
+    rateWindows.weeklyWindow,
+    WINDOW_META.codeWeekly,
+    WINDOW_META.codeMonthly
+  );
   addWindow(
-    WINDOW_META.codeWeekly.id,
-    t(WINDOW_META.codeWeekly.labelKey),
-    WINDOW_META.codeWeekly.labelKey,
+    codeSecondaryWindowMeta.id,
+    t(codeSecondaryWindowMeta.labelKey),
+    codeSecondaryWindowMeta.labelKey,
     undefined,
     rateWindows.weeklyWindow,
     rawLimitReached,
@@ -392,10 +417,15 @@ const buildCodexQuotaWindows = (payload: CodexUsagePayload, t: TFunction): Codex
     codeReviewLimitReached,
     codeReviewAllowed
   );
+  const codeReviewSecondaryWindowMeta = selectCodexSecondaryWindowMeta(
+    codeReviewWindows.weeklyWindow,
+    WINDOW_META.codeReviewWeekly,
+    WINDOW_META.codeReviewMonthly
+  );
   addWindow(
-    WINDOW_META.codeReviewWeekly.id,
-    t(WINDOW_META.codeReviewWeekly.labelKey),
-    WINDOW_META.codeReviewWeekly.labelKey,
+    codeReviewSecondaryWindowMeta.id,
+    t(codeReviewSecondaryWindowMeta.labelKey),
+    codeReviewSecondaryWindowMeta.labelKey,
     undefined,
     codeReviewWindows.weeklyWindow,
     codeReviewLimitReached,
@@ -433,10 +463,15 @@ const buildCodexQuotaWindows = (payload: CodexUsagePayload, t: TFunction): Codex
         additionalLimitReached,
         additionalAllowed
       );
+      const additionalSecondaryMeta = selectCodexSecondaryWindowMeta(
+        additionalWindows.weeklyWindow,
+        { id: 'weekly', labelKey: 'codex_quota.additional_secondary_window' },
+        { id: 'monthly', labelKey: 'codex_quota.additional_monthly_window' }
+      );
       addWindow(
-        `${idPrefix}-weekly-${index}`,
-        t('codex_quota.additional_secondary_window', { name: limitName }),
-        'codex_quota.additional_secondary_window',
+        `${idPrefix}-${additionalSecondaryMeta.id}-${index}`,
+        t(additionalSecondaryMeta.labelKey, { name: limitName }),
+        additionalSecondaryMeta.labelKey,
         { name: limitName },
         additionalWindows.weeklyWindow,
         additionalLimitReached,
@@ -1167,6 +1202,7 @@ const fetchCodexQuota = async (
 ): Promise<{
   planType: string | null;
   accountEmail: string | null;
+  subscriptionActiveUntil: string | number | null;
   windows: CodexQuotaWindow[];
   analytics: CodexAnalyticsState | null;
   analyticsError: string | null;
@@ -1178,6 +1214,7 @@ const fetchCodexQuota = async (
   }
 
   const planTypeFromFile = resolveCodexPlanType(file);
+  const subscriptionActiveUntil = resolveCodexSubscriptionActiveUntil(file);
   const accountId = resolveCodexChatgptAccountId(file);
 
   const requestHeader: Record<string, string> = {
@@ -1234,6 +1271,7 @@ const fetchCodexQuota = async (
   return {
     planType: resolvedPlanType,
     accountEmail,
+    subscriptionActiveUntil,
     windows,
     analytics,
     analyticsError,
@@ -1557,6 +1595,7 @@ const renderCodexItems = (
   const windows = quota.windows ?? [];
   const planType = quota.planType ?? null;
   const accountEmail = normalizeStringValue(quota.accountEmail);
+  const subscriptionActiveUntil = quota.subscriptionActiveUntil ?? null;
 
   const getPlanLabel = (pt?: string | null): string | null => {
     const normalized = normalizePlanType(pt);
@@ -1573,6 +1612,7 @@ const renderCodexItems = (
 
   const planLabel = getPlanLabel(planType);
   const isPremiumPlan = PREMIUM_CODEX_PLAN_TYPES.has(normalizePlanType(planType) ?? '');
+  const expiryLabel = subscriptionActiveUntil ? formatUnixTimestamp(subscriptionActiveUntil) : '';
   const nodes: ReactNode[] = [];
   const analytics = quota.analytics ?? null;
   const analyticsError = quota.analyticsError ?? null;
@@ -1627,24 +1667,63 @@ const renderCodexItems = (
       )
     );
 
-  if (planLabel) {
+  if (planLabel || expiryLabel) {
     const valueClass = isPremiumPlan ? styleMap.premiumPlanValue : styleMap.codexPlanValue;
+    const planNodes: ReactNode[] = [];
+
+    if (planLabel) {
+      planNodes.push(
+        h(
+          'span',
+          { key: 'plan-label', className: styleMap.codexPlanLabel },
+          t('codex_quota.plan_label')
+        ),
+        h('span', { key: 'plan-value', className: valueClass }, planLabel)
+      );
+    }
+
+    if (expiryLabel) {
+      if (planNodes.length > 0) {
+        planNodes.push(
+          h('span', {
+            key: 'subscription-expiry-separator',
+            className: styleMap.codexPlanSeparator,
+          })
+        );
+      }
+      planNodes.push(
+        h(
+          'span',
+          { key: 'subscription-expiry-label', className: styleMap.codexPlanLabel },
+          t('codex_quota.expires_label')
+        ),
+        h(
+          'span',
+          { key: 'subscription-expiry-value', className: styleMap.codexPlanValue },
+          expiryLabel
+        )
+      );
+    }
+
+    if (weeklyUsdInlineEstimate) {
+      planNodes.push(
+        h(
+          'span',
+          {
+            key: 'weekly-estimate',
+            className: styleMap.codexPlanEstimate,
+            title: weeklyInlineEstimateTitle ?? undefined,
+          },
+          weeklyUsdInlineEstimate
+        )
+      );
+    }
+
     nodes.push(
       h(
         'div',
         { key: 'plan', className: styleMap.codexPlan },
-        h('span', { className: styleMap.codexPlanLabel }, t('codex_quota.plan_label')),
-        h('span', { className: valueClass }, planLabel),
-        weeklyUsdInlineEstimate
-          ? h(
-              'span',
-              {
-                className: styleMap.codexPlanEstimate,
-                title: weeklyInlineEstimateTitle ?? undefined,
-              },
-              weeklyUsdInlineEstimate
-            )
-          : null
+        ...planNodes
       )
     );
   }
@@ -2220,6 +2299,7 @@ export const CODEX_CONFIG: QuotaConfig<
   {
     planType: string | null;
     accountEmail: string | null;
+    subscriptionActiveUntil: string | number | null;
     windows: CodexQuotaWindow[];
     analytics: CodexAnalyticsState | null;
     analyticsError: string | null;
@@ -2245,6 +2325,7 @@ export const CODEX_CONFIG: QuotaConfig<
     windows: data.windows,
     planType: data.planType,
     accountEmail: data.accountEmail,
+    subscriptionActiveUntil: data.subscriptionActiveUntil,
     analytics: data.analytics,
     analyticsError: data.analyticsError,
   }),

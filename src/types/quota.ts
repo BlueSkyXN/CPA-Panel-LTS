@@ -365,6 +365,7 @@ export interface CodexQuotaState {
   windows: CodexQuotaWindow[];
   planType?: string | null;
   accountEmail?: string | null;
+  subscriptionActiveUntil?: string | number | null;
   analytics?: CodexAnalyticsState | null;
   analyticsError?: string | null;
   error?: string;
