@@ -104,6 +104,8 @@ const QUOTA_PROGRESS_HIGH_THRESHOLD = 70;
 const QUOTA_PROGRESS_MEDIUM_THRESHOLD = 30;
 const CODEX_FIVE_HOUR_SECONDS = 18000;
 const CODEX_WEEK_SECONDS = 604800;
+const CODEX_MIN_MONTH_SECONDS = 28 * 24 * 60 * 60;
+const CODEX_MAX_MONTH_SECONDS = 31 * 24 * 60 * 60;
 const CODEX_DAY_MS = 24 * 60 * 60 * 1000;
 const CODEX_TOP_CLIENT_LIMIT = 3;
 const CODEX_TEAM_PERMISSION_STATUSES = new Set([401, 403]);
@@ -273,6 +275,11 @@ const getCodexWindowSeconds = (window?: CodexUsageWindow | null): number | null 
   return normalizeNumberValue(window.limit_window_seconds ?? window.limitWindowSeconds);
 };
 
+const isCodexMonthlyWindow = (window?: CodexUsageWindow | null): boolean => {
+  const seconds = getCodexWindowSeconds(window);
+  return seconds !== null && seconds >= CODEX_MIN_MONTH_SECONDS && seconds <= CODEX_MAX_MONTH_SECONDS;
+};
+
 const pickCodexClassifiedWindows = (
   limitInfo?: CodexRateLimitInfo | null,
   options?: { allowOrderFallback?: boolean }
@@ -290,7 +297,7 @@ const pickCodexClassifiedWindows = (
     const seconds = getCodexWindowSeconds(window);
     if (seconds === CODEX_FIVE_HOUR_SECONDS && !fiveHourWindow) {
       fiveHourWindow = window;
-    } else if (seconds === CODEX_WEEK_SECONDS && !weeklyWindow) {
+    } else if ((seconds === CODEX_WEEK_SECONDS || isCodexMonthlyWindow(window)) && !weeklyWindow) {
       weeklyWindow = window;
     }
   }
@@ -1172,14 +1179,13 @@ const fetchCodexQuota = async (
 
   const planTypeFromFile = resolveCodexPlanType(file);
   const accountId = resolveCodexChatgptAccountId(file);
-  if (!accountId) {
-    throw new Error(t('codex_quota.missing_account_id'));
-  }
 
   const requestHeader: Record<string, string> = {
     ...CODEX_REQUEST_HEADERS,
-    'Chatgpt-Account-Id': accountId,
   };
+  if (accountId) {
+    requestHeader['Chatgpt-Account-Id'] = accountId;
+  }
 
   const result = await apiCallApi.request({
     authIndex,
@@ -1207,7 +1213,7 @@ const fetchCodexQuota = async (
   let analyticsError: string | null = null;
 
   try {
-    if (normalizePlanType(resolvedPlanType) === 'team') {
+    if (normalizePlanType(resolvedPlanType) === 'team' && teamAccountId) {
       const teamAnalytics = await fetchCodexTeamAnalyticsWithFallback(
         authIndex,
         requestHeader,
