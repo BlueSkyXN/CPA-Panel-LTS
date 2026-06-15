@@ -53,6 +53,7 @@ import {
   CLAUDE_USAGE_WINDOW_KEYS,
   CODEX_ANALYTICS_ROLLING_DAYS,
   CODEX_DAILY_USAGE_URL,
+  CODEX_RATE_LIMIT_RESET_CREDITS_CONSUME_URL,
   CODEX_TEAM_USAGE_LEADERBOARD_URL,
   CODEX_USAGE_URL,
   CODEX_REQUEST_HEADERS,
@@ -164,6 +165,8 @@ export interface QuotaConfig<TState, TData> {
   cardIdleMessageKey?: string;
   filterFn: (file: AuthFileItem) => boolean;
   fetchQuota: (file: AuthFileItem, t: TFunction) => Promise<TData>;
+  resetQuota?: (file: AuthFileItem, t: TFunction) => Promise<TData>;
+  canResetQuota?: (quota: TState) => boolean;
   storeSelector: (state: QuotaStore) => Record<string, TState>;
   storeSetter: keyof QuotaStore;
   buildLoadingState: () => TState;
@@ -1214,6 +1217,7 @@ const fetchCodexQuota = async (
   planType: string | null;
   accountEmail: string | null;
   subscriptionActiveUntil: string | number | null;
+  rateLimitResetCreditsAvailableCount: number | null;
   windows: CodexQuotaWindow[];
   analytics: CodexAnalyticsState | null;
   analyticsError: string | null;
@@ -1253,6 +1257,10 @@ const fetchCodexQuota = async (
   }
 
   const planTypeFromUsage = normalizePlanType(payload.plan_type ?? payload.planType);
+  const resetCredits = payload.rate_limit_reset_credits ?? payload.rateLimitResetCredits ?? null;
+  const rateLimitResetCreditsAvailableCount = normalizeNumberValue(
+    resetCredits?.available_count ?? resetCredits?.availableCount
+  );
   const accountEmail = normalizeStringValue(payload.email);
   const teamAccountId = normalizeStringValue(payload.account_id ?? payload.accountId) ?? accountId;
   const resolvedPlanType = planTypeFromUsage ?? planTypeFromFile;
@@ -1283,10 +1291,72 @@ const fetchCodexQuota = async (
     planType: resolvedPlanType,
     accountEmail,
     subscriptionActiveUntil,
+    rateLimitResetCreditsAvailableCount,
     windows,
     analytics,
     analyticsError,
   };
+};
+
+const createCodexRedeemRequestId = (): string => {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+    const value = Math.floor(Math.random() * 16);
+    const segment = char === 'x' ? value : (value & 0x3) | 0x8;
+    return segment.toString(16);
+  });
+};
+
+const consumeCodexRateLimitResetCredit = async (
+  file: AuthFileItem,
+  t: TFunction
+): Promise<void> => {
+  const rawAuthIndex = file['auth_index'] ?? file.authIndex;
+  const authIndex = normalizeAuthIndex(rawAuthIndex);
+  if (!authIndex) {
+    throw new Error(t('codex_quota.missing_auth_index'));
+  }
+
+  const accountId = resolveCodexChatgptAccountId(file);
+  const requestHeader: Record<string, string> = {
+    ...CODEX_REQUEST_HEADERS,
+  };
+  if (accountId) {
+    requestHeader['Chatgpt-Account-Id'] = accountId;
+  }
+
+  const result = await apiCallApi.request({
+    authIndex,
+    method: 'POST',
+    url: CODEX_RATE_LIMIT_RESET_CREDITS_CONSUME_URL,
+    header: requestHeader,
+    data: JSON.stringify({
+      redeem_request_id: createCodexRedeemRequestId(),
+    }),
+  });
+
+  if (result.statusCode < 200 || result.statusCode >= 300) {
+    throw createStatusError(getApiCallErrorMessage(result), result.statusCode);
+  }
+};
+
+const resetCodexQuota = async (
+  file: AuthFileItem,
+  t: TFunction
+): Promise<{
+  planType: string | null;
+  accountEmail: string | null;
+  subscriptionActiveUntil: string | number | null;
+  rateLimitResetCreditsAvailableCount: number | null;
+  windows: CodexQuotaWindow[];
+  analytics: CodexAnalyticsState | null;
+  analyticsError: string | null;
+}> => {
+  await consumeCodexRateLimitResetCredit(file, t);
+  return fetchCodexQuota(file, t);
 };
 
 const GEMINI_CLI_G1_CREDIT_TYPE = 'GOOGLE_ONE_AI';
@@ -1607,6 +1677,7 @@ const renderCodexItems = (
   const planType = quota.planType ?? null;
   const accountEmail = normalizeStringValue(quota.accountEmail);
   const subscriptionActiveUntil = quota.subscriptionActiveUntil ?? null;
+  const rateLimitResetCreditsAvailableCount = quota.rateLimitResetCreditsAvailableCount ?? null;
 
   const getPlanLabel = (pt?: string | null): string | null => {
     const normalized = normalizePlanType(pt);
@@ -1678,9 +1749,18 @@ const renderCodexItems = (
       )
     );
 
-  if (planLabel || expiryLabel) {
+  if (planLabel || expiryLabel || rateLimitResetCreditsAvailableCount !== null) {
     const valueClass = isPremiumPlan ? styleMap.premiumPlanValue : styleMap.codexPlanValue;
     const planNodes: ReactNode[] = [];
+    const appendSeparator = (key: string) => {
+      if (planNodes.length === 0) return;
+      planNodes.push(
+        h('span', {
+          key,
+          className: styleMap.codexPlanSeparator,
+        })
+      );
+    };
 
     if (planLabel) {
       planNodes.push(
@@ -1694,14 +1774,7 @@ const renderCodexItems = (
     }
 
     if (expiryLabel) {
-      if (planNodes.length > 0) {
-        planNodes.push(
-          h('span', {
-            key: 'subscription-expiry-separator',
-            className: styleMap.codexPlanSeparator,
-          })
-        );
-      }
+      appendSeparator('subscription-expiry-separator');
       planNodes.push(
         h(
           'span',
@@ -1712,6 +1785,22 @@ const renderCodexItems = (
           'span',
           { key: 'subscription-expiry-value', className: styleMap.codexPlanValue },
           expiryLabel
+        )
+      );
+    }
+
+    if (rateLimitResetCreditsAvailableCount !== null) {
+      appendSeparator('reset-credits-separator');
+      planNodes.push(
+        h(
+          'span',
+          { key: 'reset-credits-label', className: styleMap.codexPlanLabel },
+          t('codex_quota.reset_credits_label')
+        ),
+        h(
+          'span',
+          { key: 'reset-credits-value', className: styleMap.codexPlanValue },
+          rateLimitResetCreditsAvailableCount.toString()
         )
       );
     }
@@ -2305,6 +2394,7 @@ export const CODEX_CONFIG: QuotaConfig<
     planType: string | null;
     accountEmail: string | null;
     subscriptionActiveUntil: string | number | null;
+    rateLimitResetCreditsAvailableCount: number | null;
     windows: CodexQuotaWindow[];
     analytics: CodexAnalyticsState | null;
     analyticsError: string | null;
@@ -2315,6 +2405,8 @@ export const CODEX_CONFIG: QuotaConfig<
   cardIdleMessageKey: 'quota_management.card_idle_hint',
   filterFn: (file) => isCodexFile(file) && !isDisabledAuthFile(file),
   fetchQuota: fetchCodexQuota,
+  resetQuota: resetCodexQuota,
+  canResetQuota: (quota) => (quota.rateLimitResetCreditsAvailableCount ?? 0) > 0,
   storeSelector: (state) => state.codexQuota,
   storeSetter: 'setCodexQuota',
   batchConcurrency: CODEX_BATCH_CONCURRENCY,
@@ -2331,6 +2423,7 @@ export const CODEX_CONFIG: QuotaConfig<
     planType: data.planType,
     accountEmail: data.accountEmail,
     subscriptionActiveUntil: data.subscriptionActiveUntil,
+    rateLimitResetCreditsAvailableCount: data.rateLimitResetCreditsAvailableCount,
     analytics: data.analytics,
     analyticsError: data.analyticsError,
   }),

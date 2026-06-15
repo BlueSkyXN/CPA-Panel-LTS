@@ -396,10 +396,13 @@
 .quotaCardActions {
   display: flex;
   justify-content: flex-end;
+  gap: $spacing-xs;
   padding-top: $spacing-xs;
+  flex-wrap: wrap;
 }
 
-.quotaRefreshButton:global(.btn.btn-sm) {
+.quotaRefreshButton:global(.btn.btn-sm),
+.quotaResetCreditButton:global(.btn.btn-sm) {
   border-radius: 999px;
   padding-inline: 12px;
 
