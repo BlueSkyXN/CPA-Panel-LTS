@@ -67,12 +67,17 @@ export function AiProvidersOpenAIModelsPage() {
       setError('');
       try {
         const headerObject = buildHeaderObject(form.headers);
-        const firstKey = form.apiKeyEntries.find((entry) => entry.apiKey?.trim())?.apiKey?.trim();
+        const firstCredential = form.apiKeyEntries.find(
+          (entry) => entry.apiKey?.trim() || entry.authIndex?.trim()
+        );
+        const firstKey = firstCredential?.apiKey?.trim();
+        const authIndex = firstCredential?.authIndex?.trim() || form.authIndex?.trim() || undefined;
         const hasAuthHeader = hasHeader(headerObject, 'authorization');
         const list = await modelsApi.fetchModelsViaApiCall(
           trimmedBaseUrl,
           hasAuthHeader ? undefined : firstKey,
-          headerObject
+          headerObject,
+          authIndex
         );
         setModels(list);
       } catch (err: unknown) {
@@ -94,7 +99,7 @@ export function AiProvidersOpenAIModelsPage() {
         setFetching(false);
       }
     },
-    [form.apiKeyEntries, form.baseUrl, form.headers, t]
+    [form.apiKeyEntries, form.authIndex, form.baseUrl, form.headers, t]
   );
 
   useEffect(() => {
