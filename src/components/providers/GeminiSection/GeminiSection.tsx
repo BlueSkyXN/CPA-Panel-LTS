@@ -6,14 +6,15 @@ import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import iconGemini from '@/assets/icons/gemini.svg';
 import type { GeminiKeyConfig } from '@/types';
 import { maskApiKey } from '@/utils/format';
-import { calculateStatusBarData, type KeyStats } from '@/utils/usage';
+import type { KeyStats, StatusBarData } from '@/utils/usage';
 import { type UsageDetailsByAuthIndex, type UsageDetailsBySource } from '@/utils/usageIndex';
 import styles from '@/pages/AiProvidersPage.module.scss';
 import { ProviderList } from '../ProviderList';
 import { ProviderStatusBar } from '../ProviderStatusBar';
 import {
-  collectUsageDetailsForIdentity,
+  buildEmptyFullUsageStatusData,
   getProviderConfigKey,
+  getFullUsageStatusDataForIdentity,
   getStatsForIdentity,
   hasDisableAllModelsRule,
 } from '../utils';
@@ -50,19 +51,17 @@ export function GeminiSection({
   const toggleDisabled = disableControls || loading || isSwitching;
 
   const statusBarCache = useMemo(() => {
-    const cache = new Map<string, ReturnType<typeof calculateStatusBarData>>();
+    const cache = new Map<string, StatusBarData>();
 
     configs.forEach((config, index) => {
       if (!config.apiKey) return;
       const configKey = getProviderConfigKey(config, index);
       cache.set(
         configKey,
-        calculateStatusBarData(
-          collectUsageDetailsForIdentity(
-            { authIndex: config.authIndex, apiKey: config.apiKey, prefix: config.prefix },
-            usageDetailsBySource,
-            usageDetailsByAuthIndex
-          )
+        getFullUsageStatusDataForIdentity(
+          { authIndex: config.authIndex, apiKey: config.apiKey, prefix: config.prefix },
+          usageDetailsBySource,
+          usageDetailsByAuthIndex
         )
       );
     });
@@ -112,7 +111,7 @@ export function GeminiSection({
             const configDisabled = hasDisableAllModelsRule(item.excludedModels);
             const excludedModels = item.excludedModels ?? [];
             const statusData =
-              statusBarCache.get(getProviderConfigKey(item, index)) || calculateStatusBarData([]);
+              statusBarCache.get(getProviderConfigKey(item, index)) || buildEmptyFullUsageStatusData();
 
             return (
               <Fragment>

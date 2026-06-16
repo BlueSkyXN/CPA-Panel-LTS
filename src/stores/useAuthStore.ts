@@ -10,6 +10,7 @@ import { STORAGE_KEY_AUTH } from '@/utils/constants';
 import { obfuscatedStorage } from '@/services/storage/secureStorage';
 import { apiClient } from '@/services/api/client';
 import { versionApi } from '@/services/api/version';
+import { pluginsApi } from '@/services/api/plugins';
 import { useConfigStore } from './useConfigStore';
 import { useUsageStatsStore } from './useUsageStatsStore';
 import { useModelsStore } from './useModelsStore';
@@ -36,7 +37,20 @@ interface AuthStoreState extends AuthState {
 
 let restoreSessionPromise: Promise<boolean> | null = null;
 
-const detectRuntimeKind = async (): Promise<ServerRuntimeKind> => {
+const probePluginSupport = async (): Promise<boolean> => {
+  try {
+    await pluginsApi.list();
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const detectRuntimeKind = async (currentRuntimeKind: ServerRuntimeKind): Promise<ServerRuntimeKind> => {
+  if (currentRuntimeKind !== 'unknown') {
+    return currentRuntimeKind;
+  }
+
   try {
     return await versionApi.detectRuntimeKind();
   } catch (error) {
@@ -57,6 +71,7 @@ export const useAuthStore = create<AuthStoreState>()(
       serverBuildDate: null,
       serverRuntimeKind: 'unknown',
       supportsPlugin: false,
+      pluginSupportKnown: false,
       connectionStatus: 'disconnected',
       connectionError: null,
 
@@ -117,7 +132,8 @@ export const useAuthStore = create<AuthStoreState>()(
             serverVersion: null,
             serverBuildDate: null,
             serverRuntimeKind: 'unknown',
-            supportsPlugin: false
+            supportsPlugin: false,
+            pluginSupportKnown: false
           });
           useModelsStore.getState().clearCache();
 
@@ -129,7 +145,9 @@ export const useAuthStore = create<AuthStoreState>()(
 
           // 测试连接 - 获取配置
           await useConfigStore.getState().fetchConfig(undefined, true);
-          const runtimeKind = await detectRuntimeKind();
+          const runtimeKind = await detectRuntimeKind(get().serverRuntimeKind);
+          const pluginSupportKnown = get().pluginSupportKnown;
+          const supportsPlugin = pluginSupportKnown ? get().supportsPlugin : await probePluginSupport();
 
           // 登录成功
           set({
@@ -139,6 +157,8 @@ export const useAuthStore = create<AuthStoreState>()(
             rememberPassword,
             connectionStatus: 'connected',
             connectionError: null,
+            supportsPlugin,
+            pluginSupportKnown: true,
             ...(runtimeKind !== 'unknown' ? { serverRuntimeKind: runtimeKind } : {})
           });
           if (rememberPassword) {
@@ -175,6 +195,7 @@ export const useAuthStore = create<AuthStoreState>()(
           serverBuildDate: null,
           serverRuntimeKind: 'unknown',
           supportsPlugin: false,
+          pluginSupportKnown: false,
           connectionStatus: 'disconnected',
           connectionError: null
         });
@@ -192,15 +213,19 @@ export const useAuthStore = create<AuthStoreState>()(
         try {
           // 重新配置客户端
           apiClient.setConfig({ apiBase, managementKey });
-          set({ supportsPlugin: false });
+          set({ supportsPlugin: false, pluginSupportKnown: false });
 
           // 验证连接
           await useConfigStore.getState().fetchConfig();
-          const runtimeKind = await detectRuntimeKind();
+          const runtimeKind = await detectRuntimeKind(get().serverRuntimeKind);
+          const pluginSupportKnown = get().pluginSupportKnown;
+          const supportsPlugin = pluginSupportKnown ? get().supportsPlugin : await probePluginSupport();
 
           set({
             isAuthenticated: true,
             connectionStatus: 'connected',
+            supportsPlugin,
+            pluginSupportKnown: true,
             ...(runtimeKind !== 'unknown' ? { serverRuntimeKind: runtimeKind } : {})
           });
 
@@ -209,7 +234,8 @@ export const useAuthStore = create<AuthStoreState>()(
           set({
             isAuthenticated: false,
             connectionStatus: 'error',
-            supportsPlugin: false
+            supportsPlugin: false,
+            pluginSupportKnown: false
           });
           return false;
         }
@@ -229,7 +255,7 @@ export const useAuthStore = create<AuthStoreState>()(
       },
 
       updateServerPluginSupport: (supportsPlugin) => {
-        set({ supportsPlugin });
+        set({ supportsPlugin, pluginSupportKnown: true });
       },
 
       // 更新连接状态
@@ -258,6 +284,8 @@ export const useAuthStore = create<AuthStoreState>()(
         apiBase: state.apiBase,
         ...(state.rememberPassword ? { managementKey: state.managementKey } : {}),
         rememberPassword: state.rememberPassword,
+        supportsPlugin: state.supportsPlugin,
+        pluginSupportKnown: state.pluginSupportKnown,
         serverVersion: state.serverVersion,
         serverBuildDate: state.serverBuildDate,
         serverRuntimeKind: state.serverRuntimeKind

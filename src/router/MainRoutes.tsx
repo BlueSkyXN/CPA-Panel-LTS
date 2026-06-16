@@ -24,18 +24,33 @@ import { SystemPage } from '@/pages/SystemPage';
 import { PluginsPage } from '@/features/plugins/PluginsPage';
 import { PluginStorePage } from '@/features/plugins/PluginStorePage';
 import { PluginResourcePage } from '@/features/plugins/PluginResourcePage';
+import { ProvidersWorkbenchPage } from '@/features/providers/ProvidersWorkbenchPage';
 import { useAuthStore } from '@/stores';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
 function RequirePluginSupport({ children }: { children: ReactNode }) {
   const supportsPlugin = useAuthStore((state) => state.supportsPlugin);
+  const pluginSupportKnown = useAuthStore((state) => state.pluginSupportKnown);
+  const connectionStatus = useAuthStore((state) => state.connectionStatus);
+  if (connectionStatus !== 'connected' || !pluginSupportKnown) {
+    return (
+      <div className="main-content">
+        <LoadingSpinner />
+      </div>
+    );
+  }
   return supportsPlugin ? <>{children}</> : <Navigate to="/" replace />;
 }
 
 const mainRoutes = [
   { path: '/', element: <DashboardPage /> },
   { path: '/dashboard', element: <DashboardPage /> },
+  { path: '/lts/usage', element: <Navigate to="/usage" replace /> },
+  { path: '/lts/providers', element: <Navigate to="/ai-providers" replace /> },
+  { path: '/lts/ampcode', element: <Navigate to="/ai-providers/ampcode" replace /> },
   { path: '/settings', element: <Navigate to="/config" replace /> },
   { path: '/api-keys', element: <Navigate to="/config" replace /> },
+  { path: '/ai-providers/workbench', element: <ProvidersWorkbenchPage /> },
   { path: '/ai-providers/gemini/new', element: <AiProvidersGeminiEditPage /> },
   { path: '/ai-providers/gemini/:index', element: <AiProvidersGeminiEditPage /> },
   { path: '/ai-providers/codex/new', element: <AiProvidersCodexEditPage /> },

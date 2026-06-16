@@ -1,0 +1,361 @@
+version: 1
+generated_from: local/20260616/lts-maintenance-plan.md
+maintenance_model: protected-selective-port-with-minimal-shared-file-delta
+
+status_definitions:
+  protected: LTS identity surface. Must remain present and functional unless the LTS product direction changes.
+  lts-maintained: Upstream-deprecated or downstream-only, but still supported by CPA-Core-LTS.
+  coexist: Accepted upstream feature. May coexist with LTS surfaces, but must not replace protected behavior.
+  shared: Shared Core/Panel management behavior that can evolve with compatible contracts.
+  experimental: Optional surface that may be gated or hidden when backend support is missing.
+
+features:
+  - id: full-usage-statistics
+    status: protected
+    reason: Complete usage statistics are the primary CPA-Panel-LTS protected delta.
+    routes:
+      - /usage
+      - /lts/usage
+    panel_files:
+      - src/router/MainRoutes.tsx
+      - src/pages/UsagePage.tsx
+      - src/pages/UsagePage.module.scss
+      - src/components/usage/
+      - src/components/providers/ProviderStatusBar.tsx
+      - src/components/providers/hooks/useProviderStats.ts
+      - src/services/api/usage.ts
+      - src/services/api/config.ts
+      - src/stores/useUsageStatsStore.ts
+      - src/types/usage.ts
+      - src/utils/usage.ts
+      - src/utils/usageIndex.ts
+      - src/utils/usage/
+    core_endpoints:
+      - /v0/management/usage
+      - /v0/management/usage/export
+      - /v0/management/usage/import
+      - /v0/management/usage-statistics-enabled
+    required_markers:
+      - usageApi.getUsage
+      - usageApi.exportUsage
+      - usageApi.importUsage
+      - calculateStatusBarData
+      - collectUsageDetailsForCandidates
+    validation:
+      - npm run check:lts
+      - npm run check:feature-contract
+      - npm run type-check
+      - npm run build
+
+  - id: dashboard-overview
+    status: shared
+    reason: Dashboard provider counts must derive from cached config without dropping LTS-maintained providers.
+    routes:
+      - /
+      - /dashboard
+    panel_files:
+      - src/pages/DashboardPage.tsx
+      - src/pages/DashboardPage.module.scss
+      - src/hooks/useApiKeysForModels.ts
+      - src/services/api/config.ts
+      - src/services/api/authFiles.ts
+      - src/services/api/models.ts
+      - src/stores/useConfigStore.ts
+      - src/stores/useModelsStore.ts
+      - src/types/ampcode.ts
+      - src/i18n/locales/
+    core_endpoints:
+      - /v0/management/config
+      - /v0/management/auth-files
+      - /v1/models
+    required_markers:
+      - useConfigStore
+      - fetchConfig
+      - countAmpcodeConfig
+      - config.ampcode
+      - modelsApi.fetchModels
+      - "A:{{ampcode}}"
+
+  - id: provider-stable-lts-page
+    status: protected
+    reason: The stable provider page preserves full usage-backed status bars and LTS-only providers.
+    routes:
+      - /ai-providers
+      - /lts/providers
+    panel_files:
+      - src/pages/AiProvidersPage.tsx
+      - src/pages/AiProvidersPage.module.scss
+      - src/components/providers/
+      - src/components/providers/hooks/useProviderStats.ts
+      - src/components/providers/ProviderStatusBar.tsx
+      - src/services/api/providers.ts
+      - src/services/api/usage.ts
+      - src/utils/usage.ts
+      - src/utils/usageIndex.ts
+    core_endpoints:
+      - /v0/management/config
+      - /v0/management/gemini-api-key
+      - /v0/management/codex-api-key
+      - /v0/management/claude-api-key
+      - /v0/management/vertex-api-key
+      - /v0/management/openai-compatibility
+      - /v0/management/usage
+    required_markers:
+      - ProviderStatusBar
+      - calculateStatusBarData
+
+  - id: provider-workbench
+    status: coexist
+    reason: Upstream workbench is useful for resource management and recent health, but must not replace the stable LTS provider page.
+    routes:
+      - /ai-providers/workbench
+    panel_files:
+      - src/router/MainRoutes.tsx
+      - src/features/providers/ProvidersWorkbenchPage.tsx
+      - src/features/providers/useProviderWorkbench.ts
+      - src/features/providers/descriptors.ts
+      - src/features/providers/sheets/forms/BaseProviderForm.tsx
+      - src/features/providers/sheets/forms/useModelDiscovery.ts
+      - src/features/providers/sheets/forms/useConnectivityTest.ts
+      - src/features/providers/adapters.ts
+      - src/components/providers/hooks/useProviderRecentRequests.ts
+      - src/services/api/config.ts
+      - src/services/api/providers.ts
+      - src/services/api/apiKeyUsage.ts
+      - src/utils/recentRequests.ts
+      - scripts/smoke-lts-panel.py
+      - scripts/smoke-lts-panel-core.py
+    core_endpoints:
+      - /v0/management/config
+      - /v0/management/api-key-usage
+      - /v0/management/gemini-api-key
+      - /v0/management/codex-api-key
+      - /v0/management/claude-api-key
+      - /v0/management/vertex-api-key
+      - /v0/management/openai-compatibility
+    required_markers:
+      - useProviderRecentRequests
+      - MODEL_DISCOVERY_BRANDS
+      - runOpenAIAllKeys
+      - runCodex
+      - openrouter-a
+      - openrouter-b
+      - openrouter.ai/api/v1/chat/completions
+      - openrouter.ai/api/v1/models
+      - openai/smoke-discovered
+      - x-lts-unknown-provider
+      - x-lts-entry-note
+      - x-lts-model-note
+      - dropped provider unknown fields
+      - dropped model unknown field
+      - run_browser_provider_workbench_smoke
+      - run_browser_provider_key_crud_smoke
+      - BROWSER provider workbench OpenAI Compatibility save PUT /v0/management/openai-compatibility
+      - Provider write smoke persisted response-only auth-index
+    validation:
+      - npm run smoke:lts
+      - npm run smoke:lts:core
+
+  - id: ampcode
+    status: lts-maintained
+    reason: Upstream Panel removed Ampcode, but CPA-Core-LTS still exposes Ampcode config and management endpoints.
+    routes:
+      - /ai-providers/ampcode
+      - /lts/ampcode
+    panel_files:
+      - src/router/MainRoutes.tsx
+      - src/assets/icons/amp.svg
+      - src/components/providers/AmpcodeSection/
+      - src/pages/AiProvidersAmpcodeEditPage.tsx
+      - src/services/api/ampcode.ts
+      - src/types/ampcode.ts
+    core_endpoints:
+      - /v0/management/ampcode
+      - /v0/management/ampcode/upstream-url
+      - /v0/management/ampcode/upstream-api-key
+      - /v0/management/ampcode/upstream-api-keys
+      - /v0/management/ampcode/model-mappings
+      - /v0/management/ampcode/force-model-mappings
+    required_markers:
+      - saveAmpcode
+      - force-model-mappings
+
+  - id: plugin-management
+    status: coexist
+    reason: CPA-Core-LTS exposes real plugin management capabilities behind a support header.
+    routes:
+      - /plugins
+      - /plugin-store
+      - /plugin-pages/:pluginId/:menuIndex
+    panel_files:
+      - src/router/MainRoutes.tsx
+      - src/features/plugins/PluginsPage.tsx
+      - src/features/plugins/PluginStorePage.tsx
+      - src/features/plugins/PluginResourcePage.tsx
+      - src/features/plugins/pluginResources.ts
+      - src/features/plugins/components/PluginInstallGateModal.tsx
+      - src/features/plugins/components/PluginInstallGateModal.module.scss
+      - src/components/config/VisualConfigEditor.tsx
+      - src/components/config/VisualConfigEditorBlocks.tsx
+      - src/hooks/useVisualConfig.ts
+      - src/services/api/plugins.ts
+      - src/types/plugin.ts
+      - src/types/visualConfig.ts
+      - src/components/layout/MainLayout.tsx
+      - src/stores/useAuthStore.ts
+      - src/services/api/client.ts
+      - scripts/smoke-lts-panel-core.py
+    core_endpoints:
+      - /v0/management/plugins
+      - /v0/management/plugins/:id/config
+      - /v0/management/plugins/:id/enabled
+      - /v0/management/plugin-store
+      - /v0/management/plugin-store/:id/install
+    capability_gates:
+      - x-cpa-support-plugin
+    required_markers:
+      - DEFAULT_PLUGIN_STORE_SOURCE_ID
+      - plugin_store_sources
+      - getPluginConfirmToken
+      - gate_effect_runs_code
+      - server-plugin-support-update
+      - pluginSupportKnown
+      - probePluginSupport
+      - run_plugin_config_smoke
+      - plugin_id = "lts-smoke-plugin"
+
+  - id: recent-requests
+    status: coexist
+    reason: Recent requests can power short-window health views but must not replace full usage statistics.
+    panel_files:
+      - src/components/providers/utils.ts
+      - src/components/providers/hooks/useProviderRecentRequests.ts
+      - src/services/api/apiKeyUsage.ts
+      - src/utils/recentRequests.ts
+      - src/features/providers/ProvidersWorkbenchPage.tsx
+    core_endpoints:
+      - /v0/management/api-key-usage
+    required_markers:
+      - useProviderRecentRequests
+      - getProviderRecentStatusData
+      - getOpenAIProviderRecentStatusData
+
+  - id: logs-runtime
+    status: shared
+    reason: Logs must support CPA file-log runtime and Home DB runtime without breaking request log downloads.
+    routes:
+      - /logs
+    panel_files:
+      - src/pages/LogsPage.tsx
+      - src/pages/LogsPage.module.scss
+      - src/services/api/logs.ts
+      - src/stores/useAuthStore.ts
+      - scripts/smoke-lts-panel.py
+      - scripts/smoke-lts-panel-core.py
+    core_endpoints:
+      - /v0/management/logs
+      - /v0/management/request-error-logs
+      - /v0/management/request-error-logs/:name
+      - /v0/management/request-log-by-id/:id
+    required_markers:
+      - "cursor?: string"
+      - latestAfter
+      - nextCursor
+      - cursorReset
+      - fullscreenLogs
+      - logs-fullscreen-active
+      - openErrorLog
+      - copySelectedErrorLog
+      - downloadErrorLog
+      - downloadRequestLog
+      - run_logs_runtime_smoke
+      - run_home_logs_runtime_smoke
+      - home_ip=10.99.0.7
+
+  - id: config-management
+    status: shared
+    reason: Source and visual config saves must preserve unmanaged YAML and plugin store sources.
+    routes:
+      - /config
+    panel_files:
+      - src/pages/ConfigPage.tsx
+      - src/pages/ConfigPage.module.scss
+      - src/components/config/
+      - src/hooks/useVisualConfig.ts
+      - src/services/api/config.ts
+      - src/services/api/configFile.ts
+      - src/types/visualConfig.ts
+      - scripts/smoke-lts-panel.py
+      - scripts/smoke-lts-panel-core.py
+    core_endpoints:
+      - /v0/management/config
+      - /v0/management/config.yaml
+      - /v0/management/usage-statistics-enabled
+    required_markers:
+      - visualBaseYaml
+      - normalizeYamlForVisualDiff
+      - applyVisualChangesToYaml
+      - shouldWriteManagedField
+      - hasPayloadDirtyFields
+      - payloadRuleRawParamRow
+      - payloadJsonInput
+      - pluginStoreSources
+      - parsePluginStoreSources
+      - dirtyFields.has('pluginStoreSources')
+
+  - id: auth-files-management
+    status: shared
+    reason: Auth files are shared credential management and quota state inputs.
+    routes:
+      - /auth-files
+      - /oauth
+    panel_files:
+      - src/pages/AuthFilesPage.tsx
+      - src/pages/OAuthPage.tsx
+      - src/features/authFiles/
+      - src/services/api/authFiles.ts
+      - src/services/api/oauth.ts
+      - src/types/authFile.ts
+      - scripts/smoke-lts-panel-core.py
+    core_endpoints:
+      - /v0/management/auth-files
+      - /v0/management/auth-files/status
+      - /v0/management/auth-files/fields
+      - /v0/management/auth-files/models
+    required_markers:
+      - normalizeBatchUploadResponse
+      - normalizeBatchDeleteResponse
+      - AUTH_FILE_INVALID_JSON_OBJECT_ERROR
+      - OAUTH_PROVIDER_PRESETS
+      - run_auth_files_write_smoke
+
+  - id: quota-management
+    status: shared
+    reason: Quota surfaces include LTS Codex quota helpers and accepted xAI/Grok quota support.
+    routes:
+      - /quota
+    panel_files:
+      - src/pages/QuotaPage.tsx
+      - src/components/quota/
+      - src/features/authFiles/components/AuthFileQuotaSection.tsx
+      - src/features/authFiles/constants.ts
+      - src/services/api/apiCall.ts
+      - src/stores/useQuotaStore.ts
+      - src/types/quota.ts
+      - scripts/smoke-lts-panel.py
+    core_endpoints:
+      - /v0/management/api-call
+    required_markers:
+      - CODEX_CONFIG
+      - resetCodexQuota
+      - CODEX_RATE_LIMIT_RESET_CREDITS_CONSUME_URL
+      - XAI_CONFIG
+      - fetchXaiQuota
+      - XAI_BILLING_URL
+      - batchConcurrency
+      - run_quota_runtime_smoke
+      - codex-smoke-auth
+      - xai-smoke-auth
+      - daily-workspace-usage-counts
+      - rate-limit-reset-credits/consume
+      - cli-chat-proxy.grok.com/v1/billing

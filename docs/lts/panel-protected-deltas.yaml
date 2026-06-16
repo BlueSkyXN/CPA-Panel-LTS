@@ -34,12 +34,11 @@ protected_deltas:
       - release asset named management.html
       - npm/package-lock based build
       - v*-tls-* release tag guard
-      - codex-quota-compass.user.js release asset unless deliberately removed by user-approved release scope
   - id: local-downstream-customizations
     reason: This repository contains downstream panel work that is not present upstream.
     must_keep:
       - CPA-Panel-LTS documentation and release links
-      - Codex quota helper/userscript assets
+      - Panel built-in Codex quota/cloud UI unless intentionally replaced
       - Codex remote cloud connect environment UI unless intentionally replaced
       - local i18n and panel compatibility fixes
 

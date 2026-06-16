@@ -9,7 +9,12 @@
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,scss}\"",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "check:feature-contract": "node scripts/check-panel-feature-contracts.mjs",
+    "check:lts": "scripts/check-lts-panel-contract.sh",
+    "validate:lts": "npm run check:lts && npm run type-check && npm run lint && npm run build",
+    "smoke:lts": "npm run build && python3 scripts/smoke-lts-panel.py",
+    "smoke:lts:core": "npm run build && python3 scripts/smoke-lts-panel-core.py"
   },
   "dependencies": {
     "@codemirror/lang-yaml": "^6.1.2",

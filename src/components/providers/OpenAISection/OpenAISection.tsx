@@ -18,14 +18,15 @@ import iconOpenaiLight from '@/assets/icons/openai-light.svg';
 import iconOpenaiDark from '@/assets/icons/openai-dark.svg';
 import type { OpenAIProviderConfig } from '@/types';
 import { maskApiKey } from '@/utils/format';
-import { calculateStatusBarData, type KeyStats } from '@/utils/usage';
+import type { KeyStats, StatusBarData } from '@/utils/usage';
 import { type UsageDetailsByAuthIndex, type UsageDetailsBySource } from '@/utils/usageIndex';
 import styles from '@/pages/AiProvidersPage.module.scss';
 import { ProviderStatusBar } from '../ProviderStatusBar';
 import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer';
 import {
-  collectOpenAIProviderUsageDetails,
+  buildEmptyFullUsageStatusData,
   getOpenAIProviderKey,
+  getOpenAIProviderFullUsageStatusData,
   getOpenAIProviderStats,
   getStatsForIdentity,
 } from '../utils';
@@ -40,7 +41,7 @@ interface FloatingToolbarStyle {
   visible: boolean;
 }
 
-const EMPTY_STATUS_BAR = calculateStatusBarData([]);
+const EMPTY_STATUS_BAR = buildEmptyFullUsageStatusData();
 
 interface OpenAISectionProps {
   configs: OpenAIProviderConfig[];
@@ -253,15 +254,13 @@ export function OpenAISection({
     : t('ai_providers.model_search_placeholder');
 
   const statusBarCache = useMemo(() => {
-    const cache = new Map<string, ReturnType<typeof calculateStatusBarData>>();
+    const cache = new Map<string, StatusBarData>();
 
     configs.forEach((provider, index) => {
       const providerKey = getOpenAIProviderKey(provider, index);
       cache.set(
         providerKey,
-        calculateStatusBarData(
-          collectOpenAIProviderUsageDetails(provider, usageDetailsBySource, usageDetailsByAuthIndex)
-        )
+        getOpenAIProviderFullUsageStatusData(provider, usageDetailsBySource, usageDetailsByAuthIndex)
       );
     });
 

@@ -47,7 +47,7 @@ Use protected selective-port:
 2. Classify upstream commits as safe-port, adapt-port, reject, or defer.
 3. Cherry-pick or manually port compatible changes into a Panel LTS branch.
 4. Preserve complete usage UI and CPA-Core-LTS API compatibility.
-5. Run the Panel LTS contract check, type-check, build, and lint before PR.
+5. Run `npm run validate:lts` before PR, or run the equivalent contract, type-check, lint, and build commands separately when diagnosing failures.
 6. Merge Panel maintenance PRs normally. Do not use GitHub Sync fork.
 
 Do not:
@@ -121,10 +121,8 @@ Then either cherry-pick, manually port, or reject. Prefer small PRs grouped by f
 After changes:
 
 ```bash
-scripts/check-lts-panel-contract.sh
-npm run type-check
-npm run build
-npm run lint
+npm run validate:lts
+npm run smoke:lts  # optional local browser smoke; requires Python Playwright
 ```
 
 ## PR body checklist
@@ -138,6 +136,7 @@ Each Panel upstream-port PR should state:
 - CPA-Core-LTS Management API compatibility impact
 - release asset impact
 - validation commands and results
+- whether optional `npm run smoke:lts` or a real CPA-Core-LTS authenticated smoke was run
 
 ## Release note
 
@@ -145,9 +144,9 @@ Publishing a Panel release is separate from porting code. A release is externall
 
 When releasing:
 
-1. Run `scripts/check-lts-panel-contract.sh`.
+1. Run `npm run check:lts`.
 2. Run `npm run type-check`.
-3. Run `npm run build`.
-4. Run `npm run lint`.
+3. Run `npm run lint`.
+4. Run `npm run build`.
 5. Push only the exact intended tag, for example `v1-tls-0.0.3`.
 6. Verify the GitHub release contains `management.html`.

@@ -178,7 +178,10 @@ npm run preview    # serve dist locally
 npm run lint       # ESLint (fails on warnings)
 npm run format     # Prettier
 npm run type-check # tsc --noEmit
-scripts/check-lts-panel-contract.sh # LTS protected usage/release contract guard
+npm run check:feature-contract # feature contract guard
+npm run check:lts  # LTS protected usage/release/provider/plugin contract guard
+npm run validate:lts # check:lts + type-check + lint + build
+npm run smoke:lts  # optional Python Playwright smoke against a mock Core API
 ```
 
 ## Contributing
@@ -187,7 +190,7 @@ Issues and PRs are welcome. Please include:
 
 - Reproduction steps (server version + UI version)
 - Screenshots for UI changes
-- Verification notes (`npm run lint`, `npm run type-check`)
+- Verification notes (`npm run validate:lts`, optional `npm run smoke:lts`, or the narrower checks you ran)
 
 ## License
 

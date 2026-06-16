@@ -20,6 +20,7 @@ export interface AuthState {
   serverBuildDate: string | null;
   serverRuntimeKind: ServerRuntimeKind;
   supportsPlugin: boolean;
+  pluginSupportKnown: boolean;
 }
 
 // 连接状态

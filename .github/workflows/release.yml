@@ -44,8 +44,6 @@ jobs:
           cd dist
           mv index.html management.html
           ls -lh management.html
-          cd ..
-          ls -lh scripts/codex-quota-compass.user.js
 
       - name: Generate release notes
         run: |
@@ -83,7 +81,6 @@ jobs:
           tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
           files: |
             dist/management.html
-            scripts/codex-quota-compass.user.js
           body_path: release-notes.md
           draft: false
           prerelease: false

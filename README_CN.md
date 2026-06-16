@@ -177,7 +177,10 @@ npm run preview    # 本地预览 dist
 npm run lint       # ESLint（warnings 视为失败）
 npm run format     # Prettier
 npm run type-check # tsc --noEmit
-scripts/check-lts-panel-contract.sh # LTS 统计/发布契约检查
+npm run check:feature-contract # feature contract 检查
+npm run check:lts  # LTS 统计/发布/provider/plugin 契约检查
+npm run validate:lts # check:lts + type-check + lint + build
+npm run smoke:lts  # 可选：用 Python Playwright + mock Core API 做浏览器 smoke
 ```
 
 ## 贡献
@@ -186,7 +189,7 @@ scripts/check-lts-panel-contract.sh # LTS 统计/发布契约检查
 
 - 复现步骤（服务端版本 + UI 版本）
 - UI 改动截图
-- 验证记录（`npm run lint`、`npm run type-check`）
+- 验证记录（`npm run validate:lts`，可选 `npm run smoke:lts`，或说明实际运行的更小范围检查）
 
 ## 许可证
 

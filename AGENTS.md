@@ -33,8 +33,8 @@
 | `README.md`, `README_CN.md` | 人类文档、LTS 背景、开发和发布说明 | No | 修改对外说明、quick start、release notes 前 |
 | `package.json`, `package-lock.json` | npm 依赖、scripts、锁定版本 | No | 新增依赖、改 scripts、改构建链前 |
 | `vite.config.ts` | Vite single-file build、版本注入、alias、SCSS module 配置 | No | 改 build 输出、asset inline、`__APP_VERSION__`、`@/` alias 前 |
-| `.github/workflows/` | GitHub Actions release workflow，发布 `management.html` 和 userscript asset | Yes | 修改 workflow、tag trigger、release asset、GitHub permissions 前 |
-| `scripts/` | 公开 Tampermonkey/userscript 辅助脚本 | Yes | 修改 `codex-quota-compass.user.js`、metadata、ChatGPT quota 请求逻辑前 |
+| `.github/workflows/` | GitHub Actions release workflow，发布 Panel `management.html` asset | Yes | 修改 workflow、tag trigger、release asset、GitHub permissions 前 |
+| `scripts/` | 额外材料和维护/验证脚本；userscript 不属于 Panel 主线完成标准 | Yes | 修改 `codex-quota-compass.user.js`、metadata、ChatGPT quota 请求逻辑，或维护/验证脚本前 |
 | `src/main.tsx`, `src/App.tsx`, `src/index.css`, `src/App.css` | React app 入口和全局样式入口 | No | 修改 app bootstrap、全局 CSS 注入、router 挂载前 |
 | `src/router/` | route registration and protected routes | No | 修改路由、导航路径、`/usage`、auth guard 前 |
 | `src/pages/` | 页面级 UI、页面状态和 page-level SCSS modules | No | 修改 Dashboard、Providers、AuthFiles、Quota、Usage、Config、Logs、System 页面前 |
@@ -106,7 +106,7 @@ When following upstream:
 - Before merging an upstream change, check whether it touches usage routes, usage store, usage API client, provider status bar, auth-file stats, quota display, or release workflow.
 - If an upstream change removes or weakens full statistics, preserve the LTS implementation first and port only unrelated compatible pieces.
 - Lightweight cleanup may remove promotional copy, sponsorship text, unused pages, unused providers, or non-target release machinery, but must not remove code still needed by the Core/Panel statistics contract.
-- Run `scripts/check-lts-panel-contract.sh` before opening or merging upstream-port PRs.
+- Run `npm run check:lts` before opening or merging upstream-port PRs.
 - For detailed upstream handling rules, read `docs/lts/sync-runbook.md` and `docs/lts/panel-protected-deltas.yaml`.
 
 ## CPA-Core-LTS contract
@@ -136,7 +136,12 @@ All commands below are confirmed from `package.json`, `.github/workflows/release
 | `npm run lint` | Run ESLint on `ts,tsx` files | repo | Does not validate `scripts/*.js` userscripts |
 | `npm run type-check` | Run `tsc --noEmit` | repo | Good first validation for TypeScript-only changes |
 | `npm run format` | Run Prettier over `src/**/*.{ts,tsx,css,scss}` | `src/` only | Writes files; use only when formatting source changes is intended |
-| `scripts/check-lts-panel-contract.sh` | Check Panel LTS sentinel paths, release asset contract, and npm lockfile policy | repo | Lightweight guard; does not replace browser or Core compatibility smoke |
+| `npm run check:feature-contract` | Run `scripts/check-panel-feature-contracts.mjs` against `docs/lts/panel-feature-contracts.yaml` | repo | Feature file/route/API marker guard; included by `npm run check:lts` |
+| `npm run check:lts` | Run the Panel LTS contract guard, including feature contract, sentinel paths, release asset contract, provider/plugin/recent-request markers, and npm lockfile policy | repo | Lightweight guard; does not replace browser or Core compatibility smoke |
+| `npm run validate:lts` | Run `check:lts`, `type-check`, `lint`, and `build` in sequence | repo | Default post-port validation for shared code or upstream-port batches |
+| `npm run smoke:lts` | Build and run optional Python Playwright browser smoke against a mock Core API | local browser/dev | Requires Python Playwright and Chromium; not part of default CI gate |
+| `npm run smoke:lts:core` | Build and run optional authenticated smoke against a local sibling `CPA-Core-LTS` process, including safe writes to the temporary smoke config | local browser/dev + Core checkout | Requires Go, `/Users/sky/Github/CPA-Core-LTS`, Python Playwright, and Chromium; plugin-store is skipped unless `-- --include-plugin-store` is passed; use `-- --no-write-smoke` to skip temp config/provider writes |
+| `scripts/check-lts-panel-contract.sh` | Underlying shell implementation for `npm run check:lts` | repo | Prefer npm script in docs and handoffs unless debugging the shell script itself |
 
 There is no configured `npm test` script in this repository. Do not claim tests passed unless a real test command is added or provided by the user.
 
@@ -157,7 +162,7 @@ For TypeScript or UI changes:
 For usage statistics changes:
 
 1. Read `src/components/usage/AGENTS.md`.
-2. Run `scripts/check-lts-panel-contract.sh`.
+2. Run `npm run check:lts`.
 3. Run `npm run type-check`.
 4. Run `npm run build`.
 5. Inspect `src/router/MainRoutes.tsx`, `src/pages/UsagePage.tsx`, `src/services/api/usage.ts`, `src/stores/useUsageStatsStore.ts`, `src/types/usage.ts`, `src/utils/usage.ts`, and `src/utils/usageIndex.ts` for contract drift.
@@ -167,7 +172,7 @@ For release workflow changes:
 
 1. Read `.github/workflows/AGENTS.md`.
 2. Confirm `npm run build` still produces `dist/index.html`.
-3. Confirm the workflow still publishes `dist/management.html` and the intended `scripts/codex-quota-compass.user.js` asset.
+3. Confirm the workflow still publishes `dist/management.html`.
 4. Live workflow or GitHub release validation requires GitHub network/auth and should be reported separately.
 
 For userscript changes:
@@ -196,7 +201,7 @@ For userscript changes:
 
 - Do not delete or weaken the full usage statistics page and data chain listed in this file.
 - Do not rename the release asset away from `management.html`.
-- Do not silently drop the userscript release asset once it is part of the release workflow.
+- Do not treat userscript or other `scripts/` extra materials as Panel mainline completion criteria unless the user explicitly scopes that work in.
 - Do not broaden release tag publishing casually; panel releases use `v*-tls-*`, for example `v1-tls-0.0.1`.
 - Do not run `git push --tags` after upstream tracking work; push only the exact intended panel release tag when releasing.
 - Do not execute release publishing, `gh release`, or workflow dispatch unless the user explicitly asks for release work.

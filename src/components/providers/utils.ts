@@ -7,9 +7,11 @@ import type {
 } from '@/types';
 import {
   buildCandidateUsageSourceIds,
+  calculateStatusBarData,
   normalizeAuthIndex,
   type KeyStatBucket,
   type KeyStats,
+  type StatusBarData as FullUsageStatusBarData,
   type UsageDetail,
 } from '@/utils/usage';
 import {
@@ -443,6 +445,27 @@ export const collectOpenAIProviderUsageDetails = (
 
   return mergeUsageDetails(groups);
 };
+
+export const buildEmptyFullUsageStatusData = (): FullUsageStatusBarData =>
+  calculateStatusBarData([]);
+
+export const getFullUsageStatusDataForIdentity = (
+  identity: UsageIdentity,
+  usageDetailsBySource: UsageDetailsBySource,
+  usageDetailsByAuthIndex: UsageDetailsByAuthIndex
+): FullUsageStatusBarData =>
+  calculateStatusBarData(
+    collectUsageDetailsForIdentity(identity, usageDetailsBySource, usageDetailsByAuthIndex)
+  );
+
+export const getOpenAIProviderFullUsageStatusData = (
+  provider: OpenAIProviderConfig,
+  usageDetailsBySource: UsageDetailsBySource,
+  usageDetailsByAuthIndex: UsageDetailsByAuthIndex
+): FullUsageStatusBarData =>
+  calculateStatusBarData(
+    collectOpenAIProviderUsageDetails(provider, usageDetailsBySource, usageDetailsByAuthIndex)
+  );
 
 export const getProviderConfigKey = (
   config: {

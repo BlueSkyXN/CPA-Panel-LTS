@@ -24,7 +24,7 @@ jobs:
         run: npm ci
 
       - name: Check LTS panel contract
-        run: scripts/check-lts-panel-contract.sh
+        run: npm run check:lts
 
       - name: Type-check
         run: npm run type-check
