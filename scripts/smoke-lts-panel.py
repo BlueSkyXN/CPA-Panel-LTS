@@ -421,6 +421,43 @@ def build_codex_daily_usage_payload() -> dict[str, Any]:
     }
 
 
+def build_codex_remote_cloud_connect_environments_payload() -> dict[str, Any]:
+    return {
+        "items": [
+            {
+                "env_id": "env-smoke-online",
+                "kind": "desktop",
+                "display_name": "Smoke MacBook",
+                "host_name": "smoke-host-a",
+                "online": True,
+                "busy": False,
+                "os": "macOS",
+                "os_version": "16.0",
+                "arch": "arm64",
+                "app_server_version": "26.513.20950",
+                "installation_id": "install-smoke-a",
+                "client_type": "desktop",
+                "originator": "Codex Desktop",
+                "terminal": "zsh",
+                "client_name": "Codex",
+                "client_version": "26.513.20950",
+                "last_seen_at": "2026-06-17T02:30:00Z",
+            },
+            {
+                "env_id": "env-smoke-stale",
+                "kind": "desktop",
+                "display_name": "Smoke Old Host",
+                "host_name": "smoke-host-b",
+                "online": False,
+                "busy": False,
+                "os": "macOS",
+                "arch": "arm64",
+            },
+        ],
+        "cursor": None,
+    }
+
+
 def build_xai_billing_payload() -> dict[str, Any]:
     return {
         "config": {
@@ -616,6 +653,8 @@ class MockCoreHandler(BaseHTTPRequestHandler):
             return build_api_call_result({"status": "ok"})
         if "daily-workspace-usage-counts" in url:
             return build_api_call_result(build_codex_daily_usage_payload())
+        if "backend-api/codex/remote/control/environments" in url:
+            return build_api_call_result(build_codex_remote_cloud_connect_environments_payload())
         if url == "https://chatgpt.com/backend-api/wham/usage":
             return build_api_call_result(build_codex_quota_usage_payload())
         if url == "https://cli-chat-proxy.grok.com/v1/billing":
@@ -1166,6 +1205,58 @@ def run_quota_runtime_smoke(page: Any, app_url: str) -> None:
     xai_card.get_by_text("$12.00 / $50.00", exact=False).wait_for()
 
 
+def run_remote_cloud_connect_runtime_smoke(page: Any, app_url: str) -> None:
+    page.goto(
+        f"{app_url}?route=remote-cloud-connect-runtime#/auth-files",
+        wait_until="domcontentloaded",
+    )
+    page.wait_for_function("() => window.location.hash.endsWith('/auth-files')")
+    page.get_by_text("Auth Files Management", exact=False).first.wait_for()
+
+    codex_card = page.get_by_text("codex-smoke.json", exact=True).locator(
+        "xpath=ancestor::div[contains(@class, 'fileCard')][1]"
+    )
+    codex_card.wait_for()
+    action = codex_card.get_by_role("button", name="Codex Remote Cloud Connect Environments")
+    action.wait_for()
+    with page.expect_response(
+        lambda response: response.request.method == "POST"
+        and response.url.endswith("/v0/management/api-call")
+    ):
+        action.click()
+
+    dialog = page.get_by_role(
+        "dialog",
+        name="Codex Remote Cloud Connect Environments - codex-smoke.json",
+    )
+    dialog.wait_for()
+    dialog_text = dialog.inner_text()
+    for expected_text in [
+        "2 connections · 2 hosts · 1 online · 0 cleanable",
+        "Smoke MacBook",
+        "smoke-host-a",
+        "Smoke Old Host",
+        "smoke-host-b",
+        "Use caution",
+    ]:
+        if expected_text not in dialog_text:
+            raise AssertionError(
+                f"Remote cloud connect smoke missing modal text: {expected_text!r}"
+            )
+
+    body_text = page.locator("body").inner_text()
+    for raw_key in [
+        "auth_files.codex_remote_cloud_connect",
+        "codex_remote_cloud_connect_environment_button",
+        "codex_remote_cloud_connect_environment_title",
+    ]:
+        if raw_key in body_text:
+            raise AssertionError(f"Remote cloud connect smoke leaked raw i18n key: {raw_key}")
+
+    page.keyboard.press("Escape")
+    page.wait_for_function("() => document.querySelectorAll('[role=\"dialog\"]').length === 0")
+
+
 def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: bool) -> None:
     try:
         from playwright.sync_api import Error as PlaywrightError
@@ -1372,6 +1463,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             page.get_by_text("Configuration saved successfully", exact=False).first.wait_for()
 
             run_quota_runtime_smoke(page, app_url)
+            run_remote_cloud_connect_runtime_smoke(page, app_url)
             run_logs_runtime_smoke(page, app_url)
             run_home_logs_runtime_smoke(page, app_url, state)
         except PlaywrightError as exc:
@@ -1463,6 +1555,11 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
         "rate-limit-reset-credits/consume",
         "Codex reset credit consume",
     )
+    assert_api_call_url_seen(
+        state,
+        "backend-api/codex/remote/control/environments",
+        "Codex remote cloud connect environments",
+    )
     assert_api_call_url_seen(state, "cli-chat-proxy.grok.com/v1/billing", "xAI billing")
     assert_api_call_url_seen(
         state,
@@ -1479,6 +1576,12 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
         "backend-api/wham/usage",
         "codex-smoke-auth",
         "Codex quota usage",
+    )
+    assert_api_call_auth_seen(
+        state,
+        "backend-api/codex/remote/control/environments",
+        "codex-smoke-auth",
+        "Codex remote cloud connect environments",
     )
     assert_api_call_auth_seen(
         state,
