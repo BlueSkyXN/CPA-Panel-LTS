@@ -48,6 +48,7 @@ import { formatUnixTimestamp } from '@/utils/format';
 import type { QuotaRenderHelpers } from '@/components/quota/QuotaCard';
 import type { QuotaConfig } from '@/components/quota/quotaConfigs';
 import styles from '@/pages/QuotaPage.module.scss';
+import codexQuotaStyles from './styles.module.scss';
 
 const QUOTA_PROGRESS_HIGH_THRESHOLD = 70;
 const QUOTA_PROGRESS_MEDIUM_THRESHOLD = 30;
@@ -1172,7 +1173,10 @@ const renderCodexItems = (
   t: TFunction,
   helpers: QuotaRenderHelpers
 ): ReactNode => {
-  const { styles: styleMap, QuotaProgressBar } = helpers;
+  // Codex quota CONTENT classes are LTS-owned (./styles.module.scss); the page-injected
+  // helpers still supply shared/layout classes (codexDetails*, premiumPlanValue, quotaRow…).
+  const { styles: pageStyles, QuotaProgressBar } = helpers;
+  const styleMap = { ...pageStyles, ...codexQuotaStyles };
   const { createElement: h, Fragment } = React;
   const windows = quota.windows ?? [];
   const planType = quota.planType ?? null;

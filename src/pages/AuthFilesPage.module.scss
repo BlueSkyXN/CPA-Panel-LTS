@@ -564,42 +564,6 @@
   }
 }
 
-.codexQuotaLabel {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  max-width: 100%;
-  flex-wrap: nowrap;
-  white-space: normal;
-}
-
-.codexQuotaLabelText {
-  min-width: 0;
-}
-
-.codexQuotaLabelSeparator {
-  display: none;
-}
-
-.codexWeeklyInlineEstimate {
-  display: inline-flex;
-  align-items: center;
-  min-width: 0;
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 500;
-  white-space: normal;
-
-  &::before {
-    content: '·';
-    flex: 0 0 auto;
-    margin-right: 6px;
-    color: var(--text-tertiary);
-    font-weight: 500;
-  }
-}
-
 .quotaBar {
   height: 8px;
   background-color: var(--bg-tertiary);
@@ -714,36 +678,6 @@
   padding: $spacing-xs $spacing-sm;
 }
 
-.codexPlan {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  flex-wrap: wrap;
-}
-
-.codexPlanLabel {
-  color: var(--text-tertiary);
-}
-
-.codexPlanEstimate {
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.codexPlanValue {
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.codexPlanSeparator {
-  width: 1px;
-  height: 12px;
-  background-color: var(--border-color);
-}
-
 .premiumPlanValue {
   display: inline-flex;
   align-items: center;
@@ -814,102 +748,6 @@
 
 .codexDetailsBody {
   padding: 0 $spacing-sm $spacing-sm;
-}
-
-.codexAnalytics {
-  display: flex;
-  flex-direction: column;
-  gap: $spacing-xs;
-}
-
-.codexAnalyticsHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: $spacing-sm;
-  flex-wrap: wrap;
-}
-
-.codexAnalyticsTitle {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.codexAnalyticsMeta {
-  font-size: 11px;
-  color: var(--text-tertiary);
-}
-
-.codexWindowFacts {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px;
-  font-size: 11px;
-  color: var(--text-tertiary);
-}
-
-.codexWindowFactSeparator {
-  color: var(--border-strong, var(--border-color));
-}
-
-.codexUsageRanges {
-  display: grid;
-  gap: $spacing-xs;
-}
-
-.codexUsageRange {
-  border: 1px solid var(--border-color);
-  border-radius: $radius-sm;
-  background: var(--bg-primary);
-  padding: $spacing-xs;
-}
-
-.codexUsageRangeHeader {
-  display: flex;
-  justify-content: space-between;
-  gap: $spacing-sm;
-  margin-bottom: 6px;
-  flex-wrap: wrap;
-}
-
-.codexUsageRangeTitle {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.codexUsageRangeDates {
-  font-size: 11px;
-  color: var(--text-tertiary);
-}
-
-.codexMetricGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 6px;
-}
-
-.codexMetric {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.codexMetricLabel {
-  font-size: 11px;
-  color: var(--text-tertiary);
-}
-
-.codexMetricValue {
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.codexMetricValueStrong {
-  font-weight: 700;
-  color: var(--text-primary);
 }
 
 // 单个认证文件卡片
