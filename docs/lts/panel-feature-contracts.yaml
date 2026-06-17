@@ -371,4 +371,7 @@ features:
       - cli-chat-proxy.grok.com/v1/billing
       - weekly_estimate_usd_inline
       - analytics_backend_now
+      - formatCodexUsdAmount
+      - .codexDetails[open] .codexDetailsChevron
+      - Est weekly 0.31 USD
       - credits_unit

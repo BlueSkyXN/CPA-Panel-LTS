@@ -30,6 +30,18 @@ require_file_contains() {
   fi
 }
 
+require_file_not_contains() {
+  local file="$1"
+  local pattern="$2"
+  if [ ! -f "$file" ]; then
+    fail "missing file: $file"
+    return
+  fi
+  if grep -Fq -- "$pattern" "$file"; then
+    fail "unexpected marker '$pattern' in $file"
+  fi
+}
+
 require_repo_contains() {
   local pattern="$1"
   if ! grep -R -F -q --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=local -- "$pattern" .; then
@@ -247,6 +259,13 @@ require_file_contains src/lts/codexQuota/config.ts "resetCodexQuota"
 require_file_contains src/lts/codexQuota/config.ts "CODEX_RATE_LIMIT_RESET_CREDITS_CONSUME_URL"
 require_file_contains src/lts/codexQuota/config.ts "weekly_estimate_usd_inline"
 require_file_contains src/lts/codexQuota/config.ts "analytics_backend_now"
+require_file_contains src/lts/codexQuota/config.ts "formatCodexUsdAmount"
+require_file_contains src/lts/codexQuota/styles.module.scss ".codexDetails[open] .codexDetailsChevron"
+require_file_contains src/pages/QuotaPage.module.scss ".codexDetailsSurface"
+require_file_contains src/pages/AuthFilesPage.module.scss ".codexDetailsSurface"
+require_file_not_contains src/pages/QuotaPage.module.scss ".codexDetailsSummary"
+require_file_not_contains src/pages/AuthFilesPage.module.scss ".codexDetailsSummary"
+require_file_contains scripts/smoke-lts-panel.py "Est weekly 0.31 USD"
 require_file_contains src/lts/i18n/en.lts.json "weekly_estimate_usd_inline"
 require_file_contains src/lts/i18n/zh-CN.lts.json "weekly_estimate_usd_inline"
 require_file_contains src/lts/i18n/zh-TW.lts.json "weekly_estimate_usd_inline"
