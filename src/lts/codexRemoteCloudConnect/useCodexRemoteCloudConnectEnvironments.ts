@@ -3,11 +3,11 @@ import { useTranslation } from 'react-i18next';
 import {
   codexRemoteCloudConnectEnvironmentsApi,
   type CodexRemoteCloudConnectEnvironment,
-} from '@/services/api';
+} from './api';
 import { useNotificationStore } from '@/stores';
 import type { AuthFileItem } from '@/types';
 import { getStatusFromError } from '@/utils/quota';
-import { CodexRemoteCloudConnectEnvironmentDeleteDetails } from '@/features/authFiles/components/CodexRemoteCloudConnectEnvironmentDeleteDetails';
+import { CodexRemoteCloudConnectEnvironmentDeleteDetails } from './CodexRemoteCloudConnectEnvironmentDeleteDetails';
 import {
   areCodexRemoteCloudConnectEnvironmentSummariesEqual,
   createCodexRemoteCloudConnectEnvironmentSummary,
@@ -15,7 +15,7 @@ import {
   type CodexRemoteCloudConnectCleanupAdvice,
   type CodexRemoteCloudConnectEnvironmentLastAction,
   type CodexRemoteCloudConnectEnvironmentSummary,
-} from '@/features/authFiles/utils/codexRemoteCloudConnectEnvironmentView';
+} from './viewModel';
 
 type CodexRemoteCloudConnectEnvironmentsState = {
   open: boolean;

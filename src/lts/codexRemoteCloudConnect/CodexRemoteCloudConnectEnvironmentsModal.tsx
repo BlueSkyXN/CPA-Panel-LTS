@@ -6,14 +6,14 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { IconRefreshCw, IconX } from '@/components/ui/icons';
-import type { CodexRemoteCloudConnectEnvironment } from '@/services/api';
+import type { CodexRemoteCloudConnectEnvironment } from './api';
 import {
   createCodexRemoteCloudConnectEnvironmentViewModel,
   type CodexRemoteCloudConnectCleanupAdviceReason,
   type CodexRemoteCloudConnectEnvironmentGroup,
   type CodexRemoteCloudConnectEnvironmentLastAction,
   type CodexRemoteCloudConnectEnvironmentView,
-} from '@/features/authFiles/utils/codexRemoteCloudConnectEnvironmentView';
+} from './viewModel';
 import styles from '@/pages/AuthFilesPage.module.scss';
 
 export type CodexRemoteCloudConnectEnvironmentsModalProps = {

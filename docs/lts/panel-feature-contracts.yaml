@@ -315,6 +315,8 @@ features:
       - src/features/authFiles/
       - src/services/api/authFiles.ts
       - src/services/api/oauth.ts
+      - src/lts/codexRemoteCloudConnect/
+      - src/i18n/locales/
       - src/types/authFile.ts
       - scripts/smoke-lts-panel-core.py
     core_endpoints:
@@ -327,6 +329,12 @@ features:
       - normalizeBatchDeleteResponse
       - AUTH_FILE_INVALID_JSON_OBJECT_ERROR
       - OAUTH_PROVIDER_PRESETS
+      - CodexRemoteCloudConnectEnvironmentsModal
+      - useCodexRemoteCloudConnectEnvironments
+      - CodexRemoteCloudConnectAuthFileAction
+      - CodexRemoteCloudConnectAuthFileSummary
+      - codex_remote_cloud_connect_environment_button
+      - codex_remote_cloud_connect_environment_card_summary
       - run_auth_files_write_smoke
 
   - id: quota-management
@@ -342,6 +350,8 @@ features:
       - src/services/api/apiCall.ts
       - src/stores/useQuotaStore.ts
       - src/types/quota.ts
+      - src/lts/codexQuota/
+      - src/i18n/locales/
       - scripts/smoke-lts-panel.py
     core_endpoints:
       - /v0/management/api-call
@@ -359,3 +369,6 @@ features:
       - daily-workspace-usage-counts
       - rate-limit-reset-credits/consume
       - cli-chat-proxy.grok.com/v1/billing
+      - weekly_estimate_usd_inline
+      - analytics_backend_now
+      - credits_unit

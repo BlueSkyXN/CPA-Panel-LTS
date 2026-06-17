@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
-import type { CodexRemoteCloudConnectEnvironment } from '@/services/api';
-import type { CodexRemoteCloudConnectCleanupAdvice } from '@/features/authFiles/utils/codexRemoteCloudConnectEnvironmentView';
+import type { CodexRemoteCloudConnectEnvironment } from './api';
+import type { CodexRemoteCloudConnectCleanupAdvice } from './viewModel';
 import styles from '@/pages/AuthFilesPage.module.scss';
 
 type CodexRemoteCloudConnectEnvironmentDeleteDetailsProps = {

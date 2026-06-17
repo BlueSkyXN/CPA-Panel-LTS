@@ -2,7 +2,7 @@ import type { AuthFileItem } from '@/types';
 import { createStatusError, normalizeStringValue } from '@/utils/quota';
 import { resolveCodexRemoteCloudConnectAccountId } from '@/utils/codexAuth';
 import { normalizeAuthIndex } from '@/utils/usage';
-import { apiCallApi, getApiCallErrorMessage, type ApiCallResult } from './apiCall';
+import { apiCallApi, getApiCallErrorMessage, type ApiCallResult } from '@/services/api/apiCall';
 
 const CODEX_REMOTE_CLOUD_CONNECT_ENVIRONMENTS_URL =
   'https://chatgpt.com/backend-api/codex/remote/control/environments';

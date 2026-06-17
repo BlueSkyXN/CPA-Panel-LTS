@@ -19,6 +19,11 @@ import {
   normalizeUsageTotal,
   statusBarDataFromRecentRequests,
 } from '@/utils/recentRequests';
+import {
+  CodexRemoteCloudConnectAuthFileAction,
+  CodexRemoteCloudConnectAuthFileSummary,
+  type CodexRemoteCloudConnectEnvironmentSummary,
+} from '@/lts/codexRemoteCloudConnect';
 import { formatFileSize } from '@/utils/format';
 import {
   QUOTA_PROVIDER_TYPES,
@@ -49,7 +54,9 @@ export type AuthFileCardProps = {
   statusUpdating: Record<string, boolean>;
   quotaFilterType: QuotaProviderType | null;
   statusBarCache: Map<string, AuthFileStatusBarData>;
+  codexRemoteCloudConnectSummary?: CodexRemoteCloudConnectEnvironmentSummary;
   onShowModels: (file: AuthFileItem) => void;
+  onShowCodexRemoteCloudConnectEnvironments: (file: AuthFileItem) => void;
   onDownload: (name: string) => void;
   onOpenPrefixProxyEditor: (file: AuthFileItem) => void;
   onDelete: (name: string) => void;
@@ -75,7 +82,9 @@ export function AuthFileCard(props: AuthFileCardProps) {
     statusUpdating,
     quotaFilterType,
     statusBarCache,
+    codexRemoteCloudConnectSummary,
     onShowModels,
+    onShowCodexRemoteCloudConnectEnvironments,
     onDownload,
     onOpenPrefixProxyEditor,
     onDelete,
@@ -201,7 +210,18 @@ export function AuthFileCard(props: AuthFileCardProps) {
                   <span className={styles.noteValue}>{noteValue}</span>
                 </div>
               )}
+              <CodexRemoteCloudConnectAuthFileSummary
+                file={file}
+                isRuntimeOnly={isRuntimeOnly}
+                summary={codexRemoteCloudConnectSummary}
+              />
             </div>
+            <CodexRemoteCloudConnectAuthFileAction
+              file={file}
+              isRuntimeOnly={isRuntimeOnly}
+              disabled={disableControls}
+              onOpen={onShowCodexRemoteCloudConnectEnvironments}
+            />
           </div>
 
           <div className={`${styles.cardMeta} ${compact ? styles.cardMetaCompact : ''}`}>

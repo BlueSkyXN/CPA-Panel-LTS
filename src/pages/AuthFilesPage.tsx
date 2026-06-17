@@ -45,6 +45,12 @@ import { AuthFileModelsModal } from '@/features/authFiles/components/AuthFileMod
 import { AuthFilesPrefixProxyEditorModal } from '@/features/authFiles/components/AuthFilesPrefixProxyEditorModal';
 import { OAuthExcludedCard } from '@/features/authFiles/components/OAuthExcludedCard';
 import { OAuthModelAliasCard } from '@/features/authFiles/components/OAuthModelAliasCard';
+import {
+  CodexRemoteCloudConnectEnvironmentsModal,
+  areCodexRemoteCloudConnectEnvironmentSummariesEqual,
+  useCodexRemoteCloudConnectEnvironments,
+  type CodexRemoteCloudConnectEnvironmentSummary,
+} from '@/lts/codexRemoteCloudConnect';
 import { useAuthFilesData } from '@/features/authFiles/hooks/useAuthFilesData';
 import { useAuthFilesModels } from '@/features/authFiles/hooks/useAuthFilesModels';
 import { useAuthFilesOauth } from '@/features/authFiles/hooks/useAuthFilesOauth';
@@ -99,6 +105,9 @@ export function AuthFilesPage() {
   const [pageSizeInput, setPageSizeInput] = useState('9');
   const [viewMode, setViewMode] = useState<'diagram' | 'list'>('list');
   const [sortMode, setSortMode] = useState<AuthFilesSortMode>('default');
+  const [codexRemoteCloudConnectSummaryCache, setCodexRemoteCloudConnectSummaryCache] = useState<
+    Map<string, CodexRemoteCloudConnectEnvironmentSummary>
+  >(() => new Map());
   const [batchActionBarVisible, setBatchActionBarVisible] = useState(false);
   const [uiStateHydrated, setUiStateHydrated] = useState(false);
   const floatingBatchActionsRef = useRef<HTMLDivElement>(null);
@@ -176,6 +185,29 @@ export function AuthFilesPage() {
     disableControls: connectionStatus !== 'connected',
     loadFiles,
   });
+
+  const {
+    codexRemoteCloudConnectEnvironments,
+    openCodexRemoteCloudConnectEnvironments,
+    refreshCodexRemoteCloudConnectEnvironments,
+    closeCodexRemoteCloudConnectEnvironments,
+    deleteCodexRemoteCloudConnectEnvironment,
+  } = useCodexRemoteCloudConnectEnvironments();
+
+  useEffect(() => {
+    const { fileName, summary } = codexRemoteCloudConnectEnvironments;
+    if (!fileName || !summary) return;
+
+    setCodexRemoteCloudConnectSummaryCache((current) => {
+      const existing = current.get(fileName);
+      if (areCodexRemoteCloudConnectEnvironmentSummariesEqual(existing ?? null, summary)) {
+        return current;
+      }
+      const next = new Map(current);
+      next.set(fileName, summary);
+      return next;
+    });
+  }, [codexRemoteCloudConnectEnvironments]);
 
   const disableControls = connectionStatus !== 'connected';
   const normalizedFilter = normalizeProviderKey(String(filter));
@@ -811,7 +843,13 @@ export function AuthFilesPage() {
                     statusUpdating={statusUpdating}
                     quotaFilterType={quotaFilterType}
                     statusBarCache={statusBarCache}
+                    codexRemoteCloudConnectSummary={codexRemoteCloudConnectSummaryCache.get(
+                      file.name
+                    )}
                     onShowModels={showModels}
+                    onShowCodexRemoteCloudConnectEnvironments={
+                      openCodexRemoteCloudConnectEnvironments
+                    }
                     onDownload={handleDownload}
                     onOpenPrefixProxyEditor={openPrefixProxyEditor}
                     onDelete={handleDelete}
@@ -889,6 +927,21 @@ export function AuthFilesPage() {
         excluded={excluded}
         onClose={closeModelsModal}
         onCopyText={copyTextWithNotification}
+      />
+
+      <CodexRemoteCloudConnectEnvironmentsModal
+        open={codexRemoteCloudConnectEnvironments.open}
+        fileName={codexRemoteCloudConnectEnvironments.fileName}
+        loading={codexRemoteCloudConnectEnvironments.loading}
+        error={codexRemoteCloudConnectEnvironments.error}
+        environments={codexRemoteCloudConnectEnvironments.environments}
+        truncated={codexRemoteCloudConnectEnvironments.truncated}
+        deletingId={codexRemoteCloudConnectEnvironments.deletingId}
+        lastAction={codexRemoteCloudConnectEnvironments.lastAction}
+        onClose={closeCodexRemoteCloudConnectEnvironments}
+        onRefresh={refreshCodexRemoteCloudConnectEnvironments}
+        onCopyText={copyTextWithNotification}
+        onDelete={deleteCodexRemoteCloudConnectEnvironment}
       />
 
       <AuthFilesPrefixProxyEditorModal

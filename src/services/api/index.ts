@@ -13,6 +13,5 @@ export * from './logs';
 export * from './version';
 export * from './models';
 export * from './plugins';
-export * from './codexRemoteCloudConnectEnvironments';
 export * from './transformers';
 export * from './vertex';

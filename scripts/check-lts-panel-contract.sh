@@ -83,7 +83,7 @@ for path in \
   src/services/api/authFiles.ts \
   src/services/api/oauth.ts \
   src/services/api/apiCall.ts \
-  src/services/api/codexRemoteCloudConnectEnvironments.ts \
+  src/lts/codexRemoteCloudConnect/api.ts \
   src/pages/AuthFilesPage.tsx \
   src/pages/OAuthPage.tsx \
   src/pages/QuotaPage.tsx \
@@ -221,6 +221,17 @@ require_file_contains src/services/api/authFiles.ts "/auth-files/models"
 require_file_contains src/services/api/authFiles.ts "normalizeBatchUploadResponse"
 require_file_contains src/services/api/authFiles.ts "normalizeBatchDeleteResponse"
 require_file_contains src/services/api/authFiles.ts "AUTH_FILE_INVALID_JSON_OBJECT_ERROR"
+require_file_contains src/pages/AuthFilesPage.tsx "CodexRemoteCloudConnectEnvironmentsModal"
+require_file_contains src/pages/AuthFilesPage.tsx "useCodexRemoteCloudConnectEnvironments"
+require_file_contains src/features/authFiles/components/AuthFileCard.tsx "CodexRemoteCloudConnectAuthFileAction"
+require_file_contains src/features/authFiles/components/AuthFileCard.tsx "CodexRemoteCloudConnectAuthFileSummary"
+require_file_contains src/features/authFiles/components/AuthFileCard.tsx "onShowCodexRemoteCloudConnectEnvironments"
+require_file_contains src/lts/codexRemoteCloudConnect/AuthFileCardAction.tsx "codexRemoteCloudConnectEnvironmentHeaderButton"
+require_file_contains src/lts/codexRemoteCloudConnect/AuthFileCardAction.tsx "codex_remote_cloud_connect_environment_card_summary"
+require_file_contains src/i18n/locales/en.json "codex_remote_cloud_connect_environment_button"
+require_file_contains src/i18n/locales/zh-CN.json "codex_remote_cloud_connect_environment_button"
+require_file_contains src/i18n/locales/zh-TW.json "codex_remote_cloud_connect_environment_button"
+require_file_contains src/i18n/locales/ru.json "codex_remote_cloud_connect_environment_button"
 require_file_contains src/services/api/oauth.ts "'xai'"
 require_file_contains src/services/api/oauth.ts "WEBUI_SUPPORTED"
 require_file_contains src/services/api/oauth.ts "/get-auth-status"
@@ -232,8 +243,22 @@ require_file_contains src/features/authFiles/constants.ts "xai"
 require_file_contains src/features/authFiles/components/AuthFileQuotaSection.tsx "XAI_CONFIG"
 require_file_contains src/features/authFiles/components/AuthFileQuotaSection.tsx "CODEX_CONFIG"
 require_file_contains src/components/quota/quotaConfigs.ts "CODEX_CONFIG"
-require_file_contains src/components/quota/quotaConfigs.ts "resetCodexQuota"
-require_file_contains src/components/quota/quotaConfigs.ts "CODEX_RATE_LIMIT_RESET_CREDITS_CONSUME_URL"
+require_file_contains src/lts/codexQuota/config.ts "resetCodexQuota"
+require_file_contains src/lts/codexQuota/config.ts "CODEX_RATE_LIMIT_RESET_CREDITS_CONSUME_URL"
+require_file_contains src/lts/codexQuota/config.ts "weekly_estimate_usd_inline"
+require_file_contains src/lts/codexQuota/config.ts "analytics_backend_now"
+require_file_contains src/i18n/locales/en.json "weekly_estimate_usd_inline"
+require_file_contains src/i18n/locales/zh-CN.json "weekly_estimate_usd_inline"
+require_file_contains src/i18n/locales/zh-TW.json "weekly_estimate_usd_inline"
+require_file_contains src/i18n/locales/ru.json "weekly_estimate_usd_inline"
+require_file_contains src/i18n/locales/en.json "analytics_backend_now"
+require_file_contains src/i18n/locales/zh-CN.json "analytics_backend_now"
+require_file_contains src/i18n/locales/zh-TW.json "analytics_backend_now"
+require_file_contains src/i18n/locales/ru.json "analytics_backend_now"
+require_file_contains src/i18n/locales/en.json "credits_unit"
+require_file_contains src/i18n/locales/zh-CN.json "credits_unit"
+require_file_contains src/i18n/locales/zh-TW.json "credits_unit"
+require_file_contains src/i18n/locales/ru.json "credits_unit"
 require_file_contains src/components/quota/quotaConfigs.ts "XAI_CONFIG"
 require_file_contains src/components/quota/quotaConfigs.ts "fetchXaiQuota"
 require_file_contains src/components/quota/quotaConfigs.ts "XAI_BILLING_URL"
@@ -300,6 +325,73 @@ require_repo_contains "management.html"
 require_repo_contains "x-cpa-support-plugin"
 
 node scripts/check-panel-feature-contracts.mjs
+
+if ! node <<'NODE'
+const fs = require('node:fs');
+
+const locales = ['en', 'zh-CN', 'zh-TW', 'ru'];
+
+const collectKeys = (files, regex) => {
+  const keys = new Set();
+  for (const file of files) {
+    const source = fs.readFileSync(file, 'utf8');
+    let match;
+    regex.lastIndex = 0;
+    while ((match = regex.exec(source))) {
+      keys.add(match[1]);
+    }
+  }
+  return [...keys].sort();
+};
+
+const codexQuotaKeys = collectKeys(
+  [
+    'src/lts/codexQuota/config.ts',
+    'src/components/quota/QuotaSection.tsx',
+    'src/features/authFiles/components/AuthFileQuotaSection.tsx',
+  ],
+  /codex_quota\.([A-Za-z0-9_]+)/g
+);
+
+const remoteCloudConnectKeys = collectKeys(
+  [
+    'src/lts/codexRemoteCloudConnect/AuthFileCardAction.tsx',
+    'src/features/authFiles/components/AuthFileCard.tsx',
+    'src/lts/codexRemoteCloudConnect/CodexRemoteCloudConnectEnvironmentsModal.tsx',
+    'src/lts/codexRemoteCloudConnect/CodexRemoteCloudConnectEnvironmentDeleteDetails.tsx',
+    'src/lts/codexRemoteCloudConnect/useCodexRemoteCloudConnectEnvironments.ts',
+  ],
+  /auth_files\.([A-Za-z0-9_]+)/g
+).filter((key) => !/(?:_$|advice_$|reason_$|view_$)/.test(key));
+
+const failures = [];
+
+for (const locale of locales) {
+  const catalog = JSON.parse(fs.readFileSync(`src/i18n/locales/${locale}.json`, 'utf8'));
+  const codexQuota = catalog.codex_quota || {};
+  const authFiles = catalog.auth_files || {};
+
+  const missingCodexQuota = codexQuotaKeys.filter((key) => !(key in codexQuota));
+  const missingRemoteCloudConnect = remoteCloudConnectKeys.filter((key) => !(key in authFiles));
+
+  if (missingCodexQuota.length > 0) {
+    failures.push(`${locale} missing codex_quota keys: ${missingCodexQuota.join(', ')}`);
+  }
+  if (missingRemoteCloudConnect.length > 0) {
+    failures.push(
+      `${locale} missing auth_files remote cloud connect keys: ${missingRemoteCloudConnect.join(', ')}`
+    );
+  }
+}
+
+if (failures.length > 0) {
+  failures.forEach((message) => console.error(message));
+  process.exit(1);
+}
+NODE
+then
+  fail "missing Codex quota or remote cloud connect locale keys"
+fi
 
 for lockfile in bun.lock yarn.lock pnpm-lock.yaml; do
   if [ -e "$lockfile" ]; then

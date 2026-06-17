@@ -1,4 +1,4 @@
-import type { CodexRemoteCloudConnectEnvironment } from '@/services/api';
+import type { CodexRemoteCloudConnectEnvironment } from './api';
 
 export type CodexRemoteCloudConnectCleanupAdviceLevel = 'keep' | 'cleanable' | 'caution';
 
