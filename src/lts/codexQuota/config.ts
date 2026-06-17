@@ -1174,7 +1174,8 @@ const renderCodexItems = (
   helpers: QuotaRenderHelpers
 ): ReactNode => {
   // Codex quota CONTENT classes are LTS-owned (./styles.module.scss); the page-injected
-  // helpers still supply shared/layout classes (codexDetails*, premiumPlanValue, quotaRow…).
+  // helpers still supply shared/layout classes (premiumPlanValue, quotaRow…) plus the
+  // per-context .codexDetailsSurface background — codexDetails structure is sidecar-owned.
   const { styles: pageStyles, QuotaProgressBar } = helpers;
   const styleMap = { ...pageStyles, ...codexQuotaStyles };
   const { createElement: h, Fragment } = React;
@@ -1506,7 +1507,12 @@ const renderCodexItems = (
     nodes.push(
       h(
         'details',
-        { key: 'analytics-details', className: styleMap.codexDetails },
+        {
+          key: 'analytics-details',
+          className: [styleMap.codexDetails, styleMap.codexDetailsSurface]
+            .filter(Boolean)
+            .join(' '),
+        },
         h(
           'summary',
           { className: styleMap.codexDetailsSummary },

@@ -591,57 +591,10 @@
   }
 }
 
-.codexDetails {
-  margin-top: $spacing-xs;
-  border: 1px solid var(--border-color);
-  border-radius: $radius-md;
+// codexDetails structure is LTS-owned (src/lts/codexQuota/styles.module.scss);
+// this page injects only the surface background for the quota-page context.
+.codexDetailsSurface {
   background: var(--bg-secondary);
-}
-
-.codexDetailsSummary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: $spacing-sm;
-  padding: $spacing-xs $spacing-sm;
-  cursor: pointer;
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
-.codexDetailsSummaryMain {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.codexDetailsIcon {
-  display: inline-flex;
-  color: var(--text-tertiary);
-}
-
-.codexDetailsTitle {
-  color: var(--text-primary);
-  font-weight: 600;
-}
-
-.codexDetailsHint {
-  color: var(--text-tertiary);
-  font-size: 11px;
-}
-
-.codexDetailsChevron {
-  color: var(--text-tertiary);
-  transition: transform $transition-fast;
-}
-
-.codexDetails[open] .codexDetailsChevron {
-  transform: rotate(180deg);
-}
-
-.codexDetailsBody {
-  padding: 0 $spacing-sm $spacing-sm;
 }
 
 @include mobile {
