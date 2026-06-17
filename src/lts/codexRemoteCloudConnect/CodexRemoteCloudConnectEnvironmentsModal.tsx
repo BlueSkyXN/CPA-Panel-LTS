@@ -14,7 +14,8 @@ import {
   type CodexRemoteCloudConnectEnvironmentLastAction,
   type CodexRemoteCloudConnectEnvironmentView,
 } from './viewModel';
-import styles from '@/pages/AuthFilesPage.module.scss';
+import styles from './styles.module.scss';
+import pageStyles from '@/pages/AuthFilesPage.module.scss';
 
 export type CodexRemoteCloudConnectEnvironmentsModalProps = {
   open: boolean;
@@ -454,7 +455,7 @@ export function CodexRemoteCloudConnectEnvironmentsModal(
           <span>{t('auth_files.codex_remote_cloud_connect_environment_loading')}</span>
         </div>
       ) : error ? (
-        <div className={styles.prefixProxyError}>{error}</div>
+        <div className={pageStyles.prefixProxyError}>{error}</div>
       ) : environments.length === 0 ? (
         <EmptyState
           title={t('auth_files.codex_remote_cloud_connect_environment_empty')}

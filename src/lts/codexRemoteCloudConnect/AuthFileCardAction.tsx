@@ -5,7 +5,8 @@ import type { AuthFileItem } from '@/types';
 import { resolveAuthProvider } from '@/utils/quota';
 import { normalizeProviderKey } from '@/features/authFiles/constants';
 import type { CodexRemoteCloudConnectEnvironmentSummary } from './viewModel';
-import styles from '@/pages/AuthFilesPage.module.scss';
+import styles from './styles.module.scss';
+import pageStyles from '@/pages/AuthFilesPage.module.scss';
 
 type CodexRemoteCloudConnectAuthFileProps = {
   file: AuthFileItem;
@@ -57,7 +58,7 @@ export function CodexRemoteCloudConnectAuthFileAction({
   if (isRuntimeOnly || !isCodexAuthFile(file)) return null;
 
   return (
-    <div className={styles.cardHeaderActions}>
+    <div className={pageStyles.cardHeaderActions}>
       <Button
         variant="secondary"
         size="sm"
@@ -67,7 +68,7 @@ export function CodexRemoteCloudConnectAuthFileAction({
         aria-label={t('auth_files.codex_remote_cloud_connect_environment_button')}
         disabled={disabled}
       >
-        <IconSatellite className={styles.actionIcon} size={16} />
+        <IconSatellite className={pageStyles.actionIcon} size={16} />
       </Button>
     </div>
   );

@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import type { CodexRemoteCloudConnectEnvironment } from './api';
 import type { CodexRemoteCloudConnectCleanupAdvice } from './viewModel';
-import styles from '@/pages/AuthFilesPage.module.scss';
+import styles from './styles.module.scss';
 
 type CodexRemoteCloudConnectEnvironmentDeleteDetailsProps = {
   environment: CodexRemoteCloudConnectEnvironment;
