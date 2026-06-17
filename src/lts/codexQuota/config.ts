@@ -1358,6 +1358,14 @@ const renderCodexItems = (
                 h(
                   'span',
                   {
+                    className: styleMap.codexQuotaLabelSeparator,
+                    'aria-hidden': true,
+                  },
+                  ' · '
+                ),
+                h(
+                  'span',
+                  {
                     className: styleMap.codexWeeklyInlineEstimate,
                     title: weeklyInlineEstimateTitle ?? undefined,
                   },
@@ -1430,11 +1438,13 @@ const renderCodexItems = (
             null,
             t('codex_quota.analytics_backend_now', { time: analytics.backendNowLabel })
           ),
+          h('span', { className: styleMap.codexWindowFactSeparator, 'aria-hidden': true }, ' · '),
           h(
             'span',
             null,
             t('codex_quota.analytics_window_start', { time: analytics.windowStartLabel })
           ),
+          h('span', { className: styleMap.codexWindowFactSeparator, 'aria-hidden': true }, ' · '),
           h('span', null, t('codex_quota.analytics_reset_at', { time: analytics.resetAtLabel }))
         ),
         h(

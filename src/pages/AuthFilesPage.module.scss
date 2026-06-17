@@ -564,6 +564,30 @@
   }
 }
 
+.codexQuotaLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+
+.codexQuotaLabelText {
+  min-width: 0;
+}
+
+.codexQuotaLabelSeparator {
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+
+.codexWeeklyInlineEstimate {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
 .quotaBar {
   height: 8px;
   background-color: var(--bg-tertiary);
@@ -684,10 +708,17 @@
   gap: 6px;
   font-size: 12px;
   color: var(--text-secondary);
+  flex-wrap: wrap;
 }
 
 .codexPlanLabel {
   color: var(--text-tertiary);
+}
+
+.codexPlanEstimate {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .codexPlanValue {
@@ -719,6 +750,155 @@
   background: rgba(226, 180, 50, 0.12);
   border-color: rgba(226, 180, 50, 0.28);
   color: #ffd862;
+}
+
+.codexDetails {
+  margin-top: $spacing-xs;
+  border: 1px solid var(--border-color);
+  border-radius: $radius-md;
+  background: color-mix(in srgb, var(--bg-secondary) 86%, transparent);
+}
+
+.codexDetailsSummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-sm;
+  padding: $spacing-xs $spacing-sm;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.codexDetailsSummaryMain {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.codexDetailsIcon {
+  display: inline-flex;
+  color: var(--text-tertiary);
+}
+
+.codexDetailsTitle {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.codexDetailsHint {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.codexDetailsChevron {
+  color: var(--text-tertiary);
+  transition: transform $transition-fast;
+}
+
+.codexDetails[open] .codexDetailsChevron {
+  transform: rotate(180deg);
+}
+
+.codexDetailsBody {
+  padding: 0 $spacing-sm $spacing-sm;
+}
+
+.codexAnalytics {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-xs;
+}
+
+.codexAnalyticsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-sm;
+  flex-wrap: wrap;
+}
+
+.codexAnalyticsTitle {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.codexAnalyticsMeta {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.codexWindowFacts {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.codexWindowFactSeparator {
+  color: var(--border-strong, var(--border-color));
+}
+
+.codexUsageRanges {
+  display: grid;
+  gap: $spacing-xs;
+}
+
+.codexUsageRange {
+  border: 1px solid var(--border-color);
+  border-radius: $radius-sm;
+  background: var(--bg-primary);
+  padding: $spacing-xs;
+}
+
+.codexUsageRangeHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: $spacing-sm;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.codexUsageRangeTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.codexUsageRangeDates {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.codexMetricGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 6px;
+}
+
+.codexMetric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.codexMetricLabel {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.codexMetricValue {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.codexMetricValueStrong {
+  font-weight: 700;
+  color: var(--text-primary);
 }
 
 // 单个认证文件卡片
