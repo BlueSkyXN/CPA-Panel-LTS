@@ -319,10 +319,11 @@
 .codexQuotaLabel {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
   max-width: 100%;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  white-space: normal;
 }
 
 .codexQuotaLabelText {
@@ -330,14 +331,25 @@
 }
 
 .codexQuotaLabelSeparator {
-  color: var(--text-tertiary);
-  font-weight: 500;
+  display: none;
 }
 
 .codexWeeklyInlineEstimate {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
   color: var(--text-secondary);
   font-size: 12px;
   font-weight: 500;
+  white-space: normal;
+
+  &::before {
+    content: '·';
+    flex: 0 0 auto;
+    margin-right: 6px;
+    color: var(--text-tertiary);
+    font-weight: 500;
+  }
 }
 
 .quotaBar {
@@ -477,7 +489,6 @@
 .codexPlanValue {
   font-weight: 600;
   color: var(--text-primary);
-  text-transform: capitalize;
 }
 
 .codexPlanSeparator {
