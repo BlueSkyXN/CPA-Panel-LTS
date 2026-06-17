@@ -27,6 +27,7 @@ skills
 # Editor directories and files
 settings.local.json
 .codex
+.playwright-mcp/
 .vscode/*
 !.vscode/extensions.json
 .idea

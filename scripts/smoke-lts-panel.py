@@ -1181,6 +1181,7 @@ def run_quota_runtime_smoke(page: Any, app_url: str) -> None:
     codex_card.get_by_text("Plus", exact=True).wait_for()
     codex_card.get_by_text("Manual resets", exact=False).wait_for()
     codex_card.get_by_text("2", exact=True).first.wait_for()
+    codex_card.get_by_text("Est weekly 0.31 USD", exact=True).wait_for()
 
     # codexDetails analytics fold-out is LTS-isolated: its structure and the compound
     # `.codexDetails[open] .codexDetailsChevron` selector live in the codexQuota sidecar
