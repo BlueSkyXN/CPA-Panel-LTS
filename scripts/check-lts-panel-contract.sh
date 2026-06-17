@@ -228,10 +228,10 @@ require_file_contains src/features/authFiles/components/AuthFileCard.tsx "CodexR
 require_file_contains src/features/authFiles/components/AuthFileCard.tsx "onShowCodexRemoteCloudConnectEnvironments"
 require_file_contains src/lts/codexRemoteCloudConnect/AuthFileCardAction.tsx "codexRemoteCloudConnectEnvironmentHeaderButton"
 require_file_contains src/lts/codexRemoteCloudConnect/AuthFileCardAction.tsx "codex_remote_cloud_connect_environment_card_summary"
-require_file_contains src/i18n/locales/en.json "codex_remote_cloud_connect_environment_button"
-require_file_contains src/i18n/locales/zh-CN.json "codex_remote_cloud_connect_environment_button"
-require_file_contains src/i18n/locales/zh-TW.json "codex_remote_cloud_connect_environment_button"
-require_file_contains src/i18n/locales/ru.json "codex_remote_cloud_connect_environment_button"
+require_file_contains src/lts/i18n/en.lts.json "codex_remote_cloud_connect_environment_button"
+require_file_contains src/lts/i18n/zh-CN.lts.json "codex_remote_cloud_connect_environment_button"
+require_file_contains src/lts/i18n/zh-TW.lts.json "codex_remote_cloud_connect_environment_button"
+require_file_contains src/lts/i18n/ru.lts.json "codex_remote_cloud_connect_environment_button"
 require_file_contains src/services/api/oauth.ts "'xai'"
 require_file_contains src/services/api/oauth.ts "WEBUI_SUPPORTED"
 require_file_contains src/services/api/oauth.ts "/get-auth-status"
@@ -247,18 +247,18 @@ require_file_contains src/lts/codexQuota/config.ts "resetCodexQuota"
 require_file_contains src/lts/codexQuota/config.ts "CODEX_RATE_LIMIT_RESET_CREDITS_CONSUME_URL"
 require_file_contains src/lts/codexQuota/config.ts "weekly_estimate_usd_inline"
 require_file_contains src/lts/codexQuota/config.ts "analytics_backend_now"
-require_file_contains src/i18n/locales/en.json "weekly_estimate_usd_inline"
-require_file_contains src/i18n/locales/zh-CN.json "weekly_estimate_usd_inline"
-require_file_contains src/i18n/locales/zh-TW.json "weekly_estimate_usd_inline"
-require_file_contains src/i18n/locales/ru.json "weekly_estimate_usd_inline"
-require_file_contains src/i18n/locales/en.json "analytics_backend_now"
-require_file_contains src/i18n/locales/zh-CN.json "analytics_backend_now"
-require_file_contains src/i18n/locales/zh-TW.json "analytics_backend_now"
-require_file_contains src/i18n/locales/ru.json "analytics_backend_now"
-require_file_contains src/i18n/locales/en.json "credits_unit"
-require_file_contains src/i18n/locales/zh-CN.json "credits_unit"
-require_file_contains src/i18n/locales/zh-TW.json "credits_unit"
-require_file_contains src/i18n/locales/ru.json "credits_unit"
+require_file_contains src/lts/i18n/en.lts.json "weekly_estimate_usd_inline"
+require_file_contains src/lts/i18n/zh-CN.lts.json "weekly_estimate_usd_inline"
+require_file_contains src/lts/i18n/zh-TW.lts.json "weekly_estimate_usd_inline"
+require_file_contains src/lts/i18n/ru.lts.json "weekly_estimate_usd_inline"
+require_file_contains src/lts/i18n/en.lts.json "analytics_backend_now"
+require_file_contains src/lts/i18n/zh-CN.lts.json "analytics_backend_now"
+require_file_contains src/lts/i18n/zh-TW.lts.json "analytics_backend_now"
+require_file_contains src/lts/i18n/ru.lts.json "analytics_backend_now"
+require_file_contains src/lts/i18n/en.lts.json "credits_unit"
+require_file_contains src/lts/i18n/zh-CN.lts.json "credits_unit"
+require_file_contains src/lts/i18n/zh-TW.lts.json "credits_unit"
+require_file_contains src/lts/i18n/ru.lts.json "credits_unit"
 require_file_contains src/components/quota/quotaConfigs.ts "XAI_CONFIG"
 require_file_contains src/components/quota/quotaConfigs.ts "fetchXaiQuota"
 require_file_contains src/components/quota/quotaConfigs.ts "XAI_BILLING_URL"
@@ -329,6 +329,17 @@ node scripts/check-panel-feature-contracts.mjs
 if ! node <<'NODE'
 const fs = require('node:fs');
 
+const deepMerge = (a, b) => {
+  const out = { ...a };
+  for (const [k, v] of Object.entries(b)) {
+    out[k] =
+      v && typeof v === 'object' && !Array.isArray(v) && out[k] && typeof out[k] === 'object'
+        ? deepMerge(out[k], v)
+        : v;
+  }
+  return out;
+};
+
 const locales = ['en', 'zh-CN', 'zh-TW', 'ru'];
 
 const collectKeys = (files, regex) => {
@@ -367,7 +378,12 @@ const remoteCloudConnectKeys = collectKeys(
 const failures = [];
 
 for (const locale of locales) {
-  const catalog = JSON.parse(fs.readFileSync(`src/i18n/locales/${locale}.json`, 'utf8'));
+  // Codex locale keys are isolated into the LTS overlay (src/lts/i18n/*.lts.json) and
+  // merged onto the shared catalog at runtime via i18n.addResourceBundle; mirror that here so
+  // the check validates the effective merged catalog (base general keys + LTS codex keys).
+  const base = JSON.parse(fs.readFileSync(`src/i18n/locales/${locale}.json`, 'utf8'));
+  const overlay = JSON.parse(fs.readFileSync(`src/lts/i18n/${locale}.lts.json`, 'utf8'));
+  const catalog = deepMerge(base, overlay);
   const codexQuota = catalog.codex_quota || {};
   const authFiles = catalog.auth_files || {};
 
