@@ -13,6 +13,8 @@ import type {
   CodexUsageLeaderboardPayload,
   CodexUsageLeaderboardRow,
   CodexRateLimitInfo,
+  CodexRateLimitResetCredits,
+  CodexRateLimitResetCredit,
   CodexQuotaState,
   CodexUsageWindow,
   CodexQuotaWindow,
@@ -23,6 +25,7 @@ import { apiCallApi, getApiCallErrorMessage } from '@/services/api';
 import {
   CODEX_ANALYTICS_ROLLING_DAYS,
   CODEX_DAILY_USAGE_URL,
+  CODEX_RATE_LIMIT_RESET_CREDITS_URL,
   CODEX_RATE_LIMIT_RESET_CREDITS_CONSUME_URL,
   CODEX_TEAM_USAGE_LEADERBOARD_URL,
   CODEX_USAGE_URL,
@@ -31,6 +34,7 @@ import {
   normalizeNumberValue,
   normalizePlanType,
   normalizeStringValue,
+  parseCodexRateLimitResetCreditsPayload,
   parseCodexDailyUsagePayload,
   parseCodexUsageLeaderboardPayload,
   parseCodexUsagePayload,
@@ -745,6 +749,73 @@ const fetchCodexUsageLeaderboard = async (
 const getErrorMessage = (err: unknown, fallback: string): string =>
   err instanceof Error ? err.message : fallback;
 
+const getCodexRateLimitResetCreditsAvailableCount = (
+  payload?: CodexRateLimitResetCredits | null
+): number | null =>
+  normalizeNumberValue(payload?.available_count ?? payload?.availableCount);
+
+type CodexRateLimitResetCreditsInfo = {
+  availableCount: number | null;
+  expiresAt: string | number | null;
+};
+
+const getCodexResetCreditExpiryMs = (value: unknown): number | null => {
+  const numeric = normalizeNumberValue(value);
+  if (numeric !== null) {
+    const ms = numeric > 1e12 ? numeric : numeric * 1000;
+    return Number.isFinite(ms) ? ms : null;
+  }
+  const stringValue = normalizeStringValue(value);
+  if (!stringValue) return null;
+  const ms = Date.parse(stringValue);
+  return Number.isFinite(ms) ? ms : null;
+};
+
+const getCodexRateLimitResetCreditExpiresAt = (
+  payload?: CodexRateLimitResetCredits | null
+): string | number | null => {
+  const credits = Array.isArray(payload?.credits) ? payload.credits : [];
+  const availableCredits = credits.filter((credit: CodexRateLimitResetCredit) => {
+    const status = normalizeStringValue(credit.status)?.toLowerCase();
+    return !status || status === 'available';
+  });
+
+  const candidates = availableCredits
+    .map((credit) => credit.expires_at ?? credit.expiresAt ?? null)
+    .filter((value): value is string | number => value !== null && value !== undefined)
+    .map((value) => ({ value, ms: getCodexResetCreditExpiryMs(value) }))
+    .filter((item): item is { value: string | number; ms: number } => item.ms !== null)
+    .sort((left, right) => left.ms - right.ms);
+
+  return candidates[0]?.value ?? null;
+};
+
+const getCodexRateLimitResetCreditsInfo = (
+  payload?: CodexRateLimitResetCredits | null
+): CodexRateLimitResetCreditsInfo => ({
+  availableCount: getCodexRateLimitResetCreditsAvailableCount(payload),
+  expiresAt: getCodexRateLimitResetCreditExpiresAt(payload),
+});
+
+const fetchCodexRateLimitResetCredits = async (
+  authIndex: string,
+  requestHeader: Record<string, string>
+): Promise<CodexRateLimitResetCreditsInfo> => {
+  const result = await apiCallApi.request({
+    authIndex,
+    method: 'GET',
+    url: CODEX_RATE_LIMIT_RESET_CREDITS_URL,
+    header: requestHeader,
+  });
+
+  if (result.statusCode < 200 || result.statusCode >= 300) {
+    throw createStatusError(getApiCallErrorMessage(result), result.statusCode);
+  }
+
+  const payload = parseCodexRateLimitResetCreditsPayload(result.body ?? result.bodyText);
+  return getCodexRateLimitResetCreditsInfo(payload);
+};
+
 const resolveCodexRequestErrorMessage = (
   err: unknown,
   planType: string | null,
@@ -1007,6 +1078,7 @@ const fetchCodexQuota = async (
   accountEmail: string | null;
   subscriptionActiveUntil: string | number | null;
   rateLimitResetCreditsAvailableCount: number | null;
+  rateLimitResetCreditExpiresAt: string | number | null;
   windows: CodexQuotaWindow[];
   analytics: CodexAnalyticsState | null;
   analyticsError: string | null;
@@ -1047,9 +1119,27 @@ const fetchCodexQuota = async (
 
   const planTypeFromUsage = normalizePlanType(payload.plan_type ?? payload.planType);
   const resetCredits = payload.rate_limit_reset_credits ?? payload.rateLimitResetCredits ?? null;
-  const rateLimitResetCreditsAvailableCount = normalizeNumberValue(
-    resetCredits?.available_count ?? resetCredits?.availableCount
-  );
+  const embeddedResetCreditInfo = getCodexRateLimitResetCreditsInfo(resetCredits);
+  let rateLimitResetCreditsAvailableCount = embeddedResetCreditInfo.availableCount;
+  let rateLimitResetCreditExpiresAt = embeddedResetCreditInfo.expiresAt;
+  if (
+    rateLimitResetCreditsAvailableCount === null ||
+    (rateLimitResetCreditsAvailableCount > 0 && rateLimitResetCreditExpiresAt === null)
+  ) {
+    try {
+      const resetCreditInfo = await fetchCodexRateLimitResetCredits(
+        authIndex,
+        requestHeader
+      );
+      rateLimitResetCreditsAvailableCount =
+        resetCreditInfo.availableCount ?? rateLimitResetCreditsAvailableCount;
+      rateLimitResetCreditExpiresAt =
+        resetCreditInfo.expiresAt ?? rateLimitResetCreditExpiresAt;
+    } catch {
+      rateLimitResetCreditsAvailableCount = rateLimitResetCreditsAvailableCount ?? null;
+      rateLimitResetCreditExpiresAt = rateLimitResetCreditExpiresAt ?? null;
+    }
+  }
   const accountEmail = normalizeStringValue(payload.email);
   const teamAccountId = normalizeStringValue(payload.account_id ?? payload.accountId) ?? accountId;
   const resolvedPlanType = planTypeFromUsage ?? planTypeFromFile;
@@ -1081,6 +1171,7 @@ const fetchCodexQuota = async (
     accountEmail,
     subscriptionActiveUntil,
     rateLimitResetCreditsAvailableCount,
+    rateLimitResetCreditExpiresAt,
     windows,
     analytics,
     analyticsError,
@@ -1140,6 +1231,7 @@ const resetCodexQuota = async (
   accountEmail: string | null;
   subscriptionActiveUntil: string | number | null;
   rateLimitResetCreditsAvailableCount: number | null;
+  rateLimitResetCreditExpiresAt: string | number | null;
   windows: CodexQuotaWindow[];
   analytics: CodexAnalyticsState | null;
   analyticsError: string | null;
@@ -1190,6 +1282,7 @@ const renderCodexItems = (
   const accountEmail = normalizeStringValue(quota.accountEmail);
   const subscriptionActiveUntil = quota.subscriptionActiveUntil ?? null;
   const rateLimitResetCreditsAvailableCount = quota.rateLimitResetCreditsAvailableCount ?? null;
+  const rateLimitResetCreditExpiresAt = quota.rateLimitResetCreditExpiresAt ?? null;
 
   const getPlanLabel = (pt?: string | null): string | null => {
     const normalized = normalizePlanType(pt);
@@ -1207,6 +1300,9 @@ const renderCodexItems = (
   const planLabel = getPlanLabel(planType);
   const isPremiumPlan = PREMIUM_CODEX_PLAN_TYPES.has(normalizePlanType(planType) ?? '');
   const expiryLabel = subscriptionActiveUntil ? formatUnixTimestamp(subscriptionActiveUntil) : '';
+  const resetCreditExpiryLabel = rateLimitResetCreditExpiresAt
+    ? formatUnixTimestamp(rateLimitResetCreditExpiresAt)
+    : '';
   const nodes: ReactNode[] = [];
   const analytics = quota.analytics ?? null;
   const analyticsError = quota.analyticsError ?? null;
@@ -1261,7 +1357,12 @@ const renderCodexItems = (
       )
     );
 
-  if (planLabel || expiryLabel || rateLimitResetCreditsAvailableCount !== null) {
+  if (
+    planLabel ||
+    expiryLabel ||
+    rateLimitResetCreditsAvailableCount !== null ||
+    resetCreditExpiryLabel
+  ) {
     const valueClass = isPremiumPlan ? styleMap.premiumPlanValue : styleMap.codexPlanValue;
     const planNodes: ReactNode[] = [];
     const appendSeparator = (key: string) => {
@@ -1313,6 +1414,22 @@ const renderCodexItems = (
           'span',
           { key: 'reset-credits-value', className: styleMap.codexPlanValue },
           rateLimitResetCreditsAvailableCount.toString()
+        )
+      );
+    }
+
+    if (resetCreditExpiryLabel) {
+      appendSeparator('reset-credit-expiry-separator');
+      planNodes.push(
+        h(
+          'span',
+          { key: 'reset-credit-expiry-label', className: styleMap.codexPlanLabel },
+          t('codex_quota.reset_credits_expires_label')
+        ),
+        h(
+          'span',
+          { key: 'reset-credit-expiry-value', className: styleMap.codexPlanValue },
+          resetCreditExpiryLabel
         )
       );
     }
@@ -1558,6 +1675,7 @@ export const CODEX_CONFIG: QuotaConfig<
     accountEmail: string | null;
     subscriptionActiveUntil: string | number | null;
     rateLimitResetCreditsAvailableCount: number | null;
+    rateLimitResetCreditExpiresAt: string | number | null;
     windows: CodexQuotaWindow[];
     analytics: CodexAnalyticsState | null;
     analyticsError: string | null;
@@ -1587,6 +1705,7 @@ export const CODEX_CONFIG: QuotaConfig<
     accountEmail: data.accountEmail,
     subscriptionActiveUntil: data.subscriptionActiveUntil,
     rateLimitResetCreditsAvailableCount: data.rateLimitResetCreditsAvailableCount,
+    rateLimitResetCreditExpiresAt: data.rateLimitResetCreditExpiresAt,
     analytics: data.analytics,
     analyticsError: data.analyticsError,
   }),

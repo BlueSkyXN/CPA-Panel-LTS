@@ -5,6 +5,7 @@
 import type {
   ClaudeUsagePayload,
   CodexDailyUsagePayload,
+  CodexRateLimitResetCredits,
   CodexUsageLeaderboardPayload,
   CodexUsagePayload,
   GeminiCliCodeAssistPayload,
@@ -179,6 +180,25 @@ export function parseCodexUsagePayload(payload: unknown): CodexUsagePayload | nu
   }
   if (typeof payload === 'object') {
     return payload as CodexUsagePayload;
+  }
+  return null;
+}
+
+export function parseCodexRateLimitResetCreditsPayload(
+  payload: unknown
+): CodexRateLimitResetCredits | null {
+  if (payload === undefined || payload === null) return null;
+  if (typeof payload === 'string') {
+    const trimmed = payload.trim();
+    if (!trimmed) return null;
+    try {
+      return JSON.parse(trimmed) as CodexRateLimitResetCredits;
+    } catch {
+      return null;
+    }
+  }
+  if (typeof payload === 'object') {
+    return payload as CodexRateLimitResetCredits;
   }
   return null;
 }

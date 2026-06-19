@@ -119,9 +119,29 @@ export interface CodexAdditionalRateLimit {
   rateLimit?: CodexRateLimitInfo | null;
 }
 
+export interface CodexRateLimitResetCredit {
+  id?: string;
+  reset_type?: string;
+  resetType?: string;
+  status?: string;
+  granted_at?: string | number;
+  grantedAt?: string | number;
+  expires_at?: string | number;
+  expiresAt?: string | number;
+  redeem_started_at?: string | number | null;
+  redeemStartedAt?: string | number | null;
+  redeemed_at?: string | number | null;
+  redeemedAt?: string | number | null;
+  title?: string;
+  description?: string;
+}
+
 export interface CodexRateLimitResetCredits {
+  credits?: CodexRateLimitResetCredit[];
   available_count?: number | string;
   availableCount?: number | string;
+  total_earned_count?: number | string;
+  totalEarnedCount?: number | string;
 }
 
 export interface CodexUsagePayload {
@@ -374,6 +394,7 @@ export interface CodexQuotaState {
   accountEmail?: string | null;
   subscriptionActiveUntil?: string | number | null;
   rateLimitResetCreditsAvailableCount?: number | null;
+  rateLimitResetCreditExpiresAt?: string | number | null;
   analytics?: CodexAnalyticsState | null;
   analyticsError?: string | null;
   error?: string;

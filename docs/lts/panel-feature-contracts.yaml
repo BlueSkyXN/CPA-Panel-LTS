@@ -358,6 +358,7 @@ features:
     required_markers:
       - CODEX_CONFIG
       - resetCodexQuota
+      - CODEX_RATE_LIMIT_RESET_CREDITS_URL
       - CODEX_RATE_LIMIT_RESET_CREDITS_CONSUME_URL
       - XAI_CONFIG
       - fetchXaiQuota
@@ -367,6 +368,7 @@ features:
       - codex-smoke-auth
       - xai-smoke-auth
       - daily-workspace-usage-counts
+      - rate-limit-reset-credits
       - rate-limit-reset-credits/consume
       - cli-chat-proxy.grok.com/v1/billing
       - weekly_estimate_usd_inline

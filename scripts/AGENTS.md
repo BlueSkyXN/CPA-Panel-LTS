@@ -10,7 +10,7 @@ Key file: `scripts/codex-quota-compass.user.js`.
 - `@match` is intentionally scoped to `https://chatgpt.com/codex/cloud*`.
 - `CONFIG.MANUAL_ACCESS_TOKEN` must stay empty in committed files.
 - The script must not print access tokens, id tokens, refresh tokens, raw `/usage` responses, or raw analytics responses.
-- Quota reads currently use `/backend-api/wham/usage`, `/backend-api/wham/analytics/daily-workspace-usage-counts`, `/backend-api/wham/analytics/usage-leaderboard`, and `/backend-api/me`; verify endpoint semantics before changing parsers or estimates.
+- Quota reads currently use `/backend-api/wham/usage`, `/backend-api/wham/rate-limit-reset-credits`, `/backend-api/wham/analytics/daily-workspace-usage-counts`, `/backend-api/wham/analytics/usage-leaderboard`, and `/backend-api/me`; verify endpoint semantics before changing parsers or estimates.
 
 ## Local rules
 

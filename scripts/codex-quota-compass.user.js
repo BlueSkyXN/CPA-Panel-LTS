@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Codex Quota Compass
 // @namespace    https://github.com/BlueSkyXN/CPA-Panel-LTS
-// @version      0.1.6
+// @version      0.1.7
 // @description  在 ChatGPT Codex Cloud 页面直接查看 Codex 额度窗口、周额度估算和 daily analytics 汇总。
 // @author       BlueSkyXN
 // @match        https://chatgpt.com/codex/cloud*
@@ -26,6 +26,7 @@
     MANUAL_ACCESS_TOKEN: '',
 
     USAGE_PATH: '/backend-api/wham/usage',
+    RESET_CREDITS_PATH: '/backend-api/wham/rate-limit-reset-credits',
     DAILY_USAGE_PATH: '/backend-api/wham/analytics/daily-workspace-usage-counts',
     TEAM_USAGE_LEADERBOARD_PATH: '/backend-api/wham/analytics/usage-leaderboard',
     ME_PATH: '/backend-api/me',
@@ -498,6 +499,83 @@
     return windows;
   };
 
+  const normalizeResetCreditExpiryMs = (value) => {
+    const numeric = normalizeNumber(value);
+    if (numeric !== null) return numeric > 1e12 ? numeric : numeric * 1000;
+    const stringValue = normalizeString(value);
+    if (!stringValue) return null;
+    const ms = Date.parse(stringValue);
+    return Number.isFinite(ms) ? ms : null;
+  };
+
+  const readResetCreditsInfo = (payload) => {
+    const candidates = [
+      payload?.rate_limit_reset_credits,
+      payload?.rateLimitResetCredits,
+      payload?.data,
+      payload,
+    ];
+    let availableCount = null;
+
+    for (const candidate of candidates) {
+      const count = normalizeNumber(candidate?.available_count ?? candidate?.availableCount);
+      if (count !== null) {
+        availableCount = count;
+        break;
+      }
+    }
+
+    const credits = candidates.flatMap((candidate) =>
+      Array.isArray(candidate?.credits) ? candidate.credits : []
+    );
+    const expiresAt =
+      credits
+        .filter((credit) => {
+          const status = normalizeString(credit?.status)?.toLowerCase();
+          return !status || status === 'available';
+        })
+        .map((credit) => credit?.expires_at ?? credit?.expiresAt ?? null)
+        .filter((value) => value !== null && value !== undefined)
+        .map((value) => ({ value, ms: normalizeResetCreditExpiryMs(value) }))
+        .filter((item) => item.ms !== null)
+        .sort((left, right) => left.ms - right.ms)[0]?.value ?? null;
+
+    return {
+      availableCount,
+      expiresAt,
+    };
+  };
+
+  const fetchResetCredits = async (headers, usagePayload) => {
+    const embeddedInfo = readResetCreditsInfo(usagePayload);
+    if (
+      embeddedInfo.availableCount !== null &&
+      (embeddedInfo.availableCount <= 0 || embeddedInfo.expiresAt !== null)
+    ) {
+      return {
+        ...embeddedInfo,
+        source: 'usage',
+        error: '',
+      };
+    }
+
+    try {
+      const payload = await apiGet(CONFIG.RESET_CREDITS_PATH, headers);
+      const info = readResetCreditsInfo(payload);
+      return {
+        ...info,
+        source: 'standalone',
+        error: '',
+      };
+    } catch (error) {
+      return {
+        ...embeddedInfo,
+        source: 'unavailable',
+        error: errorMessage(error),
+      };
+    }
+  };
+
   const fetchDailyUsage = async (headers, startDate, endDateExclusive) => {
     const query = new URLSearchParams({
       start_date: startDate,
@@ -956,6 +1034,7 @@
     const isTeamPlan = planType === 'team';
     const meResult = isTeamPlan ? await fetchMeInfo(headers) : { info: null, error: '' };
     const userEmail = meResult.info?.email || normalizeString(usage.email);
+    const resetCredits = await fetchResetCredits(headers, usage);
     let analytics = null;
     let analyticsError = '';
 
@@ -988,6 +1067,10 @@
       userEmail,
       meInfo: meResult.info,
       meError: meResult.error,
+      rateLimitResetCreditsAvailableCount: resetCredits.availableCount,
+      rateLimitResetCreditExpiresAt: resetCredits.expiresAt,
+      resetCreditsSource: resetCredits.source,
+      resetCreditsError: resetCredits.error,
       windows,
       analytics,
       analyticsError,
@@ -1179,8 +1262,25 @@
     const weeklyWindow = result.windows.find((item) => item.id === 'codex-weekly');
     const fiveHourWindow = result.windows.find((item) => item.id === 'codex-five-hour');
     const weeklyEstimate = result.analytics?.weeklyEstimate ?? null;
+    const resetCreditsLabel =
+      result.rateLimitResetCreditsAvailableCount === null ||
+      result.rateLimitResetCreditsAvailableCount === undefined
+        ? '--'
+        : formatInteger(result.rateLimitResetCreditsAvailableCount);
+    const resetCreditExpiryMs = normalizeResetCreditExpiryMs(result.rateLimitResetCreditExpiresAt);
+    const resetCreditsHint =
+      resetCreditExpiryMs !== null
+        ? `expires ${formatLocalDateTime(resetCreditExpiryMs)}`
+        : result.resetCreditsSource === 'usage'
+          ? 'from /usage'
+          : result.resetCreditsSource === 'standalone'
+            ? 'from reset credits API'
+            : result.resetCreditsError
+              ? '查询失败'
+              : '';
     const summary = [
       metricCard('Plan', getPlanLabel(result.planType), result.userEmail || ''),
+      metricCard('Manual resets', resetCreditsLabel, resetCreditsHint),
       metricCard(
         '7 天剩余',
         weeklyWindow?.remainingPercent === null || weeklyWindow?.remainingPercent === undefined
@@ -1243,6 +1343,11 @@
               : '<div class="cqc-muted">未返回限制窗口。</div>'
           }
         </div>
+        ${
+          result.resetCreditsError
+            ? `<div class="cqc-warning">Manual resets 查询失败：${escapeHtml(result.resetCreditsError)}</div>`
+            : ''
+        }
       </section>
 
       <section>
@@ -1534,6 +1639,9 @@
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 10px;
+    }
+    .cqc-summary {
+      grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
     }
     .cqc-metric {
       min-width: 0;

@@ -60,6 +60,7 @@
     "code_review_monthly_window": "Месячный лимит code review",
     "additional_monthly_window": "{{name}}: месячный лимит",
     "reset_credits_label": "Ручные сбросы",
+    "reset_credits_expires_label": "Сброс истекает",
     "reset_button": "Сбросить квоту",
     "reset_confirm_title": "Сброс квоты Codex",
     "reset_confirm_message": "Это потратит 1 ручной сброс для квоты Codex \"{{name}}\". Продолжить?",
