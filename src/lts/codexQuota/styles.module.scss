@@ -1,7 +1,8 @@
 // Codex quota — LTS-owned content styles (shared by quota page + auth-file card).
 // Extracted from QuotaPage/AuthFilesPage module (identical copies) to de-duplicate
-// and isolate. Context-specific layout (codexCard/codexControl(s)/codexGrid/
-// codexDetails*) intentionally stays in each page module.
+// and isolate. Context-specific layout (codexCard/codexControl(s)/codexGrid)
+// intentionally stays in each page module. The codexDetails family now lives here
+// too — only its surface background is injected per page via .codexDetailsSurface.
 @use '../../styles/variables' as *;
 @use '../../styles/mixins' as *;
 
@@ -165,4 +166,60 @@
 .codexMetricValueStrong {
   font-weight: 700;
   color: var(--text-primary);
+}
+
+// Collapsible analytics details. Structure is LTS-owned so the compound
+// .codexDetails[open] .codexDetailsChevron selector stays inside one CSS module
+// (a cross-module compound would not match the hashed classnames). Each page
+// injects only the surface background via .codexDetailsSurface.
+.codexDetails {
+  margin-top: $spacing-xs;
+  border: 1px solid var(--border-color);
+  border-radius: $radius-md;
+}
+
+.codexDetailsSummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-sm;
+  padding: $spacing-xs $spacing-sm;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.codexDetailsSummaryMain {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.codexDetailsIcon {
+  display: inline-flex;
+  color: var(--text-tertiary);
+}
+
+.codexDetailsTitle {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.codexDetailsHint {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.codexDetailsChevron {
+  color: var(--text-tertiary);
+  transition: transform $transition-fast;
+}
+
+.codexDetails[open] .codexDetailsChevron {
+  transform: rotate(180deg);
+}
+
+.codexDetailsBody {
+  padding: 0 $spacing-sm $spacing-sm;
 }

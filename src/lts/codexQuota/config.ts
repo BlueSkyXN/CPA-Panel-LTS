@@ -1152,13 +1152,19 @@ const PREMIUM_CODEX_PLAN_TYPES = new Set(['pro', 'prolite', 'pro-lite', 'pro_lit
 const CODEX_STANDARD_NUMBER_FORMATTER = new Intl.NumberFormat(undefined, {
   maximumFractionDigits: 2,
 });
+const CODEX_USD_NUMBER_FORMATTER = new Intl.NumberFormat(undefined, {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 
 const formatCodexPlainIntegerNumber = (value: number): string => String(Math.round(value));
 
 const formatCodexStandardNumber = (value: number): string =>
   CODEX_STANDARD_NUMBER_FORMATTER.format(value);
 
-const formatCodexUsd = (value: number): string => `$${value.toFixed(2)}`;
+const formatCodexUsdAmount = (value: number): string => CODEX_USD_NUMBER_FORMATTER.format(value);
+
+const formatCodexUsd = (value: number): string => `$${formatCodexUsdAmount(value)}`;
 
 const formatCodexAnalyticsDateRange = (range: CodexAnalyticsRange): string => {
   const endMs = Date.parse(`${range.endDateExclusive}T00:00:00Z`);
@@ -1174,7 +1180,8 @@ const renderCodexItems = (
   helpers: QuotaRenderHelpers
 ): ReactNode => {
   // Codex quota CONTENT classes are LTS-owned (./styles.module.scss); the page-injected
-  // helpers still supply shared/layout classes (codexDetails*, premiumPlanValue, quotaRow…).
+  // helpers still supply shared/layout classes (premiumPlanValue, quotaRow…) plus the
+  // per-context .codexDetailsSurface background — codexDetails structure is sidecar-owned.
   const { styles: pageStyles, QuotaProgressBar } = helpers;
   const styleMap = { ...pageStyles, ...codexQuotaStyles };
   const { createElement: h, Fragment } = React;
@@ -1214,7 +1221,7 @@ const renderCodexItems = (
     : null;
   const weeklyUsdInlineEstimate = weeklyEstimate
     ? t('codex_quota.weekly_estimate_usd_inline', {
-        usd: formatCodexPlainIntegerNumber(weeklyEstimate.totalUsdWithResetDay),
+        usd: formatCodexUsdAmount(weeklyEstimate.totalUsdWithResetDay),
       })
     : null;
   const weeklyInlineEstimateTitle = weeklyEstimate
@@ -1506,7 +1513,12 @@ const renderCodexItems = (
     nodes.push(
       h(
         'details',
-        { key: 'analytics-details', className: styleMap.codexDetails },
+        {
+          key: 'analytics-details',
+          className: [styleMap.codexDetails, styleMap.codexDetailsSurface]
+            .filter(Boolean)
+            .join(' '),
+        },
         h(
           'summary',
           { className: styleMap.codexDetailsSummary },
