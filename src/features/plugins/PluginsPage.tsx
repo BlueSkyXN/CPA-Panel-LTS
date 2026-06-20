@@ -32,9 +32,11 @@ import {
   notifyPluginResourcesChanged,
   resolvePluginAssetURL,
 } from './pluginResources';
+import { waitForPluginState } from './pluginPolling';
 import styles from './PluginsPage.module.scss';
 
 type PluginDraftValue = string | boolean | string[];
+type PluginRuntimeWaitStatus = 'ready' | 'globalDisabled' | 'timeout';
 
 interface PluginConfigDraft {
   enabled: boolean;
@@ -42,13 +44,6 @@ interface PluginConfigDraft {
   values: Record<string, PluginDraftValue>;
   errors: Record<string, string>;
 }
-
-const PLUGIN_ENABLE_REFRESH_DELAY_MS = 1600;
-
-const wait = (ms: number) =>
-  new Promise<void>((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
 
 function PluginCardLogo({ src }: { src: string }) {
   const [failed, setFailed] = useState(false);
@@ -280,14 +275,20 @@ export function PluginsPage() {
     }
   }, [connected, t]);
 
-  const loadPluginsAfterMutation = useCallback(
-    async (waitForRegistration: boolean) => {
-      if (waitForRegistration) {
-        await wait(PLUGIN_ENABLE_REFRESH_DELAY_MS);
+  const waitForPluginRuntimeState = useCallback(
+    async (id: string, enabled: boolean): Promise<PluginRuntimeWaitStatus> => {
+      const result = await waitForPluginState(id, (item, response) =>
+        enabled
+          ? !response.pluginsEnabled || (item.registered && item.effectiveEnabled)
+          : !item.effectiveEnabled
+      );
+      setData(result.response);
+      if (enabled && !result.response.pluginsEnabled) {
+        return 'globalDisabled';
       }
-      await loadPlugins();
+      return result.timedOut ? 'timeout' : 'ready';
     },
-    [loadPlugins]
+    []
   );
 
   useHeaderRefresh(loadPlugins, connected);
@@ -388,9 +389,20 @@ export function PluginsPage() {
     try {
       await pluginsApi.updateEnabled(plugin.id, enabled);
       clearConfigCache();
-      await loadPluginsAfterMutation(enabled);
-      notifyPluginResourcesChanged();
-      showNotification(t('plugin_management.toggle_success'), 'success');
+      const status = await waitForPluginRuntimeState(plugin.id, enabled);
+      if (status === 'ready') {
+        notifyPluginResourcesChanged();
+        showNotification(t('plugin_management.toggle_success'), 'success');
+      } else {
+        showNotification(
+          t(
+            status === 'globalDisabled'
+              ? 'plugin_management.global_disabled_hint'
+              : 'plugin_management.runtime_pending'
+          ),
+          'warning'
+        );
+      }
     } catch (err: unknown) {
       showNotification(
         `${t('plugin_management.toggle_failed')}: ${getErrorMessage(
@@ -424,7 +436,7 @@ export function PluginsPage() {
             setEditingConfig({});
             setDraft(null);
           }
-          await loadPluginsAfterMutation(false);
+          await loadPlugins();
           notifyPluginResourcesChanged();
           showNotification(t('plugin_management.delete_success'), 'success');
           if (result.restartRequired) {
@@ -466,14 +478,29 @@ export function PluginsPage() {
     try {
       await pluginsApi.putConfig(editingPlugin.id, nextConfig);
       clearConfigCache();
-      await loadPluginsAfterMutation(
-        nextConfig.enabled === true && editingPlugin.enabled !== true
-      );
-      notifyPluginResourcesChanged();
+      const enabledChanged =
+        typeof nextConfig.enabled === 'boolean' && nextConfig.enabled !== editingPlugin.enabled;
+      const status = enabledChanged
+        ? await waitForPluginRuntimeState(editingPlugin.id, nextConfig.enabled === true)
+        : await loadPlugins().then((): PluginRuntimeWaitStatus => 'ready');
+      if (status === 'ready') {
+        notifyPluginResourcesChanged();
+      }
       setEditingPlugin(null);
       setEditingConfig({});
       setDraft(null);
-      showNotification(t('plugin_management.save_success'), 'success');
+      if (status === 'ready') {
+        showNotification(t('plugin_management.save_success'), 'success');
+      } else {
+        showNotification(
+          t(
+            status === 'globalDisabled'
+              ? 'plugin_management.global_disabled_hint'
+              : 'plugin_management.runtime_pending'
+          ),
+          'warning'
+        );
+      }
     } catch (err: unknown) {
       showNotification(
         `${t('plugin_management.save_failed')}: ${getErrorMessage(
