@@ -167,6 +167,7 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
 
   const pendingQuotaRefreshRef = useRef(false);
   const prevFilesLoadingRef = useRef(loading);
+  const singleRefreshInFlightRef = useRef<Set<string>>(new Set());
 
   const handleRefresh = useCallback(() => {
     pendingQuotaRefreshRef.current = true;
@@ -210,6 +211,9 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
     async (file: AuthFileItem) => {
       if (disabled || file.disabled) return;
       if (quota[file.name]?.status === 'loading') return;
+      if (singleRefreshInFlightRef.current.has(file.name)) return;
+
+      singleRefreshInFlightRef.current.add(file.name);
 
       setQuota((prev) => ({
         ...prev,
@@ -234,6 +238,8 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
           t('auth_files.quota_refresh_failed', { name: file.name, message }),
           'error'
         );
+      } finally {
+        singleRefreshInFlightRef.current.delete(file.name);
       }
     },
     [config, disabled, quota, setQuota, showNotification, t]
