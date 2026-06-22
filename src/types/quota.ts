@@ -132,6 +132,10 @@ export interface CodexRateLimitResetCredit {
   redeemStartedAt?: string | number | null;
   redeemed_at?: string | number | null;
   redeemedAt?: string | number | null;
+  profile_image_url?: string;
+  profileImageUrl?: string;
+  profile_user_id?: string;
+  profileUserId?: string;
   title?: string;
   description?: string;
 }
@@ -395,6 +399,7 @@ export interface CodexQuotaState {
   subscriptionActiveUntil?: string | number | null;
   rateLimitResetCreditsAvailableCount?: number | null;
   rateLimitResetCreditExpiresAt?: string | number | null;
+  rateLimitResetCredits?: CodexRateLimitResetCredit[];
   analytics?: CodexAnalyticsState | null;
   analyticsError?: string | null;
   error?: string;

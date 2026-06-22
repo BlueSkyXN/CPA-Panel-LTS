@@ -31,6 +31,9 @@
 |---|---|---:|---|
 | `AGENTS.md` | 根启动规则、LTS 不变量、命令索引 | This file | 每次从仓库根目录开始任务时 |
 | `README.md`, `README_CN.md` | 人类文档、LTS 背景、开发和发布说明 | No | 修改对外说明、quick start、release notes 前 |
+| `docs/` | 仓库文档和 LTS contract/runbook | No | 修改文档索引、普通说明、非 LTS contract 文档前 |
+| `docs/lts/` | LTS protected-delta registry、feature contracts、selective-port runbook | Yes | 修改 `panel-feature-contracts.yaml`、`panel-protected-deltas.yaml`、`sync-runbook.md` 前 |
+| `local/` | 未跟踪本地证据、截图、release-candidate 和临时交付材料 | No | 读取材料可用；不要把它当作主线源码或发布 truth |
 | `package.json`, `package-lock.json` | npm 依赖、scripts、锁定版本 | No | 新增依赖、改 scripts、改构建链前 |
 | `vite.config.ts` | Vite single-file build、版本注入、alias、SCSS module 配置 | No | 改 build 输出、asset inline、`__APP_VERSION__`、`@/` alias 前 |
 | `.github/workflows/` | GitHub Actions release workflow，发布 Panel `management.html` asset | Yes | 修改 workflow、tag trigger、release asset、GitHub permissions 前 |
@@ -45,8 +48,11 @@
 | `src/components/modelAlias/` | OAuth model alias diagram/list editing UI | No | 修改 alias diagram、fork、context menu、modal 行为前 |
 | `src/components/ui/` | 共享 UI primitives 和 icon wrappers | No | 修改 Button/Input/Modal/Select/Toggle 等公共组件 API 前 |
 | `src/features/authFiles/` | auth file cards、OAuth excluded/model alias、auth-file quota/status cache | No | 修改凭据上传/删除、runtime-only 状态、OAuth excluded/model alias、auth-file quota 前 |
+| `src/features/providers/` | provider workbench、model discovery、connectivity tests、recent-request health | No | 修改 `/ai-providers/workbench`、provider form/adapters/model discovery/recent request smoke 前 |
+| `src/features/plugins/` | plugin management/store/resource pages，受 Core plugin capability gate 控制 | Yes | 修改 `/plugins`、`/plugin-store`、plugin resource pages、install gate、plugin polling/resource descriptors 前 |
 | `src/hooks/` | 通用 React hooks | No | 修改 shared hook contract、interval、pagination、unsaved guard、API hook 前 |
 | `src/i18n/` | i18next setup and locale JSON | No | 新增或修改用户可见文案、语言切换、locale key 前 |
+| `src/lts/` | LTS-owned sidecar/overlay code：Codex quota、Codex remote cloud connect、LTS locale overlays | Yes | 修改 `codexQuota`、`codexRemoteCloudConnect`、`i18n/*.lts.json` 或 LTS-only integration 前 |
 | `src/services/api/` | browser-side Management API clients and transformers | No | 修改 `/v0/management` endpoint、request/response transform、auth header、usage/quota/oauth clients 前 |
 | `src/services/storage/` | browser local storage abstraction | No | 修改 management key 或敏感本地存储前 |
 | `src/stores/` | Zustand stores for auth/config/models/usage/quota/theme/drafts | No | 修改跨页面缓存、load state、draft state、usage/quota store 前 |
@@ -63,7 +69,10 @@ Before editing files under a directory that has `Local AGENTS.md = Yes`, read th
 
 ```bash
 cat .github/workflows/AGENTS.md
+cat docs/lts/AGENTS.md
 cat scripts/AGENTS.md
+cat src/features/plugins/AGENTS.md
+cat src/lts/AGENTS.md
 cat src/components/usage/AGENTS.md
 ```
 
@@ -108,6 +117,21 @@ When following upstream:
 - Lightweight cleanup may remove promotional copy, sponsorship text, unused pages, unused providers, or non-target release machinery, but must not remove code still needed by the Core/Panel statistics contract.
 - Run `npm run check:lts` before opening or merging upstream-port PRs.
 - For detailed upstream handling rules, read `docs/lts/sync-runbook.md` and `docs/lts/panel-protected-deltas.yaml`.
+
+Contract truth lives in two places and should stay aligned:
+
+- `docs/lts/panel-feature-contracts.yaml` documents protected, LTS-maintained, shared, coexist, and experimental feature surfaces.
+- `scripts/check-lts-panel-contract.sh` enforces sentinel files, required markers, locale overlay coverage, lockfile policy, release asset contract, plugin support markers, and LTS sidecar markers.
+
+When adding or removing a protected/coexist LTS surface, update both the feature contract and the guard script in the same change unless the user explicitly scopes a partial investigation.
+
+Important current feature boundaries:
+
+- `full-usage-statistics` is protected and must not be replaced by recent-request summaries.
+- `provider-workbench` and `recent-requests` may coexist, but must not replace the stable LTS provider page or full usage statistics.
+- `plugin-management` is capability-gated by Core support, including `x-cpa-support-plugin`, `pluginSupportKnown`, and `RequirePluginSupport`.
+- `src/lts/codexQuota/` and `src/lts/codexRemoteCloudConnect/` are LTS-owned sidecars; shared pages should keep thin integration points.
+- `src/lts/i18n/*.lts.json` are runtime overlay locale catalogs. Keep all active locales aligned when adding LTS-only text.
 
 ## CPA-Core-LTS contract
 
@@ -162,11 +186,37 @@ For TypeScript or UI changes:
 For usage statistics changes:
 
 1. Read `src/components/usage/AGENTS.md`.
+2. Read `docs/lts/AGENTS.md` if the protected feature registry or guard markers need to change.
+3. Run `npm run check:lts`.
+4. Run `npm run type-check`.
+5. Run `npm run build`.
+6. Inspect `src/router/MainRoutes.tsx`, `src/pages/UsagePage.tsx`, `src/services/api/usage.ts`, `src/stores/useUsageStatsStore.ts`, `src/types/usage.ts`, `src/utils/usage.ts`, and `src/utils/usageIndex.ts` for contract drift.
+7. If the change depends on Core behavior, verify against current `CPA-Core-LTS` Management API code or live endpoint; do not infer fields from memory.
+
+For LTS contract or guard changes:
+
+1. Read `docs/lts/AGENTS.md`.
+2. Read `scripts/AGENTS.md` when changing `scripts/check-lts-panel-contract.sh`, `scripts/check-panel-feature-contracts.mjs`, or smoke scripts.
+3. Keep `docs/lts/panel-feature-contracts.yaml` and `scripts/check-lts-panel-contract.sh` aligned.
+4. Run `npm run check:lts`.
+5. Run `npm run validate:lts` for broad protected-surface, route, API, or smoke marker changes.
+
+For LTS sidecar changes under `src/lts/`:
+
+1. Read `src/lts/AGENTS.md`.
 2. Run `npm run check:lts`.
 3. Run `npm run type-check`.
 4. Run `npm run build`.
-5. Inspect `src/router/MainRoutes.tsx`, `src/pages/UsagePage.tsx`, `src/services/api/usage.ts`, `src/stores/useUsageStatsStore.ts`, `src/types/usage.ts`, `src/utils/usage.ts`, and `src/utils/usageIndex.ts` for contract drift.
-6. If the change depends on Core behavior, verify against current `CPA-Core-LTS` Management API code or live endpoint; do not infer fields from memory.
+5. Run `npm run smoke:lts` when touching Codex quota rendering, reset-credit behavior, remote cloud connect UI, auth-file quota cards, or locale overlays; report if Playwright/Chromium is unavailable.
+
+For plugin management changes:
+
+1. Read `src/features/plugins/AGENTS.md`.
+2. Run `npm run check:lts`.
+3. Run `npm run type-check`.
+4. Run `npm run build`.
+5. Run `npm run smoke:lts` for route, gate, install modal, store-source, or plugin resource changes.
+6. Use `npm run smoke:lts:core -- --include-plugin-store` only when local `CPA-Core-LTS`, management credentials, and plugin-store support are available; report skipped real-Core validation separately.
 
 For release workflow changes:
 

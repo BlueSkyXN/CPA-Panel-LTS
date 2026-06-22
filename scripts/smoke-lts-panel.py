@@ -392,7 +392,13 @@ def build_codex_quota_usage_payload() -> dict[str, Any]:
                     "id": "RateLimitResetCredit_smoke",
                     "reset_type": "codex_rate_limits",
                     "status": "available",
+                    "title": "Smoke reset credit",
+                    "description": "Codex reset credit smoke fixture",
+                    "granted_at": "2026-06-18T00:32:23.324671Z",
                     "expires_at": "2026-07-18T00:32:23.324671Z",
+                    "redeem_started_at": None,
+                    "redeemed_at": None,
+                    "profile_user_id": "user-smoke",
                 }
             ],
         },
@@ -1190,6 +1196,11 @@ def run_quota_runtime_smoke(page: Any, app_url: str) -> None:
     codex_card.get_by_text("Manual resets", exact=False).wait_for()
     codex_card.get_by_text("2", exact=True).first.wait_for()
     codex_card.get_by_text("Reset expires", exact=False).wait_for()
+    codex_card.get_by_role("button", name="Details").click()
+    reset_details = page.get_by_role("dialog", name="Manual reset details")
+    reset_details.get_by_text("RateLimitResetCredit_smoke", exact=False).wait_for()
+    reset_details.get_by_text("codex_rate_limits", exact=True).wait_for()
+    reset_details.locator(".modal-footer").get_by_role("button", name="Close").click()
     codex_card.get_by_text("Est weekly 0.31 USD", exact=True).wait_for()
 
     # codexDetails analytics fold-out is LTS-isolated: its structure and the compound

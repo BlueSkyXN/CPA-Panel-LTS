@@ -374,6 +374,15 @@ features:
       - weekly_estimate_usd_inline
       - analytics_backend_now
       - formatCodexUsdAmount
+      - CodexResetCreditsDetailsButton
+      - LTS-owned reset credit details dialog
+      - getCodexRateLimitResetCreditsInfo
+      - CODEX_RESET_CREDITS_REQUEST_TIMEOUT_MS
+      - sortCodexResetCredits
+      - rateLimitResetCredits
+      - codexPlanItem
       - .codexDetails[open] .codexDetailsChevron
+      - .codexResetCreditCard
+      - reset_credits_details_button
       - Est weekly 0.31 USD
       - credits_unit
