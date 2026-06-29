@@ -265,6 +265,7 @@ require_file_contains src/lts/codexQuota/config.ts "CodexResetCreditsDetailsButt
 require_file_contains src/lts/codexQuota/config.ts "rateLimitResetCredits"
 require_file_contains src/lts/codexQuota/config.ts "codexPlanItem"
 require_file_contains src/lts/codexQuota/config.ts "CODEX_RESET_CREDITS_REQUEST_TIMEOUT_MS"
+require_file_contains src/lts/codexQuota/resetConfirmation.ts "showCodexQuotaResetConfirmation"
 require_file_contains src/lts/codexQuota/ResetCreditsDetails.tsx "CodexResetCreditsDetailsButton"
 require_file_contains src/lts/codexQuota/ResetCreditsDetails.tsx "LTS-owned reset credit details dialog"
 require_file_contains src/lts/codexQuota/resetCredits.ts "getCodexRateLimitResetCreditsInfo"
@@ -393,6 +394,7 @@ const collectKeys = (files, regex) => {
 const codexQuotaKeys = collectKeys(
   [
     'src/lts/codexQuota/config.ts',
+    'src/lts/codexQuota/resetConfirmation.ts',
     'src/components/quota/QuotaSection.tsx',
     'src/features/authFiles/components/AuthFileQuotaSection.tsx',
   ],

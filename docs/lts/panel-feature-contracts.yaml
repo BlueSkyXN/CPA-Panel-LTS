@@ -376,6 +376,7 @@ features:
       - formatCodexUsdAmount
       - CodexResetCreditsDetailsButton
       - LTS-owned reset credit details dialog
+      - showCodexQuotaResetConfirmation
       - getCodexRateLimitResetCreditsInfo
       - CODEX_RESET_CREDITS_REQUEST_TIMEOUT_MS
       - sortCodexResetCredits

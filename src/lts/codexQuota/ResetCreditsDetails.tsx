@@ -1,9 +1,10 @@
 import React from 'react';
 import type { ReactNode } from 'react';
 import type { TFunction } from 'i18next';
-import { IconInfo } from '@/components/ui/icons';
+import { IconInfo, IconRefreshCw } from '@/components/ui/icons';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
+import type { QuotaResetAction } from '@/components/quota/QuotaCard';
 import type { CodexRateLimitResetCredit } from '@/types';
 import { formatUnixTimestamp } from '@/utils/format';
 import { normalizeStringValue } from '@/utils/quota';
@@ -20,6 +21,7 @@ type CodexResetCreditsDetailsButtonProps = {
   credits: CodexRateLimitResetCredit[];
   availableCount: number | null;
   t: TFunction;
+  resetQuotaAction?: QuotaResetAction;
 };
 
 const formatCodexResetCreditTimestamp = (
@@ -40,12 +42,13 @@ export const CodexResetCreditsDetailsButton = ({
   credits,
   availableCount,
   t,
+  resetQuotaAction,
 }: CodexResetCreditsDetailsButtonProps): ReactNode => {
   const [open, setOpen] = React.useState(false);
   const { createElement: h } = React;
   const sortedCredits = React.useMemo(() => sortCodexResetCredits(credits), [credits]);
 
-  if (sortedCredits.length === 0) return null;
+  if (sortedCredits.length === 0 && !resetQuotaAction) return null;
 
   const available = availableCount ?? sortedCredits.filter(isCodexResetCreditAvailable).length;
   const earliestExpiryLabel = formatCodexResetCreditTimestamp(
@@ -137,9 +140,33 @@ export const CodexResetCreditsDetailsButton = ({
         width: 760,
         className: codexQuotaStyles.codexResetCreditsModal,
         footer: h(
-          Button,
-          { type: 'button', variant: 'primary', size: 'sm', onClick: () => setOpen(false) },
-          t('common.close')
+          React.Fragment,
+          null,
+          h(
+            Button,
+            { type: 'button', variant: 'ghost', size: 'sm', onClick: () => setOpen(false) },
+            t('common.close')
+          ),
+          resetQuotaAction
+            ? h(
+                Button,
+                {
+                  type: 'button',
+                  variant: 'danger',
+                  size: 'sm',
+                  onClick: () => {
+                    setOpen(false);
+                    resetQuotaAction.onClick();
+                  },
+                  disabled: resetQuotaAction.disabled,
+                  loading: resetQuotaAction.loading,
+                  title: t('codex_quota.reset_button'),
+                  'aria-label': t('codex_quota.reset_button'),
+                },
+                !resetQuotaAction.loading ? h(IconRefreshCw, { size: 14 }) : null,
+                t('codex_quota.reset_button')
+              )
+            : null
         ),
       },
       h(

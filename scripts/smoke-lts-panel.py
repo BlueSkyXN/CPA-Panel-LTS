@@ -1213,14 +1213,20 @@ def run_quota_runtime_smoke(page: Any, app_url: str) -> None:
     codex_card.locator("details[open]").first.wait_for()
     codex_card.get_by_text("Deep Usage", exact=False).first.wait_for()
 
-    codex_card.get_by_role("button", name="Reset quota").click()
+    codex_card.get_by_role("button", name="Details").click()
+    reset_action_details = page.get_by_role("dialog", name="Manual reset details")
+    reset_action_details.get_by_text("RateLimitResetCredit_smoke", exact=False).wait_for()
+    reset_action_details.get_by_role("button", name="Reset quota").click()
     confirm = page.get_by_role("dialog", name="Reset Codex quota")
     confirm.get_by_text("codex-smoke.json", exact=False).wait_for()
+    confirm.get_by_role("button", name="Continue").click()
+    second_confirm = page.get_by_role("dialog", name="Confirm reset again")
+    second_confirm.get_by_text("codex-smoke.json", exact=False).wait_for()
     with page.expect_response(
         lambda response: response.request.method == "POST"
         and response.url.endswith("/v0/management/api-call")
     ):
-        confirm.get_by_role("button", name="Reset quota").click()
+        second_confirm.get_by_role("button", name="Reset quota now").click()
     page.wait_for_function("() => document.querySelectorAll('[role=\"dialog\"]').length === 0")
 
     xai_card = page.get_by_text("xai-smoke.json", exact=True).locator(

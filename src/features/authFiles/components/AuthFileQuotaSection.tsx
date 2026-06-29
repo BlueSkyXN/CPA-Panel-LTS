@@ -17,9 +17,8 @@ import {
   resolveQuotaErrorMessage,
   type QuotaProviderType,
 } from '@/features/authFiles/constants';
-import { Button } from '@/components/ui/Button';
-import { IconRefreshCw } from '@/components/ui/icons';
 import { QuotaProgressBar } from '@/features/authFiles/components/QuotaProgressBar';
+import { showCodexQuotaResetConfirmation } from '@/lts/codexQuota/resetConfirmation';
 import styles from '@/pages/AuthFilesPage.module.scss';
 
 type QuotaState = { status?: string; error?: string; errorStatus?: number } | undefined;
@@ -118,11 +117,10 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
     const resetQuota = config.resetQuota;
     if (!resetQuota) return;
 
-    showConfirmation({
-      title: t('codex_quota.reset_confirm_title'),
-      message: t('codex_quota.reset_confirm_message', { name: file.name }),
-      confirmText: t('codex_quota.reset_confirm_button'),
-      variant: 'primary',
+    showCodexQuotaResetConfirmation({
+      fileName: file.name,
+      t,
+      showConfirmation,
       onConfirm: async () => {
         setResettingQuota(true);
         try {
@@ -164,20 +162,11 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
   const canUseResetQuota = canRefreshQuota && quotaStatus !== 'loading';
   const showResetQuotaAction = quota !== undefined && Boolean(config.canResetQuota?.(quota));
   const resetQuotaAction = config.resetQuota && showResetQuotaAction ? (
-    <Button
-      type="button"
-      variant="secondary"
-      size="sm"
-      className={styles.quotaResetCreditButton}
-      onClick={() => resetQuotaForFile()}
-      disabled={!canUseResetQuota}
-      loading={resettingQuota}
-      title={t('codex_quota.reset_button')}
-      aria-label={t('codex_quota.reset_button')}
-    >
-      {!resettingQuota && <IconRefreshCw size={14} />}
-      {t('codex_quota.reset_button')}
-    </Button>
+    {
+      disabled: !canUseResetQuota,
+      loading: resettingQuota,
+      onClick: () => resetQuotaForFile(),
+    }
   ) : undefined;
   const quotaErrorMessage = resolveQuotaErrorMessage(
     t,
@@ -208,12 +197,10 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
         (config.renderQuotaItems(quota, t, {
           styles,
           QuotaProgressBar,
+          resetQuotaAction,
         }) as ReactNode)
       ) : (
         <div className={styles.quotaMessage}>{t(`${config.i18nPrefix}.idle`)}</div>
-      )}
-      {quotaStatus !== 'idle' && resetQuotaAction && (
-        <div className={styles.quotaCardActions}>{resetQuotaAction}</div>
       )}
     </div>
   );

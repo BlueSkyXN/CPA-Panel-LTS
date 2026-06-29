@@ -17,6 +17,7 @@ import { useQuotaLoader } from './useQuotaLoader';
 import type { QuotaConfig } from './quotaConfigs';
 import { useGridColumns } from './useGridColumns';
 import { IconRefreshCw } from '@/components/ui/icons';
+import { showCodexQuotaResetConfirmation } from '@/lts/codexQuota/resetConfirmation';
 import styles from '@/pages/QuotaPage.module.scss';
 
 type QuotaUpdater<T> = T | ((prev: T) => T);
@@ -253,11 +254,10 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
       if (quota[file.name]?.status === 'loading') return;
       if (resettingQuotaName === file.name) return;
 
-      showConfirmation({
-        title: t('codex_quota.reset_confirm_title'),
-        message: t('codex_quota.reset_confirm_message', { name: file.name }),
-        confirmText: t('codex_quota.reset_confirm_button'),
-        variant: 'primary',
+      showCodexQuotaResetConfirmation({
+        fileName: file.name,
+        t,
+        showConfirmation,
         onConfirm: async () => {
           setResettingQuotaName(file.name);
           try {
@@ -356,20 +356,11 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
                 itemQuota !== undefined && Boolean(config.canResetQuota?.(itemQuota));
               const resetQuotaAction =
                 config.resetQuota && showResetQuotaAction ? (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className={styles.quotaResetCreditButton}
-                    onClick={() => resetQuotaForFile(item)}
-                    disabled={!canUseQuotaAction || isResettingQuota}
-                    loading={isResettingQuota}
-                    title={t('codex_quota.reset_button')}
-                    aria-label={t('codex_quota.reset_button')}
-                  >
-                    {!isResettingQuota && <IconRefreshCw size={14} />}
-                    {t('codex_quota.reset_button')}
-                  </Button>
+                  {
+                    disabled: !canUseQuotaAction || isResettingQuota,
+                    loading: isResettingQuota,
+                    onClick: () => resetQuotaForFile(item),
+                  }
                 ) : undefined;
 
               return (

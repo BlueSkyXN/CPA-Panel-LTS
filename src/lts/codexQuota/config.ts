@@ -1246,7 +1246,7 @@ const renderCodexItems = (
   // Codex quota CONTENT classes are LTS-owned (./styles.module.scss); the page-injected
   // helpers still supply shared/layout classes (premiumPlanValue, quotaRow…) plus the
   // per-context .codexDetailsSurface background — codexDetails structure is sidecar-owned.
-  const { styles: pageStyles, QuotaProgressBar } = helpers;
+  const { styles: pageStyles, QuotaProgressBar, resetQuotaAction } = helpers;
   const styleMap = { ...pageStyles, ...codexQuotaStyles };
   const { createElement: h, Fragment } = React;
   const windows = quota.windows ?? [];
@@ -1365,12 +1365,13 @@ const renderCodexItems = (
       planNodes.push(
         renderCodexPlanItem(
           'reset-credits',
-          rateLimitResetCredits.length > 0
+          rateLimitResetCredits.length > 0 || resetQuotaAction
             ? h(CodexResetCreditsDetailsButton, {
                 key: 'reset-credits-details',
                 credits: rateLimitResetCredits,
                 availableCount: rateLimitResetCreditsAvailableCount,
                 t,
+                resetQuotaAction,
               })
             : null,
           h('span', { className: styleMap.codexPlanLabel }, t('codex_quota.reset_credits_label')),
