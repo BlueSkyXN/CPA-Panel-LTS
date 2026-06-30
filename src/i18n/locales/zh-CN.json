@@ -1306,6 +1306,8 @@
           "codex_abnormal_reasoning_retry_reasoning_efforts_hint": "可选的 Codex reasoning.effort 过滤值，例如 high 或 xhigh；留空表示不限制 effort",
           "codex_abnormal_reasoning_retry_reasoning_tokens_label": "Reasoning tokens",
           "codex_abnormal_reasoning_retry_reasoning_tokens_hint": "触发重试的非负整数 token 数",
+          "codex_abnormal_reasoning_retry_max_retries_label": "最大异常重试次数",
+          "codex_abnormal_reasoning_retry_max_retries_hint": "异常 reasoning 检测触发的最大额外重试次数；填 0 表示记录失败 attempt 并直接返回 502",
           "codex_abnormal_reasoning_retry_auth_kinds_label": "认证类型",
           "codex_abnormal_reasoning_retry_auth_kinds_hint": "归一化后的 auth kind 白名单；默认 OAuth 不匹配 API Key",
           "codex_abnormal_reasoning_retry_auth_ids_label": "认证 ID",

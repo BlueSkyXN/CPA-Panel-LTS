@@ -325,8 +325,10 @@ features:
       - codexAbnormalReasoningRetryAuthKinds
       - codexAbnormalReasoningRetryAuthIds
       - codexAbnormalReasoningRetryStreamBuffer
+      - codexAbnormalReasoningRetryMaxRetries
       - abnormal-reasoning-retry
       - reasoning-efforts
+      - max-retries
       - codex_abnormal_reasoning_retry_title
 
   - id: auth-files-management

@@ -1300,6 +1300,8 @@
           "codex_abnormal_reasoning_retry_reasoning_efforts_hint": "Опциональный фильтр translated Codex reasoning.effort, например high или xhigh; оставьте пустым, чтобы не ограничивать effort",
           "codex_abnormal_reasoning_retry_reasoning_tokens_label": "Reasoning tokens",
           "codex_abnormal_reasoning_retry_reasoning_tokens_hint": "Неотрицательные целые значения token count, запускающие повтор",
+          "codex_abnormal_reasoning_retry_max_retries_label": "Max abnormal retries",
+          "codex_abnormal_reasoning_retry_max_retries_hint": "Максимум дополнительных повторов из-за abnormal reasoning; 0 записывает failed attempt и возвращает 502 без повтора",
           "codex_abnormal_reasoning_retry_auth_kinds_label": "Типы auth",
           "codex_abnormal_reasoning_retry_auth_kinds_hint": "Белый список нормализованных auth kind; OAuth по умолчанию не совпадает с API key",
           "codex_abnormal_reasoning_retry_auth_ids_label": "Auth IDs",

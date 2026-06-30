@@ -195,6 +195,7 @@ const CODEX_ABNORMAL_REASONING_RETRY_DIRTY_FIELDS = [
   'codexAbnormalReasoningRetryAuthKinds',
   'codexAbnormalReasoningRetryAuthIds',
   'codexAbnormalReasoningRetryStreamBuffer',
+  'codexAbnormalReasoningRetryMaxRetries',
 ] as const;
 
 function hasPayloadDirtyFields(dirtyFields: Set<string>): boolean {
@@ -252,6 +253,9 @@ export function getVisualConfigValidationErrors(
     maxRetryCredentials: getNonNegativeIntegerError(values.maxRetryCredentials),
     maxRetryInterval: getNonNegativeIntegerError(values.maxRetryInterval),
     authAutoRefreshWorkers: getNonNegativeIntegerError(values.authAutoRefreshWorkers),
+    codexAbnormalReasoningRetryMaxRetries: getNonNegativeIntegerError(
+      values.codexAbnormalReasoningRetryMaxRetries
+    ),
     codexAbnormalReasoningRetryReasoningTokens: getNonNegativeIntegerListError(
       values.codexAbnormalReasoningRetryReasoningTokens
     ),
@@ -849,6 +853,7 @@ function getNextDirtyFields(
       'codexIdentityConfuse',
       'codexAbnormalReasoningRetryEnabled',
       'codexAbnormalReasoningRetryStreamBuffer',
+      'codexAbnormalReasoningRetryMaxRetries',
       'host',
       'port',
       'tlsEnable',
@@ -1184,6 +1189,10 @@ export function useVisualConfig() {
           typeof codexAbnormalReasoningRetry?.['stream-buffer'] === 'boolean'
             ? codexAbnormalReasoningRetry['stream-buffer']
             : DEFAULT_VISUAL_VALUES.codexAbnormalReasoningRetryStreamBuffer,
+        codexAbnormalReasoningRetryMaxRetries: String(
+          codexAbnormalReasoningRetry?.['max-retries'] ??
+            DEFAULT_VISUAL_VALUES.codexAbnormalReasoningRetryMaxRetries
+        ),
 
         quotaSwitchProject: Boolean(quotaExceeded?.['switch-project'] ?? true),
         quotaSwitchPreviewModel: Boolean(quotaExceeded?.['switch-preview-model'] ?? true),
@@ -1463,6 +1472,11 @@ export function useVisualConfig() {
             doc.setIn(
               ['codex', 'abnormal-reasoning-retry', 'stream-buffer'],
               values.codexAbnormalReasoningRetryStreamBuffer
+            );
+            setIntFromStringInDoc(
+              doc,
+              ['codex', 'abnormal-reasoning-retry', 'max-retries'],
+              values.codexAbnormalReasoningRetryMaxRetries
             );
             deleteIfMapEmpty(doc, ['codex', 'abnormal-reasoning-retry']);
           }

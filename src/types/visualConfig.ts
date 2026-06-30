@@ -14,6 +14,7 @@ export type VisualConfigFieldPath =
   | 'maxRetryCredentials'
   | 'maxRetryInterval'
   | 'authAutoRefreshWorkers'
+  | 'codexAbnormalReasoningRetryMaxRetries'
   | 'codexAbnormalReasoningRetryReasoningTokens'
   | 'streaming.keepaliveSeconds'
   | 'streaming.bootstrapRetries'
@@ -127,6 +128,7 @@ export type VisualConfigValues = {
   codexAbnormalReasoningRetryAuthKinds: string[];
   codexAbnormalReasoningRetryAuthIds: string[];
   codexAbnormalReasoningRetryStreamBuffer: boolean;
+  codexAbnormalReasoningRetryMaxRetries: string;
   payloadDefaultRules: PayloadRule[];
   payloadDefaultRawRules: PayloadRule[];
   payloadOverrideRules: PayloadRule[];
@@ -199,6 +201,7 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   codexAbnormalReasoningRetryAuthKinds: ['oauth'],
   codexAbnormalReasoningRetryAuthIds: [],
   codexAbnormalReasoningRetryStreamBuffer: true,
+  codexAbnormalReasoningRetryMaxRetries: '2',
   payloadDefaultRules: [],
   payloadDefaultRawRules: [],
   payloadOverrideRules: [],

@@ -1306,6 +1306,8 @@
           "codex_abnormal_reasoning_retry_reasoning_efforts_hint": "Optional translated Codex reasoning.effort values such as high or xhigh; leave empty to match any effort",
           "codex_abnormal_reasoning_retry_reasoning_tokens_label": "Reasoning tokens",
           "codex_abnormal_reasoning_retry_reasoning_tokens_hint": "Non-negative integer token counts that trigger retry",
+          "codex_abnormal_reasoning_retry_max_retries_label": "Max abnormal retries",
+          "codex_abnormal_reasoning_retry_max_retries_hint": "Maximum extra retries caused by abnormal reasoning detection; 0 records the failed attempt and returns 502 without retry",
           "codex_abnormal_reasoning_retry_auth_kinds_label": "Auth kinds",
           "codex_abnormal_reasoning_retry_auth_kinds_hint": "Normalized auth kind whitelist; default OAuth does not match API keys",
           "codex_abnormal_reasoning_retry_auth_ids_label": "Auth IDs",

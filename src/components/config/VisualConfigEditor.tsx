@@ -209,6 +209,10 @@ export function VisualConfigEditor({
     t,
     validationErrors?.codexAbnormalReasoningRetryReasoningTokens
   );
+  const codexAbnormalReasoningRetryMaxRetriesError = getValidationMessage(
+    t,
+    validationErrors?.codexAbnormalReasoningRetryMaxRetries
+  );
   const keepaliveError = getValidationMessage(t, validationErrors?.['streaming.keepaliveSeconds']);
   const bootstrapRetriesError = getValidationMessage(
     t,
@@ -297,6 +301,7 @@ export function VisualConfigEditor({
           'maxRetryCredentials',
           'maxRetryInterval',
           'authAutoRefreshWorkers',
+          'codexAbnormalReasoningRetryMaxRetries',
           'codexAbnormalReasoningRetryReasoningTokens',
         ]),
       },
@@ -971,6 +976,22 @@ export function VisualConfigEditor({
                         }
                       />
                     </FieldShell>
+                    <Input
+                      label={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_max_retries_label'
+                      )}
+                      type="number"
+                      placeholder="2"
+                      value={values.codexAbnormalReasoningRetryMaxRetries}
+                      onChange={(e) =>
+                        onChange({ codexAbnormalReasoningRetryMaxRetries: e.target.value })
+                      }
+                      disabled={disabled}
+                      hint={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_max_retries_hint'
+                      )}
+                      error={codexAbnormalReasoningRetryMaxRetriesError}
+                    />
                     <FieldShell
                       label={t(
                         'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_auth_kinds_label'
