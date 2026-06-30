@@ -122,6 +122,7 @@ export type VisualConfigValues = {
   codexIdentityConfuse: boolean;
   codexAbnormalReasoningRetryEnabled: boolean;
   codexAbnormalReasoningRetryModelContains: string[];
+  codexAbnormalReasoningRetryReasoningEfforts: string[];
   codexAbnormalReasoningRetryReasoningTokens: string[];
   codexAbnormalReasoningRetryAuthKinds: string[];
   codexAbnormalReasoningRetryAuthIds: string[];
@@ -193,6 +194,7 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   codexIdentityConfuse: false,
   codexAbnormalReasoningRetryEnabled: false,
   codexAbnormalReasoningRetryModelContains: ['gpt-5.5'],
+  codexAbnormalReasoningRetryReasoningEfforts: [],
   codexAbnormalReasoningRetryReasoningTokens: ['516', '1034'],
   codexAbnormalReasoningRetryAuthKinds: ['oauth'],
   codexAbnormalReasoningRetryAuthIds: [],

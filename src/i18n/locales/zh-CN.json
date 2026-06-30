@@ -1302,6 +1302,8 @@
           "codex_abnormal_reasoning_retry_stream_buffer_desc": "缓存 streaming chunks 到 response.completed，命中异常时可透明重试",
           "codex_abnormal_reasoning_retry_model_contains_label": "模型包含",
           "codex_abnormal_reasoning_retry_model_contains_hint": "请求模型或解析后的上游模型包含任一值即匹配",
+          "codex_abnormal_reasoning_retry_reasoning_efforts_label": "Reasoning efforts",
+          "codex_abnormal_reasoning_retry_reasoning_efforts_hint": "可选的 Codex reasoning.effort 过滤值，例如 high 或 xhigh；留空表示不限制 effort",
           "codex_abnormal_reasoning_retry_reasoning_tokens_label": "Reasoning tokens",
           "codex_abnormal_reasoning_retry_reasoning_tokens_hint": "触发重试的非负整数 token 数",
           "codex_abnormal_reasoning_retry_auth_kinds_label": "认证类型",

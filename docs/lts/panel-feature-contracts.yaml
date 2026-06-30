@@ -320,11 +320,13 @@ features:
     required_markers:
       - codexAbnormalReasoningRetryEnabled
       - codexAbnormalReasoningRetryModelContains
+      - codexAbnormalReasoningRetryReasoningEfforts
       - codexAbnormalReasoningRetryReasoningTokens
       - codexAbnormalReasoningRetryAuthKinds
       - codexAbnormalReasoningRetryAuthIds
       - codexAbnormalReasoningRetryStreamBuffer
       - abnormal-reasoning-retry
+      - reasoning-efforts
       - codex_abnormal_reasoning_retry_title
 
   - id: auth-files-management

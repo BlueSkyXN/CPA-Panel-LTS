@@ -1328,6 +1328,8 @@
           "codex_abnormal_reasoning_retry_stream_buffer_desc": "快取 streaming chunks 到 response.completed，命中異常時可透明重試",
           "codex_abnormal_reasoning_retry_model_contains_label": "模型包含",
           "codex_abnormal_reasoning_retry_model_contains_hint": "請求模型或解析後的上游模型包含任一值即符合",
+          "codex_abnormal_reasoning_retry_reasoning_efforts_label": "Reasoning efforts",
+          "codex_abnormal_reasoning_retry_reasoning_efforts_hint": "可選的 Codex reasoning.effort 過濾值，例如 high 或 xhigh；留空表示不限制 effort",
           "codex_abnormal_reasoning_retry_reasoning_tokens_label": "Reasoning tokens",
           "codex_abnormal_reasoning_retry_reasoning_tokens_hint": "觸發重試的非負整數 token 數",
           "codex_abnormal_reasoning_retry_auth_kinds_label": "驗證類型",

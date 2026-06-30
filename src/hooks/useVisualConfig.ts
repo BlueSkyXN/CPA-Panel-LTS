@@ -190,6 +190,7 @@ const PAYLOAD_DIRTY_FIELDS = [
 const CODEX_ABNORMAL_REASONING_RETRY_DIRTY_FIELDS = [
   'codexAbnormalReasoningRetryEnabled',
   'codexAbnormalReasoningRetryModelContains',
+  'codexAbnormalReasoningRetryReasoningEfforts',
   'codexAbnormalReasoningRetryReasoningTokens',
   'codexAbnormalReasoningRetryAuthKinds',
   'codexAbnormalReasoningRetryAuthIds',
@@ -894,6 +895,15 @@ function getNextDirtyFields(
       )
     );
   }
+  if (Object.prototype.hasOwnProperty.call(patch, 'codexAbnormalReasoningRetryReasoningEfforts')) {
+    updateDirty(
+      'codexAbnormalReasoningRetryReasoningEfforts',
+      areStringArraysEqual(
+        nextValues.codexAbnormalReasoningRetryReasoningEfforts,
+        baselineValues.codexAbnormalReasoningRetryReasoningEfforts
+      )
+    );
+  }
   if (Object.prototype.hasOwnProperty.call(patch, 'codexAbnormalReasoningRetryReasoningTokens')) {
     updateDirty(
       'codexAbnormalReasoningRetryReasoningTokens',
@@ -1155,6 +1165,9 @@ export function useVisualConfig() {
         codexAbnormalReasoningRetryModelContains: parseStringListWithDefault(
           codexAbnormalReasoningRetry?.['model-contains'],
           DEFAULT_VISUAL_VALUES.codexAbnormalReasoningRetryModelContains
+        ),
+        codexAbnormalReasoningRetryReasoningEfforts: parseStringList(
+          codexAbnormalReasoningRetry?.['reasoning-efforts']
         ),
         codexAbnormalReasoningRetryReasoningTokens: parseReasoningTokensWithDefault(
           codexAbnormalReasoningRetry?.['reasoning-tokens'],
@@ -1426,6 +1439,11 @@ export function useVisualConfig() {
               doc,
               ['codex', 'abnormal-reasoning-retry', 'model-contains'],
               values.codexAbnormalReasoningRetryModelContains
+            );
+            setStringListInDoc(
+              doc,
+              ['codex', 'abnormal-reasoning-retry', 'reasoning-efforts'],
+              values.codexAbnormalReasoningRetryReasoningEfforts
             );
             setIntListFromStringsInDoc(
               doc,

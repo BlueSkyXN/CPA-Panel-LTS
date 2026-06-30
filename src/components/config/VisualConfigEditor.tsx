@@ -932,6 +932,26 @@ export function VisualConfigEditor({
                     </FieldShell>
                     <FieldShell
                       label={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_reasoning_efforts_label'
+                      )}
+                      hint={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_reasoning_efforts_hint'
+                      )}
+                    >
+                      <StringListEditor
+                        value={values.codexAbnormalReasoningRetryReasoningEfforts}
+                        disabled={disabled}
+                        placeholder="xhigh"
+                        inputAriaLabel={t(
+                          'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_reasoning_efforts_label'
+                        )}
+                        onChange={(codexAbnormalReasoningRetryReasoningEfforts) =>
+                          onChange({ codexAbnormalReasoningRetryReasoningEfforts })
+                        }
+                      />
+                    </FieldShell>
+                    <FieldShell
+                      label={t(
                         'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_reasoning_tokens_label'
                       )}
                       hint={t(

@@ -1302,6 +1302,8 @@
           "codex_abnormal_reasoning_retry_stream_buffer_desc": "Hold streaming chunks until response.completed so matching abnormal responses can be retried transparently",
           "codex_abnormal_reasoning_retry_model_contains_label": "Model contains",
           "codex_abnormal_reasoning_retry_model_contains_hint": "Matches when the requested or resolved upstream model contains any value",
+          "codex_abnormal_reasoning_retry_reasoning_efforts_label": "Reasoning efforts",
+          "codex_abnormal_reasoning_retry_reasoning_efforts_hint": "Optional translated Codex reasoning.effort values such as high or xhigh; leave empty to match any effort",
           "codex_abnormal_reasoning_retry_reasoning_tokens_label": "Reasoning tokens",
           "codex_abnormal_reasoning_retry_reasoning_tokens_hint": "Non-negative integer token counts that trigger retry",
           "codex_abnormal_reasoning_retry_auth_kinds_label": "Auth kinds",
