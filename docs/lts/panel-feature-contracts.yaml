@@ -303,6 +303,30 @@ features:
       - parsePluginStoreSources
       - dirtyFields.has('pluginStoreSources')
 
+  - id: codex-abnormal-reasoning-retry-config
+    status: lts-maintained
+    reason: CPA-Core-LTS owns codex.abnormal-reasoning-retry; CPA-Panel-LTS must keep a visual config surface for this downstream LTS feature.
+    routes:
+      - /config
+    panel_files:
+      - src/components/config/VisualConfigEditor.tsx
+      - src/hooks/useVisualConfig.ts
+      - src/services/api/configFile.ts
+      - src/types/visualConfig.ts
+      - src/i18n/locales/
+      - scripts/check-lts-panel-contract.sh
+    core_endpoints:
+      - /v0/management/config.yaml
+    required_markers:
+      - codexAbnormalReasoningRetryEnabled
+      - codexAbnormalReasoningRetryModelContains
+      - codexAbnormalReasoningRetryReasoningTokens
+      - codexAbnormalReasoningRetryAuthKinds
+      - codexAbnormalReasoningRetryAuthIds
+      - codexAbnormalReasoningRetryStreamBuffer
+      - abnormal-reasoning-retry
+      - codex_abnormal_reasoning_retry_title
+
   - id: auth-files-management
     status: shared
     reason: Auth files are shared credential management and quota state inputs.

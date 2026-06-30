@@ -1293,7 +1293,21 @@
           "stabilize_device_desc": "固定 OS/Arch，并按凭据/API Key 稳定软件指纹",
           "beta_features": "Beta Features",
           "codex_identity_confuse": "Codex 身份混淆",
-          "codex_identity_confuse_desc": "在 fill-first 或会话粘性路由下，按所选认证重映射 Codex prompt_cache_key 与安装身份"
+          "codex_identity_confuse_desc": "在 fill-first 或会话粘性路由下，按所选认证重映射 Codex prompt_cache_key 与安装身份",
+          "codex_abnormal_reasoning_retry_title": "Codex 异常思考重试",
+          "codex_abnormal_reasoning_retry_desc": "维护 Core LTS 的 Codex OAuth 异常 reasoning token 自动重试保护",
+          "codex_abnormal_reasoning_retry_enabled": "启用异常思考重试",
+          "codex_abnormal_reasoning_retry_enabled_desc": "丢弃匹配的 Codex 响应，并消耗现有 request-retry 预算重试",
+          "codex_abnormal_reasoning_retry_stream_buffer": "缓存流式响应",
+          "codex_abnormal_reasoning_retry_stream_buffer_desc": "缓存 streaming chunks 到 response.completed，命中异常时可透明重试",
+          "codex_abnormal_reasoning_retry_model_contains_label": "模型包含",
+          "codex_abnormal_reasoning_retry_model_contains_hint": "请求模型或解析后的上游模型包含任一值即匹配",
+          "codex_abnormal_reasoning_retry_reasoning_tokens_label": "Reasoning tokens",
+          "codex_abnormal_reasoning_retry_reasoning_tokens_hint": "触发重试的非负整数 token 数",
+          "codex_abnormal_reasoning_retry_auth_kinds_label": "认证类型",
+          "codex_abnormal_reasoning_retry_auth_kinds_hint": "归一化后的 auth kind 白名单；默认 OAuth 不匹配 API Key",
+          "codex_abnormal_reasoning_retry_auth_ids_label": "认证 ID",
+          "codex_abnormal_reasoning_retry_auth_ids_hint": "可选的精确 auth ID 白名单；留空表示不限制 ID"
         },
         "network": {
           "title": "网络配置",

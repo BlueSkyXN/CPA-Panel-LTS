@@ -129,6 +129,19 @@ function setStringListInDoc(doc: YamlDocument, path: YamlPath, values: string[])
   if (docHas(doc, path)) doc.deleteIn(path);
 }
 
+function setIntListFromStringsInDoc(doc: YamlDocument, path: YamlPath, values: string[]): void {
+  const nextValues = values
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) => Number(value))
+    .filter((value) => Number.isSafeInteger(value) && value >= 0);
+  if (nextValues.length > 0) {
+    doc.setIn(path, nextValues);
+    return;
+  }
+  if (docHas(doc, path)) doc.deleteIn(path);
+}
+
 function setIntFromStringInDoc(doc: YamlDocument, path: YamlPath, value: unknown): void {
   const safe = typeof value === 'string' ? value : '';
   const trimmed = safe.trim();
@@ -174,8 +187,33 @@ const PAYLOAD_DIRTY_FIELDS = [
   'payloadFilterRules',
 ] as const;
 
+const CODEX_ABNORMAL_REASONING_RETRY_DIRTY_FIELDS = [
+  'codexAbnormalReasoningRetryEnabled',
+  'codexAbnormalReasoningRetryModelContains',
+  'codexAbnormalReasoningRetryReasoningTokens',
+  'codexAbnormalReasoningRetryAuthKinds',
+  'codexAbnormalReasoningRetryAuthIds',
+  'codexAbnormalReasoningRetryStreamBuffer',
+] as const;
+
 function hasPayloadDirtyFields(dirtyFields: Set<string>): boolean {
   return PAYLOAD_DIRTY_FIELDS.some((field) => dirtyFields.has(field));
+}
+
+function hasCodexAbnormalReasoningRetryDirtyFields(dirtyFields: Set<string>): boolean {
+  return CODEX_ABNORMAL_REASONING_RETRY_DIRTY_FIELDS.some((field) => dirtyFields.has(field));
+}
+
+function shouldWriteCodexAbnormalReasoningRetryBlock(
+  doc: YamlDocument,
+  values: VisualConfigValues,
+  dirtyFields: Set<string>
+): boolean {
+  return (
+    docHas(doc, ['codex', 'abnormal-reasoning-retry']) ||
+    values.codexAbnormalReasoningRetryEnabled ||
+    hasCodexAbnormalReasoningRetryDirtyFields(dirtyFields)
+  );
 }
 
 function getNonNegativeIntegerError(value: string): 'non_negative_integer' | undefined {
@@ -183,6 +221,12 @@ function getNonNegativeIntegerError(value: string): 'non_negative_integer' | und
   if (!trimmed) return undefined;
   if (!/^-?\d+$/.test(trimmed)) return 'non_negative_integer';
   return Number(trimmed) >= 0 ? undefined : 'non_negative_integer';
+}
+
+function getNonNegativeIntegerListError(values: string[]): 'non_negative_integer' | undefined {
+  return values.some((value) => getNonNegativeIntegerError(value))
+    ? 'non_negative_integer'
+    : undefined;
 }
 
 function getPortError(value: string): 'port_range' | undefined {
@@ -207,6 +251,9 @@ export function getVisualConfigValidationErrors(
     maxRetryCredentials: getNonNegativeIntegerError(values.maxRetryCredentials),
     maxRetryInterval: getNonNegativeIntegerError(values.maxRetryInterval),
     authAutoRefreshWorkers: getNonNegativeIntegerError(values.authAutoRefreshWorkers),
+    codexAbnormalReasoningRetryReasoningTokens: getNonNegativeIntegerListError(
+      values.codexAbnormalReasoningRetryReasoningTokens
+    ),
     'streaming.keepaliveSeconds': getNonNegativeIntegerError(values.streaming.keepaliveSeconds),
     'streaming.bootstrapRetries': getNonNegativeIntegerError(values.streaming.bootstrapRetries),
     'streaming.nonstreamKeepaliveInterval': getNonNegativeIntegerError(
@@ -461,6 +508,15 @@ function parsePayloadConditions(raw: unknown, idPrefix: string): PayloadParamEnt
 
 function parseStringList(raw: unknown): string[] {
   return Array.isArray(raw) ? raw.map((item) => String(item ?? '').trim()).filter(Boolean) : [];
+}
+
+function parseStringListWithDefault(raw: unknown, fallback: string[]): string[] {
+  return Array.isArray(raw) ? parseStringList(raw) : [...fallback];
+}
+
+function parseReasoningTokensWithDefault(raw: unknown, fallback: string[]): string[] {
+  if (!Array.isArray(raw)) return [...fallback];
+  return raw.map((item) => String(item ?? '').trim()).filter(Boolean);
 }
 
 function parsePluginStoreSources(raw: unknown): string[] {
@@ -790,6 +846,8 @@ function getNextDirtyFields(
       'codexHeaderUserAgent',
       'codexHeaderBetaFeatures',
       'codexIdentityConfuse',
+      'codexAbnormalReasoningRetryEnabled',
+      'codexAbnormalReasoningRetryStreamBuffer',
       'host',
       'port',
       'tlsEnable',
@@ -824,6 +882,43 @@ function getNextDirtyFields(
     updateDirty(
       'pluginStoreSources',
       areStringArraysEqual(nextValues.pluginStoreSources, baselineValues.pluginStoreSources)
+    );
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, 'codexAbnormalReasoningRetryModelContains')) {
+    updateDirty(
+      'codexAbnormalReasoningRetryModelContains',
+      areStringArraysEqual(
+        nextValues.codexAbnormalReasoningRetryModelContains,
+        baselineValues.codexAbnormalReasoningRetryModelContains
+      )
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'codexAbnormalReasoningRetryReasoningTokens')) {
+    updateDirty(
+      'codexAbnormalReasoningRetryReasoningTokens',
+      areStringArraysEqual(
+        nextValues.codexAbnormalReasoningRetryReasoningTokens,
+        baselineValues.codexAbnormalReasoningRetryReasoningTokens
+      )
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'codexAbnormalReasoningRetryAuthKinds')) {
+    updateDirty(
+      'codexAbnormalReasoningRetryAuthKinds',
+      areStringArraysEqual(
+        nextValues.codexAbnormalReasoningRetryAuthKinds,
+        baselineValues.codexAbnormalReasoningRetryAuthKinds
+      )
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'codexAbnormalReasoningRetryAuthIds')) {
+    updateDirty(
+      'codexAbnormalReasoningRetryAuthIds',
+      areStringArraysEqual(
+        nextValues.codexAbnormalReasoningRetryAuthIds,
+        baselineValues.codexAbnormalReasoningRetryAuthIds
+      )
     );
   }
 
@@ -966,6 +1061,7 @@ export function useVisualConfig() {
       const streaming = asRecord(parsed.streaming);
       const plugins = asRecord(parsed.plugins);
       const codex = asRecord(parsed.codex);
+      const codexAbnormalReasoningRetry = asRecord(codex?.['abnormal-reasoning-retry']);
       const claudeHeaderDefaults = asRecord(parsed['claude-header-defaults']);
       const codexHeaderDefaults = asRecord(parsed['codex-header-defaults']);
 
@@ -1055,6 +1151,26 @@ export function useVisualConfig() {
             ? codexHeaderDefaults['beta-features']
             : '',
         codexIdentityConfuse: Boolean(codex?.['identity-confuse']),
+        codexAbnormalReasoningRetryEnabled: Boolean(codexAbnormalReasoningRetry?.enabled),
+        codexAbnormalReasoningRetryModelContains: parseStringListWithDefault(
+          codexAbnormalReasoningRetry?.['model-contains'],
+          DEFAULT_VISUAL_VALUES.codexAbnormalReasoningRetryModelContains
+        ),
+        codexAbnormalReasoningRetryReasoningTokens: parseReasoningTokensWithDefault(
+          codexAbnormalReasoningRetry?.['reasoning-tokens'],
+          DEFAULT_VISUAL_VALUES.codexAbnormalReasoningRetryReasoningTokens
+        ),
+        codexAbnormalReasoningRetryAuthKinds: parseStringListWithDefault(
+          codexAbnormalReasoningRetry?.['auth-kinds'],
+          DEFAULT_VISUAL_VALUES.codexAbnormalReasoningRetryAuthKinds
+        ),
+        codexAbnormalReasoningRetryAuthIds: parseStringList(
+          codexAbnormalReasoningRetry?.['auth-ids']
+        ),
+        codexAbnormalReasoningRetryStreamBuffer:
+          typeof codexAbnormalReasoningRetry?.['stream-buffer'] === 'boolean'
+            ? codexAbnormalReasoningRetry['stream-buffer']
+            : DEFAULT_VISUAL_VALUES.codexAbnormalReasoningRetryStreamBuffer,
 
         quotaSwitchProject: Boolean(quotaExceeded?.['switch-project'] ?? true),
         quotaSwitchPreviewModel: Boolean(quotaExceeded?.['switch-preview-model'] ?? true),
@@ -1290,6 +1406,7 @@ export function useVisualConfig() {
         if (
           docHas(doc, ['codex']) ||
           values.codexIdentityConfuse ||
+          shouldWriteCodexAbnormalReasoningRetryBlock(doc, values, dirtyFields) ||
           shouldWriteManagedField(
             doc,
             ['codex', 'identity-confuse'],
@@ -1299,6 +1416,38 @@ export function useVisualConfig() {
         ) {
           ensureMapInDoc(doc, ['codex']);
           setBooleanInDoc(doc, ['codex', 'identity-confuse'], values.codexIdentityConfuse);
+          if (shouldWriteCodexAbnormalReasoningRetryBlock(doc, values, dirtyFields)) {
+            ensureMapInDoc(doc, ['codex', 'abnormal-reasoning-retry']);
+            doc.setIn(
+              ['codex', 'abnormal-reasoning-retry', 'enabled'],
+              values.codexAbnormalReasoningRetryEnabled
+            );
+            setStringListInDoc(
+              doc,
+              ['codex', 'abnormal-reasoning-retry', 'model-contains'],
+              values.codexAbnormalReasoningRetryModelContains
+            );
+            setIntListFromStringsInDoc(
+              doc,
+              ['codex', 'abnormal-reasoning-retry', 'reasoning-tokens'],
+              values.codexAbnormalReasoningRetryReasoningTokens
+            );
+            setStringListInDoc(
+              doc,
+              ['codex', 'abnormal-reasoning-retry', 'auth-kinds'],
+              values.codexAbnormalReasoningRetryAuthKinds
+            );
+            setStringListInDoc(
+              doc,
+              ['codex', 'abnormal-reasoning-retry', 'auth-ids'],
+              values.codexAbnormalReasoningRetryAuthIds
+            );
+            doc.setIn(
+              ['codex', 'abnormal-reasoning-retry', 'stream-buffer'],
+              values.codexAbnormalReasoningRetryStreamBuffer
+            );
+            deleteIfMapEmpty(doc, ['codex', 'abnormal-reasoning-retry']);
+          }
           deleteIfMapEmpty(doc, ['codex']);
         }
 

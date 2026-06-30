@@ -1293,7 +1293,21 @@
           "stabilize_device_desc": "Pin OS/Arch and stabilize the software fingerprint per credential/API key",
           "beta_features": "Beta Features",
           "codex_identity_confuse": "Codex Identity Confuse",
-          "codex_identity_confuse_desc": "When fill-first routing or session affinity is used, remap Codex prompt_cache_key and installation identity for the selected auth"
+          "codex_identity_confuse_desc": "When fill-first routing or session affinity is used, remap Codex prompt_cache_key and installation identity for the selected auth",
+          "codex_abnormal_reasoning_retry_title": "Codex Abnormal Reasoning Retry",
+          "codex_abnormal_reasoning_retry_desc": "Manage the Core LTS retry guard for Codex OAuth responses with abnormal reasoning token counts",
+          "codex_abnormal_reasoning_retry_enabled": "Enable Abnormal Reasoning Retry",
+          "codex_abnormal_reasoning_retry_enabled_desc": "Discard matching Codex responses and retry with the existing request-retry budget",
+          "codex_abnormal_reasoning_retry_stream_buffer": "Buffer Streaming Responses",
+          "codex_abnormal_reasoning_retry_stream_buffer_desc": "Hold streaming chunks until response.completed so matching abnormal responses can be retried transparently",
+          "codex_abnormal_reasoning_retry_model_contains_label": "Model contains",
+          "codex_abnormal_reasoning_retry_model_contains_hint": "Matches when the requested or resolved upstream model contains any value",
+          "codex_abnormal_reasoning_retry_reasoning_tokens_label": "Reasoning tokens",
+          "codex_abnormal_reasoning_retry_reasoning_tokens_hint": "Non-negative integer token counts that trigger retry",
+          "codex_abnormal_reasoning_retry_auth_kinds_label": "Auth kinds",
+          "codex_abnormal_reasoning_retry_auth_kinds_hint": "Normalized auth kind whitelist; default OAuth does not match API keys",
+          "codex_abnormal_reasoning_retry_auth_ids_label": "Auth IDs",
+          "codex_abnormal_reasoning_retry_auth_ids_hint": "Optional exact auth ID whitelist; leave empty to match all IDs"
         },
         "network": {
           "title": "Network Configuration",

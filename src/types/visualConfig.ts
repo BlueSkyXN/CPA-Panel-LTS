@@ -14,6 +14,7 @@ export type VisualConfigFieldPath =
   | 'maxRetryCredentials'
   | 'maxRetryInterval'
   | 'authAutoRefreshWorkers'
+  | 'codexAbnormalReasoningRetryReasoningTokens'
   | 'streaming.keepaliveSeconds'
   | 'streaming.bootstrapRetries'
   | 'streaming.nonstreamKeepaliveInterval';
@@ -119,6 +120,12 @@ export type VisualConfigValues = {
   codexHeaderUserAgent: string;
   codexHeaderBetaFeatures: string;
   codexIdentityConfuse: boolean;
+  codexAbnormalReasoningRetryEnabled: boolean;
+  codexAbnormalReasoningRetryModelContains: string[];
+  codexAbnormalReasoningRetryReasoningTokens: string[];
+  codexAbnormalReasoningRetryAuthKinds: string[];
+  codexAbnormalReasoningRetryAuthIds: string[];
+  codexAbnormalReasoningRetryStreamBuffer: boolean;
   payloadDefaultRules: PayloadRule[];
   payloadDefaultRawRules: PayloadRule[];
   payloadOverrideRules: PayloadRule[];
@@ -184,6 +191,12 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   codexHeaderUserAgent: '',
   codexHeaderBetaFeatures: '',
   codexIdentityConfuse: false,
+  codexAbnormalReasoningRetryEnabled: false,
+  codexAbnormalReasoningRetryModelContains: ['gpt-5.5'],
+  codexAbnormalReasoningRetryReasoningTokens: ['516', '1034'],
+  codexAbnormalReasoningRetryAuthKinds: ['oauth'],
+  codexAbnormalReasoningRetryAuthIds: [],
+  codexAbnormalReasoningRetryStreamBuffer: true,
   payloadDefaultRules: [],
   payloadDefaultRawRules: [],
   payloadOverrideRules: [],

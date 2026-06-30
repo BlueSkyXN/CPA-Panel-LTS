@@ -205,6 +205,10 @@ export function VisualConfigEditor({
     t,
     validationErrors?.authAutoRefreshWorkers
   );
+  const codexAbnormalReasoningRetryReasoningTokensError = getValidationMessage(
+    t,
+    validationErrors?.codexAbnormalReasoningRetryReasoningTokens
+  );
   const keepaliveError = getValidationMessage(t, validationErrors?.['streaming.keepaliveSeconds']);
   const bootstrapRetriesError = getValidationMessage(
     t,
@@ -293,6 +297,7 @@ export function VisualConfigEditor({
           'maxRetryCredentials',
           'maxRetryInterval',
           'authAutoRefreshWorkers',
+          'codexAbnormalReasoningRetryReasoningTokens',
         ]),
       },
       {
@@ -862,6 +867,130 @@ export function VisualConfigEditor({
                       disabled={disabled}
                       onChange={(codexIdentityConfuse) => onChange({ codexIdentityConfuse })}
                     />
+                  </SectionGrid>
+                  <Divider />
+                  <div className={styles.subsectionHeader}>
+                    <h3 className={styles.subsectionTitle}>
+                      {t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_title'
+                      )}
+                    </h3>
+                    <p className={styles.subsectionDescription}>
+                      {t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_desc'
+                      )}
+                    </p>
+                  </div>
+                  <SectionGrid>
+                    <ToggleRow
+                      title={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_enabled'
+                      )}
+                      description={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_enabled_desc'
+                      )}
+                      checked={values.codexAbnormalReasoningRetryEnabled}
+                      disabled={disabled}
+                      onChange={(codexAbnormalReasoningRetryEnabled) =>
+                        onChange({ codexAbnormalReasoningRetryEnabled })
+                      }
+                    />
+                    <ToggleRow
+                      title={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_stream_buffer'
+                      )}
+                      description={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_stream_buffer_desc'
+                      )}
+                      checked={values.codexAbnormalReasoningRetryStreamBuffer}
+                      disabled={disabled}
+                      onChange={(codexAbnormalReasoningRetryStreamBuffer) =>
+                        onChange({ codexAbnormalReasoningRetryStreamBuffer })
+                      }
+                    />
+                  </SectionGrid>
+                  <SectionGrid>
+                    <FieldShell
+                      label={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_model_contains_label'
+                      )}
+                      hint={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_model_contains_hint'
+                      )}
+                    >
+                      <StringListEditor
+                        value={values.codexAbnormalReasoningRetryModelContains}
+                        disabled={disabled}
+                        placeholder="gpt-5.5"
+                        inputAriaLabel={t(
+                          'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_model_contains_label'
+                        )}
+                        onChange={(codexAbnormalReasoningRetryModelContains) =>
+                          onChange({ codexAbnormalReasoningRetryModelContains })
+                        }
+                      />
+                    </FieldShell>
+                    <FieldShell
+                      label={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_reasoning_tokens_label'
+                      )}
+                      hint={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_reasoning_tokens_hint'
+                      )}
+                      error={codexAbnormalReasoningRetryReasoningTokensError}
+                    >
+                      <StringListEditor
+                        value={values.codexAbnormalReasoningRetryReasoningTokens}
+                        disabled={disabled}
+                        placeholder="516"
+                        inputAriaLabel={t(
+                          'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_reasoning_tokens_label'
+                        )}
+                        onChange={(codexAbnormalReasoningRetryReasoningTokens) =>
+                          onChange({ codexAbnormalReasoningRetryReasoningTokens })
+                        }
+                      />
+                    </FieldShell>
+                    <FieldShell
+                      label={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_auth_kinds_label'
+                      )}
+                      hint={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_auth_kinds_hint'
+                      )}
+                    >
+                      <StringListEditor
+                        value={values.codexAbnormalReasoningRetryAuthKinds}
+                        disabled={disabled}
+                        placeholder="oauth"
+                        inputAriaLabel={t(
+                          'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_auth_kinds_label'
+                        )}
+                        onChange={(codexAbnormalReasoningRetryAuthKinds) =>
+                          onChange({ codexAbnormalReasoningRetryAuthKinds })
+                        }
+                      />
+                    </FieldShell>
+                    <FieldShell
+                      label={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_auth_ids_label'
+                      )}
+                      hint={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_auth_ids_hint'
+                      )}
+                    >
+                      <StringListEditor
+                        value={values.codexAbnormalReasoningRetryAuthIds}
+                        disabled={disabled}
+                        placeholder="codex-oauth-primary"
+                        inputAriaLabel={t(
+                          'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_auth_ids_label'
+                        )}
+                        onChange={(codexAbnormalReasoningRetryAuthIds) =>
+                          onChange({ codexAbnormalReasoningRetryAuthIds })
+                        }
+                      />
+                    </FieldShell>
                   </SectionGrid>
                 </SectionStack>
               </SectionSubsection>

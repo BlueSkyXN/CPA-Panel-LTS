@@ -1287,7 +1287,21 @@
           "stabilize_device_desc": "Фиксировать OS/Arch и стабилизировать программный отпечаток для учётных данных/API-ключа",
           "beta_features": "Beta Features",
           "codex_identity_confuse": "Codex identity-confuse",
-          "codex_identity_confuse_desc": "При fill-first routing или session affinity переопределяет Codex prompt_cache_key и installation identity под выбранную auth-запись"
+          "codex_identity_confuse_desc": "При fill-first routing или session affinity переопределяет Codex prompt_cache_key и installation identity под выбранную auth-запись",
+          "codex_abnormal_reasoning_retry_title": "Codex Abnormal Reasoning Retry",
+          "codex_abnormal_reasoning_retry_desc": "Управляет LTS-защитой Core для повторов Codex OAuth при аномальном числе reasoning tokens",
+          "codex_abnormal_reasoning_retry_enabled": "Включить Abnormal Reasoning Retry",
+          "codex_abnormal_reasoning_retry_enabled_desc": "Отбрасывает совпавшие ответы Codex и повторяет запрос в рамках request-retry",
+          "codex_abnormal_reasoning_retry_stream_buffer": "Буферизовать streaming-ответы",
+          "codex_abnormal_reasoning_retry_stream_buffer_desc": "Удерживает streaming chunks до response.completed, чтобы прозрачно повторить аномальный ответ",
+          "codex_abnormal_reasoning_retry_model_contains_label": "Модель содержит",
+          "codex_abnormal_reasoning_retry_model_contains_hint": "Срабатывает, если запрошенная или разрешённая upstream-модель содержит любое значение",
+          "codex_abnormal_reasoning_retry_reasoning_tokens_label": "Reasoning tokens",
+          "codex_abnormal_reasoning_retry_reasoning_tokens_hint": "Неотрицательные целые значения token count, запускающие повтор",
+          "codex_abnormal_reasoning_retry_auth_kinds_label": "Типы auth",
+          "codex_abnormal_reasoning_retry_auth_kinds_hint": "Белый список нормализованных auth kind; OAuth по умолчанию не совпадает с API key",
+          "codex_abnormal_reasoning_retry_auth_ids_label": "Auth IDs",
+          "codex_abnormal_reasoning_retry_auth_ids_hint": "Опциональный точный белый список auth ID; пусто означает без ограничения по ID"
         },
         "network": {
           "title": "Сетевые настройки",
