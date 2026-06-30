@@ -43,6 +43,7 @@ export type PayloadModelEntry = {
   id: string;
   name: string;
   protocol?: string;
+  scope?: string;
   fromProtocol?: string;
   headers?: PayloadHeaderEntry[];
   match?: PayloadParamEntry[];

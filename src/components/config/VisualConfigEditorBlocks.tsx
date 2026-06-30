@@ -159,6 +159,36 @@ function buildProtocolOptions(
   return options;
 }
 
+function buildScopeOptions(t: ReturnType<typeof useTranslation>['t'], currentScope?: string) {
+  const options = [
+    {
+      value: '',
+      label: t('config_management.visual.payload_rules.scope_any'),
+    },
+    {
+      value: 'requested',
+      label: t('config_management.visual.payload_rules.scope_requested'),
+    },
+    {
+      value: 'upstream',
+      label: t('config_management.visual.payload_rules.scope_upstream'),
+    },
+  ];
+  const trimmedScope = currentScope?.trim();
+  if (trimmedScope && !options.some((option) => option.value === trimmedScope)) {
+    options.push({
+      value: trimmedScope,
+      label: t('config_management.visual.payload_rules.scope_custom', { scope: trimmedScope }),
+    });
+  }
+  return options;
+}
+
+function normalizePayloadModelScope(scope: string): string | undefined {
+  const trimmedScope = scope.trim();
+  return trimmedScope ? trimmedScope : undefined;
+}
+
 export const ApiKeysCardEditor = memo(function ApiKeysCardEditor({
   value,
   disabled,
@@ -452,6 +482,7 @@ export const StringListEditor = memo(function StringListEditor({
 
 function hasPayloadModelAdvancedSettings(model: PayloadModelEntry) {
   return Boolean(
+    model.scope ||
     model.fromProtocol ||
     (model.headers?.length ?? 0) > 0 ||
     (model.match?.length ?? 0) > 0 ||
@@ -896,6 +927,22 @@ export const PayloadRulesEditor = memo(function PayloadRulesEditor({
                       <div className={styles.payloadAdvancedGrid}>
                         <div className={styles.fieldShell}>
                           <label className={styles.fieldLabel}>
+                            {t('config_management.visual.payload_rules.model_scope')}
+                          </label>
+                          <Select
+                            value={model.scope ?? ''}
+                            options={buildScopeOptions(t, model.scope)}
+                            disabled={disabled}
+                            ariaLabel={t('config_management.visual.payload_rules.model_scope')}
+                            onChange={(nextValue) =>
+                              updateModel(ruleIndex, modelIndex, {
+                                scope: normalizePayloadModelScope(nextValue),
+                              })
+                            }
+                          />
+                        </div>
+                        <div className={styles.fieldShell}>
+                          <label className={styles.fieldLabel}>
                             {t('config_management.visual.payload_rules.from_protocol')}
                           </label>
                           <Select
@@ -1288,6 +1335,17 @@ export const PayloadFilterRulesEditor = memo(function PayloadFilterRulesEditor({
                   onChange={(nextValue) =>
                     updateModel(ruleIndex, modelIndex, {
                       protocol: (nextValue || undefined) as PayloadModelEntry['protocol'],
+                    })
+                  }
+                />
+                <Select
+                  value={model.scope ?? ''}
+                  options={buildScopeOptions(t, model.scope)}
+                  disabled={disabled}
+                  ariaLabel={t('config_management.visual.payload_rules.model_scope')}
+                  onChange={(nextValue) =>
+                    updateModel(ruleIndex, modelIndex, {
+                      scope: normalizePayloadModelScope(nextValue),
                     })
                   }
                 />

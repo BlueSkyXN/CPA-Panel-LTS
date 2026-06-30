@@ -329,6 +329,7 @@ function arePayloadModelEntriesEqual(
       a.id !== b.id ||
       a.name !== b.name ||
       a.protocol !== b.protocol ||
+      a.scope !== b.scope ||
       a.fromProtocol !== b.fromProtocol
     ) {
       return false;
@@ -458,6 +459,11 @@ function parsePayloadProtocol(raw: unknown): string | undefined {
   return raw.trim() ? raw : undefined;
 }
 
+function parsePayloadModelScope(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  return raw.trim() ? raw : undefined;
+}
+
 function parseDisableImageGenerationMode(raw: unknown): DisableImageGenerationMode {
   if (raw === true) return 'true';
   if (typeof raw === 'string') {
@@ -571,6 +577,7 @@ function parsePayloadModelEntries(raw: unknown, idPrefix: string): PayloadRule['
       id: modelId,
       name,
       protocol: parsePayloadProtocol(modelRecord?.protocol),
+      scope: parsePayloadModelScope(modelRecord?.scope),
       fromProtocol: parsePayloadProtocol(modelRecord?.['from-protocol']),
       headers: parsePayloadHeaders(modelRecord?.headers, modelId),
       match: parsePayloadConditions(modelRecord?.match, `${modelId}-match`),
@@ -695,6 +702,7 @@ function serializePayloadModelsForYaml(
     .map((m) => {
       const obj: Record<string, unknown> = { name: m.name.trim() };
       if (m.protocol) obj.protocol = m.protocol;
+      if (m.scope?.trim()) obj.scope = m.scope.trim();
       if (m.fromProtocol) obj['from-protocol'] = m.fromProtocol;
 
       const headers = serializePayloadHeadersForYaml(m.headers);
