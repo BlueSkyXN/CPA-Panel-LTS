@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatGPT Quota Helper
 // @namespace    https://github.com/BlueSkyXN/CPA-Panel-LTS
-// @version      1.2.4
+// @version      1.2.6
 // @author       BlueSkyXN
 // @description  在 chatgpt.com 实时显示 DR / Agent / Codex 5h / Codex 7d 配额：折叠式面板、状态指示灯、自动与手动刷新。
 // @match        https://chatgpt.com/*
@@ -44,6 +44,8 @@
   const RECOVERY_STORAGE_KEY = 'cqh_recovery';
   const RECOVERY_MARKER_TTL_MS = 2 * 60 * 1000;
   const DEEP_RECOVERY_TIMEOUT_MS = 2500;
+  const PAGE_ISSUE_CONFIRM_WINDOW_MS = 10 * 1000;
+  const PAGE_ISSUE_CONFIRM_THRESHOLD = 2;
 
   // 指示灯阈值
   const DR_AGENT_LOW = 5;        // DR / Agent 剩余 < 5 视为低水位
@@ -74,6 +76,7 @@
   let codexTimer = null;
   let sessionInfoCache = null;
   let recoveryInProgress = false;
+  let pendingPageIssue = null;
 
   // 在脚本插桩前抓住原始 fetch，避免后续被站点或自身 patch 影响
   const originalFetch = window.fetch;
@@ -292,10 +295,36 @@
     state.pageIssue = null;
     state.recoveryRecommended = false;
     state.recoveryNotice = '';
+    pendingPageIssue = null;
   }
 
-  function recordPageIssue(kind, message) {
+  function recordPageIssue(kind, message, options = {}) {
     const now = Date.now();
+    const confirmed = Boolean(options.confirmed) || kind === 'chunk-load';
+
+    if (!confirmed) {
+      if (
+        !pendingPageIssue ||
+        pendingPageIssue.kind !== kind ||
+        now - pendingPageIssue.firstDetectedAt > PAGE_ISSUE_CONFIRM_WINDOW_MS
+      ) {
+        pendingPageIssue = {
+          kind,
+          message,
+          firstDetectedAt: now,
+          lastDetectedAt: now,
+          count: 1
+        };
+        return;
+      }
+
+      pendingPageIssue.message = message;
+      pendingPageIssue.lastDetectedAt = now;
+      pendingPageIssue.count += 1;
+
+      if (pendingPageIssue.count < PAGE_ISSUE_CONFIRM_THRESHOLD) return;
+    }
+
     const current = state.pageIssue;
     if (current && current.kind === kind && now - current.detectedAt < 5000) return;
 
@@ -308,6 +337,7 @@
     state.codexAutoPaused = true;
     state.codexBackoffUntil = 0;
     stopCodexAutoRefresh();
+    pendingPageIssue = null;
 
     if (!isExcludedPath()) {
       renderPanel();
@@ -736,7 +766,7 @@
       state.codexAutoPaused = false;
       state.codexBackoffUntil = 0;
       state.consecutiveCodexErrors = 0;
-      if (state.pageIssue?.kind !== 'chunk-load') {
+      if (!state.pageIssue || isManual || state.pageIssue.kind !== 'chunk-load') {
         clearRecoveryState();
       } else {
         state.recoveryNotice = '';
@@ -828,15 +858,13 @@
         opacity: 0.85;
         max-height: 36px;
         overflow: hidden;
-        transition: opacity 0.18s ease, max-height 0.22s ease, max-width 0.22s ease, min-width 0.22s ease;
+        transition: opacity 0.18s ease, max-height 0.22s ease;
       }
 
       .cqh-panel:hover,
       .cqh-panel.cqh-expanded {
         opacity: 1;
-        min-width: 210px;
         max-height: 360px;
-        max-width: min(320px, calc(100vw - 28px));
       }
 
       .cqh-summary {
