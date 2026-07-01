@@ -172,6 +172,8 @@ export function VisualConfigEditor({
   const routingStrategyHintId = `${routingStrategyLabelId}-hint`;
   const disableImageGenerationLabelId = useId();
   const disableImageGenerationHintId = `${disableImageGenerationLabelId}-hint`;
+  const abnormalRetryExhaustedBehaviorLabelId = useId();
+  const abnormalRetryExhaustedBehaviorHintId = `${abnormalRetryExhaustedBehaviorLabelId}-hint`;
   const keepaliveInputId = useId();
   const keepaliveHintId = `${keepaliveInputId}-hint`;
   const keepaliveErrorId = `${keepaliveInputId}-error`;
@@ -268,6 +270,23 @@ export function VisualConfigEditor({
       {
         value: 'chat',
         label: t('config_management.visual.sections.network.disable_image_generation_chat'),
+      },
+    ],
+    [t]
+  );
+  const abnormalRetryExhaustedBehaviorOptions = useMemo(
+    () => [
+      {
+        value: 'error',
+        label: t(
+          'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_exhausted_behavior_error'
+        ),
+      },
+      {
+        value: 'pass-through',
+        label: t(
+          'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_exhausted_behavior_pass_through'
+        ),
       },
     ],
     [t]
@@ -997,6 +1016,31 @@ export function VisualConfigEditor({
                       )}
                       error={codexAbnormalReasoningRetryMaxRetriesError}
                     />
+                    <FieldShell
+                      label={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_exhausted_behavior_label'
+                      )}
+                      labelId={abnormalRetryExhaustedBehaviorLabelId}
+                      hint={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_exhausted_behavior_hint'
+                      )}
+                      hintId={abnormalRetryExhaustedBehaviorHintId}
+                    >
+                      <Select
+                        value={values.codexAbnormalReasoningRetryExhaustedBehavior}
+                        options={abnormalRetryExhaustedBehaviorOptions}
+                        id={`${abnormalRetryExhaustedBehaviorLabelId}-select`}
+                        disabled={disabled}
+                        ariaLabelledBy={abnormalRetryExhaustedBehaviorLabelId}
+                        ariaDescribedBy={abnormalRetryExhaustedBehaviorHintId}
+                        onChange={(nextValue) =>
+                          onChange({
+                            codexAbnormalReasoningRetryExhaustedBehavior:
+                              nextValue as VisualConfigValues['codexAbnormalReasoningRetryExhaustedBehavior'],
+                          })
+                        }
+                      />
+                    </FieldShell>
                     <FieldShell
                       label={t(
                         'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_auth_kinds_label'

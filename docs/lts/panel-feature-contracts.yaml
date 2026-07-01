@@ -329,10 +329,13 @@ features:
       - codexAbnormalReasoningRetryAuthIds
       - codexAbnormalReasoningRetryStreamBuffer
       - codexAbnormalReasoningRetryMaxRetries
+      - codexAbnormalReasoningRetryExhaustedBehavior
       - abnormal-reasoning-retry
       - reasoning-efforts
       - max-retries
+      - exhausted-behavior
       - codex_abnormal_reasoning_retry_title
+      - codex_abnormal_reasoning_retry_exhausted_behavior_label
 
   - id: auth-files-management
     status: shared

@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useReducer } from 'react';
 import { isMap, parse as parseYaml, parseDocument } from 'yaml';
 import type {
+  CodexAbnormalReasoningRetryExhaustedBehavior,
   DisableImageGenerationMode,
   PayloadFilterRule,
   PayloadHeaderEntry,
@@ -179,6 +180,14 @@ function setDisableImageGenerationInDoc(
   if (docHas(doc, path)) doc.setIn(path, false);
 }
 
+function parseCodexAbnormalReasoningRetryExhaustedBehavior(
+  value: unknown
+): CodexAbnormalReasoningRetryExhaustedBehavior {
+  if (typeof value !== 'string') return 'error';
+  const normalized = value.trim().toLowerCase();
+  return normalized === 'pass-through' || normalized === 'passthrough' ? 'pass-through' : 'error';
+}
+
 const PAYLOAD_DIRTY_FIELDS = [
   'payloadDefaultRules',
   'payloadDefaultRawRules',
@@ -196,6 +205,7 @@ const CODEX_ABNORMAL_REASONING_RETRY_DIRTY_FIELDS = [
   'codexAbnormalReasoningRetryAuthIds',
   'codexAbnormalReasoningRetryStreamBuffer',
   'codexAbnormalReasoningRetryMaxRetries',
+  'codexAbnormalReasoningRetryExhaustedBehavior',
 ] as const;
 
 function hasPayloadDirtyFields(dirtyFields: Set<string>): boolean {
@@ -869,6 +879,7 @@ function getNextDirtyFields(
       'codexAbnormalReasoningRetryEnabled',
       'codexAbnormalReasoningRetryStreamBuffer',
       'codexAbnormalReasoningRetryMaxRetries',
+      'codexAbnormalReasoningRetryExhaustedBehavior',
       'host',
       'port',
       'tlsEnable',
@@ -1212,6 +1223,10 @@ export function useVisualConfig() {
           codexAbnormalReasoningRetry?.['max-retries'] ??
             DEFAULT_VISUAL_VALUES.codexAbnormalReasoningRetryMaxRetries
         ),
+        codexAbnormalReasoningRetryExhaustedBehavior:
+          parseCodexAbnormalReasoningRetryExhaustedBehavior(
+            codexAbnormalReasoningRetry?.['exhausted-behavior']
+          ),
 
         quotaSwitchProject: Boolean(quotaExceeded?.['switch-project'] ?? true),
         quotaSwitchPreviewModel: Boolean(quotaExceeded?.['switch-preview-model'] ?? true),
@@ -1501,6 +1516,10 @@ export function useVisualConfig() {
               doc,
               ['codex', 'abnormal-reasoning-retry', 'max-retries'],
               values.codexAbnormalReasoningRetryMaxRetries
+            );
+            doc.setIn(
+              ['codex', 'abnormal-reasoning-retry', 'exhausted-behavior'],
+              values.codexAbnormalReasoningRetryExhaustedBehavior
             );
             deleteIfMapEmpty(doc, ['codex', 'abnormal-reasoning-retry']);
           }

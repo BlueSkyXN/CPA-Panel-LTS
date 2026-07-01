@@ -1,5 +1,6 @@
 export type PayloadParamValueType = 'string' | 'number' | 'boolean' | 'json';
 export type DisableImageGenerationMode = 'false' | 'true' | 'chat';
+export type CodexAbnormalReasoningRetryExhaustedBehavior = 'error' | 'pass-through';
 export type PayloadParamValidationErrorCode =
   | 'payload_invalid_number'
   | 'payload_invalid_boolean'
@@ -132,6 +133,7 @@ export type VisualConfigValues = {
   codexAbnormalReasoningRetryAuthIds: string[];
   codexAbnormalReasoningRetryStreamBuffer: boolean;
   codexAbnormalReasoningRetryMaxRetries: string;
+  codexAbnormalReasoningRetryExhaustedBehavior: CodexAbnormalReasoningRetryExhaustedBehavior;
   payloadDefaultRules: PayloadRule[];
   payloadDefaultRawRules: PayloadRule[];
   payloadOverrideRules: PayloadRule[];
@@ -206,6 +208,7 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   codexAbnormalReasoningRetryAuthIds: [],
   codexAbnormalReasoningRetryStreamBuffer: true,
   codexAbnormalReasoningRetryMaxRetries: '2',
+  codexAbnormalReasoningRetryExhaustedBehavior: 'error',
   payloadDefaultRules: [],
   payloadDefaultRawRules: [],
   payloadOverrideRules: [],

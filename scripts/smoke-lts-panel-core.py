@@ -998,6 +998,10 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
     transient_cooldown_input = page.get_by_label("Transient Error Cooldown (seconds)")
     transient_cooldown_input.scroll_into_view_if_needed()
     transient_cooldown_input.fill("0")
+    exhausted_behavior_select = page.get_by_label("Exhausted behavior")
+    exhausted_behavior_select.scroll_into_view_if_needed()
+    exhausted_behavior_select.click()
+    page.get_by_role("option", name="Pass through abnormal response").click()
 
     page.locator('button[aria-label="Save"]').click()
     page.get_by_text("Review Changes", exact=False).first.wait_for()
@@ -1016,6 +1020,10 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
     if "transient-error-cooldown-seconds: 0" not in visual_saved_yaml:
         raise AssertionError(
             "Browser visual save did not persist transient-error-cooldown-seconds"
+        )
+    if "exhausted-behavior: pass-through" not in visual_saved_yaml:
+        raise AssertionError(
+            "Browser visual save did not persist codex abnormal retry exhausted-behavior"
         )
     if BROWSER_PLUGIN_STORE_SOURCE not in visual_saved_yaml:
         raise AssertionError(
