@@ -13,6 +13,7 @@ export type VisualConfigFieldPath =
   | 'requestRetry'
   | 'maxRetryCredentials'
   | 'maxRetryInterval'
+  | 'transientErrorCooldownSeconds'
   | 'authAutoRefreshWorkers'
   | 'codexAbnormalReasoningRetryMaxRetries'
   | 'codexAbnormalReasoningRetryReasoningTokens'
@@ -20,7 +21,7 @@ export type VisualConfigFieldPath =
   | 'streaming.bootstrapRetries'
   | 'streaming.nonstreamKeepaliveInterval';
 
-export type VisualConfigValidationErrorCode = 'port_range' | 'non_negative_integer';
+export type VisualConfigValidationErrorCode = 'port_range' | 'non_negative_integer' | 'integer';
 
 export type VisualConfigValidationErrors = Partial<
   Record<VisualConfigFieldPath, VisualConfigValidationErrorCode>
@@ -98,6 +99,7 @@ export type VisualConfigValues = {
   requestRetry: string;
   maxRetryCredentials: string;
   maxRetryInterval: string;
+  transientErrorCooldownSeconds: string;
   disableCooling: boolean;
   disableImageGeneration: DisableImageGenerationMode;
   gptImage2BaseModel: string;
@@ -171,6 +173,7 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   requestRetry: '',
   maxRetryCredentials: '',
   maxRetryInterval: '',
+  transientErrorCooldownSeconds: '',
   disableCooling: false,
   disableImageGeneration: 'false',
   gptImage2BaseModel: '',

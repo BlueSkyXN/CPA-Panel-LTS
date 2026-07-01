@@ -16,6 +16,7 @@ export interface Config {
   debug?: boolean;
   proxyUrl?: string;
   requestRetry?: number;
+  transientErrorCooldownSeconds?: number;
   quotaExceeded?: QuotaExceededConfig;
   usageStatisticsEnabled?: boolean;
   pluginsEnabled?: boolean;

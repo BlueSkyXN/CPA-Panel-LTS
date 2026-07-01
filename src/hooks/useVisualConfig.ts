@@ -225,6 +225,12 @@ function getNonNegativeIntegerError(value: string): 'non_negative_integer' | und
   return Number(trimmed) >= 0 ? undefined : 'non_negative_integer';
 }
 
+function getIntegerError(value: string): 'integer' | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return /^-?\d+$/.test(trimmed) ? undefined : 'integer';
+}
+
 function getNonNegativeIntegerListError(values: string[]): 'non_negative_integer' | undefined {
   return values.some((value) => getNonNegativeIntegerError(value))
     ? 'non_negative_integer'
@@ -252,6 +258,7 @@ export function getVisualConfigValidationErrors(
     requestRetry: getNonNegativeIntegerError(values.requestRetry),
     maxRetryCredentials: getNonNegativeIntegerError(values.maxRetryCredentials),
     maxRetryInterval: getNonNegativeIntegerError(values.maxRetryInterval),
+    transientErrorCooldownSeconds: getIntegerError(values.transientErrorCooldownSeconds),
     authAutoRefreshWorkers: getNonNegativeIntegerError(values.authAutoRefreshWorkers),
     codexAbnormalReasoningRetryMaxRetries: getNonNegativeIntegerError(
       values.codexAbnormalReasoningRetryMaxRetries
@@ -882,6 +889,7 @@ function getNextDirtyFields(
       'requestRetry',
       'maxRetryCredentials',
       'maxRetryInterval',
+      'transientErrorCooldownSeconds',
       'wsAuth',
       'quotaSwitchProject',
       'quotaSwitchPreviewModel',
@@ -1131,6 +1139,9 @@ export function useVisualConfig() {
         requestRetry: String(parsed['request-retry'] ?? ''),
         maxRetryCredentials: String(parsed['max-retry-credentials'] ?? ''),
         maxRetryInterval: String(parsed['max-retry-interval'] ?? ''),
+        transientErrorCooldownSeconds: String(
+          parsed['transient-error-cooldown-seconds'] ?? ''
+        ),
         disableCooling: Boolean(parsed['disable-cooling']),
         disableImageGeneration: parseDisableImageGenerationMode(parsed['disable-image-generation']),
         gptImage2BaseModel:
@@ -1346,6 +1357,11 @@ export function useVisualConfig() {
         setIntFromStringInDoc(doc, ['request-retry'], values.requestRetry);
         setIntFromStringInDoc(doc, ['max-retry-credentials'], values.maxRetryCredentials);
         setIntFromStringInDoc(doc, ['max-retry-interval'], values.maxRetryInterval);
+        setIntFromStringInDoc(
+          doc,
+          ['transient-error-cooldown-seconds'],
+          values.transientErrorCooldownSeconds
+        );
         setBooleanInDoc(doc, ['disable-cooling'], values.disableCooling);
         setDisableImageGenerationInDoc(
           doc,

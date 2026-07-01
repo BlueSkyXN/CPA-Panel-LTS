@@ -1321,6 +1321,8 @@
           "max_retry_credentials": "最大重试凭据数",
           "max_retry_credentials_hint": "留空表示不设置；设为 0 表示保留 legacy 行为，并尝试所有可用凭据。",
           "max_retry_interval": "最大重试间隔 (秒)",
+          "transient_error_cooldown_seconds": "瞬时错误冷却时间 (秒)",
+          "transient_error_cooldown_seconds_hint": "留空使用 Core 默认值。0 保留旧的 60 秒冷却；负数禁用瞬时错误冷却。",
           "auth_auto_refresh_workers": "认证自动刷新 Worker 数",
           "auth_auto_refresh_workers_hint": "大于 0 时覆盖默认 Worker 数（16）",
           "disable_image_generation": "禁用图像生成",
@@ -1455,6 +1457,7 @@
         "validation_blocked": "请先修复表单校验错误再保存",
         "port_range": "请输入 1 到 65535 之间的有效端口",
         "non_negative_integer": "请输入非负整数",
+        "integer": "请输入整数",
         "payload_invalid_number": "请输入有效数字",
         "payload_invalid_boolean": "请选择 true 或 false",
         "payload_invalid_json": "请输入有效的 JSON"

@@ -421,6 +421,22 @@ export const normalizeConfigResponse = (raw: unknown): Config => {
       config.requestRetry = parsed;
     }
   }
+  const transientErrorCooldownSeconds =
+    raw['transient-error-cooldown-seconds'] ?? raw.transientErrorCooldownSeconds;
+  if (
+    typeof transientErrorCooldownSeconds === 'number' &&
+    Number.isFinite(transientErrorCooldownSeconds)
+  ) {
+    config.transientErrorCooldownSeconds = transientErrorCooldownSeconds;
+  } else if (
+    typeof transientErrorCooldownSeconds === 'string' &&
+    transientErrorCooldownSeconds.trim() !== ''
+  ) {
+    const parsed = Number(transientErrorCooldownSeconds);
+    if (Number.isFinite(parsed)) {
+      config.transientErrorCooldownSeconds = parsed;
+    }
+  }
 
   const quota = raw['quota-exceeded'] ?? raw.quotaExceeded;
   if (isRecord(quota)) {

@@ -302,6 +302,9 @@ features:
       - pluginStoreSources
       - parsePluginStoreSources
       - dirtyFields.has('pluginStoreSources')
+      - transientErrorCooldownSeconds
+      - transient-error-cooldown-seconds
+      - transient_error_cooldown_seconds
 
   - id: codex-abnormal-reasoning-retry-config
     status: lts-maintained

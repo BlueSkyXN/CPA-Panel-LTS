@@ -201,6 +201,10 @@ export function VisualConfigEditor({
   const requestRetryError = getValidationMessage(t, validationErrors?.requestRetry);
   const maxRetryCredentialsError = getValidationMessage(t, validationErrors?.maxRetryCredentials);
   const maxRetryIntervalError = getValidationMessage(t, validationErrors?.maxRetryInterval);
+  const transientErrorCooldownSecondsError = getValidationMessage(
+    t,
+    validationErrors?.transientErrorCooldownSeconds
+  );
   const authAutoRefreshWorkersError = getValidationMessage(
     t,
     validationErrors?.authAutoRefreshWorkers
@@ -300,6 +304,7 @@ export function VisualConfigEditor({
           'requestRetry',
           'maxRetryCredentials',
           'maxRetryInterval',
+          'transientErrorCooldownSeconds',
           'authAutoRefreshWorkers',
           'codexAbnormalReasoningRetryMaxRetries',
           'codexAbnormalReasoningRetryReasoningTokens',
@@ -1078,6 +1083,22 @@ export function VisualConfigEditor({
                       onChange={(e) => onChange({ maxRetryInterval: e.target.value })}
                       disabled={disabled}
                       error={maxRetryIntervalError}
+                    />
+                    <Input
+                      label={t(
+                        'config_management.visual.sections.network.transient_error_cooldown_seconds'
+                      )}
+                      type="number"
+                      placeholder="30"
+                      value={values.transientErrorCooldownSeconds}
+                      onChange={(e) =>
+                        onChange({ transientErrorCooldownSeconds: e.target.value })
+                      }
+                      disabled={disabled}
+                      hint={t(
+                        'config_management.visual.sections.network.transient_error_cooldown_seconds_hint'
+                      )}
+                      error={transientErrorCooldownSecondsError}
                     />
                     <Input
                       label={t(

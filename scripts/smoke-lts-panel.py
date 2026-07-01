@@ -97,6 +97,7 @@ def build_config_payload() -> dict[str, Any]:
         "usage-statistics-enabled": True,
         "request-log": True,
         "logging-to-file": True,
+        "transient-error-cooldown-seconds": 30,
         "routing": {"strategy": "round-robin"},
         "api-keys": ["mgmt-key-1"],
         "gemini-api-key": [
@@ -266,6 +267,7 @@ def build_config_yaml() -> str:
 usage-statistics-enabled: true
 request-log: true
 logging-to-file: true
+transient-error-cooldown-seconds: 30
 unmanaged-lts-smoke: keep-me
 routing:
   strategy: round-robin
@@ -1084,6 +1086,11 @@ def assert_config_yaml_roundtrip(state: MockCoreState) -> None:
             "Visual config save did not persist the logging-to-file toggle:\n"
             f"{visual_payload}"
         )
+    if "transient-error-cooldown-seconds: -1" not in visual_payload:
+        raise AssertionError(
+            "Visual config save did not persist transient-error-cooldown-seconds:\n"
+            f"{visual_payload}"
+        )
 
 
 def run_logs_runtime_smoke(page: Any, app_url: str) -> None:
@@ -1491,6 +1498,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             page.get_by_label("Log to File").evaluate(
                 "(element) => { if (element.checked) element.click(); }"
             )
+            page.get_by_label("Transient Error Cooldown (seconds)").fill("-1")
             page.locator('button[aria-label="Save"]').click()
             with page.expect_response(
                 lambda response: response.request.method == "PUT"

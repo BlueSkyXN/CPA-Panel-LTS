@@ -136,6 +136,7 @@ def build_core_config(port: int, temp_dir: Path) -> str:
         request-retry: 0
         max-retry-credentials: 1
         max-retry-interval: 1
+        transient-error-cooldown-seconds: 30
         routing:
           strategy: round-robin
         plugins:
@@ -994,6 +995,9 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
     logging_was_checked = logging_toggle.is_checked()
     logging_toggle.evaluate("(element) => element.click()")
     expected_logging = not logging_was_checked
+    transient_cooldown_input = page.get_by_label("Transient Error Cooldown (seconds)")
+    transient_cooldown_input.scroll_into_view_if_needed()
+    transient_cooldown_input.fill("0")
 
     page.locator('button[aria-label="Save"]').click()
     page.get_by_text("Review Changes", exact=False).first.wait_for()
@@ -1009,6 +1013,10 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
     expected_logging_text = f"logging-to-file: {str(expected_logging).lower()}"
     if expected_logging_text not in visual_saved_yaml:
         raise AssertionError("Browser visual save did not persist logging-to-file toggle")
+    if "transient-error-cooldown-seconds: 0" not in visual_saved_yaml:
+        raise AssertionError(
+            "Browser visual save did not persist transient-error-cooldown-seconds"
+        )
     if BROWSER_PLUGIN_STORE_SOURCE not in visual_saved_yaml:
         raise AssertionError(
             "Browser visual save dropped plugins.store-sources from the source draft"
