@@ -328,14 +328,24 @@ features:
       - codexAbnormalReasoningRetryAuthKinds
       - codexAbnormalReasoningRetryAuthIds
       - codexAbnormalReasoningRetryStreamBuffer
+      - codexAbnormalReasoningRetryStreamBufferMaxBytes
       - codexAbnormalReasoningRetryMaxRetries
       - codexAbnormalReasoningRetryExhaustedBehavior
+      - codexAbnormalReasoningRetryHedgedRetryEnabled
+      - codexAbnormalReasoningRetryHedgeDelayMs
+      - codexAbnormalReasoningRetryRequireDistinctAuth
       - abnormal-reasoning-retry
+      - stream-buffer-max-bytes
       - reasoning-efforts
       - max-retries
       - exhausted-behavior
+      - hedged-retry
+      - hedge-delay-ms
+      - require-distinct-auth
       - codex_abnormal_reasoning_retry_title
+      - codex_abnormal_reasoning_retry_stream_buffer_max_bytes_label
       - codex_abnormal_reasoning_retry_exhausted_behavior_label
+      - codex_abnormal_reasoning_retry_hedged_retry_enabled
 
   - id: auth-files-management
     status: shared

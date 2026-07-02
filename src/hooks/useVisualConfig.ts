@@ -204,8 +204,12 @@ const CODEX_ABNORMAL_REASONING_RETRY_DIRTY_FIELDS = [
   'codexAbnormalReasoningRetryAuthKinds',
   'codexAbnormalReasoningRetryAuthIds',
   'codexAbnormalReasoningRetryStreamBuffer',
+  'codexAbnormalReasoningRetryStreamBufferMaxBytes',
   'codexAbnormalReasoningRetryMaxRetries',
   'codexAbnormalReasoningRetryExhaustedBehavior',
+  'codexAbnormalReasoningRetryHedgedRetryEnabled',
+  'codexAbnormalReasoningRetryHedgeDelayMs',
+  'codexAbnormalReasoningRetryRequireDistinctAuth',
 ] as const;
 
 function hasPayloadDirtyFields(dirtyFields: Set<string>): boolean {
@@ -272,6 +276,12 @@ export function getVisualConfigValidationErrors(
     authAutoRefreshWorkers: getNonNegativeIntegerError(values.authAutoRefreshWorkers),
     codexAbnormalReasoningRetryMaxRetries: getNonNegativeIntegerError(
       values.codexAbnormalReasoningRetryMaxRetries
+    ),
+    codexAbnormalReasoningRetryStreamBufferMaxBytes: getNonNegativeIntegerError(
+      values.codexAbnormalReasoningRetryStreamBufferMaxBytes
+    ),
+    codexAbnormalReasoningRetryHedgeDelayMs: getNonNegativeIntegerError(
+      values.codexAbnormalReasoningRetryHedgeDelayMs
     ),
     codexAbnormalReasoningRetryReasoningTokens: getNonNegativeIntegerListError(
       values.codexAbnormalReasoningRetryReasoningTokens
@@ -878,8 +888,12 @@ function getNextDirtyFields(
       'codexIdentityConfuse',
       'codexAbnormalReasoningRetryEnabled',
       'codexAbnormalReasoningRetryStreamBuffer',
+      'codexAbnormalReasoningRetryStreamBufferMaxBytes',
       'codexAbnormalReasoningRetryMaxRetries',
       'codexAbnormalReasoningRetryExhaustedBehavior',
+      'codexAbnormalReasoningRetryHedgedRetryEnabled',
+      'codexAbnormalReasoningRetryHedgeDelayMs',
+      'codexAbnormalReasoningRetryRequireDistinctAuth',
       'host',
       'port',
       'tlsEnable',
@@ -1104,6 +1118,9 @@ export function useVisualConfig() {
       const plugins = asRecord(parsed.plugins);
       const codex = asRecord(parsed.codex);
       const codexAbnormalReasoningRetry = asRecord(codex?.['abnormal-reasoning-retry']);
+      const codexAbnormalReasoningHedgedRetry = asRecord(
+        codexAbnormalReasoningRetry?.['hedged-retry']
+      );
       const claudeHeaderDefaults = asRecord(parsed['claude-header-defaults']);
       const codexHeaderDefaults = asRecord(parsed['codex-header-defaults']);
 
@@ -1219,6 +1236,10 @@ export function useVisualConfig() {
           typeof codexAbnormalReasoningRetry?.['stream-buffer'] === 'boolean'
             ? codexAbnormalReasoningRetry['stream-buffer']
             : DEFAULT_VISUAL_VALUES.codexAbnormalReasoningRetryStreamBuffer,
+        codexAbnormalReasoningRetryStreamBufferMaxBytes: String(
+          codexAbnormalReasoningRetry?.['stream-buffer-max-bytes'] ??
+            DEFAULT_VISUAL_VALUES.codexAbnormalReasoningRetryStreamBufferMaxBytes
+        ),
         codexAbnormalReasoningRetryMaxRetries: String(
           codexAbnormalReasoningRetry?.['max-retries'] ??
             DEFAULT_VISUAL_VALUES.codexAbnormalReasoningRetryMaxRetries
@@ -1227,6 +1248,17 @@ export function useVisualConfig() {
           parseCodexAbnormalReasoningRetryExhaustedBehavior(
             codexAbnormalReasoningRetry?.['exhausted-behavior']
           ),
+        codexAbnormalReasoningRetryHedgedRetryEnabled: Boolean(
+          codexAbnormalReasoningHedgedRetry?.enabled
+        ),
+        codexAbnormalReasoningRetryHedgeDelayMs: String(
+          codexAbnormalReasoningHedgedRetry?.['hedge-delay-ms'] ??
+            DEFAULT_VISUAL_VALUES.codexAbnormalReasoningRetryHedgeDelayMs
+        ),
+        codexAbnormalReasoningRetryRequireDistinctAuth:
+          typeof codexAbnormalReasoningHedgedRetry?.['require-distinct-auth'] === 'boolean'
+            ? codexAbnormalReasoningHedgedRetry['require-distinct-auth']
+            : DEFAULT_VISUAL_VALUES.codexAbnormalReasoningRetryRequireDistinctAuth,
 
         quotaSwitchProject: Boolean(quotaExceeded?.['switch-project'] ?? true),
         quotaSwitchPreviewModel: Boolean(quotaExceeded?.['switch-preview-model'] ?? true),
@@ -1514,6 +1546,11 @@ export function useVisualConfig() {
             );
             setIntFromStringInDoc(
               doc,
+              ['codex', 'abnormal-reasoning-retry', 'stream-buffer-max-bytes'],
+              values.codexAbnormalReasoningRetryStreamBufferMaxBytes
+            );
+            setIntFromStringInDoc(
+              doc,
               ['codex', 'abnormal-reasoning-retry', 'max-retries'],
               values.codexAbnormalReasoningRetryMaxRetries
             );
@@ -1521,6 +1558,26 @@ export function useVisualConfig() {
               ['codex', 'abnormal-reasoning-retry', 'exhausted-behavior'],
               values.codexAbnormalReasoningRetryExhaustedBehavior
             );
+            ensureMapInDoc(doc, ['codex', 'abnormal-reasoning-retry', 'hedged-retry']);
+            doc.setIn(
+              ['codex', 'abnormal-reasoning-retry', 'hedged-retry', 'enabled'],
+              values.codexAbnormalReasoningRetryHedgedRetryEnabled
+            );
+            setIntFromStringInDoc(
+              doc,
+              ['codex', 'abnormal-reasoning-retry', 'hedged-retry', 'hedge-delay-ms'],
+              values.codexAbnormalReasoningRetryHedgeDelayMs
+            );
+            doc.setIn(
+              [
+                'codex',
+                'abnormal-reasoning-retry',
+                'hedged-retry',
+                'require-distinct-auth',
+              ],
+              values.codexAbnormalReasoningRetryRequireDistinctAuth
+            );
+            deleteIfMapEmpty(doc, ['codex', 'abnormal-reasoning-retry', 'hedged-retry']);
             deleteIfMapEmpty(doc, ['codex', 'abnormal-reasoning-retry']);
           }
           deleteIfMapEmpty(doc, ['codex']);

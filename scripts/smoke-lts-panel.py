@@ -1096,6 +1096,29 @@ def assert_config_yaml_roundtrip(state: MockCoreState) -> None:
             "Visual config save did not persist codex abnormal retry exhausted-behavior:\n"
             f"{visual_payload}"
         )
+    if "stream-buffer-max-bytes: 4096" not in visual_payload:
+        raise AssertionError(
+            "Visual config save did not persist codex abnormal retry stream-buffer-max-bytes:\n"
+            f"{visual_payload}"
+        )
+    if not re.search(
+        r"hedged-retry:\s*\n(?:[ \t]+[^\n]*\n)*?[ \t]+enabled: true",
+        visual_payload,
+    ):
+        raise AssertionError(
+            "Visual config save did not persist codex abnormal retry hedged-retry.enabled:\n"
+            f"{visual_payload}"
+        )
+    if "hedge-delay-ms: 250" not in visual_payload:
+        raise AssertionError(
+            "Visual config save did not persist codex abnormal retry hedge-delay-ms:\n"
+            f"{visual_payload}"
+        )
+    if "require-distinct-auth: true" not in visual_payload:
+        raise AssertionError(
+            "Visual config save did not persist codex abnormal retry require-distinct-auth:\n"
+            f"{visual_payload}"
+        )
 
 
 def run_logs_runtime_smoke(page: Any, app_url: str) -> None:
@@ -1504,6 +1527,14 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
                 "(element) => { if (element.checked) element.click(); }"
             )
             page.get_by_label("Transient Error Cooldown (seconds)").fill("-1")
+            page.get_by_label("Stream buffer max bytes").fill("4096")
+            page.get_by_label("Enable Hedged Retry").evaluate(
+                "(element) => { if (!element.checked) element.click(); }"
+            )
+            page.get_by_label("Hedge delay (ms)").fill("250")
+            page.get_by_label("Require Distinct Auth").evaluate(
+                "(element) => { if (!element.checked) element.click(); }"
+            )
             page.get_by_label("Exhausted behavior").click()
             page.get_by_role("option", name="Pass through abnormal response").click()
             page.locator('button[aria-label="Save"]').click()

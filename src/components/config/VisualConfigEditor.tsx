@@ -219,6 +219,14 @@ export function VisualConfigEditor({
     t,
     validationErrors?.codexAbnormalReasoningRetryMaxRetries
   );
+  const codexAbnormalReasoningRetryStreamBufferMaxBytesError = getValidationMessage(
+    t,
+    validationErrors?.codexAbnormalReasoningRetryStreamBufferMaxBytes
+  );
+  const codexAbnormalReasoningRetryHedgeDelayMsError = getValidationMessage(
+    t,
+    validationErrors?.codexAbnormalReasoningRetryHedgeDelayMs
+  );
   const keepaliveError = getValidationMessage(t, validationErrors?.['streaming.keepaliveSeconds']);
   const bootstrapRetriesError = getValidationMessage(
     t,
@@ -325,7 +333,9 @@ export function VisualConfigEditor({
           'maxRetryInterval',
           'transientErrorCooldownSeconds',
           'authAutoRefreshWorkers',
+          'codexAbnormalReasoningRetryStreamBufferMaxBytes',
           'codexAbnormalReasoningRetryMaxRetries',
+          'codexAbnormalReasoningRetryHedgeDelayMs',
           'codexAbnormalReasoningRetryReasoningTokens',
         ]),
       },
@@ -937,8 +947,68 @@ export function VisualConfigEditor({
                         onChange({ codexAbnormalReasoningRetryStreamBuffer })
                       }
                     />
+                    <ToggleRow
+                      title={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_hedged_retry_enabled'
+                      )}
+                      description={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_hedged_retry_enabled_desc'
+                      )}
+                      checked={values.codexAbnormalReasoningRetryHedgedRetryEnabled}
+                      disabled={disabled}
+                      onChange={(codexAbnormalReasoningRetryHedgedRetryEnabled) =>
+                        onChange({ codexAbnormalReasoningRetryHedgedRetryEnabled })
+                      }
+                    />
+                    <ToggleRow
+                      title={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_require_distinct_auth'
+                      )}
+                      description={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_require_distinct_auth_desc'
+                      )}
+                      checked={values.codexAbnormalReasoningRetryRequireDistinctAuth}
+                      disabled={disabled}
+                      onChange={(codexAbnormalReasoningRetryRequireDistinctAuth) =>
+                        onChange({ codexAbnormalReasoningRetryRequireDistinctAuth })
+                      }
+                    />
                   </SectionGrid>
                   <SectionGrid>
+                    <Input
+                      label={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_stream_buffer_max_bytes_label'
+                      )}
+                      type="number"
+                      placeholder="0"
+                      value={values.codexAbnormalReasoningRetryStreamBufferMaxBytes}
+                      onChange={(e) =>
+                        onChange({
+                          codexAbnormalReasoningRetryStreamBufferMaxBytes: e.target.value,
+                        })
+                      }
+                      disabled={disabled}
+                      hint={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_stream_buffer_max_bytes_hint'
+                      )}
+                      error={codexAbnormalReasoningRetryStreamBufferMaxBytesError}
+                    />
+                    <Input
+                      label={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_hedge_delay_ms_label'
+                      )}
+                      type="number"
+                      placeholder="1000"
+                      value={values.codexAbnormalReasoningRetryHedgeDelayMs}
+                      onChange={(e) =>
+                        onChange({ codexAbnormalReasoningRetryHedgeDelayMs: e.target.value })
+                      }
+                      disabled={disabled}
+                      hint={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_hedge_delay_ms_hint'
+                      )}
+                      error={codexAbnormalReasoningRetryHedgeDelayMsError}
+                    />
                     <FieldShell
                       label={t(
                         'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_model_contains_label'

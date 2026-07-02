@@ -998,6 +998,20 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
     transient_cooldown_input = page.get_by_label("Transient Error Cooldown (seconds)")
     transient_cooldown_input.scroll_into_view_if_needed()
     transient_cooldown_input.fill("0")
+    stream_buffer_max_input = page.get_by_label("Stream buffer max bytes")
+    stream_buffer_max_input.scroll_into_view_if_needed()
+    stream_buffer_max_input.fill("4096")
+    hedged_retry_toggle = page.get_by_label("Enable Hedged Retry")
+    hedged_retry_toggle.scroll_into_view_if_needed()
+    hedged_retry_toggle.evaluate("(element) => { if (!element.checked) element.click(); }")
+    hedge_delay_input = page.get_by_label("Hedge delay (ms)")
+    hedge_delay_input.scroll_into_view_if_needed()
+    hedge_delay_input.fill("250")
+    require_distinct_auth_toggle = page.get_by_label("Require Distinct Auth")
+    require_distinct_auth_toggle.scroll_into_view_if_needed()
+    require_distinct_auth_toggle.evaluate(
+        "(element) => { if (!element.checked) element.click(); }"
+    )
     exhausted_behavior_select = page.get_by_label("Exhausted behavior")
     exhausted_behavior_select.scroll_into_view_if_needed()
     exhausted_behavior_select.click()
@@ -1024,6 +1038,25 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
     if "exhausted-behavior: pass-through" not in visual_saved_yaml:
         raise AssertionError(
             "Browser visual save did not persist codex abnormal retry exhausted-behavior"
+        )
+    if "stream-buffer-max-bytes: 4096" not in visual_saved_yaml:
+        raise AssertionError(
+            "Browser visual save did not persist codex abnormal retry stream-buffer-max-bytes"
+        )
+    if not re.search(
+        r"hedged-retry:\s*\n(?:[ \t]+[^\n]*\n)*?[ \t]+enabled: true",
+        visual_saved_yaml,
+    ):
+        raise AssertionError(
+            "Browser visual save did not persist codex abnormal retry hedged-retry.enabled"
+        )
+    if "hedge-delay-ms: 250" not in visual_saved_yaml:
+        raise AssertionError(
+            "Browser visual save did not persist codex abnormal retry hedge-delay-ms"
+        )
+    if "require-distinct-auth: true" not in visual_saved_yaml:
+        raise AssertionError(
+            "Browser visual save did not persist codex abnormal retry require-distinct-auth"
         )
     if BROWSER_PLUGIN_STORE_SOURCE not in visual_saved_yaml:
         raise AssertionError(

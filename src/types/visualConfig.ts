@@ -16,7 +16,9 @@ export type VisualConfigFieldPath =
   | 'maxRetryInterval'
   | 'transientErrorCooldownSeconds'
   | 'authAutoRefreshWorkers'
+  | 'codexAbnormalReasoningRetryStreamBufferMaxBytes'
   | 'codexAbnormalReasoningRetryMaxRetries'
+  | 'codexAbnormalReasoningRetryHedgeDelayMs'
   | 'codexAbnormalReasoningRetryReasoningTokens'
   | 'streaming.keepaliveSeconds'
   | 'streaming.bootstrapRetries'
@@ -132,8 +134,12 @@ export type VisualConfigValues = {
   codexAbnormalReasoningRetryAuthKinds: string[];
   codexAbnormalReasoningRetryAuthIds: string[];
   codexAbnormalReasoningRetryStreamBuffer: boolean;
+  codexAbnormalReasoningRetryStreamBufferMaxBytes: string;
   codexAbnormalReasoningRetryMaxRetries: string;
   codexAbnormalReasoningRetryExhaustedBehavior: CodexAbnormalReasoningRetryExhaustedBehavior;
+  codexAbnormalReasoningRetryHedgedRetryEnabled: boolean;
+  codexAbnormalReasoningRetryHedgeDelayMs: string;
+  codexAbnormalReasoningRetryRequireDistinctAuth: boolean;
   payloadDefaultRules: PayloadRule[];
   payloadDefaultRawRules: PayloadRule[];
   payloadOverrideRules: PayloadRule[];
@@ -207,8 +213,12 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   codexAbnormalReasoningRetryAuthKinds: ['oauth'],
   codexAbnormalReasoningRetryAuthIds: [],
   codexAbnormalReasoningRetryStreamBuffer: true,
+  codexAbnormalReasoningRetryStreamBufferMaxBytes: '0',
   codexAbnormalReasoningRetryMaxRetries: '2',
   codexAbnormalReasoningRetryExhaustedBehavior: 'error',
+  codexAbnormalReasoningRetryHedgedRetryEnabled: false,
+  codexAbnormalReasoningRetryHedgeDelayMs: '1000',
+  codexAbnormalReasoningRetryRequireDistinctAuth: true,
   payloadDefaultRules: [],
   payloadDefaultRawRules: [],
   payloadOverrideRules: [],
