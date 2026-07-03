@@ -174,6 +174,10 @@ export function VisualConfigEditor({
   const disableImageGenerationHintId = `${disableImageGenerationLabelId}-hint`;
   const abnormalRetryExhaustedBehaviorLabelId = useId();
   const abnormalRetryExhaustedBehaviorHintId = `${abnormalRetryExhaustedBehaviorLabelId}-hint`;
+  const abnormalRetryUsageAggregationLabelId = useId();
+  const abnormalRetryUsageAggregationHintId = `${abnormalRetryUsageAggregationLabelId}-hint`;
+  const abnormalRetryHedgedModeLabelId = useId();
+  const abnormalRetryHedgedModeHintId = `${abnormalRetryHedgedModeLabelId}-hint`;
   const keepaliveInputId = useId();
   const keepaliveHintId = `${keepaliveInputId}-hint`;
   const keepaliveErrorId = `${keepaliveInputId}-error`;
@@ -294,6 +298,40 @@ export function VisualConfigEditor({
         value: 'pass-through',
         label: t(
           'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_exhausted_behavior_pass_through'
+        ),
+      },
+    ],
+    [t]
+  );
+  const abnormalRetryUsageAggregationOptions = useMemo(
+    () => [
+      {
+        value: 'reasoning-fold',
+        label: t(
+          'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_client_usage_aggregation_reasoning_fold'
+        ),
+      },
+      {
+        value: 'sum',
+        label: t(
+          'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_client_usage_aggregation_sum'
+        ),
+      },
+    ],
+    [t]
+  );
+  const abnormalRetryHedgedModeOptions = useMemo(
+    () => [
+      {
+        value: 'quality',
+        label: t(
+          'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_hedged_retry_mode_quality'
+        ),
+      },
+      {
+        value: 'speed',
+        label: t(
+          'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_hedged_retry_mode_speed'
         ),
       },
     ],
@@ -1011,6 +1049,31 @@ export function VisualConfigEditor({
                     />
                     <FieldShell
                       label={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_hedged_retry_mode_label'
+                      )}
+                      labelId={abnormalRetryHedgedModeLabelId}
+                      hint={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_hedged_retry_mode_hint'
+                      )}
+                      hintId={abnormalRetryHedgedModeHintId}
+                    >
+                      <Select
+                        value={values.codexAbnormalReasoningRetryHedgedRetryMode}
+                        options={abnormalRetryHedgedModeOptions}
+                        id={`${abnormalRetryHedgedModeLabelId}-select`}
+                        disabled={disabled}
+                        ariaLabelledBy={abnormalRetryHedgedModeLabelId}
+                        ariaDescribedBy={abnormalRetryHedgedModeHintId}
+                        onChange={(nextValue) =>
+                          onChange({
+                            codexAbnormalReasoningRetryHedgedRetryMode:
+                              nextValue as VisualConfigValues['codexAbnormalReasoningRetryHedgedRetryMode'],
+                          })
+                        }
+                      />
+                    </FieldShell>
+                    <FieldShell
+                      label={t(
                         'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_model_contains_label'
                       )}
                       hint={t(
@@ -1107,6 +1170,31 @@ export function VisualConfigEditor({
                           onChange({
                             codexAbnormalReasoningRetryExhaustedBehavior:
                               nextValue as VisualConfigValues['codexAbnormalReasoningRetryExhaustedBehavior'],
+                          })
+                        }
+                      />
+                    </FieldShell>
+                    <FieldShell
+                      label={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_client_usage_aggregation_label'
+                      )}
+                      labelId={abnormalRetryUsageAggregationLabelId}
+                      hint={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_client_usage_aggregation_hint'
+                      )}
+                      hintId={abnormalRetryUsageAggregationHintId}
+                    >
+                      <Select
+                        value={values.codexAbnormalReasoningRetryClientUsageAggregation}
+                        options={abnormalRetryUsageAggregationOptions}
+                        id={`${abnormalRetryUsageAggregationLabelId}-select`}
+                        disabled={disabled}
+                        ariaLabelledBy={abnormalRetryUsageAggregationLabelId}
+                        ariaDescribedBy={abnormalRetryUsageAggregationHintId}
+                        onChange={(nextValue) =>
+                          onChange({
+                            codexAbnormalReasoningRetryClientUsageAggregation:
+                              nextValue as VisualConfigValues['codexAbnormalReasoningRetryClientUsageAggregation'],
                           })
                         }
                       />

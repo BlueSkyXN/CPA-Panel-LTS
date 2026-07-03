@@ -1,7 +1,9 @@
 import { useCallback, useMemo, useReducer } from 'react';
 import { isMap, parse as parseYaml, parseDocument } from 'yaml';
 import type {
+  CodexAbnormalReasoningRetryClientUsageAggregation,
   CodexAbnormalReasoningRetryExhaustedBehavior,
+  CodexAbnormalReasoningRetryHedgedRetryMode,
   DisableImageGenerationMode,
   PayloadFilterRule,
   PayloadHeaderEntry,
@@ -188,6 +190,22 @@ function parseCodexAbnormalReasoningRetryExhaustedBehavior(
   return normalized === 'pass-through' || normalized === 'passthrough' ? 'pass-through' : 'error';
 }
 
+function parseCodexAbnormalReasoningRetryClientUsageAggregation(
+  value: unknown
+): CodexAbnormalReasoningRetryClientUsageAggregation {
+  if (typeof value !== 'string') return 'reasoning-fold';
+  const normalized = value.trim().toLowerCase();
+  return normalized === 'sum' ? 'sum' : 'reasoning-fold';
+}
+
+function parseCodexAbnormalReasoningRetryHedgedRetryMode(
+  value: unknown
+): CodexAbnormalReasoningRetryHedgedRetryMode {
+  if (typeof value !== 'string') return 'quality';
+  const normalized = value.trim().toLowerCase();
+  return normalized === 'speed' ? 'speed' : 'quality';
+}
+
 const PAYLOAD_DIRTY_FIELDS = [
   'payloadDefaultRules',
   'payloadDefaultRawRules',
@@ -207,7 +225,9 @@ const CODEX_ABNORMAL_REASONING_RETRY_DIRTY_FIELDS = [
   'codexAbnormalReasoningRetryStreamBufferMaxBytes',
   'codexAbnormalReasoningRetryMaxRetries',
   'codexAbnormalReasoningRetryExhaustedBehavior',
+  'codexAbnormalReasoningRetryClientUsageAggregation',
   'codexAbnormalReasoningRetryHedgedRetryEnabled',
+  'codexAbnormalReasoningRetryHedgedRetryMode',
   'codexAbnormalReasoningRetryHedgeDelayMs',
   'codexAbnormalReasoningRetryRequireDistinctAuth',
 ] as const;
@@ -891,7 +911,9 @@ function getNextDirtyFields(
       'codexAbnormalReasoningRetryStreamBufferMaxBytes',
       'codexAbnormalReasoningRetryMaxRetries',
       'codexAbnormalReasoningRetryExhaustedBehavior',
+      'codexAbnormalReasoningRetryClientUsageAggregation',
       'codexAbnormalReasoningRetryHedgedRetryEnabled',
+      'codexAbnormalReasoningRetryHedgedRetryMode',
       'codexAbnormalReasoningRetryHedgeDelayMs',
       'codexAbnormalReasoningRetryRequireDistinctAuth',
       'host',
@@ -1248,9 +1270,17 @@ export function useVisualConfig() {
           parseCodexAbnormalReasoningRetryExhaustedBehavior(
             codexAbnormalReasoningRetry?.['exhausted-behavior']
           ),
+        codexAbnormalReasoningRetryClientUsageAggregation:
+          parseCodexAbnormalReasoningRetryClientUsageAggregation(
+            codexAbnormalReasoningRetry?.['client-usage-aggregation']
+          ),
         codexAbnormalReasoningRetryHedgedRetryEnabled: Boolean(
           codexAbnormalReasoningHedgedRetry?.enabled
         ),
+        codexAbnormalReasoningRetryHedgedRetryMode:
+          parseCodexAbnormalReasoningRetryHedgedRetryMode(
+            codexAbnormalReasoningHedgedRetry?.mode
+          ),
         codexAbnormalReasoningRetryHedgeDelayMs: String(
           codexAbnormalReasoningHedgedRetry?.['hedge-delay-ms'] ??
             DEFAULT_VISUAL_VALUES.codexAbnormalReasoningRetryHedgeDelayMs
@@ -1558,10 +1588,18 @@ export function useVisualConfig() {
               ['codex', 'abnormal-reasoning-retry', 'exhausted-behavior'],
               values.codexAbnormalReasoningRetryExhaustedBehavior
             );
+            doc.setIn(
+              ['codex', 'abnormal-reasoning-retry', 'client-usage-aggregation'],
+              values.codexAbnormalReasoningRetryClientUsageAggregation
+            );
             ensureMapInDoc(doc, ['codex', 'abnormal-reasoning-retry', 'hedged-retry']);
             doc.setIn(
               ['codex', 'abnormal-reasoning-retry', 'hedged-retry', 'enabled'],
               values.codexAbnormalReasoningRetryHedgedRetryEnabled
+            );
+            doc.setIn(
+              ['codex', 'abnormal-reasoning-retry', 'hedged-retry', 'mode'],
+              values.codexAbnormalReasoningRetryHedgedRetryMode
             );
             setIntFromStringInDoc(
               doc,
