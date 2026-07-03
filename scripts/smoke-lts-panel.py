@@ -1096,6 +1096,11 @@ def assert_config_yaml_roundtrip(state: MockCoreState) -> None:
             "Visual config save did not persist codex abnormal retry exhausted-behavior:\n"
             f"{visual_payload}"
         )
+    if "client-usage-aggregation: sum" not in visual_payload:
+        raise AssertionError(
+            "Visual config save did not persist codex abnormal retry client-usage-aggregation:\n"
+            f"{visual_payload}"
+        )
     if "stream-buffer-max-bytes: 4096" not in visual_payload:
         raise AssertionError(
             "Visual config save did not persist codex abnormal retry stream-buffer-max-bytes:\n"
@@ -1107,6 +1112,14 @@ def assert_config_yaml_roundtrip(state: MockCoreState) -> None:
     ):
         raise AssertionError(
             "Visual config save did not persist codex abnormal retry hedged-retry.enabled:\n"
+            f"{visual_payload}"
+        )
+    if not re.search(
+        r"hedged-retry:\s*\n(?:[ \t]+[^\n]*\n)*?[ \t]+mode: speed",
+        visual_payload,
+    ):
+        raise AssertionError(
+            "Visual config save did not persist codex abnormal retry hedged-retry.mode:\n"
             f"{visual_payload}"
         )
     if "hedge-delay-ms: 250" not in visual_payload:
@@ -1535,8 +1548,12 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             page.get_by_label("Require Distinct Auth").evaluate(
                 "(element) => { if (!element.checked) element.click(); }"
             )
+            page.get_by_label("Hedged retry mode").click()
+            page.get_by_role("option", name="Speed").click()
             page.get_by_label("Exhausted behavior").click()
             page.get_by_role("option", name="Pass through abnormal response").click()
+            page.get_by_label("Client usage aggregation").click()
+            page.get_by_role("option", name="Sum fields").click()
             page.locator('button[aria-label="Save"]').click()
             with page.expect_response(
                 lambda response: response.request.method == "PUT"

@@ -1012,10 +1012,18 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
     require_distinct_auth_toggle.evaluate(
         "(element) => { if (!element.checked) element.click(); }"
     )
+    hedged_retry_mode_select = page.get_by_label("Hedged retry mode")
+    hedged_retry_mode_select.scroll_into_view_if_needed()
+    hedged_retry_mode_select.click()
+    page.get_by_role("option", name="Speed").click()
     exhausted_behavior_select = page.get_by_label("Exhausted behavior")
     exhausted_behavior_select.scroll_into_view_if_needed()
     exhausted_behavior_select.click()
     page.get_by_role("option", name="Pass through abnormal response").click()
+    client_usage_aggregation_select = page.get_by_label("Client usage aggregation")
+    client_usage_aggregation_select.scroll_into_view_if_needed()
+    client_usage_aggregation_select.click()
+    page.get_by_role("option", name="Sum fields").click()
 
     page.locator('button[aria-label="Save"]').click()
     page.get_by_text("Review Changes", exact=False).first.wait_for()
@@ -1039,6 +1047,10 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
         raise AssertionError(
             "Browser visual save did not persist codex abnormal retry exhausted-behavior"
         )
+    if "client-usage-aggregation: sum" not in visual_saved_yaml:
+        raise AssertionError(
+            "Browser visual save did not persist codex abnormal retry client-usage-aggregation"
+        )
     if "stream-buffer-max-bytes: 4096" not in visual_saved_yaml:
         raise AssertionError(
             "Browser visual save did not persist codex abnormal retry stream-buffer-max-bytes"
@@ -1049,6 +1061,13 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
     ):
         raise AssertionError(
             "Browser visual save did not persist codex abnormal retry hedged-retry.enabled"
+        )
+    if not re.search(
+        r"hedged-retry:\s*\n(?:[ \t]+[^\n]*\n)*?[ \t]+mode: speed",
+        visual_saved_yaml,
+    ):
+        raise AssertionError(
+            "Browser visual save did not persist codex abnormal retry hedged-retry.mode"
         )
     if "hedge-delay-ms: 250" not in visual_saved_yaml:
         raise AssertionError(
