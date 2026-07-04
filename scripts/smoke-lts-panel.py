@@ -1091,6 +1091,11 @@ def assert_config_yaml_roundtrip(state: MockCoreState) -> None:
             "Visual config save did not persist transient-error-cooldown-seconds:\n"
             f"{visual_payload}"
         )
+    if "action: retry" not in visual_payload:
+        raise AssertionError(
+            "Visual config save did not persist codex abnormal retry action:\n"
+            f"{visual_payload}"
+        )
     if "exhausted-behavior: pass-through" not in visual_payload:
         raise AssertionError(
             "Visual config save did not persist codex abnormal retry exhausted-behavior:\n"
@@ -1099,6 +1104,16 @@ def assert_config_yaml_roundtrip(state: MockCoreState) -> None:
     if "client-usage-aggregation: sum-with-delivered-total" not in visual_payload:
         raise AssertionError(
             "Visual config save did not persist codex abnormal retry client-usage-aggregation:\n"
+            f"{visual_payload}"
+        )
+    if "delivery-policy: max-output" not in visual_payload:
+        raise AssertionError(
+            "Visual config save did not persist codex abnormal retry delivery-policy:\n"
+            f"{visual_payload}"
+        )
+    if "fallback-policy: max-output-special" not in visual_payload:
+        raise AssertionError(
+            "Visual config save did not persist codex abnormal retry fallback-policy:\n"
             f"{visual_payload}"
         )
     if "stream-buffer-max-bytes: 4096" not in visual_payload:
@@ -1540,6 +1555,8 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
                 "(element) => { if (element.checked) element.click(); }"
             )
             page.get_by_label("Transient Error Cooldown (seconds)").fill("-1")
+            page.get_by_label("Retry action").click()
+            page.get_by_role("option", name="Retry").click()
             page.get_by_label("Stream buffer max bytes").fill("4096")
             page.get_by_label("Enable Hedged Retry").evaluate(
                 "(element) => { if (!element.checked) element.click(); }"
@@ -1554,6 +1571,10 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             page.get_by_role("option", name="Pass through abnormal response").click()
             page.get_by_label("Client usage aggregation").click()
             page.get_by_role("option", name="Sum with delivered total").click()
+            page.get_by_label("Delivery policy").click()
+            page.get_by_role("option", name="Max output").click()
+            page.get_by_label("Fallback policy").click()
+            page.get_by_role("option", name="Max output special").click()
             page.locator('button[aria-label="Save"]').click()
             with page.expect_response(
                 lambda response: response.request.method == "PUT"

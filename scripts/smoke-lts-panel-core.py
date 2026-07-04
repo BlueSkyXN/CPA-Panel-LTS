@@ -998,6 +998,10 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
     transient_cooldown_input = page.get_by_label("Transient Error Cooldown (seconds)")
     transient_cooldown_input.scroll_into_view_if_needed()
     transient_cooldown_input.fill("0")
+    retry_action_select = page.get_by_label("Retry action")
+    retry_action_select.scroll_into_view_if_needed()
+    retry_action_select.click()
+    page.get_by_role("option", name="Retry").click()
     stream_buffer_max_input = page.get_by_label("Stream buffer max bytes")
     stream_buffer_max_input.scroll_into_view_if_needed()
     stream_buffer_max_input.fill("4096")
@@ -1024,6 +1028,14 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
     client_usage_aggregation_select.scroll_into_view_if_needed()
     client_usage_aggregation_select.click()
     page.get_by_role("option", name="Sum with delivered total").click()
+    delivery_policy_select = page.get_by_label("Delivery policy")
+    delivery_policy_select.scroll_into_view_if_needed()
+    delivery_policy_select.click()
+    page.get_by_role("option", name="Max output").click()
+    fallback_policy_select = page.get_by_label("Fallback policy")
+    fallback_policy_select.scroll_into_view_if_needed()
+    fallback_policy_select.click()
+    page.get_by_role("option", name="Max output special").click()
 
     page.locator('button[aria-label="Save"]').click()
     page.get_by_text("Review Changes", exact=False).first.wait_for()
@@ -1043,6 +1055,10 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
         raise AssertionError(
             "Browser visual save did not persist transient-error-cooldown-seconds"
         )
+    if "action: retry" not in visual_saved_yaml:
+        raise AssertionError(
+            "Browser visual save did not persist codex abnormal retry action"
+        )
     if "exhausted-behavior: pass-through" not in visual_saved_yaml:
         raise AssertionError(
             "Browser visual save did not persist codex abnormal retry exhausted-behavior"
@@ -1050,6 +1066,14 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
     if "client-usage-aggregation: sum-with-delivered-total" not in visual_saved_yaml:
         raise AssertionError(
             "Browser visual save did not persist codex abnormal retry client-usage-aggregation"
+        )
+    if "delivery-policy: max-output" not in visual_saved_yaml:
+        raise AssertionError(
+            "Browser visual save did not persist codex abnormal retry delivery-policy"
+        )
+    if "fallback-policy: max-output-special" not in visual_saved_yaml:
+        raise AssertionError(
+            "Browser visual save did not persist codex abnormal retry fallback-policy"
         )
     if "stream-buffer-max-bytes: 4096" not in visual_saved_yaml:
         raise AssertionError(

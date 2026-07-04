@@ -1,10 +1,20 @@
 export type PayloadParamValueType = 'string' | 'number' | 'boolean' | 'json';
 export type DisableImageGenerationMode = 'false' | 'true' | 'chat';
+export type CodexAbnormalReasoningRetryAction = 'retry' | 'observe-only' | 'disabled';
 export type CodexAbnormalReasoningRetryExhaustedBehavior = 'error' | 'pass-through';
 export type CodexAbnormalReasoningRetryClientUsageAggregation =
   | 'delivered-only'
   | 'sum'
   | 'sum-with-delivered-total';
+export type CodexAbnormalReasoningRetryDeliveryPolicy =
+  | 'best-non-special'
+  | 'first-non-special'
+  | 'max-output'
+  | 'latest';
+export type CodexAbnormalReasoningRetryFallbackPolicy =
+  | 'best-special'
+  | 'max-output-special'
+  | 'latest-special';
 export type CodexAbnormalReasoningRetryHedgedRetryMode = 'speed' | 'quality';
 export type PayloadParamValidationErrorCode =
   | 'payload_invalid_number'
@@ -132,6 +142,7 @@ export type VisualConfigValues = {
   codexHeaderUserAgent: string;
   codexHeaderBetaFeatures: string;
   codexIdentityConfuse: boolean;
+  codexAbnormalReasoningRetryAction: CodexAbnormalReasoningRetryAction;
   codexAbnormalReasoningRetryEnabled: boolean;
   codexAbnormalReasoningRetryModelContains: string[];
   codexAbnormalReasoningRetryReasoningEfforts: string[];
@@ -143,6 +154,8 @@ export type VisualConfigValues = {
   codexAbnormalReasoningRetryMaxRetries: string;
   codexAbnormalReasoningRetryExhaustedBehavior: CodexAbnormalReasoningRetryExhaustedBehavior;
   codexAbnormalReasoningRetryClientUsageAggregation: CodexAbnormalReasoningRetryClientUsageAggregation;
+  codexAbnormalReasoningRetryDeliveryPolicy: CodexAbnormalReasoningRetryDeliveryPolicy;
+  codexAbnormalReasoningRetryFallbackPolicy: CodexAbnormalReasoningRetryFallbackPolicy;
   codexAbnormalReasoningRetryHedgedRetryEnabled: boolean;
   codexAbnormalReasoningRetryHedgedRetryMode: CodexAbnormalReasoningRetryHedgedRetryMode;
   codexAbnormalReasoningRetryHedgeDelayMs: string;
@@ -213,6 +226,7 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   codexHeaderUserAgent: '',
   codexHeaderBetaFeatures: '',
   codexIdentityConfuse: false,
+  codexAbnormalReasoningRetryAction: 'disabled',
   codexAbnormalReasoningRetryEnabled: false,
   codexAbnormalReasoningRetryModelContains: ['gpt-5.5'],
   codexAbnormalReasoningRetryReasoningEfforts: [],
@@ -224,6 +238,8 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   codexAbnormalReasoningRetryMaxRetries: '2',
   codexAbnormalReasoningRetryExhaustedBehavior: 'error',
   codexAbnormalReasoningRetryClientUsageAggregation: 'delivered-only',
+  codexAbnormalReasoningRetryDeliveryPolicy: 'best-non-special',
+  codexAbnormalReasoningRetryFallbackPolicy: 'best-special',
   codexAbnormalReasoningRetryHedgedRetryEnabled: false,
   codexAbnormalReasoningRetryHedgedRetryMode: 'quality',
   codexAbnormalReasoningRetryHedgeDelayMs: '1000',
