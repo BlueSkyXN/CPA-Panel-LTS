@@ -1023,7 +1023,7 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
     client_usage_aggregation_select = page.get_by_label("Client usage aggregation")
     client_usage_aggregation_select.scroll_into_view_if_needed()
     client_usage_aggregation_select.click()
-    page.get_by_role("option", name="Sum fields").click()
+    page.get_by_role("option", name="Sum with delivered total").click()
 
     page.locator('button[aria-label="Save"]').click()
     page.get_by_text("Review Changes", exact=False).first.wait_for()
@@ -1047,7 +1047,7 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
         raise AssertionError(
             "Browser visual save did not persist codex abnormal retry exhausted-behavior"
         )
-    if "client-usage-aggregation: sum" not in visual_saved_yaml:
+    if "client-usage-aggregation: sum-with-delivered-total" not in visual_saved_yaml:
         raise AssertionError(
             "Browser visual save did not persist codex abnormal retry client-usage-aggregation"
         )

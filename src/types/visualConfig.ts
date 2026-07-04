@@ -1,7 +1,10 @@
 export type PayloadParamValueType = 'string' | 'number' | 'boolean' | 'json';
 export type DisableImageGenerationMode = 'false' | 'true' | 'chat';
 export type CodexAbnormalReasoningRetryExhaustedBehavior = 'error' | 'pass-through';
-export type CodexAbnormalReasoningRetryClientUsageAggregation = 'reasoning-fold' | 'sum';
+export type CodexAbnormalReasoningRetryClientUsageAggregation =
+  | 'delivered-only'
+  | 'sum'
+  | 'sum-with-delivered-total';
 export type CodexAbnormalReasoningRetryHedgedRetryMode = 'speed' | 'quality';
 export type PayloadParamValidationErrorCode =
   | 'payload_invalid_number'
@@ -220,7 +223,7 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   codexAbnormalReasoningRetryStreamBufferMaxBytes: '0',
   codexAbnormalReasoningRetryMaxRetries: '2',
   codexAbnormalReasoningRetryExhaustedBehavior: 'error',
-  codexAbnormalReasoningRetryClientUsageAggregation: 'reasoning-fold',
+  codexAbnormalReasoningRetryClientUsageAggregation: 'delivered-only',
   codexAbnormalReasoningRetryHedgedRetryEnabled: false,
   codexAbnormalReasoningRetryHedgedRetryMode: 'quality',
   codexAbnormalReasoningRetryHedgeDelayMs: '1000',

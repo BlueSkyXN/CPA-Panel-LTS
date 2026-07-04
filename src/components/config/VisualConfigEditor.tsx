@@ -306,15 +306,21 @@ export function VisualConfigEditor({
   const abnormalRetryUsageAggregationOptions = useMemo(
     () => [
       {
-        value: 'reasoning-fold',
+        value: 'delivered-only',
         label: t(
-          'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_client_usage_aggregation_reasoning_fold'
+          'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_client_usage_aggregation_delivered_only'
         ),
       },
       {
         value: 'sum',
         label: t(
           'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_client_usage_aggregation_sum'
+        ),
+      },
+      {
+        value: 'sum-with-delivered-total',
+        label: t(
+          'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_client_usage_aggregation_sum_with_delivered_total'
         ),
       },
     ],
