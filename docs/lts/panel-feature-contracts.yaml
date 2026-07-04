@@ -342,6 +342,8 @@ features:
       - max-retries
       - exhausted-behavior
       - client-usage-aggregation
+      - delivered-only
+      - sum-with-delivered-total
       - hedged-retry
       - mode
       - hedge-delay-ms

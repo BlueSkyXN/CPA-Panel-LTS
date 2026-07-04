@@ -193,9 +193,11 @@ function parseCodexAbnormalReasoningRetryExhaustedBehavior(
 function parseCodexAbnormalReasoningRetryClientUsageAggregation(
   value: unknown
 ): CodexAbnormalReasoningRetryClientUsageAggregation {
-  if (typeof value !== 'string') return 'reasoning-fold';
-  const normalized = value.trim().toLowerCase();
-  return normalized === 'sum' ? 'sum' : 'reasoning-fold';
+  if (typeof value !== 'string') return 'delivered-only';
+  const normalized = value.trim().toLowerCase().replace(/_/g, '-');
+  if (normalized === 'sum') return 'sum';
+  if (normalized === 'sum-with-delivered-total') return 'sum-with-delivered-total';
+  return 'delivered-only';
 }
 
 function parseCodexAbnormalReasoningRetryHedgedRetryMode(
