@@ -321,6 +321,7 @@ features:
     core_endpoints:
       - /v0/management/config.yaml
     required_markers:
+      - codexAbnormalReasoningRetryAction
       - codexAbnormalReasoningRetryEnabled
       - codexAbnormalReasoningRetryModelContains
       - codexAbnormalReasoningRetryReasoningEfforts
@@ -332,11 +333,14 @@ features:
       - codexAbnormalReasoningRetryMaxRetries
       - codexAbnormalReasoningRetryExhaustedBehavior
       - codexAbnormalReasoningRetryClientUsageAggregation
+      - codexAbnormalReasoningRetryDeliveryPolicy
+      - codexAbnormalReasoningRetryFallbackPolicy
       - codexAbnormalReasoningRetryHedgedRetryEnabled
       - codexAbnormalReasoningRetryHedgedRetryMode
       - codexAbnormalReasoningRetryHedgeDelayMs
       - codexAbnormalReasoningRetryRequireDistinctAuth
       - abnormal-reasoning-retry
+      - action
       - stream-buffer-max-bytes
       - reasoning-efforts
       - max-retries
@@ -344,14 +348,21 @@ features:
       - client-usage-aggregation
       - delivered-only
       - sum-with-delivered-total
+      - delivery-policy
+      - best-non-special
+      - fallback-policy
+      - best-special
       - hedged-retry
       - mode
       - hedge-delay-ms
       - require-distinct-auth
       - codex_abnormal_reasoning_retry_title
+      - codex_abnormal_reasoning_retry_action_label
       - codex_abnormal_reasoning_retry_stream_buffer_max_bytes_label
       - codex_abnormal_reasoning_retry_exhausted_behavior_label
       - codex_abnormal_reasoning_retry_client_usage_aggregation_label
+      - codex_abnormal_reasoning_retry_delivery_policy_label
+      - codex_abnormal_reasoning_retry_fallback_policy_label
       - codex_abnormal_reasoning_retry_hedged_retry_enabled
       - codex_abnormal_reasoning_retry_hedged_retry_mode_label
 

@@ -1,8 +1,11 @@
 import { useCallback, useMemo, useReducer } from 'react';
 import { isMap, parse as parseYaml, parseDocument } from 'yaml';
 import type {
+  CodexAbnormalReasoningRetryAction,
   CodexAbnormalReasoningRetryClientUsageAggregation,
+  CodexAbnormalReasoningRetryDeliveryPolicy,
   CodexAbnormalReasoningRetryExhaustedBehavior,
+  CodexAbnormalReasoningRetryFallbackPolicy,
   CodexAbnormalReasoningRetryHedgedRetryMode,
   DisableImageGenerationMode,
   PayloadFilterRule,
@@ -190,6 +193,21 @@ function parseCodexAbnormalReasoningRetryExhaustedBehavior(
   return normalized === 'pass-through' || normalized === 'passthrough' ? 'pass-through' : 'error';
 }
 
+function parseCodexAbnormalReasoningRetryAction(
+  value: unknown,
+  enabled: unknown
+): CodexAbnormalReasoningRetryAction {
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase().replace(/_/g, '-');
+    if (normalized === 'retry') return 'retry';
+    if (normalized === 'observe-only' || normalized === 'observe') return 'observe-only';
+    if (normalized === 'disabled' || normalized === 'disable' || normalized === 'off') {
+      return 'disabled';
+    }
+  }
+  return enabled === true ? 'retry' : 'disabled';
+}
+
 function parseCodexAbnormalReasoningRetryClientUsageAggregation(
   value: unknown
 ): CodexAbnormalReasoningRetryClientUsageAggregation {
@@ -198,6 +216,27 @@ function parseCodexAbnormalReasoningRetryClientUsageAggregation(
   if (normalized === 'sum') return 'sum';
   if (normalized === 'sum-with-delivered-total') return 'sum-with-delivered-total';
   return 'delivered-only';
+}
+
+function parseCodexAbnormalReasoningRetryDeliveryPolicy(
+  value: unknown
+): CodexAbnormalReasoningRetryDeliveryPolicy {
+  if (typeof value !== 'string') return 'best-non-special';
+  const normalized = value.trim().toLowerCase().replace(/_/g, '-');
+  if (normalized === 'first-non-special') return 'first-non-special';
+  if (normalized === 'max-output') return 'max-output';
+  if (normalized === 'latest') return 'latest';
+  return 'best-non-special';
+}
+
+function parseCodexAbnormalReasoningRetryFallbackPolicy(
+  value: unknown
+): CodexAbnormalReasoningRetryFallbackPolicy {
+  if (typeof value !== 'string') return 'best-special';
+  const normalized = value.trim().toLowerCase().replace(/_/g, '-');
+  if (normalized === 'max-output-special') return 'max-output-special';
+  if (normalized === 'latest-special') return 'latest-special';
+  return 'best-special';
 }
 
 function parseCodexAbnormalReasoningRetryHedgedRetryMode(
@@ -217,6 +256,7 @@ const PAYLOAD_DIRTY_FIELDS = [
 ] as const;
 
 const CODEX_ABNORMAL_REASONING_RETRY_DIRTY_FIELDS = [
+  'codexAbnormalReasoningRetryAction',
   'codexAbnormalReasoningRetryEnabled',
   'codexAbnormalReasoningRetryModelContains',
   'codexAbnormalReasoningRetryReasoningEfforts',
@@ -228,6 +268,8 @@ const CODEX_ABNORMAL_REASONING_RETRY_DIRTY_FIELDS = [
   'codexAbnormalReasoningRetryMaxRetries',
   'codexAbnormalReasoningRetryExhaustedBehavior',
   'codexAbnormalReasoningRetryClientUsageAggregation',
+  'codexAbnormalReasoningRetryDeliveryPolicy',
+  'codexAbnormalReasoningRetryFallbackPolicy',
   'codexAbnormalReasoningRetryHedgedRetryEnabled',
   'codexAbnormalReasoningRetryHedgedRetryMode',
   'codexAbnormalReasoningRetryHedgeDelayMs',
@@ -250,6 +292,7 @@ function shouldWriteCodexAbnormalReasoningRetryBlock(
   return (
     docHas(doc, ['codex', 'abnormal-reasoning-retry']) ||
     values.codexAbnormalReasoningRetryEnabled ||
+    values.codexAbnormalReasoningRetryAction !== 'disabled' ||
     hasCodexAbnormalReasoningRetryDirtyFields(dirtyFields)
   );
 }
@@ -908,12 +951,15 @@ function getNextDirtyFields(
       'codexHeaderUserAgent',
       'codexHeaderBetaFeatures',
       'codexIdentityConfuse',
+      'codexAbnormalReasoningRetryAction',
       'codexAbnormalReasoningRetryEnabled',
       'codexAbnormalReasoningRetryStreamBuffer',
       'codexAbnormalReasoningRetryStreamBufferMaxBytes',
       'codexAbnormalReasoningRetryMaxRetries',
       'codexAbnormalReasoningRetryExhaustedBehavior',
       'codexAbnormalReasoningRetryClientUsageAggregation',
+      'codexAbnormalReasoningRetryDeliveryPolicy',
+      'codexAbnormalReasoningRetryFallbackPolicy',
       'codexAbnormalReasoningRetryHedgedRetryEnabled',
       'codexAbnormalReasoningRetryHedgedRetryMode',
       'codexAbnormalReasoningRetryHedgeDelayMs',
@@ -1147,6 +1193,10 @@ export function useVisualConfig() {
       );
       const claudeHeaderDefaults = asRecord(parsed['claude-header-defaults']);
       const codexHeaderDefaults = asRecord(parsed['codex-header-defaults']);
+      const codexAbnormalReasoningRetryAction = parseCodexAbnormalReasoningRetryAction(
+        codexAbnormalReasoningRetry?.action,
+        codexAbnormalReasoningRetry?.enabled
+      );
 
       const newValues: VisualConfigValues = {
         host: typeof parsed.host === 'string' ? parsed.host : '',
@@ -1191,9 +1241,7 @@ export function useVisualConfig() {
         requestRetry: String(parsed['request-retry'] ?? ''),
         maxRetryCredentials: String(parsed['max-retry-credentials'] ?? ''),
         maxRetryInterval: String(parsed['max-retry-interval'] ?? ''),
-        transientErrorCooldownSeconds: String(
-          parsed['transient-error-cooldown-seconds'] ?? ''
-        ),
+        transientErrorCooldownSeconds: String(parsed['transient-error-cooldown-seconds'] ?? ''),
         disableCooling: Boolean(parsed['disable-cooling']),
         disableImageGeneration: parseDisableImageGenerationMode(parsed['disable-image-generation']),
         gptImage2BaseModel:
@@ -1237,7 +1285,8 @@ export function useVisualConfig() {
             ? codexHeaderDefaults['beta-features']
             : '',
         codexIdentityConfuse: Boolean(codex?.['identity-confuse']),
-        codexAbnormalReasoningRetryEnabled: Boolean(codexAbnormalReasoningRetry?.enabled),
+        codexAbnormalReasoningRetryAction,
+        codexAbnormalReasoningRetryEnabled: codexAbnormalReasoningRetryAction !== 'disabled',
         codexAbnormalReasoningRetryModelContains: parseStringListWithDefault(
           codexAbnormalReasoningRetry?.['model-contains'],
           DEFAULT_VISUAL_VALUES.codexAbnormalReasoningRetryModelContains
@@ -1276,13 +1325,18 @@ export function useVisualConfig() {
           parseCodexAbnormalReasoningRetryClientUsageAggregation(
             codexAbnormalReasoningRetry?.['client-usage-aggregation']
           ),
+        codexAbnormalReasoningRetryDeliveryPolicy: parseCodexAbnormalReasoningRetryDeliveryPolicy(
+          codexAbnormalReasoningRetry?.['delivery-policy']
+        ),
+        codexAbnormalReasoningRetryFallbackPolicy: parseCodexAbnormalReasoningRetryFallbackPolicy(
+          codexAbnormalReasoningRetry?.['fallback-policy']
+        ),
         codexAbnormalReasoningRetryHedgedRetryEnabled: Boolean(
           codexAbnormalReasoningHedgedRetry?.enabled
         ),
-        codexAbnormalReasoningRetryHedgedRetryMode:
-          parseCodexAbnormalReasoningRetryHedgedRetryMode(
-            codexAbnormalReasoningHedgedRetry?.mode
-          ),
+        codexAbnormalReasoningRetryHedgedRetryMode: parseCodexAbnormalReasoningRetryHedgedRetryMode(
+          codexAbnormalReasoningHedgedRetry?.mode
+        ),
         codexAbnormalReasoningRetryHedgeDelayMs: String(
           codexAbnormalReasoningHedgedRetry?.['hedge-delay-ms'] ??
             DEFAULT_VISUAL_VALUES.codexAbnormalReasoningRetryHedgeDelayMs
@@ -1544,8 +1598,12 @@ export function useVisualConfig() {
           if (shouldWriteCodexAbnormalReasoningRetryBlock(doc, values, dirtyFields)) {
             ensureMapInDoc(doc, ['codex', 'abnormal-reasoning-retry']);
             doc.setIn(
+              ['codex', 'abnormal-reasoning-retry', 'action'],
+              values.codexAbnormalReasoningRetryAction
+            );
+            doc.setIn(
               ['codex', 'abnormal-reasoning-retry', 'enabled'],
-              values.codexAbnormalReasoningRetryEnabled
+              values.codexAbnormalReasoningRetryAction !== 'disabled'
             );
             setStringListInDoc(
               doc,
@@ -1594,6 +1652,14 @@ export function useVisualConfig() {
               ['codex', 'abnormal-reasoning-retry', 'client-usage-aggregation'],
               values.codexAbnormalReasoningRetryClientUsageAggregation
             );
+            doc.setIn(
+              ['codex', 'abnormal-reasoning-retry', 'delivery-policy'],
+              values.codexAbnormalReasoningRetryDeliveryPolicy
+            );
+            doc.setIn(
+              ['codex', 'abnormal-reasoning-retry', 'fallback-policy'],
+              values.codexAbnormalReasoningRetryFallbackPolicy
+            );
             ensureMapInDoc(doc, ['codex', 'abnormal-reasoning-retry', 'hedged-retry']);
             doc.setIn(
               ['codex', 'abnormal-reasoning-retry', 'hedged-retry', 'enabled'],
@@ -1609,12 +1675,7 @@ export function useVisualConfig() {
               values.codexAbnormalReasoningRetryHedgeDelayMs
             );
             doc.setIn(
-              [
-                'codex',
-                'abnormal-reasoning-retry',
-                'hedged-retry',
-                'require-distinct-auth',
-              ],
+              ['codex', 'abnormal-reasoning-retry', 'hedged-retry', 'require-distinct-auth'],
               values.codexAbnormalReasoningRetryRequireDistinctAuth
             );
             deleteIfMapEmpty(doc, ['codex', 'abnormal-reasoning-retry', 'hedged-retry']);

@@ -174,8 +174,14 @@ export function VisualConfigEditor({
   const disableImageGenerationHintId = `${disableImageGenerationLabelId}-hint`;
   const abnormalRetryExhaustedBehaviorLabelId = useId();
   const abnormalRetryExhaustedBehaviorHintId = `${abnormalRetryExhaustedBehaviorLabelId}-hint`;
+  const abnormalRetryActionLabelId = useId();
+  const abnormalRetryActionHintId = `${abnormalRetryActionLabelId}-hint`;
   const abnormalRetryUsageAggregationLabelId = useId();
   const abnormalRetryUsageAggregationHintId = `${abnormalRetryUsageAggregationLabelId}-hint`;
+  const abnormalRetryDeliveryPolicyLabelId = useId();
+  const abnormalRetryDeliveryPolicyHintId = `${abnormalRetryDeliveryPolicyLabelId}-hint`;
+  const abnormalRetryFallbackPolicyLabelId = useId();
+  const abnormalRetryFallbackPolicyHintId = `${abnormalRetryFallbackPolicyLabelId}-hint`;
   const abnormalRetryHedgedModeLabelId = useId();
   const abnormalRetryHedgedModeHintId = `${abnormalRetryHedgedModeLabelId}-hint`;
   const keepaliveInputId = useId();
@@ -286,6 +292,29 @@ export function VisualConfigEditor({
     ],
     [t]
   );
+  const abnormalRetryActionOptions = useMemo(
+    () => [
+      {
+        value: 'retry',
+        label: t(
+          'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_action_retry'
+        ),
+      },
+      {
+        value: 'observe-only',
+        label: t(
+          'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_action_observe_only'
+        ),
+      },
+      {
+        value: 'disabled',
+        label: t(
+          'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_action_disabled'
+        ),
+      },
+    ],
+    [t]
+  );
   const abnormalRetryExhaustedBehaviorOptions = useMemo(
     () => [
       {
@@ -321,6 +350,58 @@ export function VisualConfigEditor({
         value: 'sum-with-delivered-total',
         label: t(
           'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_client_usage_aggregation_sum_with_delivered_total'
+        ),
+      },
+    ],
+    [t]
+  );
+  const abnormalRetryDeliveryPolicyOptions = useMemo(
+    () => [
+      {
+        value: 'best-non-special',
+        label: t(
+          'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_delivery_policy_best_non_special'
+        ),
+      },
+      {
+        value: 'first-non-special',
+        label: t(
+          'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_delivery_policy_first_non_special'
+        ),
+      },
+      {
+        value: 'max-output',
+        label: t(
+          'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_delivery_policy_max_output'
+        ),
+      },
+      {
+        value: 'latest',
+        label: t(
+          'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_delivery_policy_latest'
+        ),
+      },
+    ],
+    [t]
+  );
+  const abnormalRetryFallbackPolicyOptions = useMemo(
+    () => [
+      {
+        value: 'best-special',
+        label: t(
+          'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_fallback_policy_best_special'
+        ),
+      },
+      {
+        value: 'max-output-special',
+        label: t(
+          'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_fallback_policy_max_output_special'
+        ),
+      },
+      {
+        value: 'latest-special',
+        label: t(
+          'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_fallback_policy_latest_special'
         ),
       },
     ],
@@ -972,10 +1053,15 @@ export function VisualConfigEditor({
                       description={t(
                         'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_enabled_desc'
                       )}
-                      checked={values.codexAbnormalReasoningRetryEnabled}
+                      checked={values.codexAbnormalReasoningRetryAction !== 'disabled'}
                       disabled={disabled}
                       onChange={(codexAbnormalReasoningRetryEnabled) =>
-                        onChange({ codexAbnormalReasoningRetryEnabled })
+                        onChange({
+                          codexAbnormalReasoningRetryEnabled,
+                          codexAbnormalReasoningRetryAction: codexAbnormalReasoningRetryEnabled
+                            ? 'retry'
+                            : 'disabled',
+                        })
                       }
                     />
                     <ToggleRow
@@ -1019,6 +1105,32 @@ export function VisualConfigEditor({
                     />
                   </SectionGrid>
                   <SectionGrid>
+                    <FieldShell
+                      label={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_action_label'
+                      )}
+                      labelId={abnormalRetryActionLabelId}
+                      hint={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_action_hint'
+                      )}
+                      hintId={abnormalRetryActionHintId}
+                    >
+                      <Select
+                        value={values.codexAbnormalReasoningRetryAction}
+                        options={abnormalRetryActionOptions}
+                        id={`${abnormalRetryActionLabelId}-select`}
+                        disabled={disabled}
+                        ariaLabelledBy={abnormalRetryActionLabelId}
+                        ariaDescribedBy={abnormalRetryActionHintId}
+                        onChange={(nextValue) =>
+                          onChange({
+                            codexAbnormalReasoningRetryAction:
+                              nextValue as VisualConfigValues['codexAbnormalReasoningRetryAction'],
+                            codexAbnormalReasoningRetryEnabled: nextValue !== 'disabled',
+                          })
+                        }
+                      />
+                    </FieldShell>
                     <Input
                       label={t(
                         'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_stream_buffer_max_bytes_label'
@@ -1207,6 +1319,56 @@ export function VisualConfigEditor({
                     </FieldShell>
                     <FieldShell
                       label={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_delivery_policy_label'
+                      )}
+                      labelId={abnormalRetryDeliveryPolicyLabelId}
+                      hint={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_delivery_policy_hint'
+                      )}
+                      hintId={abnormalRetryDeliveryPolicyHintId}
+                    >
+                      <Select
+                        value={values.codexAbnormalReasoningRetryDeliveryPolicy}
+                        options={abnormalRetryDeliveryPolicyOptions}
+                        id={`${abnormalRetryDeliveryPolicyLabelId}-select`}
+                        disabled={disabled}
+                        ariaLabelledBy={abnormalRetryDeliveryPolicyLabelId}
+                        ariaDescribedBy={abnormalRetryDeliveryPolicyHintId}
+                        onChange={(nextValue) =>
+                          onChange({
+                            codexAbnormalReasoningRetryDeliveryPolicy:
+                              nextValue as VisualConfigValues['codexAbnormalReasoningRetryDeliveryPolicy'],
+                          })
+                        }
+                      />
+                    </FieldShell>
+                    <FieldShell
+                      label={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_fallback_policy_label'
+                      )}
+                      labelId={abnormalRetryFallbackPolicyLabelId}
+                      hint={t(
+                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_fallback_policy_hint'
+                      )}
+                      hintId={abnormalRetryFallbackPolicyHintId}
+                    >
+                      <Select
+                        value={values.codexAbnormalReasoningRetryFallbackPolicy}
+                        options={abnormalRetryFallbackPolicyOptions}
+                        id={`${abnormalRetryFallbackPolicyLabelId}-select`}
+                        disabled={disabled}
+                        ariaLabelledBy={abnormalRetryFallbackPolicyLabelId}
+                        ariaDescribedBy={abnormalRetryFallbackPolicyHintId}
+                        onChange={(nextValue) =>
+                          onChange({
+                            codexAbnormalReasoningRetryFallbackPolicy:
+                              nextValue as VisualConfigValues['codexAbnormalReasoningRetryFallbackPolicy'],
+                          })
+                        }
+                      />
+                    </FieldShell>
+                    <FieldShell
+                      label={t(
                         'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_auth_kinds_label'
                       )}
                       hint={t(
@@ -1299,9 +1461,7 @@ export function VisualConfigEditor({
                       type="number"
                       placeholder="30"
                       value={values.transientErrorCooldownSeconds}
-                      onChange={(e) =>
-                        onChange({ transientErrorCooldownSeconds: e.target.value })
-                      }
+                      onChange={(e) => onChange({ transientErrorCooldownSeconds: e.target.value })}
                       disabled={disabled}
                       hint={t(
                         'config_management.visual.sections.network.transient_error_cooldown_seconds_hint'
