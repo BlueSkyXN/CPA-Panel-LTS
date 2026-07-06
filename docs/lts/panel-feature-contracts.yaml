@@ -313,6 +313,7 @@ features:
       - /config
     panel_files:
       - src/components/config/VisualConfigEditor.tsx
+      - src/components/config/VisualConfigEditor.module.scss
       - src/hooks/useVisualConfig.ts
       - src/services/api/configFile.ts
       - src/types/visualConfig.ts
@@ -356,15 +357,79 @@ features:
       - mode
       - hedge-delay-ms
       - require-distinct-auth
+      - StrategyBadge
+      - StrategyGroup
+      - ABNORMAL_RETRY_ACTION_HINT_KEYS
+      - ABNORMAL_RETRY_EXHAUSTED_BEHAVIOR_HINT_KEYS
+      - ABNORMAL_RETRY_USAGE_AGGREGATION_HINT_KEYS
+      - ABNORMAL_RETRY_DELIVERY_POLICY_HINT_KEYS
+      - ABNORMAL_RETRY_FALLBACK_POLICY_HINT_KEYS
+      - ABNORMAL_RETRY_HEDGED_MODE_HINT_KEYS
+      - strategySummary
+      - strategyBadgeGrid
+      - fieldSelectionHint
       - codex_abnormal_reasoning_retry_title
+      - codex_abnormal_reasoning_retry_desc
+      - codex_abnormal_reasoning_retry_summary_title
+      - codex_abnormal_reasoning_retry_summary_desc
+      - codex_abnormal_reasoning_retry_summary_action
+      - codex_abnormal_reasoning_retry_summary_stream_buffer
+      - codex_abnormal_reasoning_retry_summary_hedged
+      - codex_abnormal_reasoning_retry_summary_distinct_auth
+      - codex_abnormal_reasoning_retry_summary_on
+      - codex_abnormal_reasoning_retry_summary_off
+      - codex_abnormal_reasoning_retry_group_switches_title
+      - codex_abnormal_reasoning_retry_group_switches_desc
+      - codex_abnormal_reasoning_retry_group_retry_title
+      - codex_abnormal_reasoning_retry_group_retry_desc
+      - codex_abnormal_reasoning_retry_group_match_title
+      - codex_abnormal_reasoning_retry_group_match_desc
+      - codex_abnormal_reasoning_retry_group_delivery_title
+      - codex_abnormal_reasoning_retry_group_delivery_desc
+      - codex_abnormal_reasoning_retry_group_scope_title
+      - codex_abnormal_reasoning_retry_group_scope_desc
       - codex_abnormal_reasoning_retry_action_label
+      - codex_abnormal_reasoning_retry_action_retry
+      - codex_abnormal_reasoning_retry_action_observe_only
+      - codex_abnormal_reasoning_retry_action_disabled
+      - codex_abnormal_reasoning_retry_action_retry_desc
+      - codex_abnormal_reasoning_retry_action_observe_only_desc
+      - codex_abnormal_reasoning_retry_action_disabled_desc
       - codex_abnormal_reasoning_retry_stream_buffer_max_bytes_label
       - codex_abnormal_reasoning_retry_exhausted_behavior_label
+      - codex_abnormal_reasoning_retry_exhausted_behavior_error
+      - codex_abnormal_reasoning_retry_exhausted_behavior_pass_through
+      - codex_abnormal_reasoning_retry_exhausted_behavior_error_desc
+      - codex_abnormal_reasoning_retry_exhausted_behavior_pass_through_desc
       - codex_abnormal_reasoning_retry_client_usage_aggregation_label
+      - codex_abnormal_reasoning_retry_client_usage_aggregation_delivered_only
+      - codex_abnormal_reasoning_retry_client_usage_aggregation_sum
+      - codex_abnormal_reasoning_retry_client_usage_aggregation_sum_with_delivered_total
+      - codex_abnormal_reasoning_retry_client_usage_aggregation_delivered_only_desc
+      - codex_abnormal_reasoning_retry_client_usage_aggregation_sum_desc
+      - codex_abnormal_reasoning_retry_client_usage_aggregation_sum_with_delivered_total_desc
       - codex_abnormal_reasoning_retry_delivery_policy_label
+      - codex_abnormal_reasoning_retry_delivery_policy_best_non_special
+      - codex_abnormal_reasoning_retry_delivery_policy_first_non_special
+      - codex_abnormal_reasoning_retry_delivery_policy_max_output
+      - codex_abnormal_reasoning_retry_delivery_policy_latest
+      - codex_abnormal_reasoning_retry_delivery_policy_best_non_special_desc
+      - codex_abnormal_reasoning_retry_delivery_policy_first_non_special_desc
+      - codex_abnormal_reasoning_retry_delivery_policy_max_output_desc
+      - codex_abnormal_reasoning_retry_delivery_policy_latest_desc
       - codex_abnormal_reasoning_retry_fallback_policy_label
+      - codex_abnormal_reasoning_retry_fallback_policy_best_special
+      - codex_abnormal_reasoning_retry_fallback_policy_max_output_special
+      - codex_abnormal_reasoning_retry_fallback_policy_latest_special
+      - codex_abnormal_reasoning_retry_fallback_policy_best_special_desc
+      - codex_abnormal_reasoning_retry_fallback_policy_max_output_special_desc
+      - codex_abnormal_reasoning_retry_fallback_policy_latest_special_desc
       - codex_abnormal_reasoning_retry_hedged_retry_enabled
       - codex_abnormal_reasoning_retry_hedged_retry_mode_label
+      - codex_abnormal_reasoning_retry_hedged_retry_mode_quality
+      - codex_abnormal_reasoning_retry_hedged_retry_mode_speed
+      - codex_abnormal_reasoning_retry_hedged_retry_mode_quality_desc
+      - codex_abnormal_reasoning_retry_hedged_retry_mode_speed_desc
 
   - id: auth-files-management
     status: shared
