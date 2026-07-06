@@ -311,6 +311,98 @@ require_file_contains src/i18n/locales/en.json "codex_abnormal_reasoning_retry_h
 require_file_contains src/i18n/locales/zh-CN.json "codex_abnormal_reasoning_retry_hedged_retry_mode_label"
 require_file_contains src/i18n/locales/zh-TW.json "codex_abnormal_reasoning_retry_hedged_retry_mode_label"
 require_file_contains src/i18n/locales/ru.json "codex_abnormal_reasoning_retry_hedged_retry_mode_label"
+config_locale_files=(
+  src/i18n/locales/en.json
+  src/i18n/locales/zh-CN.json
+  src/i18n/locales/zh-TW.json
+  src/i18n/locales/ru.json
+)
+codex_abnormal_retry_code_markers=(
+  "StrategyBadge"
+  "StrategyGroup"
+  "ABNORMAL_RETRY_ACTION_HINT_KEYS"
+  "ABNORMAL_RETRY_EXHAUSTED_BEHAVIOR_HINT_KEYS"
+  "ABNORMAL_RETRY_USAGE_AGGREGATION_HINT_KEYS"
+  "ABNORMAL_RETRY_DELIVERY_POLICY_HINT_KEYS"
+  "ABNORMAL_RETRY_FALLBACK_POLICY_HINT_KEYS"
+  "ABNORMAL_RETRY_HEDGED_MODE_HINT_KEYS"
+)
+for marker in "${codex_abnormal_retry_code_markers[@]}"; do
+  require_file_contains docs/lts/panel-feature-contracts.yaml "$marker"
+  require_file_contains src/components/config/VisualConfigEditor.tsx "$marker"
+done
+codex_abnormal_retry_style_markers=(
+  "strategySummary"
+  "strategyBadgeGrid"
+  "fieldSelectionHint"
+)
+for marker in "${codex_abnormal_retry_style_markers[@]}"; do
+  require_file_contains docs/lts/panel-feature-contracts.yaml "$marker"
+  require_file_contains src/components/config/VisualConfigEditor.tsx "$marker"
+  require_file_contains src/components/config/VisualConfigEditor.module.scss ".$marker"
+done
+codex_abnormal_retry_visual_i18n_markers=(
+  "codex_abnormal_reasoning_retry_desc"
+  "codex_abnormal_reasoning_retry_summary_title"
+  "codex_abnormal_reasoning_retry_summary_desc"
+  "codex_abnormal_reasoning_retry_summary_action"
+  "codex_abnormal_reasoning_retry_summary_stream_buffer"
+  "codex_abnormal_reasoning_retry_summary_hedged"
+  "codex_abnormal_reasoning_retry_summary_distinct_auth"
+  "codex_abnormal_reasoning_retry_summary_on"
+  "codex_abnormal_reasoning_retry_summary_off"
+  "codex_abnormal_reasoning_retry_group_switches_title"
+  "codex_abnormal_reasoning_retry_group_switches_desc"
+  "codex_abnormal_reasoning_retry_group_retry_title"
+  "codex_abnormal_reasoning_retry_group_retry_desc"
+  "codex_abnormal_reasoning_retry_group_match_title"
+  "codex_abnormal_reasoning_retry_group_match_desc"
+  "codex_abnormal_reasoning_retry_group_delivery_title"
+  "codex_abnormal_reasoning_retry_group_delivery_desc"
+  "codex_abnormal_reasoning_retry_group_scope_title"
+  "codex_abnormal_reasoning_retry_group_scope_desc"
+  "codex_abnormal_reasoning_retry_action_retry"
+  "codex_abnormal_reasoning_retry_action_observe_only"
+  "codex_abnormal_reasoning_retry_action_disabled"
+  "codex_abnormal_reasoning_retry_action_retry_desc"
+  "codex_abnormal_reasoning_retry_action_observe_only_desc"
+  "codex_abnormal_reasoning_retry_action_disabled_desc"
+  "codex_abnormal_reasoning_retry_exhausted_behavior_error"
+  "codex_abnormal_reasoning_retry_exhausted_behavior_pass_through"
+  "codex_abnormal_reasoning_retry_exhausted_behavior_error_desc"
+  "codex_abnormal_reasoning_retry_exhausted_behavior_pass_through_desc"
+  "codex_abnormal_reasoning_retry_client_usage_aggregation_delivered_only"
+  "codex_abnormal_reasoning_retry_client_usage_aggregation_sum"
+  "codex_abnormal_reasoning_retry_client_usage_aggregation_sum_with_delivered_total"
+  "codex_abnormal_reasoning_retry_client_usage_aggregation_delivered_only_desc"
+  "codex_abnormal_reasoning_retry_client_usage_aggregation_sum_desc"
+  "codex_abnormal_reasoning_retry_client_usage_aggregation_sum_with_delivered_total_desc"
+  "codex_abnormal_reasoning_retry_delivery_policy_best_non_special"
+  "codex_abnormal_reasoning_retry_delivery_policy_first_non_special"
+  "codex_abnormal_reasoning_retry_delivery_policy_max_output"
+  "codex_abnormal_reasoning_retry_delivery_policy_latest"
+  "codex_abnormal_reasoning_retry_delivery_policy_best_non_special_desc"
+  "codex_abnormal_reasoning_retry_delivery_policy_first_non_special_desc"
+  "codex_abnormal_reasoning_retry_delivery_policy_max_output_desc"
+  "codex_abnormal_reasoning_retry_delivery_policy_latest_desc"
+  "codex_abnormal_reasoning_retry_fallback_policy_best_special"
+  "codex_abnormal_reasoning_retry_fallback_policy_max_output_special"
+  "codex_abnormal_reasoning_retry_fallback_policy_latest_special"
+  "codex_abnormal_reasoning_retry_fallback_policy_best_special_desc"
+  "codex_abnormal_reasoning_retry_fallback_policy_max_output_special_desc"
+  "codex_abnormal_reasoning_retry_fallback_policy_latest_special_desc"
+  "codex_abnormal_reasoning_retry_hedged_retry_mode_quality"
+  "codex_abnormal_reasoning_retry_hedged_retry_mode_speed"
+  "codex_abnormal_reasoning_retry_hedged_retry_mode_quality_desc"
+  "codex_abnormal_reasoning_retry_hedged_retry_mode_speed_desc"
+)
+for marker in "${codex_abnormal_retry_visual_i18n_markers[@]}"; do
+  require_file_contains docs/lts/panel-feature-contracts.yaml "$marker"
+  require_file_contains src/components/config/VisualConfigEditor.tsx "$marker"
+  for locale_file in "${config_locale_files[@]}"; do
+    require_file_contains "$locale_file" "$marker"
+  done
+done
 require_file_contains scripts/smoke-lts-panel.py "client-usage-aggregation: sum-with-delivered-total"
 require_file_contains scripts/smoke-lts-panel.py "action: retry"
 require_file_contains scripts/smoke-lts-panel.py "delivery-policy: max-output"
