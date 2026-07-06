@@ -553,6 +553,7 @@ export function VisualConfigEditor({
     ABNORMAL_RETRY_HEDGED_MODE_HINT_KEYS[values.codexAbnormalReasoningRetryHedgedRetryMode]
   );
   const abnormalRetryEnabled = values.codexAbnormalReasoningRetryAction !== 'disabled';
+  const abnormalRetryRetryActive = values.codexAbnormalReasoningRetryAction === 'retry';
   const abnormalRetryActionLabel = findOptionLabel(
     abnormalRetryActionOptions,
     values.codexAbnormalReasoningRetryAction
@@ -568,15 +569,15 @@ export function VisualConfigEditor({
     'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_summary_off'
   );
   const abnormalRetryStreamBufferStatus =
-    abnormalRetryEnabled && values.codexAbnormalReasoningRetryStreamBuffer
+    abnormalRetryRetryActive && values.codexAbnormalReasoningRetryStreamBuffer
       ? abnormalRetryToggleOnLabel
       : abnormalRetryToggleOffLabel;
   const abnormalRetryHedgedStatus =
-    abnormalRetryEnabled && values.codexAbnormalReasoningRetryHedgedRetryEnabled
+    abnormalRetryRetryActive && values.codexAbnormalReasoningRetryHedgedRetryEnabled
       ? abnormalRetryHedgedModeLabel
       : abnormalRetryToggleOffLabel;
   const abnormalRetryDistinctAuthStatus =
-    abnormalRetryEnabled && values.codexAbnormalReasoningRetryRequireDistinctAuth
+    abnormalRetryRetryActive && values.codexAbnormalReasoningRetryRequireDistinctAuth
       ? abnormalRetryToggleOnLabel
       : abnormalRetryToggleOffLabel;
   const abnormalRetryActionTone: StrategyBadgeTone =
@@ -586,13 +587,13 @@ export function VisualConfigEditor({
         ? 'warning'
         : 'muted';
   const abnormalRetryStreamBufferTone: StrategyBadgeTone =
-    abnormalRetryEnabled && values.codexAbnormalReasoningRetryStreamBuffer ? 'active' : 'muted';
+    abnormalRetryRetryActive && values.codexAbnormalReasoningRetryStreamBuffer ? 'active' : 'muted';
   const abnormalRetryHedgedTone: StrategyBadgeTone =
-    abnormalRetryEnabled && values.codexAbnormalReasoningRetryHedgedRetryEnabled
+    abnormalRetryRetryActive && values.codexAbnormalReasoningRetryHedgedRetryEnabled
       ? 'active'
       : 'muted';
   const abnormalRetryDistinctAuthTone: StrategyBadgeTone =
-    abnormalRetryEnabled && values.codexAbnormalReasoningRetryRequireDistinctAuth
+    abnormalRetryRetryActive && values.codexAbnormalReasoningRetryRequireDistinctAuth
       ? 'active'
       : 'muted';
 
