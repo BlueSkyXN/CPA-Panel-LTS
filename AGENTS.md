@@ -51,7 +51,7 @@
 | `src/features/providers/` | provider workbench、model discovery、connectivity tests、recent-request health | No | 修改 `/ai-providers/workbench`、provider form/adapters/model discovery/recent request smoke 前 |
 | `src/features/plugins/` | plugin management/store/resource pages，受 Core plugin capability gate 控制 | Yes | 修改 `/plugins`、`/plugin-store`、plugin resource pages、install gate、plugin polling/resource descriptors 前 |
 | `src/hooks/` | 通用 React hooks | No | 修改 shared hook contract、interval、pagination、unsaved guard、API hook 前 |
-| `src/i18n/` | i18next setup and locale JSON | No | 新增或修改用户可见文案、语言切换、locale key 前 |
+| `src/i18n/` | i18next setup and active locale JSON (`en`, `zh-CN`, `zh-TW`, `ru`) | No | 新增或修改用户可见文案、语言切换、locale key 前 |
 | `src/lts/` | LTS-owned sidecar/overlay code：Codex quota、Codex remote cloud connect、LTS locale overlays | Yes | 修改 `codexQuota`、`codexRemoteCloudConnect`、`i18n/*.lts.json` 或 LTS-only integration 前 |
 | `src/services/api/` | browser-side Management API clients and transformers | No | 修改 `/v0/management` endpoint、request/response transform、auth header、usage/quota/oauth clients 前 |
 | `src/services/storage/` | browser local storage abstraction | No | 修改 management key 或敏感本地存储前 |
@@ -130,6 +130,7 @@ Important current feature boundaries:
 - `full-usage-statistics` is protected and must not be replaced by recent-request summaries.
 - `provider-workbench` and `recent-requests` may coexist, but must not replace the stable LTS provider page or full usage statistics.
 - `plugin-management` is capability-gated by Core support, including `x-cpa-support-plugin`, `pluginSupportKnown`, and `RequirePluginSupport`.
+- `codex-abnormal-reasoning-retry-config` is a downstream Core LTS visual config surface. Keep `src/types/visualConfig.ts`, `src/hooks/useVisualConfig.ts`, `src/components/config/VisualConfigEditor.tsx`, all active locale catalogs, smoke markers, and the feature contract aligned when Core changes `codex.abnormal-reasoning-retry`.
 - `src/lts/codexQuota/` and `src/lts/codexRemoteCloudConnect/` are LTS-owned sidecars; shared pages should keep thin integration points.
 - `src/lts/i18n/*.lts.json` are runtime overlay locale catalogs. Keep all active locales aligned when adding LTS-only text.
 
@@ -161,7 +162,7 @@ All commands below are confirmed from `package.json`, `.github/workflows/release
 | `npm run type-check` | Run `tsc --noEmit` | repo | Good first validation for TypeScript-only changes |
 | `npm run format` | Run Prettier over `src/**/*.{ts,tsx,css,scss}` | `src/` only | Writes files; use only when formatting source changes is intended |
 | `npm run check:feature-contract` | Run `scripts/check-panel-feature-contracts.mjs` against `docs/lts/panel-feature-contracts.yaml` | repo | Feature file/route/API marker guard; included by `npm run check:lts` |
-| `npm run check:lts` | Run the Panel LTS contract guard, including feature contract, sentinel paths, release asset contract, provider/plugin/recent-request markers, and npm lockfile policy | repo | Lightweight guard; does not replace browser or Core compatibility smoke |
+| `npm run check:lts` | Run the Panel LTS contract guard, including feature contract, sentinel paths, release asset contract, provider/plugin/recent-request/visual-config markers, and npm lockfile policy | repo | Lightweight guard; does not replace browser or Core compatibility smoke |
 | `npm run validate:lts` | Run `check:lts`, `type-check`, `lint`, and `build` in sequence | repo | Default post-port validation for shared code or upstream-port batches |
 | `npm run smoke:lts` | Build and run optional Python Playwright browser smoke against a mock Core API | local browser/dev | Requires Python Playwright and Chromium; not part of default CI gate |
 | `npm run smoke:lts:core` | Build and run optional authenticated smoke against a local sibling `CPA-Core-LTS` process, including safe writes to the temporary smoke config | local browser/dev + Core checkout | Requires Go, `/Users/sky/Github/CPA-Core-LTS`, Python Playwright, and Chromium; plugin-store is skipped unless `-- --include-plugin-store` is passed; use `-- --no-write-smoke` to skip temp config/provider writes |
@@ -182,6 +183,15 @@ For TypeScript or UI changes:
 2. Run `npm run build`.
 3. Run `npm run lint` when touching shared components, hooks, stores, API clients, or broad refactors.
 4. For visual/layout changes, start `npm run dev` or `npm run preview` and inspect in a browser when feasible.
+
+For visual config schema changes:
+
+1. Inspect `src/types/visualConfig.ts`, `src/hooks/useVisualConfig.ts`, `src/components/config/VisualConfigEditor.tsx`, `src/components/config/VisualConfigEditorBlocks.tsx`, and all active locale JSON files.
+2. If the change is an LTS/Core-owned config surface such as `codex.abnormal-reasoning-retry`, keep `docs/lts/panel-feature-contracts.yaml` and `scripts/check-lts-panel-contract.sh` aligned in the same change.
+3. Run `npm run check:lts`.
+4. Run `npm run type-check`.
+5. Run `npm run build`.
+6. Run `npm run smoke:lts` or `npm run smoke:lts:core` when behavior depends on browser write flows or current `CPA-Core-LTS` config parsing; report skipped browser/Core validation separately.
 
 For usage statistics changes:
 
@@ -240,7 +250,7 @@ For userscript changes:
 - React app code is TypeScript with strict compiler settings. Avoid `any` as a default escape hatch; if unavoidable, keep it narrow and justified by external data shape.
 - Import application modules through the existing `@/` alias when that matches local style.
 - Reuse existing API clients, stores, hooks, utilities, and UI primitives before adding new abstractions.
-- User-visible text belongs in locale JSON under `src/i18n/locales/`. When adding text, update all active locale files or clearly report any missing translation.
+- User-visible text belongs in locale JSON under `src/i18n/locales/`. When adding text, update all active locale files (`en`, `zh-CN`, `zh-TW`, `ru`) or clearly report any missing translation.
 - Keep SCSS module class names compatible with `localsConvention: 'camelCase'`.
 - Browser-side Management API semantics must come from current `CPA-Core-LTS` implementation, current Panel code, or a live endpoint. Do not invent fields or endpoints by analogy.
 - Keep secrets out of docs, logs, screenshots, release notes, and userscript metadata. Do not hardcode management keys, API keys, OAuth access tokens, refresh tokens, or JWTs in committed files.

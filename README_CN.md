@@ -37,6 +37,7 @@ CPA Panel LTS 是 `CPA-Core-LTS` 的长期维护版 Web 管理面板。
 维护参考：
 
 - `docs/lts/sync-runbook.md`
+- `docs/lts/panel-feature-contracts.yaml`
 - `docs/lts/panel-protected-deltas.yaml`
 - `scripts/check-lts-panel-contract.sh`
 
@@ -116,7 +117,7 @@ npm run build
 - **OAuth**：对支持的提供商发起 OAuth/设备码流程，轮询状态；可选提交回调 `redirect_url`；包含 iFlow Cookie 导入。
 - **配额管理**：管理 Claude、Antigravity、Codex、Gemini CLI 等提供商的配额上限与使用情况。
 - **使用统计**：按小时/天图表、按 API 与按模型统计、缓存/推理 Token 拆分、RPM/TPM 时间窗、可选本地保存的模型价格用于费用估算。
-- **配置文件**：浏览器内编辑 `/config.yaml`（YAML 高亮 + 搜索），保存/重载。
+- **配置文件**：浏览器内用源码/可视化模式编辑 `/config.yaml`（YAML 高亮 + 搜索），保存/重载；可配置 plugin store sources，以及 Core LTS 的 Codex 异常推理重试策略（命中动作、命中条件、流式缓存、对冲重试、耗尽策略、客户端用量聚合、交付/兜底策略、认证范围）。
 - **日志**：增量拉取日志、自动刷新、搜索、隐藏管理端流量、清空日志；下载请求错误日志文件。
 - **系统信息**：快捷链接 + 拉取 `/v1/models` 并分组展示（需要至少一个代理 API Key 才能查询模型）。
 
@@ -134,10 +135,11 @@ npm run build
 
 ## 多语言支持
 
-目前支持三种语言：
+目前支持四种语言：
 
 - 英文 (en)
 - 简体中文 (zh-CN)
+- 繁体中文 (zh-TW)
 - 俄文 (ru)
 
 界面语言会根据浏览器设置自动切换，也可在页面底部手动切换。
@@ -181,6 +183,7 @@ npm run check:feature-contract # feature contract 检查
 npm run check:lts  # LTS 统计/发布/provider/plugin 契约检查
 npm run validate:lts # check:lts + type-check + lint + build
 npm run smoke:lts  # 可选：用 Python Playwright + mock Core API 做浏览器 smoke
+npm run smoke:lts:core # 可选：对本地 CPA-Core-LTS checkout 做带鉴权 smoke
 ```
 
 ## 贡献
@@ -189,7 +192,7 @@ npm run smoke:lts  # 可选：用 Python Playwright + mock Core API 做浏览器
 
 - 复现步骤（服务端版本 + UI 版本）
 - UI 改动截图
-- 验证记录（`npm run validate:lts`，可选 `npm run smoke:lts`，或说明实际运行的更小范围检查）
+- 验证记录（`npm run validate:lts`，可选 `npm run smoke:lts` / `npm run smoke:lts:core`，或说明实际运行的更小范围检查）
 
 ## 许可证
 

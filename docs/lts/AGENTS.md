@@ -7,7 +7,7 @@ These files describe what future agents and CI must preserve, not general README
 ## Local invariants
 
 - `panel-feature-contracts.yaml` is the feature registry used by `scripts/check-panel-feature-contracts.mjs` and mirrored by `scripts/check-lts-panel-contract.sh`.
-- `panel-protected-deltas.yaml` preserves the product identity: full usage statistics, CPA-Core-LTS Management API compatibility, `management.html`, npm/package-lock build, and downstream LTS customizations.
+- `panel-protected-deltas.yaml` preserves the product identity: full usage statistics, CPA-Core-LTS Management API compatibility, `management.html`, npm/package-lock build, and downstream LTS customizations including Core-owned visual config surfaces such as `codex.abnormal-reasoning-retry`.
 - `sync-runbook.md` must continue to describe protected selective-port, not blind full-sync with upstream.
 - Contract entries should use real routes, files, endpoints, and marker strings from current source.
 - Feature status words are meaningful: `protected`, `lts-maintained`, `coexist`, `shared`, and `experimental` are not interchangeable.

@@ -37,6 +37,7 @@ Maintenance rules:
 Maintenance references:
 
 - `docs/lts/sync-runbook.md`
+- `docs/lts/panel-feature-contracts.yaml`
 - `docs/lts/panel-protected-deltas.yaml`
 - `scripts/check-lts-panel-contract.sh`
 
@@ -117,7 +118,7 @@ See `api.md` for the full authentication rules, server-side limits, and edge cas
 - **OAuth**: start OAuth/device flows for supported providers, poll status, optionally submit callback `redirect_url`; includes iFlow cookie import.
 - **Quota Management**: manage quota limits and usage for Claude, Antigravity, Codex, Gemini CLI, and other providers.
 - **Usage**: requests/tokens charts (hour/day), per-API & per-model breakdown, cached/reasoning token breakdown, RPM/TPM window, optional cost estimation with locally-saved model pricing.
-- **Config**: edit `/config.yaml` in-browser with YAML highlighting + search, then save/reload.
+- **Config**: edit `/config.yaml` in-browser with source/visual modes, YAML highlighting, search, save/reload, plugin store sources, and the Core LTS Codex abnormal reasoning retry guard (action, match conditions, stream buffering, hedged retry, exhausted behavior, client usage aggregation, delivery/fallback policy, and auth scope).
 - **Logs**: tail logs with incremental polling, auto-refresh, search, hide management traffic, clear logs; download request error log files.
 - **System**: quick links + fetch `/v1/models` (grouped view). Requires at least one proxy API key to query models.
 
@@ -135,10 +136,11 @@ See `api.md` for the full authentication rules, server-side limits, and edge cas
 
 ## Internationalization
 
-Currently supports three languages:
+Currently supports four languages:
 
 - English (en)
 - Simplified Chinese (zh-CN)
+- Traditional Chinese (zh-TW)
 - Russian (ru)
 
 The UI language is automatically detected from browser settings and can be manually switched at the bottom of the page.
@@ -182,6 +184,7 @@ npm run check:feature-contract # feature contract guard
 npm run check:lts  # LTS protected usage/release/provider/plugin contract guard
 npm run validate:lts # check:lts + type-check + lint + build
 npm run smoke:lts  # optional Python Playwright smoke against a mock Core API
+npm run smoke:lts:core # optional authenticated smoke against a local CPA-Core-LTS checkout
 ```
 
 ## Contributing
@@ -190,7 +193,7 @@ Issues and PRs are welcome. Please include:
 
 - Reproduction steps (server version + UI version)
 - Screenshots for UI changes
-- Verification notes (`npm run validate:lts`, optional `npm run smoke:lts`, or the narrower checks you ran)
+- Verification notes (`npm run validate:lts`, optional `npm run smoke:lts` / `npm run smoke:lts:core`, or the narrower checks you ran)
 
 ## License
 

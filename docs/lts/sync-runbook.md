@@ -13,6 +13,7 @@ main = CPA-Panel-LTS product line
      + full usage statistics UI
      + CPA-Core-LTS Management API compatibility
      + selected compatible upstream UI/fix improvements
+     + downstream CPA-Core-LTS visual config surfaces
      + local downstream panel customizations
 ```
 
@@ -47,8 +48,9 @@ Use protected selective-port:
 2. Classify upstream commits as safe-port, adapt-port, reject, or defer.
 3. Cherry-pick or manually port compatible changes into a Panel LTS branch.
 4. Preserve complete usage UI and CPA-Core-LTS API compatibility.
-5. Run `npm run validate:lts` before PR, or run the equivalent contract, type-check, lint, and build commands separately when diagnosing failures.
-6. Merge Panel maintenance PRs normally. Do not use GitHub Sync fork.
+5. When Core-owned config keys change, update the visual config types, YAML mapper, editor UI, active locale catalogs, feature contract, and contract guard together.
+6. Run `npm run validate:lts` before PR, or run the equivalent contract, type-check, lint, and build commands separately when diagnosing failures.
+7. Merge Panel maintenance PRs normally. Do not use GitHub Sync fork.
 
 Do not:
 
@@ -76,6 +78,7 @@ Adapt-port candidates:
 - Status bar or provider stats changes.
 - Auth-file stats changes.
 - Config schema changes that overlap `usage-statistics-enabled`.
+- Visual config changes around downstream Core LTS surfaces such as `codex.abnormal-reasoning-retry`.
 - Quota page changes that share parsing, account identity, or provider metadata.
 
 Reject by default:
@@ -123,6 +126,7 @@ After changes:
 ```bash
 npm run validate:lts
 npm run smoke:lts  # optional local browser smoke; requires Python Playwright
+npm run smoke:lts:core -- --no-write-smoke  # optional real Core smoke; requires local CPA-Core-LTS, Go, Python Playwright, and Chromium
 ```
 
 ## PR body checklist
@@ -134,6 +138,7 @@ Each Panel upstream-port PR should state:
 - commits rejected or deferred, with reason
 - usage UI contract impact
 - CPA-Core-LTS Management API compatibility impact
+- visual config / downstream Core config surface impact
 - release asset impact
 - validation commands and results
 - whether optional `npm run smoke:lts` or a real CPA-Core-LTS authenticated smoke was run
