@@ -64,9 +64,23 @@ for path in \
   src/assets/icons/amp.svg \
   src/pages/AiProvidersPage.tsx \
   src/pages/AiProvidersAmpcodeEditPage.tsx \
+  src/assets/icons/apikey-fun.png \
+  src/assets/icons/claudeapi.png \
+  src/assets/icons/code0.png \
+  src/assets/icons/fenno-ai.png \
+  src/assets/icons/qiniu-cloud.png \
   src/features/providers/ProvidersWorkbenchPage.tsx \
   src/features/providers/descriptors.ts \
+  src/features/providers/sponsor.ts \
+  src/features/providers/code0.ts \
+  src/features/providers/fennoAI.ts \
+  src/features/providers/qiniuCloud.ts \
+  src/features/providers/claudeApi.ts \
+  src/features/providers/sponsorDefinitions.ts \
+  src/features/providers/components/SponsorQuickStartPanel.tsx \
   src/features/providers/sheets/forms/BaseProviderForm.tsx \
+  src/features/providers/sheets/forms/SponsorProviderForm.tsx \
+  src/features/providers/sheets/forms/useSponsorUsageCheck.ts \
   src/features/providers/sheets/forms/useConnectivityTest.ts \
   src/features/providers/sheets/forms/useModelDiscovery.ts \
   src/features/plugins/PluginsPage.tsx \
@@ -168,7 +182,9 @@ require_file_contains docs/lts/sync-runbook.md "protected selective-port"
 
 # Accepted upstream feature regression checks.
 require_file_contains src/router/MainRoutes.tsx "path: '/ai-providers/workbench'"
+require_file_contains src/router/MainRoutes.tsx "path: '/quick-start'"
 require_file_contains src/router/MainRoutes.tsx "ProvidersWorkbenchPage"
+require_file_contains src/components/layout/MainLayout.tsx "path: '/quick-start'"
 require_file_contains src/router/MainRoutes.tsx "path: '/plugins'"
 require_file_contains src/router/MainRoutes.tsx "path: '/plugin-store'"
 require_file_contains src/router/MainRoutes.tsx "path: '/plugin-pages/:pluginId/:menuIndex'"
@@ -550,11 +566,24 @@ require_file_contains src/pages/DashboardPage.tsx "fetchConfig"
 require_file_contains src/pages/DashboardPage.tsx "countAmpcodeConfig"
 require_file_contains src/pages/DashboardPage.tsx "config.ampcode"
 require_file_contains src/pages/DashboardPage.tsx "ampcode: providerStats.ampcode"
+require_file_contains src/pages/DashboardPage.tsx "hasApiKeyFunConfig"
 require_file_contains src/stores/useModelsStore.ts "modelsApi.fetchModels"
 require_file_contains src/i18n/locales/en.json "A:{{ampcode}}"
 require_file_contains src/i18n/locales/zh-CN.json "A:{{ampcode}}"
 require_file_contains src/i18n/locales/zh-TW.json "A:{{ampcode}}"
 require_file_contains src/i18n/locales/ru.json "A:{{ampcode}}"
+require_file_contains src/features/providers/descriptors.ts "apikeyFun"
+require_file_contains src/features/providers/descriptors.ts "claudeApi"
+require_file_contains src/features/providers/descriptors.ts "code0"
+require_file_contains src/features/providers/descriptors.ts "fennoAI"
+require_file_contains src/features/providers/descriptors.ts "qiniuCloud"
+require_file_contains src/features/providers/sponsor.ts "APIKEY_FUN_PROVIDER_NAME"
+require_file_contains src/features/providers/claudeApi.ts "CLAUDE_API_BASE_URL"
+require_file_contains src/features/providers/code0.ts "CODE0_PROVIDER_NAME"
+require_file_contains src/features/providers/fennoAI.ts "FENNO_AI_PROVIDER_NAME"
+require_file_contains src/features/providers/qiniuCloud.ts "QINIU_CLOUD_PROVIDER_NAME"
+require_file_contains src/features/providers/sheets/forms/useSponsorUsageCheck.ts "apiCallApi.request"
+require_file_contains src/features/providers/components/SponsorQuickStartPanel.tsx "SponsorProviderForm"
 
 # Behavior-oriented OpenAI Compatibility preservation checks.
 require_file_contains scripts/smoke-lts-panel.py "assert_provider_mutation_payloads"

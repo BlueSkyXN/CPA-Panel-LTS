@@ -1496,6 +1496,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
                 ("/quota", "Quota Management", None),
                 ("/usage", "Usage Statistics", None),
                 ("/lts/usage", "Usage Statistics", "/usage"),
+                ("/quick-start", "APIKEY.FUN", None),
                 ("/ai-providers", "AI Providers Configuration", None),
                 ("/ai-providers/workbench", "AI Providers", None),
                 ("/ai-providers/ampcode", "Configure Ampcode", None),

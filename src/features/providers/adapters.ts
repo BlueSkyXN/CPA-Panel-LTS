@@ -1,13 +1,37 @@
 import type { GeminiKeyConfig, OpenAIProviderConfig, ProviderKeyConfig } from '@/types';
-import {
-  hasDisableAllModelsRule,
-  stripDisableAllModelsRule,
-} from '@/components/providers/utils';
+import { hasDisableAllModelsRule, stripDisableAllModelsRule } from '@/components/providers/utils';
 import { maskApiKey } from '@/utils/format';
+import {
+  APIKEY_FUN_DISPLAY_NAME,
+  APIKEY_FUN_PROTOCOLS,
+  getApiKeyFunProtocolUrls,
+  resolveApiKeyFunBaseUrl,
+} from './sponsor';
+import { CLAUDE_API_DISPLAY_NAME } from './claudeApi';
+import {
+  CODE0_DISPLAY_NAME,
+  CODE0_PROTOCOL_LABELS,
+  getCode0ProtocolUrls,
+  resolveCode0BaseUrl,
+} from './code0';
+import {
+  FENNO_AI_DISPLAY_NAME,
+  FENNO_AI_PROTOCOL_LABELS,
+  getFennoAIProtocolUrls,
+  resolveFennoAIBaseUrl,
+} from './fennoAI';
+import {
+  QINIU_CLOUD_DISPLAY_NAME,
+  QINIU_CLOUD_PROTOCOL_LABELS,
+  getQiniuCloudProtocolUrls,
+  resolveQiniuCloudBaseUrl,
+} from './qiniuCloud';
 import type {
   ProviderBrand,
   ProviderResource,
   ProviderResourceSelector,
+  SponsorProviderBrand,
+  SponsorProviderRaw,
 } from './types';
 
 const countHeaders = (headers?: Record<string, string>): number =>
@@ -36,7 +60,7 @@ const truncateForId = (value: string | undefined | null): string => {
 };
 
 function providerKeyToResource(
-  brand: 'gemini' | 'codex' | 'claude' | 'vertex',
+  brand: 'gemini' | 'codex' | 'claude' | 'claudeApi' | 'vertex',
   config: GeminiKeyConfig | ProviderKeyConfig,
   index: number
 ): ProviderResource {
@@ -46,7 +70,7 @@ function providerKeyToResource(
   if (brand === 'codex') {
     flags.websockets = (config as ProviderKeyConfig).websockets === true;
   }
-  if (brand === 'claude') {
+  if (brand === 'claude' || brand === 'claudeApi') {
     const cloak = (config as ProviderKeyConfig).cloak;
     flags.cloakEnabled = Boolean(cloak?.mode?.trim());
   }
@@ -95,14 +119,19 @@ export function claudeToResource(config: ProviderKeyConfig, index: number): Prov
   return providerKeyToResource('claude', config, index);
 }
 
+export function claudeApiToResource(config: ProviderKeyConfig, index: number): ProviderResource {
+  const resource = providerKeyToResource('claudeApi', config, index);
+  return {
+    ...resource,
+    name: CLAUDE_API_DISPLAY_NAME,
+  };
+}
+
 export function vertexToResource(config: ProviderKeyConfig, index: number): ProviderResource {
   return providerKeyToResource('vertex', config, index);
 }
 
-export function openaiToResource(
-  config: OpenAIProviderConfig,
-  index: number
-): ProviderResource {
+export function openaiToResource(config: OpenAIProviderConfig, index: number): ProviderResource {
   const name = (config.name ?? '').trim();
   const firstEntry = config.apiKeyEntries?.[0];
   const previewApiKey = firstEntry?.apiKey ? maskApiKey(firstEntry.apiKey) : null;
@@ -129,4 +158,189 @@ export function openaiToResource(
     selector: { brand: 'openaiCompatibility', name, index },
     raw: config,
   };
+}
+
+interface SponsorResourceOptions {
+  displayName: string;
+  protocolLabels: readonly string[];
+  resolveBaseUrl: (value: string | undefined | null) => string;
+  getProtocolUrls: (value: string | undefined | null) => {
+    anthropic: string;
+    openai: string;
+    codex: string;
+    gemini: string;
+  };
+}
+
+function sponsorRawToResource(
+  brand: SponsorProviderBrand,
+  raw: SponsorProviderRaw,
+  options: SponsorResourceOptions
+): ProviderResource | null {
+  if (
+    raw.openai.length === 0 &&
+    raw.claude.length === 0 &&
+    raw.codex.length === 0 &&
+    raw.gemini.length === 0
+  ) {
+    return null;
+  }
+  const openaiKeyCount = raw.openai.reduce(
+    (count, item) => count + (item.config.apiKeyEntries?.length ?? 0),
+    0
+  );
+  const codexKeyCount = raw.codex.length;
+  const geminiKeyCount = raw.gemini.length;
+  const firstOpenAIEntry = raw.openai
+    .flatMap((item) => item.config.apiKeyEntries ?? [])
+    .find((entry) => entry.apiKey?.trim());
+  const firstCodex = raw.codex.find((item) => item.config.apiKey?.trim());
+  const firstClaude = raw.claude.find((item) => item.config.apiKey?.trim());
+  const firstGemini = raw.gemini.find((item) => item.config.apiKey?.trim());
+  const apiKey =
+    firstOpenAIEntry?.apiKey ??
+    firstCodex?.config.apiKey ??
+    firstClaude?.config.apiKey ??
+    firstGemini?.config.apiKey ??
+    '';
+  const openaiDisabled =
+    raw.openai.length > 0 && raw.openai.every((item) => item.config.disabled === true);
+  const codexDisabled =
+    raw.codex.length > 0 &&
+    raw.codex.every((item) => hasDisableAllModelsRule(item.config.excludedModels));
+  const claudeDisabled =
+    raw.claude.length > 0 &&
+    raw.claude.every((item) => hasDisableAllModelsRule(item.config.excludedModels));
+  const geminiDisabled =
+    raw.gemini.length > 0 &&
+    raw.gemini.every((item) => hasDisableAllModelsRule(item.config.excludedModels));
+  const enabledCount =
+    (raw.openai.length > 0 && !openaiDisabled ? 1 : 0) +
+    (raw.codex.length > 0 && !codexDisabled ? 1 : 0) +
+    (raw.claude.length > 0 && !claudeDisabled ? 1 : 0) +
+    (raw.gemini.length > 0 && !geminiDisabled ? 1 : 0);
+  const allResourcesConfigured =
+    raw.openai.length > 0 ||
+    raw.codex.length > 0 ||
+    raw.claude.length > 0 ||
+    raw.gemini.length > 0;
+  const disabled = allResourcesConfigured && enabledCount === 0;
+  const models = [
+    ...raw.openai.flatMap((item) => collectModelNames(item.config.models)),
+    ...raw.codex.flatMap((item) => collectModelNames(item.config.models)),
+    ...raw.claude.flatMap((item) => collectModelNames(item.config.models)),
+    ...raw.gemini.flatMap((item) => collectModelNames(item.config.models)),
+  ];
+  const uniqueModels = Array.from(new Set(models));
+  const headerCount =
+    raw.openai.reduce((count, item) => count + countHeaders(item.config.headers), 0) +
+    raw.codex.reduce((count, item) => count + countHeaders(item.config.headers), 0) +
+    raw.claude.reduce((count, item) => count + countHeaders(item.config.headers), 0) +
+    raw.gemini.reduce((count, item) => count + countHeaders(item.config.headers), 0);
+  const priority = Math.max(
+    0,
+    ...raw.openai.map((item) => normalizePriority(item.config.priority)),
+    ...raw.codex.map((item) => normalizePriority(item.config.priority)),
+    ...raw.claude.map((item) => normalizePriority(item.config.priority)),
+    ...raw.gemini.map((item) => normalizePriority(item.config.priority))
+  );
+  const baseUrl = options.resolveBaseUrl(
+    raw.openai[0]?.config.baseUrl ??
+      raw.codex[0]?.config.baseUrl ??
+      raw.claude[0]?.config.baseUrl ??
+      raw.gemini[0]?.config.baseUrl
+  );
+  const protocolUrls = options.getProtocolUrls(baseUrl);
+
+  return {
+    id: buildId(brand, 0, 'sponsor'),
+    brand,
+    originalIndex: 0,
+    name: options.displayName,
+    identifier: options.displayName,
+    apiKeyPreview: apiKey ? maskApiKey(apiKey) : null,
+    apiKey: apiKey || null,
+    authIndex: null,
+    baseUrl: [protocolUrls.openai, protocolUrls.anthropic, protocolUrls.gemini]
+      .filter(Boolean)
+      .join(' / '),
+    proxyUrl:
+      firstOpenAIEntry?.proxyUrl ??
+      raw.codex.find((item) => item.config.proxyUrl)?.config.proxyUrl ??
+      raw.claude.find((item) => item.config.proxyUrl)?.config.proxyUrl ??
+      raw.gemini.find((item) => item.config.proxyUrl)?.config.proxyUrl ??
+      null,
+    prefix:
+      raw.openai[0]?.config.prefix ??
+      raw.codex[0]?.config.prefix ??
+      raw.claude[0]?.config.prefix ??
+      raw.gemini[0]?.config.prefix ??
+      null,
+    modelCount: uniqueModels.length,
+    models: uniqueModels,
+    priority,
+    headerCount,
+    excludedModelCount:
+      raw.codex.reduce(
+        (count, item) => count + stripDisableAllModelsRule(item.config.excludedModels).length,
+        0
+      ) +
+      raw.claude.reduce(
+        (count, item) => count + stripDisableAllModelsRule(item.config.excludedModels).length,
+        0
+      ) +
+      raw.gemini.reduce(
+        (count, item) => count + stripDisableAllModelsRule(item.config.excludedModels).length,
+        0
+      ),
+    apiKeyEntryCount: openaiKeyCount + codexKeyCount + raw.claude.length + geminiKeyCount,
+    disabled,
+    flags: {
+      protocols: [...options.protocolLabels],
+    },
+    selector: {
+      brand,
+      openaiIndices: raw.openai.map((item) => item.index),
+      claudeIndices: raw.claude.map((item) => item.index),
+      codexIndices: raw.codex.map((item) => item.index),
+      geminiIndices: raw.gemini.map((item) => item.index),
+    } as ProviderResourceSelector,
+    raw,
+  };
+}
+
+export function apiKeyFunToResource(raw: SponsorProviderRaw): ProviderResource | null {
+  return sponsorRawToResource('apikeyFun', raw, {
+    displayName: APIKEY_FUN_DISPLAY_NAME,
+    protocolLabels: APIKEY_FUN_PROTOCOLS,
+    resolveBaseUrl: resolveApiKeyFunBaseUrl,
+    getProtocolUrls: getApiKeyFunProtocolUrls,
+  });
+}
+
+export function code0ToResource(raw: SponsorProviderRaw): ProviderResource | null {
+  return sponsorRawToResource('code0', raw, {
+    displayName: CODE0_DISPLAY_NAME,
+    protocolLabels: CODE0_PROTOCOL_LABELS,
+    resolveBaseUrl: resolveCode0BaseUrl,
+    getProtocolUrls: getCode0ProtocolUrls,
+  });
+}
+
+export function fennoAIToResource(raw: SponsorProviderRaw): ProviderResource | null {
+  return sponsorRawToResource('fennoAI', raw, {
+    displayName: FENNO_AI_DISPLAY_NAME,
+    protocolLabels: FENNO_AI_PROTOCOL_LABELS,
+    resolveBaseUrl: resolveFennoAIBaseUrl,
+    getProtocolUrls: getFennoAIProtocolUrls,
+  });
+}
+
+export function qiniuCloudToResource(raw: SponsorProviderRaw): ProviderResource | null {
+  return sponsorRawToResource('qiniuCloud', raw, {
+    displayName: QINIU_CLOUD_DISPLAY_NAME,
+    protocolLabels: QINIU_CLOUD_PROTOCOL_LABELS,
+    resolveBaseUrl: resolveQiniuCloudBaseUrl,
+    getProtocolUrls: getQiniuCloudProtocolUrls,
+  });
 }

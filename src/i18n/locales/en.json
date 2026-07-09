@@ -121,7 +121,8 @@
     "plugin_store": "Plugin Store",
     "config_management": "Config Panel",
     "logs": "Logs Viewer",
-    "system_info": "Management Center Info"
+    "system_info": "Management Center Info",
+    "quick_start": "Quick Start"
   },
   "nav_groups": {
     "operate": "Operate",
@@ -164,7 +165,10 @@
     "caring_afternoon": "Steady progress — you're doing great.",
     "caring_evening": "Wrapping up nicely — almost there.",
     "caring_night": "Burning the midnight oil? Don't forget to rest.",
-    "system_overview": "System Overview"
+    "system_overview": "System Overview",
+    "quick_start_card": "Quick Start",
+    "quick_start_entry": "Quick Start",
+    "quick_start_entry_desc": "Open the quick start page"
   },
   "basic_settings": {
     "title": "Basic Settings",
@@ -1911,14 +1915,20 @@
     },
     "categories": {
       "title": "Providers",
-      "activeCount": "{{active}}/{{total}} active"
+      "activeCount": "{{active}}/{{total}} active",
+      "quickFill": "Quick Fill"
     },
     "providerNames": {
       "gemini": "Gemini",
       "codex": "Codex",
       "claude": "Claude",
       "vertex": "Vertex",
-      "openaiCompatibility": "OpenAI Compatible"
+      "openaiCompatibility": "OpenAI Compatible",
+      "claudeApi": "ClaudeAPI",
+      "apikeyFun": "APIKEY.FUN",
+      "code0": "Code0",
+      "fennoAI": "FennoAI",
+      "qiniuCloud": "Qiniu Cloud"
     },
     "table": {
       "key": "Key",
@@ -2020,7 +2030,12 @@
         "nameRequired": "Name is required",
         "apiKeyRequired": "At least one API key is required",
         "baseUrlRequired": "Base URL is required"
-      }
+      },
+      "showAllEntries": "Show all ({{count}})",
+      "showFewerEntries": "Show fewer",
+      "proxyBadge": "Proxy",
+      "modelBadgeImage": "Image",
+      "modelBadgeThinking": "Thinking"
     },
     "delete": {
       "title": "Delete resource",
@@ -2084,6 +2099,71 @@
     },
     "modelCatalog": {
       "notLoaded": "Not loaded"
+    },
+    "sponsor": {
+      "protocolSummary": "Anthropic / OpenAI / Gemini / Codex API (Responses)",
+      "detailHint": "{{provider}} is persisted into the matching API key configs by protocol; this view manages them together.",
+      "registerLink": "Register here",
+      "registerNow": "Register now",
+      "dashboardLink": "Dashboard",
+      "emptyRegisterHint": "No configuration yet.",
+      "apiKeyHint": "This key is only written to the selected group/protocol config.",
+      "usageCheck": "Check usage",
+      "usageChecking": "Checking",
+      "usageRemaining": "Remaining: {{amount}} {{unit}}",
+      "usageBreakdown": "Used {{used}} / Limit {{limit}}",
+      "usageStatus": "Status: {{status}}",
+      "usageInvalid": "Invalid key",
+      "usageEmpty": "The endpoint returned no usage data.",
+      "usageApiKeyRequired": "API key is required",
+      "groupedKeysTitle": "Grouped keys",
+      "groupedKeysHint": "Platform keys may be bound to a group when created. Each grouped key here manages one protocol, and model discovery only uses that protocol.",
+      "groupedKey": "Grouped key #{{index}}",
+      "addGroupedKey": "Add grouped key",
+      "removeGroupedKey": "Remove grouped key",
+      "protocol": "Group/protocol",
+      "protocolHint": "Select the group/protocol for this key.",
+      "protocolEndpoint": "Current protocol endpoint",
+      "urlMode": "{{provider}} URL",
+      "urlHint": "All URLs use the same API conventions. Saving writes only the endpoint for the current grouped protocol.",
+      "urlOptions": {
+        "standard": "Standard URL",
+        "direct": "Direct URL",
+        "domestic": "China mainland route",
+        "overseas": "Overseas route"
+      },
+      "urlOptionDescriptions": {
+        "domestic": "For users and workloads in mainland China; usually lower latency in mainland networks.",
+        "overseas": "For overseas deployments, cross-border access, or workloads that need overseas models."
+      },
+      "modelsTitle": "Protocol model settings",
+      "modelsHint": "Configure model allowlists or aliases separately for Codex API, Anthropic, Gemini, and OpenAI-compatible routes.",
+      "protocolModels": {
+        "codex": "Codex API models",
+        "anthropic": "Anthropic models",
+        "gemini": "Gemini models",
+        "openai": "OpenAI-compatible models"
+      },
+      "protocolModelHints": {
+        "codex": "Writes to the Codex API config models. Fetch from /v1/models and set aliases if needed.",
+        "anthropic": "Writes to the Anthropic config models. Fetch from /v1/models and set aliases if needed.",
+        "gemini": "Writes to the Gemini config models. Fetch from /v1beta/models and set aliases if needed.",
+        "openai": "Writes to the OpenAI-compatible config models. Fetch from /models and set aliases if needed."
+      },
+      "validation": {
+        "keyRequired": "Enter an API key for every grouped key.",
+        "protocolDuplicate": "Each protocol can only have one grouped key."
+      },
+      "openaiEntries": "OpenAI-compatible keys",
+      "codexEntries": "Codex API keys",
+      "anthropicEntries": "Anthropic keys",
+      "geminiEntries": "Gemini keys",
+      "protocols": {
+        "anthropic": "Anthropic",
+        "openai": "OpenAI Compatible",
+        "gemini": "Gemini",
+        "codexResponses": "Codex API (Responses)"
+      }
     }
   }
 }

@@ -109,14 +109,24 @@ features:
     reason: Upstream workbench is useful for resource management and recent health, but must not replace the stable LTS provider page.
     routes:
       - /ai-providers/workbench
+      - /quick-start
     panel_files:
       - src/router/MainRoutes.tsx
       - src/features/providers/ProvidersWorkbenchPage.tsx
       - src/features/providers/useProviderWorkbench.ts
       - src/features/providers/descriptors.ts
+      - src/features/providers/sponsor.ts
+      - src/features/providers/code0.ts
+      - src/features/providers/fennoAI.ts
+      - src/features/providers/qiniuCloud.ts
+      - src/features/providers/claudeApi.ts
+      - src/features/providers/sponsorDefinitions.ts
       - src/features/providers/sheets/forms/BaseProviderForm.tsx
+      - src/features/providers/sheets/forms/SponsorProviderForm.tsx
+      - src/features/providers/sheets/forms/useSponsorUsageCheck.ts
       - src/features/providers/sheets/forms/useModelDiscovery.ts
       - src/features/providers/sheets/forms/useConnectivityTest.ts
+      - src/features/providers/components/SponsorQuickStartPanel.tsx
       - src/features/providers/adapters.ts
       - src/components/providers/hooks/useProviderRecentRequests.ts
       - src/services/api/config.ts
@@ -138,6 +148,14 @@ features:
       - MODEL_DISCOVERY_BRANDS
       - runOpenAIAllKeys
       - runCodex
+      - "path: '/quick-start'"
+      - APIKEY_FUN_PROVIDER_NAME
+      - CODE0_PROVIDER_NAME
+      - FENNO_AI_PROVIDER_NAME
+      - QINIU_CLOUD_PROVIDER_NAME
+      - CLAUDE_API_BASE_URL
+      - SponsorQuickStartPanel
+      - useSponsorUsageCheck
       - openrouter-a
       - openrouter-b
       - openrouter.ai/api/v1/chat/completions
