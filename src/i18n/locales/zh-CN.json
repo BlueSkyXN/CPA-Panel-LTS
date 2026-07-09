@@ -121,7 +121,8 @@
     "plugin_store": "插件商店",
     "config_management": "配置面板",
     "logs": "日志查看",
-    "system_info": "中心信息"
+    "system_info": "中心信息",
+    "quick_start": "快速开始"
   },
   "nav_groups": {
     "operate": "运行",
@@ -164,7 +165,10 @@
     "caring_afternoon": "稳步推进中，继续加油。",
     "caring_evening": "今天辛苦了，收尾工作做好哦。",
     "caring_night": "夜深了，别忘了早些休息。",
-    "system_overview": "系统概览"
+    "system_overview": "系统概览",
+    "quick_start_card": "快速开始",
+    "quick_start_entry": "快速开始",
+    "quick_start_entry_desc": "进入快速开始页面"
   },
   "basic_settings": {
     "title": "基础设置",
@@ -622,6 +626,8 @@
     "priority_label": "优先级（priority）",
     "priority_placeholder": "例如: 10 或 -1",
     "priority_hint": "仅支持整数；非法值会被忽略。数值越大优先级越高。",
+    "websockets_label": "WebSockets（websockets）",
+    "websockets_hint": "为该凭证开启 Responses API 的 websocket 传输。",
     "codex_websockets_label": "WebSockets（websockets）",
     "codex_websockets_hint": "为该 Codex 凭证开启 Responses API 的 websocket 传输。",
     "excluded_models_label": "排除模型（excluded_models）",
@@ -737,7 +743,14 @@
     "empty_data": "暂无额度数据",
     "refresh_button": "刷新额度",
     "fetch_all": "获取全部",
+    "weekly_limit": "周限额",
     "monthly_credits": "月度积分",
+    "used_percent": "已用 {{percent}}",
+    "reset_at": "重置 {{time}}",
+    "product_usage": "{{product}} 使用",
+    "plan_label": "套餐",
+    "plan_supergrok": "SuperGrok",
+    "plan_supergrok_heavy": "SuperGrok Heavy",
     "pay_as_you_go_label": "按量付费",
     "pay_as_you_go_enabled": "已启用，封顶 {{cap}}",
     "pay_as_you_go_disabled": "未启用"
@@ -1267,6 +1280,30 @@
           "plugin_store_sources_label": "插件源 registry URL (plugins.store-sources)",
           "plugin_store_sources_placeholder": "https://example.com/cliproxy-plugins/registry.json",
           "plugin_store_sources_hint": "每行一个 registry.json URL，保存时会过滤空行",
+          "plugin_store_auth": "插件商店认证规则",
+          "plugin_store_auth_desc": "为私有注册表、GitHub Release 元数据或制品下载配置认证 Header",
+          "plugin_store_auth_hint": "只填写环境变量名，不要填写真实 token。后端会从运行时环境读取对应值。",
+          "store_auth_empty": "尚未配置认证规则。公开插件源不需要配置。",
+          "store_auth_rule": "认证规则",
+          "store_auth_add": "添加认证规则",
+          "store_auth_match": "匹配的 URL 前缀",
+          "store_auth_type": "认证类型",
+          "store_auth_apply_to": "应用到",
+          "store_auth_apply_to_hint": "不选择时，该规则会应用到所有请求类型。",
+          "store_auth_apply_registry": "注册表",
+          "store_auth_apply_metadata": "元数据",
+          "store_auth_apply_artifact": "制品",
+          "store_auth_type_none": "无",
+          "store_auth_type_bearer": "Bearer",
+          "store_auth_type_basic": "Basic",
+          "store_auth_type_header": "自定义 Header",
+          "store_auth_type_github_token": "GitHub token",
+          "store_auth_token_env": "Token 环境变量",
+          "store_auth_username_env": "用户名环境变量",
+          "store_auth_password_env": "密码环境变量",
+          "store_auth_header_name": "Header 名称",
+          "store_auth_header_value_env": "Header 值环境变量",
+          "store_auth_allow_insecure": "允许不安全的 HTTP URL",
           "logs_max_size": "日志文件大小限制 (MB)",
           "error_logs_max_files": "错误日志保留文件数",
           "usage_statistics_enabled": "启用内存用量统计",
@@ -1643,13 +1680,41 @@
     "badge_update": "可更新",
     "badge_effective": "生效中",
     "version_arrow": "v{{from}} → v{{to}}",
+    "install_type": "安装方式：{{type}}",
+    "platforms": "平台：{{platforms}}",
+    "auth_required": "需要认证",
+    "auth_configured": "认证已配置",
+    "auth_required_hint": "安装该来源或制品 URL 前，请先配置 plugins.store-auth",
+    "source_errors_title": "部分插件源加载失败",
     "install": "安装",
     "update": "更新",
     "manage": "管理",
     "install_confirm_title": "安装插件",
     "install_confirm_message": "将从插件注册表下载 {{target}} 并安装到本地插件目录,是否继续?",
     "update_confirm_title": "更新插件",
-    "update_confirm_message": "将下载并安装 {{target}} 的最新版本,是否继续?",
+    "update_confirm_message": "将下载并安装 {{target}},是否继续?",
+    "install_version_label": "版本",
+    "install_version_latest": "最新版本",
+    "install_version_latest_mode": "最新稳定版",
+    "install_version_latest_hint": "安装时由后端解析。当前列表版本：{{version}}。",
+    "install_version_release_mode": "选择 Release",
+    "install_version_release_hint": "从 GitHub Releases 读取可安装标签。",
+    "install_version_manual_mode": "手动 Release 标签",
+    "install_version_manual_hint": "仅在自动加载 Release 不可用时使用。",
+    "install_versions_loading": "正在加载 GitHub Releases...",
+    "install_versions_load_failed": "Release 版本加载失败",
+    "install_version_non_github": "该插件仓库不是 GitHub 仓库",
+    "install_versions_empty": "没有找到可选择的 Release。",
+    "install_versions_only_prerelease": "只有预发布版本可用。显示预发布后才能选择。",
+    "install_version_release_select": "选择 Release 版本",
+    "install_version_release_placeholder": "选择 Release 版本",
+    "install_version_prerelease_badge": "预发布",
+    "install_version_assets_count": "{{count}} 个制品",
+    "install_version_show_prerelease": "显示预发布版本",
+    "install_version_manual_placeholder": "例如 v0.1.4",
+    "install_version_manual_error": "Release 标签只能包含字母、数字、点、下划线、加号和连字符；不能包含空格或斜杠。",
+    "install_version_current_selected": "{{version}} 已安装，请选择其他版本。",
+    "install_version_releases_link": "查看 GitHub Releases",
     "install_success": "插件安装成功",
     "update_success": "插件更新成功",
     "install_failed": "插件安装失败",
@@ -1850,14 +1915,20 @@
     },
     "categories": {
       "title": "提供商",
-      "activeCount": "{{active}}/{{total}} 活跃"
+      "activeCount": "{{active}}/{{total}} 活跃",
+      "quickFill": "快速填入"
     },
     "providerNames": {
       "gemini": "Gemini",
       "codex": "Codex",
       "claude": "Claude",
       "vertex": "Vertex",
-      "openaiCompatibility": "OpenAI 兼容"
+      "openaiCompatibility": "OpenAI 兼容",
+      "claudeApi": "ClaudeAPI",
+      "apikeyFun": "APIKEY.FUN",
+      "code0": "Code0",
+      "fennoAI": "FennoAI",
+      "qiniuCloud": "七牛云"
     },
     "table": {
       "key": "密钥",
@@ -1959,7 +2030,12 @@
         "nameRequired": "名称必填",
         "apiKeyRequired": "至少填写一个 API 密钥",
         "baseUrlRequired": "服务地址必填"
-      }
+      },
+      "showAllEntries": "显示全部（{{count}}）",
+      "showFewerEntries": "收起",
+      "proxyBadge": "代理",
+      "modelBadgeImage": "图片",
+      "modelBadgeThinking": "Thinking"
     },
     "delete": {
       "title": "删除资源",
@@ -2023,6 +2099,71 @@
     },
     "modelCatalog": {
       "notLoaded": "未加载"
+    },
+    "sponsor": {
+      "protocolSummary": "Anthropic / OpenAI / Gemini / Codex API (Responses)",
+      "detailHint": "{{provider}} 会按协议分别写入对应的 API Key 配置,这里只做聚合管理。",
+      "registerLink": "点此注册",
+      "registerNow": "立即注册",
+      "dashboardLink": "控制面板",
+      "emptyRegisterHint": "尚未添加配置",
+      "apiKeyHint": "此 Key 只会写入当前选择的分组/协议配置。",
+      "usageCheck": "查询额度",
+      "usageChecking": "查询中",
+      "usageRemaining": "剩余额度: {{amount}} {{unit}}",
+      "usageBreakdown": "已用 {{used}} / 总额 {{limit}}",
+      "usageStatus": "状态: {{status}}",
+      "usageInvalid": "Key 无效",
+      "usageEmpty": "端点未返回额度数据",
+      "usageApiKeyRequired": "API 密钥必填",
+      "groupedKeysTitle": "分组 Key",
+      "groupedKeysHint": "平台创建 Key 时可能需要选择分组,这里每个分组 Key 只管理一个协议,模型也只从该协议拉取。",
+      "groupedKey": "分组 Key #{{index}}",
+      "addGroupedKey": "添加分组 Key",
+      "removeGroupedKey": "删除分组 Key",
+      "protocol": "分组/协议",
+      "protocolHint": "请选择此 Key 对应的分组/协议。",
+      "protocolEndpoint": "当前协议地址",
+      "urlMode": "{{provider}} URL",
+      "urlHint": "不同 URL 的使用规范一致,保存时只会写入当前分组协议对应地址。",
+      "urlOptions": {
+        "standard": "普通 URL",
+        "direct": "专线直连 URL",
+        "domestic": "国内线路",
+        "overseas": "海外线路"
+      },
+      "urlOptionDescriptions": {
+        "domestic": "面向中国大陆用户和部署在中国大陆网络环境中的业务，通常可获得更低延迟。",
+        "overseas": "面向海外部署、跨境访问或需要访问境外模型的业务。"
+      },
+      "modelsTitle": "协议模型配置",
+      "modelsHint": "可分别限制或别名映射 Codex API、Anthropic、Gemini 与 OpenAI 兼容入口的模型。",
+      "protocolModels": {
+        "codex": "Codex API 模型",
+        "anthropic": "Anthropic 模型",
+        "gemini": "Gemini 模型",
+        "openai": "OpenAI 兼容模型"
+      },
+      "protocolModelHints": {
+        "codex": "写入 Codex API 配置的 models,可从 /v1/models 拉取后设置别名。",
+        "anthropic": "写入 Anthropic 配置的 models,可从 /v1/models 拉取后设置别名。",
+        "gemini": "写入 Gemini 配置的 models,可从 /v1beta/models 拉取后设置别名。",
+        "openai": "写入 OpenAI 兼容配置的 models,可从 /models 拉取后设置别名。"
+      },
+      "validation": {
+        "keyRequired": "请为每个分组 Key 填写 API Key。",
+        "protocolDuplicate": "每个协议只能添加一个分组 Key。"
+      },
+      "openaiEntries": "OpenAI 兼容密钥数",
+      "codexEntries": "Codex API 密钥数",
+      "anthropicEntries": "Anthropic 密钥数",
+      "geminiEntries": "Gemini 密钥数",
+      "protocols": {
+        "anthropic": "Anthropic",
+        "openai": "OpenAI 兼容",
+        "gemini": "Gemini",
+        "codexResponses": "Codex API (Responses)"
+      }
     }
   }
 }

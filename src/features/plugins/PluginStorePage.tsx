@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
+import { Modal } from '@/components/ui/Modal';
+import { Select } from '@/components/ui/Select';
 import {
   IconAlertTriangle,
   IconDownload,
@@ -28,10 +30,17 @@ import {
   resolvePluginAssetURL,
 } from './pluginResources';
 import { PluginInstallGateModal } from './components/PluginInstallGateModal';
+import {
+  buildGitHubReleasesPageURL,
+  fetchPluginReleaseVersions,
+  isValidManualReleaseTag,
+  type PluginReleaseVersion,
+} from './pluginReleaseVersions';
 import { waitForPluginStoreState } from './pluginPolling';
 import styles from './PluginStorePage.module.scss';
 
 type StoreStatusFilter = 'all' | 'installed' | 'notInstalled' | 'updates';
+type InstallVersionMode = 'latest' | 'release' | 'manual';
 
 interface StoreLoadError {
   kind: 'unsupported' | 'registry' | 'generic';
@@ -53,6 +62,32 @@ const getStoreEntryTitle = (entry: PluginStoreEntry) => entry.name || entry.id;
 const getStoreEntryKey = (entry: PluginStoreEntry) => entry.storeId || entry.id;
 const getDescriptionDOMID = (entryKey: string) =>
   `plugin-store-desc-${encodeURIComponent(entryKey)}`;
+const normalizePluginVersion = (version: string) => version.trim().replace(/^v/i, '');
+const formatPluginVersion = (version: string) => {
+  const trimmed = version.trim();
+  if (!trimmed) return '';
+  return /^v/i.test(trimmed) ? trimmed : `v${trimmed}`;
+};
+const pluginVersionMatches = (left: string, right: string) =>
+  normalizePluginVersion(left) === normalizePluginVersion(right);
+const formatInstallType = (installType: string) =>
+  installType
+    .trim()
+    .split('-')
+    .map((part) => (part ? `${part[0].toUpperCase()}${part.slice(1)}` : part))
+    .join(' ');
+const releaseVersionsCache = new Map<string, PluginReleaseVersion[]>();
+
+const formatReleaseDate = (value: string, locale: string) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat(locale, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+};
 
 function StoreCardLogo({ src }: { src: string }) {
   const [failed, setFailed] = useState(false);
@@ -65,6 +100,346 @@ function StoreCardLogo({ src }: { src: string }) {
   );
 }
 
+interface PluginInstallOptionsModalProps {
+  entry: PluginStoreEntry | null;
+  isUpdate: boolean;
+  version: string;
+  installing: boolean;
+  onVersionChange: (version: string) => void;
+  onClose: () => void;
+  onConfirm: () => void | Promise<void>;
+}
+
+function PluginInstallOptionsModal({
+  entry,
+  isUpdate,
+  version,
+  installing,
+  onVersionChange,
+  onClose,
+  onConfirm,
+}: PluginInstallOptionsModalProps) {
+  const { i18n, t } = useTranslation();
+  const [versionMode, setVersionMode] = useState<InstallVersionMode>('latest');
+  const [showPrerelease, setShowPrerelease] = useState(false);
+  const [releaseVersions, setReleaseVersions] = useState<PluginReleaseVersion[]>([]);
+  const [releaseLoading, setReleaseLoading] = useState(false);
+  const [releaseError, setReleaseError] = useState('');
+  const [loadedReleaseKey, setLoadedReleaseKey] = useState('');
+
+  const entryKey = entry ? getStoreEntryKey(entry) : '';
+  const entryRepository = entry?.repository ?? '';
+  const releasePageURL = entry ? buildGitHubReleasesPageURL(entry.repository) : '';
+  const releaseCacheKey = entryKey ? `${entryKey}|${entryRepository.trim()}` : '';
+
+  if (releaseCacheKey !== loadedReleaseKey) {
+    const cached = releaseCacheKey ? releaseVersionsCache.get(releaseCacheKey) : undefined;
+    setLoadedReleaseKey(releaseCacheKey);
+    setVersionMode('latest');
+    setShowPrerelease(false);
+    setReleaseVersions(cached ?? []);
+    setReleaseError(entryKey && !releasePageURL ? t('plugin_store.install_version_non_github') : '');
+    setReleaseLoading(Boolean(entryKey && releasePageURL && !cached));
+  }
+
+  useEffect(() => {
+    if (!entryKey || !releasePageURL) return;
+    if (releaseVersionsCache.has(releaseCacheKey)) return;
+
+    let active = true;
+
+    fetchPluginReleaseVersions(entryRepository)
+      .then((releases) => {
+        if (!active) return;
+        releaseVersionsCache.set(releaseCacheKey, releases);
+        setReleaseVersions(releases);
+      })
+      .catch((err: unknown) => {
+        if (!active) return;
+        setReleaseError(getErrorMessage(err, t('plugin_store.install_versions_load_failed')));
+      })
+      .finally(() => {
+        if (!active) return;
+        setReleaseLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [entryKey, entryRepository, releaseCacheKey, releasePageURL, t]);
+
+  const stableReleaseVersions = useMemo(
+    () => releaseVersions.filter((release) => !release.prerelease),
+    [releaseVersions]
+  );
+  const visibleReleaseVersions = useMemo(
+    () =>
+      showPrerelease
+        ? releaseVersions
+        : releaseVersions.filter((release) => !release.prerelease),
+    [releaseVersions, showPrerelease]
+  );
+  const latestRelease = stableReleaseVersions[0] ?? releaseVersions[0] ?? null;
+  const releaseOptions = useMemo(
+    () =>
+      visibleReleaseVersions.map((release) => {
+        const releaseTitle =
+          release.name && release.name !== release.tagName
+            ? `${release.tagName} - ${release.name}`
+            : release.tagName;
+        const releaseDate = formatReleaseDate(release.publishedAt, i18n.language);
+        const labelParts = [
+          releaseTitle,
+          releaseDate,
+          release.prerelease ? t('plugin_store.install_version_prerelease_badge') : '',
+          release.assetNames.length > 0
+            ? t('plugin_store.install_version_assets_count', {
+                count: release.assetNames.length,
+              })
+            : '',
+        ].filter(Boolean);
+        return {
+          value: release.tagName,
+          label: labelParts.join(' · '),
+        };
+      }),
+    [i18n.language, t, visibleReleaseVersions]
+  );
+
+  useEffect(() => {
+    if (versionMode !== 'release') return;
+    if (visibleReleaseVersions.length === 0) {
+      if (version) onVersionChange('');
+      return;
+    }
+    if (visibleReleaseVersions.some((release) => release.tagName === version)) return;
+    onVersionChange(visibleReleaseVersions[0].tagName);
+  }, [onVersionChange, version, versionMode, visibleReleaseVersions]);
+
+  if (!entry) return null;
+
+  const title = isUpdate
+    ? t('plugin_store.update_confirm_title')
+    : t('plugin_store.install_confirm_title');
+  const requestedVersion = versionMode === 'latest' ? '' : version.trim();
+  const displayVersion = requestedVersion || entry.version;
+  const target = displayVersion
+    ? `${getStoreEntryTitle(entry)} ${formatPluginVersion(displayVersion)}`
+    : getStoreEntryTitle(entry);
+  const message = isUpdate
+    ? t('plugin_store.update_confirm_message', { target })
+    : t('plugin_store.install_confirm_message', { target });
+  const latestVersionLabel = entry.version
+    ? formatPluginVersion(entry.version)
+    : latestRelease
+      ? formatPluginVersion(latestRelease.tagName)
+      : t('plugin_store.install_version_latest');
+  const hasPrereleaseVersions = releaseVersions.some((release) => release.prerelease);
+  const releaseModeDisabled = installing || (releaseLoading && releaseVersions.length === 0);
+  const manualVersionInvalid =
+    versionMode === 'manual' && Boolean(version.trim()) && !isValidManualReleaseTag(version);
+  const currentVersionSelected =
+    Boolean(requestedVersion) &&
+    Boolean(entry.installedVersion) &&
+    pluginVersionMatches(entry.installedVersion, requestedVersion);
+  const confirmDisabled =
+    (versionMode === 'release' && !requestedVersion) ||
+    (versionMode === 'manual' && !isValidManualReleaseTag(version)) ||
+    currentVersionSelected;
+
+  const handleVersionModeChange = (nextMode: InstallVersionMode) => {
+    if (installing) return;
+    setVersionMode(nextMode);
+    if (nextMode === 'latest') {
+      onVersionChange('');
+      return;
+    }
+    if (nextMode === 'release') {
+      onVersionChange(visibleReleaseVersions[0]?.tagName ?? '');
+      return;
+    }
+    onVersionChange('');
+  };
+
+  const handleClose = () => {
+    if (installing) return;
+    onClose();
+  };
+
+  return (
+    <Modal open={Boolean(entry)} onClose={handleClose} title={title} closeDisabled={installing}>
+      <div className={styles.installOptions}>
+        <p className={styles.installMessage}>{message}</p>
+        <div className={styles.installVersionField}>
+          <span className={styles.installVersionLabel} id="plugin-store-install-version-mode">
+            {t('plugin_store.install_version_label')}
+          </span>
+          <div
+            className={styles.installVersionModes}
+            role="radiogroup"
+            aria-labelledby="plugin-store-install-version-mode"
+          >
+            <label
+              className={`${styles.installVersionMode} ${
+                versionMode === 'latest' ? styles.installVersionModeActive : ''
+              } ${installing ? styles.installVersionModeDisabled : ''}`}
+            >
+              <input
+                type="radio"
+                name="plugin-store-install-version-mode"
+                checked={versionMode === 'latest'}
+                onChange={() => handleVersionModeChange('latest')}
+                disabled={installing}
+              />
+              <span className={styles.installVersionModeText}>
+                <strong>{t('plugin_store.install_version_latest_mode')}</strong>
+                <small>
+                  {t('plugin_store.install_version_latest_hint', {
+                    version: latestVersionLabel,
+                  })}
+                </small>
+              </span>
+            </label>
+            <label
+              className={`${styles.installVersionMode} ${
+                versionMode === 'release' ? styles.installVersionModeActive : ''
+              } ${releaseModeDisabled ? styles.installVersionModeDisabled : ''}`}
+            >
+              <input
+                type="radio"
+                name="plugin-store-install-version-mode"
+                checked={versionMode === 'release'}
+                onChange={() => handleVersionModeChange('release')}
+                disabled={releaseModeDisabled}
+              />
+              <span className={styles.installVersionModeText}>
+                <strong>{t('plugin_store.install_version_release_mode')}</strong>
+                <small>
+                  {releaseLoading
+                    ? t('plugin_store.install_versions_loading')
+                    : t('plugin_store.install_version_release_hint')}
+                </small>
+              </span>
+            </label>
+            <label
+              className={`${styles.installVersionMode} ${
+                versionMode === 'manual' ? styles.installVersionModeActive : ''
+              } ${installing ? styles.installVersionModeDisabled : ''}`}
+            >
+              <input
+                type="radio"
+                name="plugin-store-install-version-mode"
+                checked={versionMode === 'manual'}
+                onChange={() => handleVersionModeChange('manual')}
+                disabled={installing}
+              />
+              <span className={styles.installVersionModeText}>
+                <strong>{t('plugin_store.install_version_manual_mode')}</strong>
+                <small>{t('plugin_store.install_version_manual_hint')}</small>
+              </span>
+            </label>
+          </div>
+
+          {versionMode === 'release' ? (
+            <div className={styles.installVersionPanel}>
+              {releaseError ? (
+                <p className={styles.installVersionWarning}>
+                  {t('plugin_store.install_versions_load_failed')}: {releaseError}
+                </p>
+              ) : null}
+              {!releaseLoading && !releaseError && releaseVersions.length === 0 ? (
+                <p className={styles.installVersionHint}>
+                  {t('plugin_store.install_versions_empty')}
+                </p>
+              ) : null}
+              {!releaseLoading &&
+              !releaseError &&
+              releaseVersions.length > 0 &&
+              visibleReleaseVersions.length === 0 ? (
+                <p className={styles.installVersionHint}>
+                  {t('plugin_store.install_versions_only_prerelease')}
+                </p>
+              ) : null}
+              <Select
+                value={version}
+                options={releaseOptions}
+                onChange={onVersionChange}
+                placeholder={t('plugin_store.install_version_release_placeholder')}
+                disabled={installing || releaseLoading || releaseOptions.length === 0}
+                ariaLabel={t('plugin_store.install_version_release_select')}
+              />
+              {hasPrereleaseVersions ? (
+                <label className={styles.installVersionCheckbox}>
+                  <input
+                    type="checkbox"
+                    checked={showPrerelease}
+                    onChange={(event) => setShowPrerelease(event.target.checked)}
+                    disabled={installing}
+                  />
+                  <span>{t('plugin_store.install_version_show_prerelease')}</span>
+                </label>
+              ) : null}
+            </div>
+          ) : null}
+
+          {versionMode === 'manual' ? (
+            <div className={styles.installVersionPanel}>
+              <Input
+                id="plugin-store-install-version"
+                value={version}
+                onChange={(event) => onVersionChange(event.target.value)}
+                placeholder={t('plugin_store.install_version_manual_placeholder')}
+                disabled={installing}
+                autoComplete="off"
+                spellCheck={false}
+                aria-invalid={manualVersionInvalid}
+              />
+              {manualVersionInvalid ? (
+                <p className={styles.installVersionWarning}>
+                  {t('plugin_store.install_version_manual_error')}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {currentVersionSelected ? (
+            <p className={styles.installVersionWarning}>
+              {t('plugin_store.install_version_current_selected', {
+                version: formatPluginVersion(entry.installedVersion),
+              })}
+            </p>
+          ) : null}
+
+          {releasePageURL ? (
+            <a
+              className={styles.installReleaseLink}
+              href={releasePageURL}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {t('plugin_store.install_version_releases_link')}
+              <IconExternalLink size={12} />
+            </a>
+          ) : null}
+        </div>
+        <div className={styles.installDialogActions}>
+          <Button variant="ghost" onClick={handleClose} disabled={installing}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            variant={isOfficialPlugin(entry) ? 'primary' : 'danger'}
+            onClick={onConfirm}
+            disabled={confirmDisabled}
+            loading={installing}
+          >
+            {isUpdate ? t('plugin_store.update') : t('plugin_store.install')}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 export function PluginStorePage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -72,7 +447,6 @@ export function PluginStorePage() {
   const apiBase = useAuthStore((state) => state.apiBase);
   const clearConfigCache = useConfigStore((state) => state.clearCache);
   const showNotification = useNotificationStore((state) => state.showNotification);
-  const showConfirmation = useNotificationStore((state) => state.showConfirmation);
 
   const [data, setData] = useState<PluginStoreResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -89,6 +463,11 @@ export function PluginStorePage() {
   const [gateOpen, setGateOpen] = useState(false);
   const [gateEntry, setGateEntry] = useState<PluginStoreEntry | null>(null);
   const [gateIsUpdate, setGateIsUpdate] = useState(false);
+  const [gateRequestedVersion, setGateRequestedVersion] = useState('');
+
+  const [installOptionsEntry, setInstallOptionsEntry] = useState<PluginStoreEntry | null>(null);
+  const [installOptionsIsUpdate, setInstallOptionsIsUpdate] = useState(false);
+  const [installVersion, setInstallVersion] = useState('');
 
   const connected = connectionStatus === 'connected';
 
@@ -256,18 +635,25 @@ export function PluginStorePage() {
   }, []);
 
   const runInstall = useCallback(
-    async (entry: PluginStoreEntry, isUpdate: boolean) => {
+    async (entry: PluginStoreEntry, isUpdate: boolean, requestedVersion = '') => {
       const entryKey = getStoreEntryKey(entry);
       const failedKey = isUpdate ? 'plugin_store.update_failed' : 'plugin_store.install_failed';
+      const version = requestedVersion.trim();
       setInstallingKey(entryKey);
       try {
-        const result = await pluginStoreApi.install(entry.id, entry.sourceId || undefined);
+        const result = await pluginStoreApi.install(entry.id, {
+          sourceId: entry.sourceId || undefined,
+          version: version || undefined,
+        });
         clearConfigCache();
         const sourceId = result.sourceId || entry.sourceId;
         const installedState = await waitForPluginStoreState(
           entry.id,
           sourceId,
-          (plugin) => plugin.installed && plugin.configured
+          (plugin) =>
+            plugin.installed &&
+            plugin.configured &&
+            (!version || pluginVersionMatches(plugin.installedVersion, version))
         );
         setData(installedState.response);
         if (
@@ -334,38 +720,52 @@ export function PluginStorePage() {
 
   const handleInstall = (entry: PluginStoreEntry) => {
     const isUpdate = entry.installed && entry.updateAvailable;
+    setInstallOptionsEntry(entry);
+    setInstallOptionsIsUpdate(isUpdate);
+    setInstallVersion('');
+  };
+
+  const handleInstallOptionsClose = useCallback(() => {
+    if (installingKey) return;
+    setInstallOptionsEntry(null);
+    setInstallVersion('');
+  }, [installingKey]);
+
+  const handleInstallOptionsConfirm = useCallback(async () => {
+    if (!installOptionsEntry) return;
+    const requestedVersion = installVersion.trim();
 
     // Third-party plugins must clear the multi-step confirmation gauntlet first.
-    if (!isOfficialPlugin(entry)) {
-      setGateEntry(entry);
-      setGateIsUpdate(isUpdate);
+    if (!isOfficialPlugin(installOptionsEntry)) {
+      setGateEntry(installOptionsEntry);
+      setGateIsUpdate(installOptionsIsUpdate);
+      setGateRequestedVersion(requestedVersion);
       setGateOpen(true);
+      setInstallOptionsEntry(null);
+      setInstallVersion('');
       return;
     }
 
-    // Official router-for-me plugins keep the lightweight single-step confirm.
-    const title = getStoreEntryTitle(entry);
-    const target = entry.version ? `${title} v${entry.version}` : title;
-    showConfirmation({
-      title: isUpdate
-        ? t('plugin_store.update_confirm_title')
-        : t('plugin_store.install_confirm_title'),
-      message: isUpdate
-        ? t('plugin_store.update_confirm_message', { target })
-        : t('plugin_store.install_confirm_message', { target }),
-      confirmText: isUpdate ? t('plugin_store.update') : t('plugin_store.install'),
-      variant: 'primary',
-      onConfirm: () => runInstall(entry, isUpdate),
-    });
-  };
+    try {
+      await runInstall(installOptionsEntry, installOptionsIsUpdate, requestedVersion);
+      setInstallOptionsEntry(null);
+      setInstallVersion('');
+    } catch {
+      // runInstall already surfaced a notification; keep the modal available for correction.
+    }
+  }, [installOptionsEntry, installOptionsIsUpdate, installVersion, runInstall]);
 
   const handleGateConfirm = useCallback(async () => {
     if (!gateEntry) return;
-    await runInstall(gateEntry, gateIsUpdate);
+    await runInstall(gateEntry, gateIsUpdate, gateRequestedVersion);
     setGateOpen(false);
-  }, [gateEntry, gateIsUpdate, runInstall]);
+    setGateRequestedVersion('');
+  }, [gateEntry, gateIsUpdate, gateRequestedVersion, runInstall]);
 
-  const handleGateClose = useCallback(() => setGateOpen(false), []);
+  const handleGateClose = useCallback(() => {
+    setGateOpen(false);
+    setGateRequestedVersion('');
+  }, []);
 
   const renderCard = (entry: PluginStoreEntry) => {
     const entryKey = getStoreEntryKey(entry);
@@ -389,9 +789,26 @@ export function PluginStorePage() {
     const metaItems = [versionText, sourceText, entry.author, entry.license].filter(Boolean);
     const isInstalling = installingKey === entryKey;
     const hasPendingInstall = Boolean(installingKey);
+    const missingAuth = entry.authRequired && !entry.authConfigured;
     const isDescriptionExpanded = expandedDescriptionKeySet.has(entryKey);
     const isDescriptionOverflowing = overflowingDescriptionKeySet.has(entryKey);
     const descriptionID = getDescriptionDOMID(entryKey);
+    const installTypeText = entry.installType ? formatInstallType(entry.installType) : '';
+    const platformText =
+      entry.platforms.length > 0
+        ? t('plugin_store.platforms', {
+            platforms: entry.platforms
+              .map((platform) => `${platform.goos}/${platform.goarch}`)
+              .join(', '),
+          })
+        : '';
+    const authText = entry.authRequired
+      ? entry.authConfigured
+        ? t('plugin_store.auth_configured')
+        : t('plugin_store.auth_required')
+      : '';
+    const actionDisabled = !connected || missingAuth || (hasPendingInstall && !isInstalling);
+    const actionTitle = missingAuth ? t('plugin_store.auth_required_hint') : undefined;
 
     return (
       <article key={entryKey} className={styles.card}>
@@ -417,6 +834,11 @@ export function PluginStorePage() {
             ) : null}
             {entry.installed && entry.effectiveEnabled ? (
               <span className={styles.badge}>{t('plugin_store.badge_effective')}</span>
+            ) : null}
+            {entry.authRequired ? (
+              <span className={entry.authConfigured ? styles.badge : styles.badgeWarning}>
+                {authText}
+              </span>
             ) : null}
           </div>
         </div>
@@ -450,8 +872,14 @@ export function PluginStorePage() {
           </div>
         ) : null}
 
-        {metaItems.length > 0 ? (
+        {metaItems.length > 0 || installTypeText || platformText ? (
           <div className={styles.cardMeta}>
+            {installTypeText ? (
+              <span className={styles.metaItem}>
+                {t('plugin_store.install_type', { type: installTypeText })}
+              </span>
+            ) : null}
+            {platformText ? <span className={styles.metaItem}>{platformText}</span> : null}
             {metaItems.map((item, index) => (
               <span key={`${entryKey}-meta-${index}`} className={styles.metaItem}>
                 {index > 0 ? <span className={styles.metaDot} aria-hidden="true" /> : null}
@@ -477,8 +905,9 @@ export function PluginStorePage() {
               <Button
                 size="sm"
                 onClick={() => handleInstall(entry)}
-                disabled={!connected || (hasPendingInstall && !isInstalling)}
+                disabled={actionDisabled}
                 loading={isInstalling}
+                title={actionTitle}
               >
                 <IconDownload size={14} />
                 {t('plugin_store.install')}
@@ -489,8 +918,9 @@ export function PluginStorePage() {
                   <Button
                     size="sm"
                     onClick={() => handleInstall(entry)}
-                    disabled={!connected || (hasPendingInstall && !isInstalling)}
+                    disabled={actionDisabled}
                     loading={isInstalling}
+                    title={actionTitle}
                   >
                     <IconRefreshCw size={14} />
                     {t('plugin_store.update')}
@@ -560,6 +990,24 @@ export function PluginStorePage() {
               {t('plugin_store.retry')}
             </Button>
           ) : null}
+        </div>
+      ) : null}
+
+      {data?.sourceErrors.length ? (
+        <div className={styles.warningBox}>
+          <strong>{t('plugin_store.source_errors_title')}</strong>
+          <ul className={styles.sourceErrorList}>
+            {data.sourceErrors.map((sourceError, index) => {
+              const sourceLabel =
+                sourceError.sourceName || sourceError.sourceUrl || sourceError.sourceId;
+              return (
+                <li key={`${sourceError.sourceId}-${sourceError.sourceUrl}-${index}`}>
+                  <span>{sourceLabel}</span>
+                  {sourceError.message ? <small>{sourceError.message}</small> : null}
+                </li>
+              );
+            })}
+          </ul>
         </div>
       ) : null}
 
@@ -712,6 +1160,17 @@ export function PluginStorePage() {
         installing={gateEntry ? installingKey === getStoreEntryKey(gateEntry) : false}
         onClose={handleGateClose}
         onConfirm={handleGateConfirm}
+      />
+      <PluginInstallOptionsModal
+        entry={installOptionsEntry}
+        isUpdate={installOptionsIsUpdate}
+        version={installVersion}
+        installing={
+          installOptionsEntry ? installingKey === getStoreEntryKey(installOptionsEntry) : false
+        }
+        onVersionChange={setInstallVersion}
+        onClose={handleInstallOptionsClose}
+        onConfirm={handleInstallOptionsConfirm}
       />
     </div>
   );

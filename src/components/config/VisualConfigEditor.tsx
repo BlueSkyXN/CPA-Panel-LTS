@@ -44,6 +44,7 @@ import {
   ApiKeysCardEditor,
   PayloadFilterRulesEditor,
   PayloadRulesEditor,
+  PluginStoreAuthEditor,
   StringListEditor,
 } from './VisualConfigEditorBlocks';
 import styles from './VisualConfigEditor.module.scss';
@@ -359,6 +360,10 @@ export function VisualConfigEditor({
   );
   const handlePluginStoreSourcesChange = useCallback(
     (pluginStoreSources: string[]) => onChange({ pluginStoreSources }),
+    [onChange]
+  );
+  const handlePluginStoreAuthChange = useCallback(
+    (pluginStoreAuth: VisualConfigValues['pluginStoreAuth']) => onChange({ pluginStoreAuth }),
     [onChange]
   );
   const handlePayloadDefaultRulesChange = useCallback(
@@ -1037,6 +1042,22 @@ export function VisualConfigEditor({
                   <div className={styles.fieldHint}>
                     {t('config_management.visual.sections.system.plugin_store_sources_hint')}
                   </div>
+                </div>
+              </SectionSubsection>
+
+              <SectionSubsection
+                title={t('config_management.visual.sections.system.plugin_store_auth')}
+                description={t('config_management.visual.sections.system.plugin_store_auth_desc')}
+              >
+                <div className={styles.fieldShell}>
+                  <div className={styles.fieldHint}>
+                    {t('config_management.visual.sections.system.plugin_store_auth_hint')}
+                  </div>
+                  <PluginStoreAuthEditor
+                    value={values.pluginStoreAuth}
+                    disabled={disabled}
+                    onChange={handlePluginStoreAuthChange}
+                  />
                 </div>
               </SectionSubsection>
 

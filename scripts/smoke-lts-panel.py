@@ -175,6 +175,14 @@ def build_config_payload() -> dict[str, Any]:
                     "url": "https://github.com/router-for-me/plugin-store",
                 }
             ],
+            "store-auth": [
+                {
+                    "match": "https://api.github.com/repos/router-for-me/",
+                    "type": "github-token",
+                    "apply-to": ["metadata", "artifact"],
+                    "token-env": "CLIPROXY_PLUGIN_STORE_TOKEN",
+                }
+            ],
         },
     }
 
@@ -279,6 +287,13 @@ plugins:
     - id: official
       name: official
       url: https://github.com/router-for-me/plugin-store
+  store-auth:
+    - match: https://api.github.com/repos/router-for-me/
+      type: github-token
+      apply-to:
+        - metadata
+        - artifact
+      token-env: CLIPROXY_PLUGIN_STORE_TOKEN
 ampcode:
   upstream-url: https://amp.example.test
   upstream-api-key: sk-amp-smoke
@@ -329,6 +344,14 @@ def build_plugin_store_payload() -> dict[str, Any]:
                 "url": "https://github.com/router-for-me/plugin-store",
             }
         ],
+        "source_errors": [
+            {
+                "source_id": "private",
+                "source_name": "private",
+                "source_url": "https://plugins.example.test/registry.json",
+                "message": "missing store auth",
+            }
+        ],
         "plugins": [
             {
                 "source_id": "official",
@@ -340,6 +363,10 @@ def build_plugin_store_payload() -> dict[str, Any]:
                 "author": "LTS smoke",
                 "version": "0.1.0",
                 "repository": "router-for-me/mock-plugin",
+                "install_type": "github-release",
+                "auth_required": True,
+                "auth_configured": False,
+                "platforms": [{"goos": "darwin", "goarch": "arm64"}],
                 "tags": ["smoke"],
                 "installed": True,
                 "enabled": True,
@@ -474,7 +501,24 @@ def build_codex_remote_cloud_connect_environments_payload() -> dict[str, Any]:
     }
 
 
-def build_xai_billing_payload() -> dict[str, Any]:
+def build_xai_weekly_billing_payload() -> dict[str, Any]:
+    return {
+        "config": {
+            "currentPeriod": {
+                "type": "weekly",
+                "start": "2026-06-15T00:00:00Z",
+                "end": "2026-06-22T00:00:00Z",
+            },
+            "creditUsagePercent": 40,
+            "productUsage": [
+                {"product": "Grok 4", "usagePercent": 25},
+                {"product": "Grok Code", "usagePercent": 55},
+            ],
+        }
+    }
+
+
+def build_xai_monthly_billing_payload() -> dict[str, Any]:
     return {
         "config": {
             "monthlyLimit": {"val": 5000},
@@ -673,8 +717,10 @@ class MockCoreHandler(BaseHTTPRequestHandler):
             return build_api_call_result(build_codex_remote_cloud_connect_environments_payload())
         if url == "https://chatgpt.com/backend-api/wham/usage":
             return build_api_call_result(build_codex_quota_usage_payload())
+        if url == "https://cli-chat-proxy.grok.com/v1/billing?format=credits":
+            return build_api_call_result(build_xai_weekly_billing_payload())
         if url == "https://cli-chat-proxy.grok.com/v1/billing":
-            return build_api_call_result(build_xai_billing_payload())
+            return build_api_call_result(build_xai_monthly_billing_payload())
         if url == "https://openrouter.ai/api/v1/models":
             return build_api_call_result(build_openai_models_payload())
         if url == "https://openrouter.ai/api/v1/chat/completions":
@@ -928,6 +974,15 @@ def assert_api_call_url_seen(state: MockCoreState, needle: str, description: str
         )
 
 
+def assert_api_call_exact_url_seen(state: MockCoreState, url: str, description: str) -> None:
+    payloads = parse_json_bodies(state, "POST", "/v0/management/api-call")
+    if not any(isinstance(payload, dict) and payload.get("url") == url for payload in payloads):
+        raise AssertionError(
+            f"Expected /api-call URL for {description} to equal {url!r}; "
+            f"saw {payloads!r}"
+        )
+
+
 def assert_api_call_auth_seen(
     state: MockCoreState,
     url_needle: str,
@@ -944,6 +999,25 @@ def assert_api_call_auth_seen(
         raise AssertionError(
             f"Expected /api-call payload for {description} with authIndex={auth_index!r}; "
             f"saw {payloads!r}"
+        )
+
+
+def assert_api_call_exact_url_auth_seen(
+    state: MockCoreState,
+    url: str,
+    auth_index: str,
+    description: str,
+) -> None:
+    payloads = parse_json_bodies(state, "POST", "/v0/management/api-call")
+    if not any(
+        isinstance(payload, dict)
+        and payload.get("url") == url
+        and payload.get("authIndex") == auth_index
+        for payload in payloads
+    ):
+        raise AssertionError(
+            f"Expected /api-call payload for {description} with url={url!r} "
+            f"and authIndex={auth_index!r}; saw {payloads!r}"
         )
 
 
@@ -1075,6 +1149,8 @@ def assert_config_yaml_roundtrip(state: MockCoreState) -> None:
         "unmanaged-lts-smoke: keep-me",
         "store-sources:",
         "https://github.com/router-for-me/plugin-store",
+        "store-auth:",
+        "CLIPROXY_PLUGIN_STORE_TOKEN",
     ]:
         if marker not in visual_payload:
             raise AssertionError(f"Visual config save dropped marker {marker!r}:\n{visual_payload}")
@@ -1301,8 +1377,13 @@ def run_quota_runtime_smoke(page: Any, app_url: str) -> None:
         and response.url.endswith("/v0/management/api-call")
     ):
         xai_card.get_by_role("button", name="Click here to refresh quota").click()
-    xai_card.get_by_text("Enabled, cap $25.00", exact=False).wait_for()
-    xai_card.get_by_text("$12.00 / $50.00", exact=False).wait_for()
+    xai_card.get_by_text("Weekly limit", exact=True).wait_for()
+    xai_card.get_by_text("Used 40%", exact=True).wait_for()
+    xai_card.get_by_text("Grok 4 usage", exact=True).wait_for()
+    xai_card.get_by_text("Used 25%", exact=True).wait_for()
+    xai_card.get_by_text("Pay as you go", exact=True).wait_for()
+    xai_card.get_by_text("$25.00 / $25.00", exact=False).wait_for()
+    xai_card.get_by_text("$38.00 / $50.00", exact=False).wait_for()
 
 
 def run_remote_cloud_connect_runtime_smoke(page: Any, app_url: str) -> None:
@@ -1415,6 +1496,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
                 ("/quota", "Quota Management", None),
                 ("/usage", "Usage Statistics", None),
                 ("/lts/usage", "Usage Statistics", "/usage"),
+                ("/quick-start", "APIKEY.FUN", None),
                 ("/ai-providers", "AI Providers Configuration", None),
                 ("/ai-providers/workbench", "AI Providers", None),
                 ("/ai-providers/ampcode", "Configure Ampcode", None),
@@ -1438,6 +1520,13 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
                         arg=route,
                     )
                 page.get_by_text(expected_text, exact=False).first.wait_for()
+
+            page.goto(f"{app_url}?route=plugin-store-auth#/plugin-store", wait_until="domcontentloaded")
+            page.wait_for_function("() => window.location.hash.endsWith('/plugin-store')")
+            page.get_by_text("Some plugin sources failed to load", exact=False).first.wait_for()
+            page.get_by_text("Auth required", exact=False).first.wait_for()
+            page.get_by_text("Install: Github Release", exact=False).first.wait_for()
+            page.get_by_text("Platforms: darwin/arm64", exact=False).first.wait_for()
 
             page.goto(f"{app_url}?route=dashboard#/", wait_until="domcontentloaded")
             page.wait_for_function("() => window.location.hash.endsWith('/')")
@@ -1681,7 +1770,16 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
         "backend-api/codex/remote/control/environments",
         "Codex remote cloud connect environments",
     )
-    assert_api_call_url_seen(state, "cli-chat-proxy.grok.com/v1/billing", "xAI billing")
+    assert_api_call_exact_url_seen(
+        state,
+        "https://cli-chat-proxy.grok.com/v1/billing?format=credits",
+        "xAI weekly billing",
+    )
+    assert_api_call_exact_url_seen(
+        state,
+        "https://cli-chat-proxy.grok.com/v1/billing",
+        "xAI monthly billing",
+    )
     assert_api_call_url_seen(
         state,
         "openrouter.ai/api/v1/chat/completions",
@@ -1704,11 +1802,17 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
         "codex-smoke-auth",
         "Codex remote cloud connect environments",
     )
-    assert_api_call_auth_seen(
+    assert_api_call_exact_url_auth_seen(
         state,
-        "cli-chat-proxy.grok.com/v1/billing",
+        "https://cli-chat-proxy.grok.com/v1/billing?format=credits",
         "xai-smoke-auth",
-        "xAI billing",
+        "xAI weekly billing",
+    )
+    assert_api_call_exact_url_auth_seen(
+        state,
+        "https://cli-chat-proxy.grok.com/v1/billing",
+        "xai-smoke-auth",
+        "xAI monthly billing",
     )
     assert_api_call_auth_seen(
         state,

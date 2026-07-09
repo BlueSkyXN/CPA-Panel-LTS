@@ -109,14 +109,24 @@ features:
     reason: Upstream workbench is useful for resource management and recent health, but must not replace the stable LTS provider page.
     routes:
       - /ai-providers/workbench
+      - /quick-start
     panel_files:
       - src/router/MainRoutes.tsx
       - src/features/providers/ProvidersWorkbenchPage.tsx
       - src/features/providers/useProviderWorkbench.ts
       - src/features/providers/descriptors.ts
+      - src/features/providers/sponsor.ts
+      - src/features/providers/code0.ts
+      - src/features/providers/fennoAI.ts
+      - src/features/providers/qiniuCloud.ts
+      - src/features/providers/claudeApi.ts
+      - src/features/providers/sponsorDefinitions.ts
       - src/features/providers/sheets/forms/BaseProviderForm.tsx
+      - src/features/providers/sheets/forms/SponsorProviderForm.tsx
+      - src/features/providers/sheets/forms/useSponsorUsageCheck.ts
       - src/features/providers/sheets/forms/useModelDiscovery.ts
       - src/features/providers/sheets/forms/useConnectivityTest.ts
+      - src/features/providers/components/SponsorQuickStartPanel.tsx
       - src/features/providers/adapters.ts
       - src/components/providers/hooks/useProviderRecentRequests.ts
       - src/services/api/config.ts
@@ -138,6 +148,14 @@ features:
       - MODEL_DISCOVERY_BRANDS
       - runOpenAIAllKeys
       - runCodex
+      - "path: '/quick-start'"
+      - APIKEY_FUN_PROVIDER_NAME
+      - CODE0_PROVIDER_NAME
+      - FENNO_AI_PROVIDER_NAME
+      - QINIU_CLOUD_PROVIDER_NAME
+      - CLAUDE_API_BASE_URL
+      - SponsorQuickStartPanel
+      - useSponsorUsageCheck
       - openrouter-a
       - openrouter-b
       - openrouter.ai/api/v1/chat/completions
@@ -191,7 +209,9 @@ features:
       - src/router/MainRoutes.tsx
       - src/features/plugins/PluginsPage.tsx
       - src/features/plugins/PluginStorePage.tsx
+      - src/features/plugins/PluginStorePage.module.scss
       - src/features/plugins/PluginResourcePage.tsx
+      - src/features/plugins/pluginReleaseVersions.ts
       - src/features/plugins/pluginResources.ts
       - src/features/plugins/components/PluginInstallGateModal.tsx
       - src/features/plugins/components/PluginInstallGateModal.module.scss
@@ -216,6 +236,12 @@ features:
     required_markers:
       - DEFAULT_PLUGIN_STORE_SOURCE_ID
       - plugin_store_sources
+      - pluginStoreAuth
+      - store-auth
+      - fetchPluginReleaseVersions
+      - install_version_release_mode
+      - source_errors
+      - auth_required
       - getPluginConfirmToken
       - gate_effect_runs_code
       - server-plugin-support-update
@@ -463,6 +489,9 @@ features:
       - CodexRemoteCloudConnectAuthFileSummary
       - codex_remote_cloud_connect_environment_button
       - codex_remote_cloud_connect_environment_card_summary
+      - AUTH_FILE_WEBSOCKET_PROVIDERS
+      - supportsAuthFileWebsockets
+      - websockets_label
       - run_auth_files_write_smoke
 
   - id: quota-management
@@ -490,7 +519,8 @@ features:
       - CODEX_RATE_LIMIT_RESET_CREDITS_CONSUME_URL
       - XAI_CONFIG
       - fetchXaiQuota
-      - XAI_BILLING_URL
+      - XAI_BILLING_WEEKLY_URL
+      - XAI_BILLING_MONTHLY_URL
       - batchConcurrency
       - run_quota_runtime_smoke
       - codex-smoke-auth

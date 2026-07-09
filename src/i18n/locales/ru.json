@@ -121,7 +121,8 @@
     "plugin_store": "Магазин плагинов",
     "config_management": "Панель конфигурации",
     "logs": "Просмотр логов",
-    "system_info": "Информация системы"
+    "system_info": "Информация системы",
+    "quick_start": "Быстрый старт"
   },
   "nav_groups": {
     "operate": "Работа",
@@ -163,7 +164,10 @@
     "caring_afternoon": "Уверенный прогресс — отличная работа.",
     "caring_evening": "День подходит к концу — финальный рывок.",
     "caring_night": "Поздняя работа? Не забудьте отдохнуть.",
-    "system_overview": "Обзор системы"
+    "system_overview": "Обзор системы",
+    "quick_start_card": "Быстрый старт",
+    "quick_start_entry": "Быстрый старт",
+    "quick_start_entry_desc": "Открыть страницу быстрого старта"
   },
   "basic_settings": {
     "title": "Основные настройки",
@@ -621,6 +625,8 @@
     "priority_label": "Приоритет (priority)",
     "priority_placeholder": "например: 10 или -1",
     "priority_hint": "Только целые числа. Некорректные значения игнорируются. Чем больше число, тем выше приоритет.",
+    "websockets_label": "WebSockets (websockets)",
+    "websockets_hint": "Включает websocket-транспорт Responses API для этих учётных данных.",
     "codex_websockets_label": "WebSockets (websockets)",
     "codex_websockets_hint": "Включает websocket-транспорт Responses API для этих учётных данных Codex.",
     "excluded_models_label": "Исключённые модели (excluded_models)",
@@ -731,7 +737,14 @@
     "empty_data": "Данные по квоте отсутствуют",
     "refresh_button": "Обновить квоту",
     "fetch_all": "Получить все",
+    "weekly_limit": "Недельный лимит",
     "monthly_credits": "Месячные кредиты",
+    "used_percent": "Использовано {{percent}}",
+    "reset_at": "Сброс {{time}}",
+    "product_usage": "Использование {{product}}",
+    "plan_label": "План",
+    "plan_supergrok": "SuperGrok",
+    "plan_supergrok_heavy": "SuperGrok Heavy",
     "pay_as_you_go_label": "Оплата по факту",
     "pay_as_you_go_enabled": "Включено, лимит {{cap}}",
     "pay_as_you_go_disabled": "Отключено"
@@ -1261,6 +1274,30 @@
           "plugin_store_sources_label": "URL registry источника плагинов (plugins.store-sources)",
           "plugin_store_sources_placeholder": "https://example.com/cliproxy-plugins/registry.json",
           "plugin_store_sources_hint": "Один URL registry.json в строке. Пустые строки отфильтровываются при сохранении",
+          "plugin_store_auth": "Правила аутентификации магазина плагинов",
+          "plugin_store_auth_desc": "Настройте заголовки аутентификации для приватных registry, метаданных GitHub Releases или загрузки артефактов",
+          "plugin_store_auth_hint": "Указывайте только имена переменных окружения, а не реальные token. Backend читает значения из своей runtime-среды.",
+          "store_auth_empty": "Правила аутентификации не настроены. Публичным источникам плагинов они не нужны.",
+          "store_auth_rule": "Правило аутентификации",
+          "store_auth_add": "Добавить правило",
+          "store_auth_match": "Совпадающий URL-префикс",
+          "store_auth_type": "Тип аутентификации",
+          "store_auth_apply_to": "Применять к",
+          "store_auth_apply_to_hint": "Если ничего не выбрано, правило применяется ко всем типам запросов.",
+          "store_auth_apply_registry": "Registry",
+          "store_auth_apply_metadata": "Метаданные",
+          "store_auth_apply_artifact": "Артефакт",
+          "store_auth_type_none": "Нет",
+          "store_auth_type_bearer": "Bearer",
+          "store_auth_type_basic": "Basic",
+          "store_auth_type_header": "Пользовательский заголовок",
+          "store_auth_type_github_token": "GitHub token",
+          "store_auth_token_env": "Переменная token",
+          "store_auth_username_env": "Переменная username",
+          "store_auth_password_env": "Переменная password",
+          "store_auth_header_name": "Имя заголовка",
+          "store_auth_header_value_env": "Переменная значения заголовка",
+          "store_auth_allow_insecure": "Разрешить небезопасные HTTP URL",
           "logs_max_size": "Максимальный размер файла журнала (МБ)",
           "error_logs_max_files": "Файлов журнала ошибок",
           "usage_statistics_enabled": "Включить статистику использования в памяти",
@@ -1637,13 +1674,41 @@
     "badge_update": "Доступно обновление",
     "badge_effective": "Активен",
     "version_arrow": "v{{from}} → v{{to}}",
+    "install_type": "Установка: {{type}}",
+    "platforms": "Платформы: {{platforms}}",
+    "auth_required": "Требуется аутентификация",
+    "auth_configured": "Аутентификация настроена",
+    "auth_required_hint": "Настройте plugins.store-auth перед установкой из этого источника или URL артефакта",
+    "source_errors_title": "Некоторые источники плагинов не загрузились",
     "install": "Установить",
     "update": "Обновить",
     "manage": "Управлять",
     "install_confirm_title": "Установка плагина",
     "install_confirm_message": "Скачать {{target}} из реестра плагинов и установить в локальный каталог плагинов?",
     "update_confirm_title": "Обновление плагина",
-    "update_confirm_message": "Скачать и установить последнюю версию {{target}}?",
+    "update_confirm_message": "Скачать и установить {{target}}?",
+    "install_version_label": "Версия",
+    "install_version_latest": "последняя",
+    "install_version_latest_mode": "Последняя стабильная",
+    "install_version_latest_hint": "Разрешается backend во время установки. Текущая версия в списке: {{version}}.",
+    "install_version_release_mode": "Выбрать release",
+    "install_version_release_hint": "Прочитать устанавливаемые tags из GitHub Releases.",
+    "install_version_manual_mode": "Ручной release tag",
+    "install_version_manual_hint": "Используйте только когда автоматическая загрузка releases недоступна.",
+    "install_versions_loading": "Загрузка GitHub Releases...",
+    "install_versions_load_failed": "Не удалось загрузить версии releases",
+    "install_version_non_github": "Репозиторий этого плагина не является GitHub-репозиторием",
+    "install_versions_empty": "Подходящие releases не найдены.",
+    "install_versions_only_prerelease": "Доступны только prerelease-версии. Включите prerelease, чтобы выбрать одну.",
+    "install_version_release_select": "Выберите версию release",
+    "install_version_release_placeholder": "Выберите версию release",
+    "install_version_prerelease_badge": "prerelease",
+    "install_version_assets_count": "{{count}} артефактов",
+    "install_version_show_prerelease": "Показать prerelease-версии",
+    "install_version_manual_placeholder": "Например v0.1.4",
+    "install_version_manual_error": "Release tags могут содержать только буквы, цифры, точки, подчёркивания, плюсы и дефисы; пробелы и слэши запрещены.",
+    "install_version_current_selected": "{{version}} уже установлена. Выберите другую версию.",
+    "install_version_releases_link": "Открыть GitHub Releases",
     "install_success": "Плагин установлен",
     "update_success": "Плагин обновлён",
     "install_failed": "Не удалось установить плагин",
@@ -1834,14 +1899,20 @@
     },
     "categories": {
       "title": "Провайдеры",
-      "activeCount": "{{active}}/{{total}} активных"
+      "activeCount": "{{active}}/{{total}} активных",
+      "quickFill": "Быстрое заполнение"
     },
     "providerNames": {
       "gemini": "Gemini",
       "codex": "Codex",
       "claude": "Claude",
       "vertex": "Vertex",
-      "openaiCompatibility": "OpenAI-совместимый"
+      "openaiCompatibility": "OpenAI-совместимый",
+      "claudeApi": "ClaudeAPI",
+      "apikeyFun": "APIKEY.FUN",
+      "code0": "Code0",
+      "fennoAI": "FennoAI",
+      "qiniuCloud": "Qiniu Cloud"
     },
     "table": {
       "key": "Ключ",
@@ -1943,7 +2014,12 @@
         "nameRequired": "Название обязательно",
         "apiKeyRequired": "Нужен хотя бы один API-ключ",
         "baseUrlRequired": "Base URL обязателен"
-      }
+      },
+      "showAllEntries": "Показать все ({{count}})",
+      "showFewerEntries": "Показать меньше",
+      "proxyBadge": "Прокси",
+      "modelBadgeImage": "Image",
+      "modelBadgeThinking": "Thinking"
     },
     "delete": {
       "title": "Удалить ресурс",
@@ -2007,6 +2083,71 @@
     },
     "modelCatalog": {
       "notLoaded": "Не загружено"
+    },
+    "sponsor": {
+      "protocolSummary": "Anthropic / OpenAI / Gemini / Codex API (Responses)",
+      "detailHint": "{{provider}} сохраняется в соответствующие конфигурации API key по протоколам; здесь они управляются вместе.",
+      "registerLink": "Зарегистрироваться",
+      "registerNow": "Зарегистрироваться сейчас",
+      "dashboardLink": "Панель управления",
+      "emptyRegisterHint": "Конфигурации пока нет.",
+      "apiKeyHint": "Этот ключ записывается только в выбранную группу/протокол.",
+      "usageCheck": "Проверить квоту",
+      "usageChecking": "Проверка",
+      "usageRemaining": "Остаток: {{amount}} {{unit}}",
+      "usageBreakdown": "Использовано {{used}} / Лимит {{limit}}",
+      "usageStatus": "Статус: {{status}}",
+      "usageInvalid": "Недействительный ключ",
+      "usageEmpty": "Endpoint не вернул данные квоты.",
+      "usageApiKeyRequired": "Требуется API key",
+      "groupedKeysTitle": "Групповые ключи",
+      "groupedKeysHint": "Ключи платформы могут привязываться к группе при создании. Каждый групповой ключ здесь управляет одним протоколом, а модели загружаются только из этого протокола.",
+      "groupedKey": "Групповой ключ #{{index}}",
+      "addGroupedKey": "Добавить групповой ключ",
+      "removeGroupedKey": "Удалить групповой ключ",
+      "protocol": "Группа/протокол",
+      "protocolHint": "Выберите группу/протокол для этого ключа.",
+      "protocolEndpoint": "Текущий endpoint протокола",
+      "urlMode": "{{provider}} URL",
+      "urlHint": "Все URL используют одинаковые правила API. При сохранении записывается только endpoint текущего группового протокола.",
+      "urlOptions": {
+        "standard": "Обычный URL",
+        "direct": "Прямой URL",
+        "domestic": "Маршрут для материкового Китая",
+        "overseas": "Зарубежный маршрут"
+      },
+      "urlOptionDescriptions": {
+        "domestic": "Для пользователей и нагрузок в материковом Китае; обычно дает меньшую задержку в сетях материкового Китая.",
+        "overseas": "Для зарубежных развертываний, трансграничного доступа или задач, которым нужны зарубежные модели."
+      },
+      "modelsTitle": "Настройки моделей по протоколам",
+      "modelsHint": "Настраивайте allowlist моделей и алиасы отдельно для маршрутов Codex API, Anthropic, Gemini и OpenAI-compatible.",
+      "protocolModels": {
+        "codex": "Модели Codex API",
+        "anthropic": "Модели Anthropic",
+        "gemini": "Модели Gemini",
+        "openai": "Модели OpenAI-compatible"
+      },
+      "protocolModelHints": {
+        "codex": "Записывается в models конфигурации Codex API. Можно загрузить из /v1/models и задать алиасы.",
+        "anthropic": "Записывается в models конфигурации Anthropic. Можно загрузить из /v1/models и задать алиасы.",
+        "gemini": "Записывается в models конфигурации Gemini. Можно загрузить из /v1beta/models и задать алиасы.",
+        "openai": "Записывается в models конфигурации OpenAI-compatible. Можно загрузить из /models и задать алиасы."
+      },
+      "validation": {
+        "keyRequired": "Введите API key для каждого группового ключа.",
+        "protocolDuplicate": "Для каждого протокола можно добавить только один групповой ключ."
+      },
+      "openaiEntries": "Ключей OpenAI-compatible",
+      "codexEntries": "Ключей Codex API",
+      "anthropicEntries": "Ключей Anthropic",
+      "geminiEntries": "Ключей Gemini",
+      "protocols": {
+        "anthropic": "Anthropic",
+        "openai": "OpenAI-compatible",
+        "gemini": "Gemini",
+        "codexResponses": "Codex API (Responses)"
+      }
     }
   }
 }

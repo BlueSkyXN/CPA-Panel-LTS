@@ -50,6 +50,8 @@ const mainRoutes = [
   { path: '/lts/ampcode', element: <Navigate to="/ai-providers/ampcode" replace /> },
   { path: '/settings', element: <Navigate to="/config" replace /> },
   { path: '/api-keys', element: <Navigate to="/config" replace /> },
+  { path: '/quick-start', element: <ProvidersWorkbenchPage fixedBrand="apikeyFun" /> },
+  { path: '/quick-start/*', element: <Navigate to="/quick-start" replace /> },
   { path: '/ai-providers/workbench', element: <ProvidersWorkbenchPage /> },
   { path: '/ai-providers/gemini/new', element: <AiProvidersGeminiEditPage /> },
   { path: '/ai-providers/gemini/:index', element: <AiProvidersGeminiEditPage /> },

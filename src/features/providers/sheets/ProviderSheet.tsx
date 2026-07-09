@@ -5,14 +5,12 @@ import { IconLoader2, IconPencil } from '@/components/ui/icons';
 import type { ProviderRecentUsageMap } from '@/components/providers/utils';
 import { useNotificationStore } from '@/stores';
 import { PROVIDER_DESCRIPTORS } from '../descriptors';
-import type {
-  ProviderBrand,
-  ProviderEntryFormInput,
-  ProviderResource,
-} from '../types';
+import { isMultiProtocolSponsorBrand } from '../sponsorDefinitions';
+import type { ProviderBrand, ProviderEntryFormInput, ProviderResource } from '../types';
 import type { UseProviderWorkbenchResult } from '../useProviderWorkbench';
 import { BaseProviderForm } from './forms/BaseProviderForm';
 import { ResourceDetailView } from './ResourceDetailView';
+import { SponsorProviderForm } from './forms/SponsorProviderForm';
 import styles from './forms/sharedForm.module.scss';
 
 type SheetMode = 'detail' | 'create' | 'edit';
@@ -107,9 +105,7 @@ export function ProviderSheet({
         ? `${t('providersPage.form.editEyebrow')} · ${t(
             `providersPage.providerNames.${state.brand}`
           )}`
-        : `${t('providersPage.detail.title')} · ${t(
-            `providersPage.providerNames.${state.brand}`
-          )}`;
+        : `${t('providersPage.detail.title')} · ${t(`providersPage.providerNames.${state.brand}`)}`;
 
   const handleCreate = useCallback(
     async (input: ProviderEntryFormInput) => {
@@ -147,6 +143,20 @@ export function ProviderSheet({
       return <ResourceDetailView resource={state.resource} usageByProvider={usageByProvider} />;
     }
     const formKey = `${state.brand}:${state.resource?.id ?? 'new'}:${state.mode}`;
+    if (isMultiProtocolSponsorBrand(state.brand)) {
+      return (
+        <SponsorProviderForm
+          key={formKey}
+          brand={state.brand}
+          resource={state.resource}
+          mode={state.mode}
+          mutating={formMutating}
+          formId={formId}
+          onSubmit={state.mode === 'create' ? handleCreate : handleUpdate}
+          onDirtyChange={handleDirtyChange}
+        />
+      );
+    }
     return (
       <BaseProviderForm
         key={formKey}
@@ -163,7 +173,7 @@ export function ProviderSheet({
 
   const footer =
     state.mode === 'detail' ? (
-      state.resource && !state.resource.flags.isPlaceholder ? (
+      state.resource ? (
         <>
           <button
             type="button"
@@ -207,9 +217,7 @@ export function ProviderSheet({
           className={`${styles.footerBtn} ${styles.footerBtnPrimary}`}
           disabled={submitDisabled}
         >
-          {submitting ? (
-            <IconLoader2 size={14} />
-          ) : null}
+          {submitting ? <IconLoader2 size={14} /> : null}
           {state.mode === 'create'
             ? t('providersPage.actions.create')
             : t('providersPage.actions.save')}
@@ -231,7 +239,20 @@ export function ProviderSheet({
       }
       title={titleText}
       description={t('providersPage.table.description', {
-        route: `/ai-providers/${state.brand === 'openaiCompatibility' ? 'openai' : state.brand}`,
+        route:
+          state.brand === 'openaiCompatibility'
+            ? '/ai-providers/openai'
+            : state.brand === 'apikeyFun'
+              ? '/quick-start'
+              : state.brand === 'claudeApi'
+                ? '/ai-providers/claudeapi'
+                : state.brand === 'code0'
+                  ? '/ai-providers/code0'
+                  : state.brand === 'fennoAI'
+                    ? '/ai-providers/fennoai'
+                    : state.brand === 'qiniuCloud'
+                      ? '/ai-providers/qiniu'
+                      : `/ai-providers/${state.brand}`,
       })}
       footer={footer}
       closeDisabled={submitting}

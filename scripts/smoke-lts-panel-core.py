@@ -1326,7 +1326,7 @@ def run_browser_provider_workbench_smoke(page: Any, app_url: str, api_url: str) 
             page,
             api_url,
             label="Claude",
-            button_pattern=r"Claude",
+            button_pattern=r"^Claude\b",
             endpoint="/v0/management/claude-api-key",
             response_key="claude-api-key",
             api_key="claude-browser-new",

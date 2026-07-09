@@ -64,14 +64,29 @@ for path in \
   src/assets/icons/amp.svg \
   src/pages/AiProvidersPage.tsx \
   src/pages/AiProvidersAmpcodeEditPage.tsx \
+  src/assets/icons/apikey-fun.png \
+  src/assets/icons/claudeapi.png \
+  src/assets/icons/code0.png \
+  src/assets/icons/fenno-ai.png \
+  src/assets/icons/qiniu-cloud.png \
   src/features/providers/ProvidersWorkbenchPage.tsx \
   src/features/providers/descriptors.ts \
+  src/features/providers/sponsor.ts \
+  src/features/providers/code0.ts \
+  src/features/providers/fennoAI.ts \
+  src/features/providers/qiniuCloud.ts \
+  src/features/providers/claudeApi.ts \
+  src/features/providers/sponsorDefinitions.ts \
+  src/features/providers/components/SponsorQuickStartPanel.tsx \
   src/features/providers/sheets/forms/BaseProviderForm.tsx \
+  src/features/providers/sheets/forms/SponsorProviderForm.tsx \
+  src/features/providers/sheets/forms/useSponsorUsageCheck.ts \
   src/features/providers/sheets/forms/useConnectivityTest.ts \
   src/features/providers/sheets/forms/useModelDiscovery.ts \
   src/features/plugins/PluginsPage.tsx \
   src/features/plugins/PluginStorePage.tsx \
   src/features/plugins/PluginResourcePage.tsx \
+  src/features/plugins/pluginReleaseVersions.ts \
   src/features/plugins/pluginResources.ts \
   src/features/plugins/components/PluginInstallGateModal.tsx \
   src/features/plugins/components/PluginInstallGateModal.module.scss \
@@ -167,7 +182,9 @@ require_file_contains docs/lts/sync-runbook.md "protected selective-port"
 
 # Accepted upstream feature regression checks.
 require_file_contains src/router/MainRoutes.tsx "path: '/ai-providers/workbench'"
+require_file_contains src/router/MainRoutes.tsx "path: '/quick-start'"
 require_file_contains src/router/MainRoutes.tsx "ProvidersWorkbenchPage"
+require_file_contains src/components/layout/MainLayout.tsx "path: '/quick-start'"
 require_file_contains src/router/MainRoutes.tsx "path: '/plugins'"
 require_file_contains src/router/MainRoutes.tsx "path: '/plugin-store'"
 require_file_contains src/router/MainRoutes.tsx "path: '/plugin-pages/:pluginId/:menuIndex'"
@@ -183,8 +200,29 @@ require_file_contains src/services/api/index.ts "export * from './plugins'"
 require_file_contains src/services/api/apiKeyUsage.ts "'/api-key-usage'"
 require_file_contains src/services/api/plugins.ts "'/plugins'"
 require_file_contains src/services/api/plugins.ts "'/plugin-store'"
+require_file_contains src/services/api/plugins.ts "source_errors"
+require_file_contains src/services/api/plugins.ts "auth_required"
+require_file_contains src/services/api/plugins.ts "PluginStoreInstallOptions"
+require_file_contains src/services/api/plugins.ts "params.set('version'"
 require_file_contains src/features/plugins/pluginResources.ts "DEFAULT_PLUGIN_STORE_SOURCE_ID"
 require_file_contains src/features/plugins/pluginResources.ts "isDefaultPluginStoreSource"
+require_file_contains src/features/plugins/pluginReleaseVersions.ts "fetchPluginReleaseVersions"
+require_file_contains src/features/plugins/pluginReleaseVersions.ts "https://api.github.com"
+require_file_contains src/features/plugins/PluginStorePage.tsx "PluginInstallOptionsModal"
+require_file_contains src/features/plugins/PluginStorePage.tsx "install_version_release_mode"
+require_file_contains src/features/plugins/PluginStorePage.tsx "source_errors_title"
+require_file_contains src/features/plugins/PluginStorePage.tsx "auth_required"
+require_file_contains src/i18n/locales/en.json "plugin_store_auth"
+require_file_contains src/i18n/locales/zh-CN.json "plugin_store_auth"
+require_file_contains src/i18n/locales/zh-TW.json "plugin_store_auth"
+require_file_contains src/i18n/locales/ru.json "plugin_store_auth"
+require_file_contains src/i18n/locales/en.json "install_version_release_mode"
+require_file_contains src/i18n/locales/zh-CN.json "install_version_release_mode"
+require_file_contains src/i18n/locales/zh-TW.json "install_version_release_mode"
+require_file_contains src/i18n/locales/ru.json "install_version_release_mode"
+require_file_contains scripts/smoke-lts-panel.py "store-auth"
+require_file_contains scripts/smoke-lts-panel.py "CLIPROXY_PLUGIN_STORE_TOKEN"
+require_file_contains scripts/smoke-lts-panel.py "Some plugin sources failed to load"
 require_file_contains src/features/plugins/components/PluginInstallGateModal.tsx "getPluginConfirmToken"
 require_file_contains src/features/plugins/components/PluginInstallGateModal.tsx "buildRepositoryURL"
 require_file_contains src/features/plugins/components/PluginInstallGateModal.tsx "gate_effect_runs_code"
@@ -195,10 +233,18 @@ require_file_contains src/services/api/config.ts "'/config'"
 require_file_contains src/services/api/configFile.ts "'/config.yaml'"
 require_file_contains src/services/api/models.ts "/v1/models"
 require_file_contains src/components/config/VisualConfigEditor.tsx "plugin_store_sources"
+require_file_contains src/components/config/VisualConfigEditor.tsx "plugin_store_auth"
+require_file_contains src/components/config/VisualConfigEditorBlocks.tsx "PluginStoreAuthEditor"
 require_file_contains src/hooks/useVisualConfig.ts "store-sources"
+require_file_contains src/hooks/useVisualConfig.ts "store-auth"
+require_file_contains src/hooks/useVisualConfig.ts "parsePluginStoreAuthRules"
+require_file_contains src/hooks/useVisualConfig.ts "serializePluginStoreAuthForYaml"
 require_file_contains src/hooks/useVisualConfig.ts "parsePluginStoreSources"
 require_file_contains src/hooks/useVisualConfig.ts "dirtyFields.has('pluginStoreSources')"
+require_file_contains src/hooks/useVisualConfig.ts "dirtyFields.has('pluginStoreAuth')"
 require_file_contains src/types/visualConfig.ts "pluginStoreSources"
+require_file_contains src/types/visualConfig.ts "pluginStoreAuth"
+require_file_contains src/types/visualConfig.ts "PluginStoreAuthRule"
 require_file_contains src/pages/ConfigPage.tsx "visualBaseYaml"
 require_file_contains src/pages/ConfigPage.tsx "normalizeYamlForVisualDiff"
 require_file_contains src/pages/ConfigPage.tsx "applyVisualChangesToYaml"
@@ -457,6 +503,14 @@ require_file_contains src/services/api/apiCall.ts "'/api-call'"
 require_file_contains src/features/authFiles/constants.ts "QUOTA_PROVIDER_TYPES"
 require_file_contains src/features/authFiles/constants.ts "OAUTH_PROVIDER_PRESETS"
 require_file_contains src/features/authFiles/constants.ts "xai"
+require_file_contains src/features/authFiles/constants.ts "AUTH_FILE_WEBSOCKET_PROVIDERS"
+require_file_contains src/features/authFiles/constants.ts "supportsAuthFileWebsockets"
+require_file_contains src/features/authFiles/components/AuthFilesPrefixProxyEditorModal.tsx "supportsAuthFileWebsockets"
+require_file_contains src/features/authFiles/hooks/useAuthFilesPrefixProxyEditor.ts "supportsAuthFileWebsockets"
+require_file_contains src/i18n/locales/en.json "websockets_label"
+require_file_contains src/i18n/locales/zh-CN.json "websockets_label"
+require_file_contains src/i18n/locales/zh-TW.json "websockets_label"
+require_file_contains src/i18n/locales/ru.json "websockets_label"
 require_file_contains src/features/authFiles/components/AuthFileQuotaSection.tsx "XAI_CONFIG"
 require_file_contains src/features/authFiles/components/AuthFileQuotaSection.tsx "CODEX_CONFIG"
 require_file_contains src/components/quota/quotaConfigs.ts "CODEX_CONFIG"
@@ -502,7 +556,8 @@ require_file_contains src/lts/i18n/zh-TW.lts.json "credits_unit"
 require_file_contains src/lts/i18n/ru.lts.json "credits_unit"
 require_file_contains src/components/quota/quotaConfigs.ts "XAI_CONFIG"
 require_file_contains src/components/quota/quotaConfigs.ts "fetchXaiQuota"
-require_file_contains src/components/quota/quotaConfigs.ts "XAI_BILLING_URL"
+require_file_contains src/components/quota/quotaConfigs.ts "XAI_BILLING_WEEKLY_URL"
+require_file_contains src/components/quota/quotaConfigs.ts "XAI_BILLING_MONTHLY_URL"
 require_file_contains src/components/quota/quotaConfigs.ts "batchConcurrency"
 require_file_contains src/stores/useQuotaStore.ts "setXaiQuota"
 require_file_contains src/types/quota.ts "XaiQuotaState"
@@ -511,11 +566,24 @@ require_file_contains src/pages/DashboardPage.tsx "fetchConfig"
 require_file_contains src/pages/DashboardPage.tsx "countAmpcodeConfig"
 require_file_contains src/pages/DashboardPage.tsx "config.ampcode"
 require_file_contains src/pages/DashboardPage.tsx "ampcode: providerStats.ampcode"
+require_file_contains src/pages/DashboardPage.tsx "hasApiKeyFunConfig"
 require_file_contains src/stores/useModelsStore.ts "modelsApi.fetchModels"
 require_file_contains src/i18n/locales/en.json "A:{{ampcode}}"
 require_file_contains src/i18n/locales/zh-CN.json "A:{{ampcode}}"
 require_file_contains src/i18n/locales/zh-TW.json "A:{{ampcode}}"
 require_file_contains src/i18n/locales/ru.json "A:{{ampcode}}"
+require_file_contains src/features/providers/descriptors.ts "apikeyFun"
+require_file_contains src/features/providers/descriptors.ts "claudeApi"
+require_file_contains src/features/providers/descriptors.ts "code0"
+require_file_contains src/features/providers/descriptors.ts "fennoAI"
+require_file_contains src/features/providers/descriptors.ts "qiniuCloud"
+require_file_contains src/features/providers/sponsor.ts "APIKEY_FUN_PROVIDER_NAME"
+require_file_contains src/features/providers/claudeApi.ts "CLAUDE_API_BASE_URL"
+require_file_contains src/features/providers/code0.ts "CODE0_PROVIDER_NAME"
+require_file_contains src/features/providers/fennoAI.ts "FENNO_AI_PROVIDER_NAME"
+require_file_contains src/features/providers/qiniuCloud.ts "QINIU_CLOUD_PROVIDER_NAME"
+require_file_contains src/features/providers/sheets/forms/useSponsorUsageCheck.ts "apiCallApi.request"
+require_file_contains src/features/providers/components/SponsorQuickStartPanel.tsx "SponsorProviderForm"
 
 # Behavior-oriented OpenAI Compatibility preservation checks.
 require_file_contains scripts/smoke-lts-panel.py "assert_provider_mutation_payloads"

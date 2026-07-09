@@ -121,7 +121,8 @@
     "plugin_store": "Plugin Store",
     "config_management": "Config Panel",
     "logs": "Logs Viewer",
-    "system_info": "Management Center Info"
+    "system_info": "Management Center Info",
+    "quick_start": "Quick Start"
   },
   "nav_groups": {
     "operate": "Operate",
@@ -164,7 +165,10 @@
     "caring_afternoon": "Steady progress — you're doing great.",
     "caring_evening": "Wrapping up nicely — almost there.",
     "caring_night": "Burning the midnight oil? Don't forget to rest.",
-    "system_overview": "System Overview"
+    "system_overview": "System Overview",
+    "quick_start_card": "Quick Start",
+    "quick_start_entry": "Quick Start",
+    "quick_start_entry_desc": "Open the quick start page"
   },
   "basic_settings": {
     "title": "Basic Settings",
@@ -622,6 +626,8 @@
     "priority_label": "Priority (priority)",
     "priority_placeholder": "e.g. 10 or -1",
     "priority_hint": "Integers only. Invalid values are ignored. Larger value means higher priority.",
+    "websockets_label": "WebSockets (websockets)",
+    "websockets_hint": "Enable Responses API websocket transport for this credential.",
     "codex_websockets_label": "WebSockets (websockets)",
     "codex_websockets_hint": "Enable Responses API websocket transport for this Codex credential.",
     "excluded_models_label": "Excluded models (excluded_models)",
@@ -737,7 +743,14 @@
     "empty_data": "No quota data available",
     "refresh_button": "Refresh Quota",
     "fetch_all": "Fetch All",
+    "weekly_limit": "Weekly limit",
     "monthly_credits": "Monthly credits",
+    "used_percent": "Used {{percent}}",
+    "reset_at": "Resets {{time}}",
+    "product_usage": "{{product}} usage",
+    "plan_label": "Plan",
+    "plan_supergrok": "SuperGrok",
+    "plan_supergrok_heavy": "SuperGrok Heavy",
     "pay_as_you_go_label": "Pay as you go",
     "pay_as_you_go_enabled": "Enabled, cap {{cap}}",
     "pay_as_you_go_disabled": "Disabled"
@@ -1267,6 +1280,30 @@
           "plugin_store_sources_label": "Plugin source registry URL (plugins.store-sources)",
           "plugin_store_sources_placeholder": "https://example.com/cliproxy-plugins/registry.json",
           "plugin_store_sources_hint": "One registry.json URL per row. Empty rows are filtered on save",
+          "plugin_store_auth": "Plugin Store Auth Rules",
+          "plugin_store_auth_desc": "Configure auth headers for private registries, GitHub Release metadata, or artifact downloads",
+          "plugin_store_auth_hint": "Enter environment variable names only, not actual tokens. The backend reads the values from its runtime environment.",
+          "store_auth_empty": "No auth rules are configured. Public plugin sources do not need one.",
+          "store_auth_rule": "Auth rule",
+          "store_auth_add": "Add auth rule",
+          "store_auth_match": "Matching URL prefix",
+          "store_auth_type": "Auth type",
+          "store_auth_apply_to": "Apply to",
+          "store_auth_apply_to_hint": "When nothing is selected, the rule applies to all request types.",
+          "store_auth_apply_registry": "Registry",
+          "store_auth_apply_metadata": "Metadata",
+          "store_auth_apply_artifact": "Artifact",
+          "store_auth_type_none": "None",
+          "store_auth_type_bearer": "Bearer",
+          "store_auth_type_basic": "Basic",
+          "store_auth_type_header": "Custom header",
+          "store_auth_type_github_token": "GitHub token",
+          "store_auth_token_env": "Token env var",
+          "store_auth_username_env": "Username env var",
+          "store_auth_password_env": "Password env var",
+          "store_auth_header_name": "Header name",
+          "store_auth_header_value_env": "Header value env var",
+          "store_auth_allow_insecure": "Allow insecure HTTP URLs",
           "logs_max_size": "Log File Size Limit (MB)",
           "error_logs_max_files": "Retained Error Log Files",
           "usage_statistics_enabled": "Enable In-memory Usage Statistics",
@@ -1643,13 +1680,41 @@
     "badge_update": "Update available",
     "badge_effective": "Effective",
     "version_arrow": "v{{from}} → v{{to}}",
+    "install_type": "Install: {{type}}",
+    "platforms": "Platforms: {{platforms}}",
+    "auth_required": "Auth required",
+    "auth_configured": "Auth configured",
+    "auth_required_hint": "Configure plugins.store-auth before installing from this source or artifact URL",
+    "source_errors_title": "Some plugin sources failed to load",
     "install": "Install",
     "update": "Update",
     "manage": "Manage",
     "install_confirm_title": "Install plugin",
     "install_confirm_message": "Download {{target}} from the plugin registry and install it into the local plugin directory?",
     "update_confirm_title": "Update plugin",
-    "update_confirm_message": "Download and install the latest version of {{target}}?",
+    "update_confirm_message": "Download and install {{target}}?",
+    "install_version_label": "Version",
+    "install_version_latest": "latest",
+    "install_version_latest_mode": "Latest stable",
+    "install_version_latest_hint": "Resolved by the backend during install. Current listed version: {{version}}.",
+    "install_version_release_mode": "Choose release",
+    "install_version_release_hint": "Read installable tags from GitHub Releases.",
+    "install_version_manual_mode": "Manual release tag",
+    "install_version_manual_hint": "Use only when automatic release loading is unavailable.",
+    "install_versions_loading": "Loading GitHub Releases...",
+    "install_versions_load_failed": "Failed to load release versions",
+    "install_version_non_github": "This plugin repository is not a GitHub repository",
+    "install_versions_empty": "No selectable releases were found.",
+    "install_versions_only_prerelease": "Only prerelease versions are available. Show prereleases to choose one.",
+    "install_version_release_select": "Choose release version",
+    "install_version_release_placeholder": "Choose release version",
+    "install_version_prerelease_badge": "prerelease",
+    "install_version_assets_count": "{{count}} assets",
+    "install_version_show_prerelease": "Show prerelease versions",
+    "install_version_manual_placeholder": "For example v0.1.4",
+    "install_version_manual_error": "Release tags can only contain letters, numbers, dots, underscores, plus signs, and hyphens; spaces and slashes are not allowed.",
+    "install_version_current_selected": "{{version}} is already installed. Choose another version.",
+    "install_version_releases_link": "View GitHub Releases",
     "install_success": "Plugin installed",
     "update_success": "Plugin updated",
     "install_failed": "Failed to install plugin",
@@ -1850,14 +1915,20 @@
     },
     "categories": {
       "title": "Providers",
-      "activeCount": "{{active}}/{{total}} active"
+      "activeCount": "{{active}}/{{total}} active",
+      "quickFill": "Quick Fill"
     },
     "providerNames": {
       "gemini": "Gemini",
       "codex": "Codex",
       "claude": "Claude",
       "vertex": "Vertex",
-      "openaiCompatibility": "OpenAI Compatible"
+      "openaiCompatibility": "OpenAI Compatible",
+      "claudeApi": "ClaudeAPI",
+      "apikeyFun": "APIKEY.FUN",
+      "code0": "Code0",
+      "fennoAI": "FennoAI",
+      "qiniuCloud": "Qiniu Cloud"
     },
     "table": {
       "key": "Key",
@@ -1959,7 +2030,12 @@
         "nameRequired": "Name is required",
         "apiKeyRequired": "At least one API key is required",
         "baseUrlRequired": "Base URL is required"
-      }
+      },
+      "showAllEntries": "Show all ({{count}})",
+      "showFewerEntries": "Show fewer",
+      "proxyBadge": "Proxy",
+      "modelBadgeImage": "Image",
+      "modelBadgeThinking": "Thinking"
     },
     "delete": {
       "title": "Delete resource",
@@ -2023,6 +2099,71 @@
     },
     "modelCatalog": {
       "notLoaded": "Not loaded"
+    },
+    "sponsor": {
+      "protocolSummary": "Anthropic / OpenAI / Gemini / Codex API (Responses)",
+      "detailHint": "{{provider}} is persisted into the matching API key configs by protocol; this view manages them together.",
+      "registerLink": "Register here",
+      "registerNow": "Register now",
+      "dashboardLink": "Dashboard",
+      "emptyRegisterHint": "No configuration yet.",
+      "apiKeyHint": "This key is only written to the selected group/protocol config.",
+      "usageCheck": "Check usage",
+      "usageChecking": "Checking",
+      "usageRemaining": "Remaining: {{amount}} {{unit}}",
+      "usageBreakdown": "Used {{used}} / Limit {{limit}}",
+      "usageStatus": "Status: {{status}}",
+      "usageInvalid": "Invalid key",
+      "usageEmpty": "The endpoint returned no usage data.",
+      "usageApiKeyRequired": "API key is required",
+      "groupedKeysTitle": "Grouped keys",
+      "groupedKeysHint": "Platform keys may be bound to a group when created. Each grouped key here manages one protocol, and model discovery only uses that protocol.",
+      "groupedKey": "Grouped key #{{index}}",
+      "addGroupedKey": "Add grouped key",
+      "removeGroupedKey": "Remove grouped key",
+      "protocol": "Group/protocol",
+      "protocolHint": "Select the group/protocol for this key.",
+      "protocolEndpoint": "Current protocol endpoint",
+      "urlMode": "{{provider}} URL",
+      "urlHint": "All URLs use the same API conventions. Saving writes only the endpoint for the current grouped protocol.",
+      "urlOptions": {
+        "standard": "Standard URL",
+        "direct": "Direct URL",
+        "domestic": "China mainland route",
+        "overseas": "Overseas route"
+      },
+      "urlOptionDescriptions": {
+        "domestic": "For users and workloads in mainland China; usually lower latency in mainland networks.",
+        "overseas": "For overseas deployments, cross-border access, or workloads that need overseas models."
+      },
+      "modelsTitle": "Protocol model settings",
+      "modelsHint": "Configure model allowlists or aliases separately for Codex API, Anthropic, Gemini, and OpenAI-compatible routes.",
+      "protocolModels": {
+        "codex": "Codex API models",
+        "anthropic": "Anthropic models",
+        "gemini": "Gemini models",
+        "openai": "OpenAI-compatible models"
+      },
+      "protocolModelHints": {
+        "codex": "Writes to the Codex API config models. Fetch from /v1/models and set aliases if needed.",
+        "anthropic": "Writes to the Anthropic config models. Fetch from /v1/models and set aliases if needed.",
+        "gemini": "Writes to the Gemini config models. Fetch from /v1beta/models and set aliases if needed.",
+        "openai": "Writes to the OpenAI-compatible config models. Fetch from /models and set aliases if needed."
+      },
+      "validation": {
+        "keyRequired": "Enter an API key for every grouped key.",
+        "protocolDuplicate": "Each protocol can only have one grouped key."
+      },
+      "openaiEntries": "OpenAI-compatible keys",
+      "codexEntries": "Codex API keys",
+      "anthropicEntries": "Anthropic keys",
+      "geminiEntries": "Gemini keys",
+      "protocols": {
+        "anthropic": "Anthropic",
+        "openai": "OpenAI Compatible",
+        "gemini": "Gemini",
+        "codexResponses": "Codex API (Responses)"
+      }
     }
   }
 }
