@@ -191,7 +191,9 @@ features:
       - src/router/MainRoutes.tsx
       - src/features/plugins/PluginsPage.tsx
       - src/features/plugins/PluginStorePage.tsx
+      - src/features/plugins/PluginStorePage.module.scss
       - src/features/plugins/PluginResourcePage.tsx
+      - src/features/plugins/pluginReleaseVersions.ts
       - src/features/plugins/pluginResources.ts
       - src/features/plugins/components/PluginInstallGateModal.tsx
       - src/features/plugins/components/PluginInstallGateModal.module.scss
@@ -216,6 +218,12 @@ features:
     required_markers:
       - DEFAULT_PLUGIN_STORE_SOURCE_ID
       - plugin_store_sources
+      - pluginStoreAuth
+      - store-auth
+      - fetchPluginReleaseVersions
+      - install_version_release_mode
+      - source_errors
+      - auth_required
       - getPluginConfirmToken
       - gate_effect_runs_code
       - server-plugin-support-update

@@ -175,6 +175,14 @@ def build_config_payload() -> dict[str, Any]:
                     "url": "https://github.com/router-for-me/plugin-store",
                 }
             ],
+            "store-auth": [
+                {
+                    "match": "https://api.github.com/repos/router-for-me/",
+                    "type": "github-token",
+                    "apply-to": ["metadata", "artifact"],
+                    "token-env": "CLIPROXY_PLUGIN_STORE_TOKEN",
+                }
+            ],
         },
     }
 
@@ -279,6 +287,13 @@ plugins:
     - id: official
       name: official
       url: https://github.com/router-for-me/plugin-store
+  store-auth:
+    - match: https://api.github.com/repos/router-for-me/
+      type: github-token
+      apply-to:
+        - metadata
+        - artifact
+      token-env: CLIPROXY_PLUGIN_STORE_TOKEN
 ampcode:
   upstream-url: https://amp.example.test
   upstream-api-key: sk-amp-smoke
@@ -329,6 +344,14 @@ def build_plugin_store_payload() -> dict[str, Any]:
                 "url": "https://github.com/router-for-me/plugin-store",
             }
         ],
+        "source_errors": [
+            {
+                "source_id": "private",
+                "source_name": "private",
+                "source_url": "https://plugins.example.test/registry.json",
+                "message": "missing store auth",
+            }
+        ],
         "plugins": [
             {
                 "source_id": "official",
@@ -340,6 +363,10 @@ def build_plugin_store_payload() -> dict[str, Any]:
                 "author": "LTS smoke",
                 "version": "0.1.0",
                 "repository": "router-for-me/mock-plugin",
+                "install_type": "github-release",
+                "auth_required": True,
+                "auth_configured": False,
+                "platforms": [{"goos": "darwin", "goarch": "arm64"}],
                 "tags": ["smoke"],
                 "installed": True,
                 "enabled": True,
@@ -1122,6 +1149,8 @@ def assert_config_yaml_roundtrip(state: MockCoreState) -> None:
         "unmanaged-lts-smoke: keep-me",
         "store-sources:",
         "https://github.com/router-for-me/plugin-store",
+        "store-auth:",
+        "CLIPROXY_PLUGIN_STORE_TOKEN",
     ]:
         if marker not in visual_payload:
             raise AssertionError(f"Visual config save dropped marker {marker!r}:\n{visual_payload}")
@@ -1490,6 +1519,13 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
                         arg=route,
                     )
                 page.get_by_text(expected_text, exact=False).first.wait_for()
+
+            page.goto(f"{app_url}?route=plugin-store-auth#/plugin-store", wait_until="domcontentloaded")
+            page.wait_for_function("() => window.location.hash.endsWith('/plugin-store')")
+            page.get_by_text("Some plugin sources failed to load", exact=False).first.wait_for()
+            page.get_by_text("Auth required", exact=False).first.wait_for()
+            page.get_by_text("Install: Github Release", exact=False).first.wait_for()
+            page.get_by_text("Platforms: darwin/arm64", exact=False).first.wait_for()
 
             page.goto(f"{app_url}?route=dashboard#/", wait_until="domcontentloaded")
             page.wait_for_function("() => window.location.hash.endsWith('/')")
