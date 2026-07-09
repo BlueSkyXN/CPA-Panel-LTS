@@ -17,6 +17,7 @@ import type {
   DiagramLine,
   SourceNode
 } from './ModelMappingDiagramTypes';
+import { hasModelAliasConflict } from './aliasValidation';
 import styles from './ModelMappingDiagram.module.scss';
 
 export interface ModelMappingDiagramProps {
@@ -458,7 +459,12 @@ export const ModelMappingDiagram = forwardRef<ModelMappingDiagramRef, ModelMappi
       setAddAliasError(t('oauth_model_alias.diagram_please_enter_alias'));
       return;
     }
-    if (aliasNodes.some(a => a.alias === trimmed)) {
+    if (
+      hasModelAliasConflict(
+        aliasNodes.map((alias) => alias.alias),
+        trimmed
+      )
+    ) {
       setAddAliasError(t('oauth_model_alias.diagram_alias_exists'));
       return;
     }
@@ -483,7 +489,13 @@ export const ModelMappingDiagram = forwardRef<ModelMappingDiagramRef, ModelMappi
       setRenameState(null);
       return;
     }
-    if (aliasNodes.some(a => a.alias === trimmed)) {
+    if (
+      hasModelAliasConflict(
+        aliasNodes.map((alias) => alias.alias),
+        trimmed,
+        renameState?.oldAlias
+      )
+    ) {
       setRenameError(t('oauth_model_alias.diagram_alias_exists'));
       return;
     }
