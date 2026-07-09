@@ -39,6 +39,7 @@ export interface OAuthModelAliasEntry {
   name: string;
   alias: string;
   fork?: boolean;
+  forceMapping?: boolean;
 }
 
 export type OAuthModelAlias = Record<string, OAuthModelAliasEntry[]>;
