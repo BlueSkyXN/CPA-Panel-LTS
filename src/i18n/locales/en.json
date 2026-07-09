@@ -2124,6 +2124,7 @@
       "protocolSummary": "Anthropic / OpenAI / Gemini / Codex API (Responses)",
       "detailHint": "{{provider}} is persisted into the matching API key configs by protocol; this view manages them together.",
       "apiKeyHint": "This key is only written to the selected group/protocol config.",
+      "aggregationConflict": "This grouped provider contains multiple backend configs or OpenAI keys. Edit it in the source configuration to avoid data loss.",
       "groupedKeysTitle": "Grouped keys",
       "groupedKeysHint": "Platform keys may be bound to a group when created. Each grouped key here manages one protocol, and model discovery only uses that protocol.",
       "groupedKey": "Grouped key #{{index}}",

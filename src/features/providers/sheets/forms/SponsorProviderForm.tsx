@@ -15,6 +15,7 @@ import { maskApiKey } from '@/utils/format';
 import type { ModelInfo } from '@/utils/models';
 import {
   discoveryBrandForSponsorProtocol,
+  getSponsorAggregationConflict,
   getSponsorProviderDefinition,
   sponsorProtocolI18nKey,
   sponsorProtocolModelI18nKey,
@@ -722,6 +723,19 @@ export function SponsorProviderForm({
       setError(err instanceof Error ? err.message : String(err));
     }
   };
+
+  const aggregationConflict =
+    mode === 'edit'
+      ? getSponsorAggregationConflict(getSponsorRaw(resource, definition.brand))
+      : null;
+
+  if (aggregationConflict) {
+    return (
+      <form id={formId} className={styles.form} onSubmit={(event) => event.preventDefault()}>
+        <div className={styles.errorBox}>{t('providersPage.sponsor.aggregationConflict')}</div>
+      </form>
+    );
+  }
 
   return (
     <form id={formId} className={styles.form} onSubmit={handleSubmit} noValidate>
