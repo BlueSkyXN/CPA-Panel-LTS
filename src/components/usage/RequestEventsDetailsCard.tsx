@@ -23,7 +23,13 @@ import { downloadBlob } from '@/utils/download';
 import styles from '@/pages/UsagePage.module.scss';
 
 const ALL_FILTER = '__all__';
+const SERVICE_TIER_PRIORITY_FILTER = '__service_tier_priority__';
+const SERVICE_TIER_STANDARD_FILTER = '__service_tier_standard__';
+const SERVICE_TIER_LEGACY_UNKNOWN_FILTER = '__service_tier_legacy_unknown__';
+const SERVICE_TIER_OTHER_FILTER_PREFIX = '__service_tier_other__:';
 const MAX_RENDERED_EVENTS = 500;
+
+type ServiceTierKind = 'priority' | 'standard' | 'legacy-unknown' | 'other';
 
 type RequestEventRow = {
   id: string;
@@ -36,6 +42,10 @@ type RequestEventRow = {
   source: string;
   sourceType: string;
   authIndex: string;
+  serviceTier: string | null;
+  serviceTierKind: ServiceTierKind;
+  serviceTierFilterValue: string;
+  serviceTierLabel: string;
   failed: boolean;
   latencyMs: number | null;
   thinking: UsageThinking | null;
@@ -66,6 +76,21 @@ const toNumber = (value: unknown): number => {
 const normalizeThinkingText = (value: unknown): string => {
   if (typeof value !== 'string') return '';
   return value.trim();
+};
+
+const getServiceTierKind = (serviceTier: string | null): ServiceTierKind => {
+  if (!serviceTier) return 'legacy-unknown';
+  const normalized = serviceTier.toLowerCase();
+  if (normalized === 'priority' || normalized === 'fast') return 'priority';
+  if (normalized === 'default' || normalized === 'standard') return 'standard';
+  return 'other';
+};
+
+const getServiceTierFilterValue = (serviceTier: string | null, kind: ServiceTierKind): string => {
+  if (kind === 'priority') return SERVICE_TIER_PRIORITY_FILTER;
+  if (kind === 'standard') return SERVICE_TIER_STANDARD_FILTER;
+  if (kind === 'legacy-unknown') return SERVICE_TIER_LEGACY_UNKNOWN_FILTER;
+  return `${SERVICE_TIER_OTHER_FILTER_PREFIX}${encodeURIComponent(serviceTier ?? '')}`;
 };
 
 const formatThinkingLabel = (thinking: UsageThinking | null): string => {
@@ -119,6 +144,7 @@ export function RequestEventsDetailsCard({
   const [modelFilter, setModelFilter] = useState(ALL_FILTER);
   const [sourceFilter, setSourceFilter] = useState(ALL_FILTER);
   const [authIndexFilter, setAuthIndexFilter] = useState(ALL_FILTER);
+  const [serviceTierFilter, setServiceTierFilter] = useState(ALL_FILTER);
   const [authFileMap, setAuthFileMap] = useState<Map<string, CredentialInfo>>(new Map());
 
   useEffect(() => {
@@ -179,6 +205,17 @@ export function RequestEventsDetailsCard({
       const sourceKey = sourceInfo.identityKey ?? `source:${sourceRaw || source}`;
       const sourceType = sourceInfo.type;
       const model = String(detail.__modelName ?? '').trim() || '-';
+      const serviceTier = detail.service_tier ?? null;
+      const serviceTierKind = getServiceTierKind(serviceTier);
+      const serviceTierFilterValue = getServiceTierFilterValue(serviceTier, serviceTierKind);
+      const serviceTierLabel =
+        serviceTierKind === 'priority'
+          ? t('usage_stats.request_events_tier_fast')
+          : serviceTierKind === 'standard'
+            ? t('usage_stats.request_events_tier_standard')
+            : serviceTierKind === 'legacy-unknown'
+              ? t('usage_stats.request_events_tier_legacy_unknown')
+              : t('usage_stats.request_events_tier_other', { tier: serviceTier });
       const inputTokens = Math.max(toNumber(detail.tokens?.input_tokens), 0);
       const outputTokens = Math.max(toNumber(detail.tokens?.output_tokens), 0);
       const reasoningTokens = Math.max(toNumber(detail.tokens?.reasoning_tokens), 0);
@@ -205,6 +242,10 @@ export function RequestEventsDetailsCard({
         source,
         sourceType,
         authIndex,
+        serviceTier,
+        serviceTierKind,
+        serviceTierFilterValue,
+        serviceTierLabel,
         failed: detail.failed === true,
         latencyMs,
         thinking,
@@ -251,7 +292,7 @@ export function RequestEventsDetailsCard({
         source: buildDisambiguatedSourceLabel(row),
       }))
       .sort((a, b) => b.timestampMs - a.timestampMs);
-  }, [authFileMap, i18n.language, sourceInfoMap, usage]);
+  }, [authFileMap, i18n.language, sourceInfoMap, t, usage]);
 
   const hasLatencyData = useMemo(() => rows.some((row) => row.latencyMs !== null), [rows]);
 
@@ -294,6 +335,30 @@ export function RequestEventsDetailsCard({
     [rows, t]
   );
 
+  const serviceTierOptions = useMemo(() => {
+    const otherOptions = new Map<string, string>();
+    rows.forEach((row) => {
+      if (row.serviceTierKind !== 'other' || otherOptions.has(row.serviceTierFilterValue)) return;
+      otherOptions.set(row.serviceTierFilterValue, row.serviceTierLabel);
+    });
+
+    return [
+      { value: ALL_FILTER, label: t('usage_stats.filter_all') },
+      { value: SERVICE_TIER_PRIORITY_FILTER, label: t('usage_stats.request_events_tier_fast') },
+      {
+        value: SERVICE_TIER_STANDARD_FILTER,
+        label: t('usage_stats.request_events_tier_standard'),
+      },
+      {
+        value: SERVICE_TIER_LEGACY_UNKNOWN_FILTER,
+        label: t('usage_stats.request_events_tier_legacy_unknown'),
+      },
+      ...Array.from(otherOptions.entries())
+        .sort(([, left], [, right]) => left.localeCompare(right, i18n.language))
+        .map(([value, label]) => ({ value, label })),
+    ];
+  }, [i18n.language, rows, t]);
+
   const modelOptionSet = useMemo(
     () => new Set(modelOptions.map((option) => option.value)),
     [modelOptions]
@@ -306,11 +371,18 @@ export function RequestEventsDetailsCard({
     () => new Set(authIndexOptions.map((option) => option.value)),
     [authIndexOptions]
   );
+  const serviceTierOptionSet = useMemo(
+    () => new Set(serviceTierOptions.map((option) => option.value)),
+    [serviceTierOptions]
+  );
 
   const effectiveModelFilter = modelOptionSet.has(modelFilter) ? modelFilter : ALL_FILTER;
   const effectiveSourceFilter = sourceOptionSet.has(sourceFilter) ? sourceFilter : ALL_FILTER;
   const effectiveAuthIndexFilter = authIndexOptionSet.has(authIndexFilter)
     ? authIndexFilter
+    : ALL_FILTER;
+  const effectiveServiceTierFilter = serviceTierOptionSet.has(serviceTierFilter)
+    ? serviceTierFilter
     : ALL_FILTER;
 
   const filteredRows = useMemo(
@@ -322,9 +394,18 @@ export function RequestEventsDetailsCard({
           effectiveSourceFilter === ALL_FILTER || row.sourceKey === effectiveSourceFilter;
         const authIndexMatched =
           effectiveAuthIndexFilter === ALL_FILTER || row.authIndex === effectiveAuthIndexFilter;
-        return modelMatched && sourceMatched && authIndexMatched;
+        const serviceTierMatched =
+          effectiveServiceTierFilter === ALL_FILTER ||
+          row.serviceTierFilterValue === effectiveServiceTierFilter;
+        return modelMatched && sourceMatched && authIndexMatched && serviceTierMatched;
       }),
-    [effectiveAuthIndexFilter, effectiveModelFilter, effectiveSourceFilter, rows]
+    [
+      effectiveAuthIndexFilter,
+      effectiveModelFilter,
+      effectiveServiceTierFilter,
+      effectiveSourceFilter,
+      rows,
+    ]
   );
 
   const renderedRows = useMemo(() => filteredRows.slice(0, MAX_RENDERED_EVENTS), [filteredRows]);
@@ -332,12 +413,14 @@ export function RequestEventsDetailsCard({
   const hasActiveFilters =
     effectiveModelFilter !== ALL_FILTER ||
     effectiveSourceFilter !== ALL_FILTER ||
-    effectiveAuthIndexFilter !== ALL_FILTER;
+    effectiveAuthIndexFilter !== ALL_FILTER ||
+    effectiveServiceTierFilter !== ALL_FILTER;
 
   const handleClearFilters = () => {
     setModelFilter(ALL_FILTER);
     setSourceFilter(ALL_FILTER);
     setAuthIndexFilter(ALL_FILTER);
+    setServiceTierFilter(ALL_FILTER);
   };
 
   const handleExportCsv = () => {
@@ -349,6 +432,7 @@ export function RequestEventsDetailsCard({
       'source',
       'source_raw',
       'auth_index',
+      'service_tier',
       'result',
       ...(hasLatencyData ? ['latency_ms'] : []),
       'thinking_intensity',
@@ -369,6 +453,7 @@ export function RequestEventsDetailsCard({
         row.source,
         row.sourceRaw,
         row.authIndex,
+        row.serviceTier ?? '',
         row.failed ? 'failed' : 'success',
         ...(hasLatencyData ? [row.latencyMs ?? ''] : []),
         row.thinking?.intensity ?? '',
@@ -402,6 +487,7 @@ export function RequestEventsDetailsCard({
       source: row.source,
       source_raw: row.sourceRaw,
       auth_index: row.authIndex,
+      service_tier: row.serviceTier,
       failed: row.failed,
       ...(hasLatencyData && row.latencyMs !== null ? { latency_ms: row.latencyMs } : {}),
       ...(row.thinking ? { thinking: row.thinking } : {}),
@@ -494,6 +580,19 @@ export function RequestEventsDetailsCard({
             fullWidth={false}
           />
         </div>
+        <div className={styles.requestEventsFilterItem}>
+          <span className={styles.requestEventsFilterLabel}>
+            {t('usage_stats.request_events_filter_tier')}
+          </span>
+          <Select
+            value={effectiveServiceTierFilter}
+            options={serviceTierOptions}
+            onChange={setServiceTierFilter}
+            className={styles.requestEventsSelect}
+            ariaLabel={t('usage_stats.request_events_filter_tier')}
+            fullWidth={false}
+          />
+        </div>
       </div>
 
       {loading && rows.length === 0 ? (
@@ -531,6 +630,7 @@ export function RequestEventsDetailsCard({
                   <th>{t('usage_stats.model_name')}</th>
                   <th>{t('usage_stats.request_events_source')}</th>
                   <th>{t('usage_stats.request_events_auth_index')}</th>
+                  <th>{t('usage_stats.request_events_tier')}</th>
                   <th>{t('usage_stats.request_events_result')}</th>
                   {hasLatencyData && <th title={latencyHint}>{t('usage_stats.time')}</th>}
                   <th>{t('usage_stats.thinking_intensity')}</th>
@@ -556,6 +656,22 @@ export function RequestEventsDetailsCard({
                     </td>
                     <td className={styles.requestEventsAuthIndex} title={row.authIndex}>
                       {row.authIndex}
+                    </td>
+                    <td>
+                      <span
+                        className={`${styles.requestEventsTierBadge} ${
+                          row.serviceTierKind === 'priority'
+                            ? styles.requestEventsTierPriority
+                            : row.serviceTierKind === 'standard'
+                              ? styles.requestEventsTierStandard
+                              : row.serviceTierKind === 'legacy-unknown'
+                                ? styles.requestEventsTierLegacyUnknown
+                                : styles.requestEventsTierOther
+                        }`}
+                        title={row.serviceTier ?? row.serviceTierLabel}
+                      >
+                        {row.serviceTierLabel}
+                      </span>
                     </td>
                     <td>
                       <span

@@ -41,6 +41,8 @@ features:
       - usageApi.importUsage
       - calculateStatusBarData
       - collectUsageDetailsForCandidates
+      - service_tier
+      - request_events_filter_tier
     validation:
       - npm run check:lts
       - npm run check:feature-contract

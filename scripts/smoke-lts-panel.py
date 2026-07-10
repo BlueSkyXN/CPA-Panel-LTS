@@ -9,6 +9,7 @@ the single-file dist first.
 from __future__ import annotations
 
 import argparse
+import csv
 import contextlib
 import json
 import mimetypes
@@ -17,6 +18,7 @@ import re
 import socket
 import sys
 import threading
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -188,21 +190,96 @@ def build_config_payload() -> dict[str, Any]:
 
 
 def build_usage_payload() -> dict[str, Any]:
-    # The full usage parser tolerates multiple shapes; this keeps the payload
-    # intentionally small while proving the page reaches /usage.
+    now = datetime.now(timezone.utc)
+
+    def timestamp(minutes_ago: int) -> str:
+        return (now - timedelta(minutes=minutes_ago)).isoformat().replace("+00:00", "Z")
+
+    details = [
+        {
+            "timestamp": timestamp(1),
+            "source": "codex-key-1",
+            "auth_index": "codex-smoke-auth",
+            "service_tier": " priority ",
+            "latency": 110,
+            "tokens": {
+                "input_tokens": 12,
+                "output_tokens": 8,
+                "reasoning_tokens": 2,
+                "cached_tokens": 1,
+                "total_tokens": 23,
+            },
+            "failed": False,
+        },
+        {
+            "timestamp": timestamp(2),
+            "source": "codex-key-1",
+            "authIndex": "codex-smoke-auth",
+            "serviceTier": " default ",
+            "latency": 120,
+            "tokens": {
+                "input_tokens": 10,
+                "output_tokens": 6,
+                "reasoning_tokens": 0,
+                "cached_tokens": 0,
+                "total_tokens": 16,
+            },
+            "failed": False,
+        },
+        {
+            "timestamp": timestamp(3),
+            "source": "codex-key-1",
+            "AuthIndex": "codex-smoke-auth",
+            "latency": 130,
+            "tokens": {
+                "input_tokens": 9,
+                "output_tokens": 3,
+                "reasoning_tokens": 0,
+                "cached_tokens": 0,
+                "total_tokens": 12,
+            },
+            "failed": True,
+        },
+        {
+            "timestamp": timestamp(4),
+            "source": "codex-key-1",
+            "auth_index": "codex-smoke-auth",
+            "ServiceTier": " flex ",
+            "latency": 140,
+            "tokens": {
+                "input_tokens": 11,
+                "output_tokens": 7,
+                "reasoning_tokens": 1,
+                "cached_tokens": 0,
+                "total_tokens": 19,
+            },
+            "failed": False,
+        },
+    ]
+
     return {
         "usage": {
-            "requests": [
-                {
-                    "time": "2026-06-16T00:00:00Z",
-                    "model": "gpt-5",
-                    "api": "codex",
-                    "api_key": "codex-key-1",
-                    "success": True,
-                    "input_tokens": 12,
-                    "output_tokens": 8,
+            "total_requests": 4,
+            "success_count": 3,
+            "failure_count": 1,
+            "total_tokens": 70,
+            "apis": {
+                "POST /v1/responses": {
+                    "total_requests": 4,
+                    "success_count": 3,
+                    "failure_count": 1,
+                    "total_tokens": 70,
+                    "models": {
+                        "gpt-5.5": {
+                            "total_requests": 4,
+                            "success_count": 3,
+                            "failure_count": 1,
+                            "total_tokens": 70,
+                            "details": details,
+                        }
+                    },
                 }
-            ]
+            },
         }
     }
 
@@ -1438,6 +1515,89 @@ def run_remote_cloud_connect_runtime_smoke(page: Any, app_url: str) -> None:
     page.wait_for_function("() => document.querySelectorAll('[role=\"dialog\"]').length === 0")
 
 
+def run_usage_service_tier_smoke(page: Any) -> None:
+    card = page.get_by_text("Request Events", exact=True).locator("xpath=../..")
+    card.wait_for()
+    card.get_by_role("columnheader", name="Tier", exact=True).wait_for()
+
+    rows = card.locator("tbody tr")
+
+    def wait_for_row_count(expected: int) -> None:
+        for _ in range(50):
+            if rows.count() == expected:
+                return
+            page.wait_for_timeout(100)
+        raise AssertionError(
+            f"Expected {expected} request event row(s), found {rows.count()}"
+        )
+
+    wait_for_row_count(4)
+    for expected_label in [
+        "Fast / Priority",
+        "Standard",
+        "Legacy / Unknown",
+        "Other: flex",
+    ]:
+        card.get_by_text(expected_label, exact=True).wait_for()
+
+    with page.expect_download() as csv_download:
+        card.get_by_role("button", name="Export CSV", exact=True).click()
+    csv_path = csv_download.value.path()
+    if not csv_path:
+        raise AssertionError("Request-event CSV export did not create a download")
+    with Path(csv_path).open("r", encoding="utf-8", newline="") as csv_file:
+        csv_rows = list(csv.DictReader(csv_file))
+    csv_tiers = sorted(row.get("service_tier", "") for row in csv_rows)
+    if csv_tiers != ["", "default", "flex", "priority"]:
+        raise AssertionError(f"Request-event CSV lost raw service_tier values: {csv_tiers!r}")
+
+    with page.expect_download() as json_download:
+        card.get_by_role("button", name="Export JSON", exact=True).click()
+    json_path = json_download.value.path()
+    if not json_path:
+        raise AssertionError("Request-event JSON export did not create a download")
+    json_rows = json.loads(Path(json_path).read_text(encoding="utf-8"))
+    json_tiers = sorted(
+        "<null>" if row.get("service_tier") is None else str(row.get("service_tier"))
+        for row in json_rows
+    )
+    if json_tiers != ["<null>", "default", "flex", "priority"]:
+        raise AssertionError(f"Request-event JSON lost raw service_tier values: {json_tiers!r}")
+
+    tier_select = card.get_by_label("Tier", exact=True)
+    for option_label in [
+        "Fast / Priority",
+        "Standard",
+        "Legacy / Unknown",
+        "Other: flex",
+    ]:
+        tier_select.click()
+        page.get_by_role("option", name=option_label, exact=True).click()
+        wait_for_row_count(1)
+        if option_label not in rows.first.inner_text():
+            raise AssertionError(
+                f"Tier filter {option_label!r} returned the wrong request event row"
+            )
+
+    card.get_by_role("button", name="Clear Filters", exact=True).click()
+    wait_for_row_count(4)
+
+    page.set_viewport_size({"width": 390, "height": 844})
+    tier_select.wait_for()
+    table_metrics = card.locator("table").evaluate(
+        """(table) => ({
+          wrapperOverflowX: getComputedStyle(table.parentElement).overflowX,
+          wrapperClientWidth: table.parentElement.clientWidth,
+          wrapperScrollWidth: table.parentElement.scrollWidth,
+        })"""
+    )
+    if table_metrics["wrapperOverflowX"] not in {"auto", "scroll"}:
+        raise AssertionError(
+            f"Request-event table is not horizontally scrollable on narrow screens: {table_metrics!r}"
+        )
+    page.set_viewport_size({"width": 1280, "height": 720})
+
+
 def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: bool) -> None:
     try:
         from playwright.sync_api import Error as PlaywrightError
@@ -1519,6 +1679,8 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
                         arg=route,
                     )
                 page.get_by_text(expected_text, exact=False).first.wait_for()
+                if route == "/usage":
+                    run_usage_service_tier_smoke(page)
 
             page.goto(f"{app_url}?route=plugin-store-auth#/plugin-store", wait_until="domcontentloaded")
             page.wait_for_function("() => window.location.hash.endsWith('/plugin-store')")

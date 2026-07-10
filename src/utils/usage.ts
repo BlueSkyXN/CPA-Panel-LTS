@@ -64,6 +64,7 @@ export interface UsageDetail {
   timestamp: string;
   source: string;
   auth_index: string | number | null;
+  service_tier?: string | null;
   latency_ms?: number;
   tokens: {
     input_tokens: number;
@@ -291,6 +292,19 @@ export const normalizeAuthIndex = (value: unknown) => {
   }
   return null;
 };
+
+export const normalizeServiceTier = (value: unknown): string | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed || null;
+};
+
+const extractServiceTier = (detail: Record<string, unknown>): string | null =>
+  normalizeServiceTier(detail.service_tier) ??
+  normalizeServiceTier(detail.serviceTier) ??
+  normalizeServiceTier(detail.ServiceTier);
 
 const USAGE_SOURCE_PREFIX_KEY = 'k:';
 const USAGE_SOURCE_PREFIX_MASKED = 'm:';
@@ -586,6 +600,7 @@ export function collectUsageDetails(usageData: unknown): UsageDetail[] {
             detailRaw?.authIndex ??
             detailRaw?.AuthIndex ??
             null) as UsageDetail['auth_index'],
+          service_tier: extractServiceTier(detailRaw),
           latency_ms: latencyMs ?? undefined,
           tokens: tokensRaw as unknown as UsageDetail['tokens'],
           thinking: normalizeUsageThinking(detailRaw.thinking),
@@ -663,6 +678,7 @@ export function collectUsageDetailsWithEndpoint(usageData: unknown): UsageDetail
             detailRaw?.authIndex ??
             detailRaw?.AuthIndex ??
             null) as UsageDetail['auth_index'],
+          service_tier: extractServiceTier(detailRaw),
           latency_ms: latencyMs ?? undefined,
           tokens: tokensRaw as unknown as UsageDetail['tokens'],
           thinking: normalizeUsageThinking(detailRaw.thinking),
