@@ -139,6 +139,10 @@ for path in \
   src/utils/usageIndex.ts \
   src/utils/usage \
   src/utils/usage/cacheTokens.test.mjs \
+  src/utils/usage/importPreflight.ts \
+  src/utils/usage/importPreflight.test.mjs \
+  src/utils/usage/reasoningEffort.ts \
+  src/utils/usage/reasoningEffort.test.mjs \
   src/utils/recentRequests.ts \
   src/utils/quota \
   src/utils/constants.ts \
@@ -179,12 +183,24 @@ require_file_contains src/utils/usage.ts "service_tier"
 require_file_contains src/utils/usage.ts "resolveUsageTotalTokens"
 require_file_contains src/utils/usage/cacheTokens.ts "resolveCacheWriteUnitPrice"
 require_file_contains src/utils/usage/cacheTokens.test.mjs "only explicit GPT-5.6 model slugs"
+require_file_contains src/utils/usage.ts "reasoning_effort"
+require_file_contains src/utils/usage/importPreflight.ts "analyzeUsageImport"
+require_file_contains src/utils/usage/importPreflight.ts "legacyCreationAlias"
+require_file_contains src/utils/usage/importPreflight.test.mjs "legacy and canonical creation-only"
+require_file_contains src/utils/usage/reasoningEffort.ts "classifyUsageReasoningEffort"
+require_file_contains src/utils/usage/reasoningEffort.test.mjs "known Sol and Terra Max"
 require_file_contains src/components/usage/RequestEventsDetailsCard.tsx "service_tier"
 require_file_contains src/components/usage/RequestEventsDetailsCard.tsx "request_events_filter_tier"
+require_file_contains src/components/usage/RequestEventsDetailsCard.tsx "reasoning_effort"
+require_file_contains src/components/usage/RequestEventsDetailsCard.tsx "request_events_filter_effort"
 require_file_contains src/i18n/locales/en.json "request_events_filter_tier"
 require_file_contains src/i18n/locales/zh-CN.json "request_events_filter_tier"
 require_file_contains src/i18n/locales/zh-TW.json "request_events_filter_tier"
 require_file_contains src/i18n/locales/ru.json "request_events_filter_tier"
+require_file_contains src/i18n/locales/en.json "import_review_warning"
+require_file_contains src/i18n/locales/zh-CN.json "import_review_warning"
+require_file_contains src/i18n/locales/zh-TW.json "import_review_warning"
+require_file_contains src/i18n/locales/ru.json "import_review_warning"
 require_file_contains src/services/api/ampcode.ts "'/ampcode'"
 require_file_contains src/services/api/ampcode.ts "'/ampcode/upstream-api-keys'"
 require_file_contains src/services/api/ampcode.ts "'/ampcode/model-mappings'"
@@ -637,8 +653,15 @@ require_file_contains scripts/smoke-lts-panel-core.py "Provider write smoke pers
 
 # Smoke coverage markers.
 require_file_contains package.json "\"test:usage-cache\""
-require_file_contains package.json "\"validate:lts\": \"npm run test:usage-cache"
-require_file_contains .github/workflows/lts-panel-contract.yml "npm run test:usage-cache"
+require_file_contains package.json '"test:usage-import"'
+require_file_contains package.json '"test:usage-effort"'
+require_file_contains package.json '"test:usage"'
+require_file_contains package.json '"validate:lts": "npm run test:usage'
+require_file_contains .github/workflows/lts-panel-contract.yml "npm run test:usage"
+require_file_contains scripts/smoke-lts-panel.py "run_usage_import_review_smoke"
+require_file_contains scripts/smoke-lts-panel.py "Max / Ultra wire"
+require_file_contains scripts/smoke-lts-panel.py "Resets"
+require_file_not_contains src/components/quota/quotaConfigs.ts "formatXaiPeriodRange"
 require_file_contains package.json "\"smoke:lts\""
 require_file_contains package.json "\"smoke:lts:core\""
 require_file_contains scripts/check-panel-feature-contracts.mjs "panel-feature-contracts.yaml"

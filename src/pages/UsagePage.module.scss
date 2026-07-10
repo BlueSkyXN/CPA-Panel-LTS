@@ -937,6 +937,15 @@
   border-radius: $radius-md;
 }
 
+.requestEventsTable {
+  min-width: 1680px;
+
+  .modelCell {
+    min-width: 120px;
+    white-space: nowrap;
+  }
+}
+
 .requestEventsTimestamp {
   white-space: nowrap;
   min-width: 160px;
@@ -948,8 +957,12 @@
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
     monospace;
   font-size: 11px;
+  min-width: 150px;
   max-width: 180px;
-  word-break: break-all;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: normal;
 }
 
 .requestEventsResultSuccess {

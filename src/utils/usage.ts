@@ -18,6 +18,7 @@ import {
   resolveUsageTotalTokens,
   type UsageTokenFields,
 } from './usage/cacheTokens';
+import { normalizeReasoningEffort } from './usage/reasoningEffort';
 import { maskApiKey } from './format';
 import { parseTimestampMs } from './timestamp';
 
@@ -85,6 +86,7 @@ export interface UsageDetail {
   source: string;
   auth_index: string | number | null;
   service_tier?: string | null;
+  reasoning_effort?: string | null;
   latency_ms?: number;
   tokens: UsageTokenStats;
   thinking?: UsageThinking | null;
@@ -327,6 +329,11 @@ const extractServiceTier = (detail: Record<string, unknown>): string | null =>
   normalizeServiceTier(detail.service_tier) ??
   normalizeServiceTier(detail.serviceTier) ??
   normalizeServiceTier(detail.ServiceTier);
+
+const extractReasoningEffort = (detail: Record<string, unknown>): string | null =>
+  normalizeReasoningEffort(detail.reasoning_effort) ??
+  normalizeReasoningEffort(detail.reasoningEffort) ??
+  normalizeReasoningEffort(detail.ReasoningEffort);
 
 const USAGE_SOURCE_PREFIX_KEY = 'k:';
 const USAGE_SOURCE_PREFIX_MASKED = 'm:';
@@ -623,6 +630,7 @@ export function collectUsageDetails(usageData: unknown): UsageDetail[] {
             detailRaw?.AuthIndex ??
             null) as UsageDetail['auth_index'],
           service_tier: extractServiceTier(detailRaw),
+          reasoning_effort: extractReasoningEffort(detailRaw),
           latency_ms: latencyMs ?? undefined,
           tokens: normalizeUsageDetailTokens(tokensRaw),
           thinking: normalizeUsageThinking(detailRaw.thinking),
@@ -701,6 +709,7 @@ export function collectUsageDetailsWithEndpoint(usageData: unknown): UsageDetail
             detailRaw?.AuthIndex ??
             null) as UsageDetail['auth_index'],
           service_tier: extractServiceTier(detailRaw),
+          reasoning_effort: extractReasoningEffort(detailRaw),
           latency_ms: latencyMs ?? undefined,
           tokens: normalizeUsageDetailTokens(tokensRaw),
           thinking: normalizeUsageThinking(detailRaw.thinking),

@@ -73,6 +73,7 @@ class MockCoreState:
         self.config_yaml_puts: list[str] = []
         self.runtime_kind = "cpa"
         self.include_branded_providers = True
+        self.usage_payload = build_usage_payload()
 
     def record(self, method: str, path: str, query: str = "") -> None:
         suffix = f"?{query}" if query else ""
@@ -233,6 +234,7 @@ def build_usage_payload() -> dict[str, Any]:
             "source": "codex-key-1",
             "auth_index": "codex-smoke-auth",
             "service_tier": " priority ",
+            "reasoning_effort": " max ",
             "latency": 110,
             "tokens": {
                 "input_tokens": 12,
@@ -250,6 +252,7 @@ def build_usage_payload() -> dict[str, Any]:
             "source": "codex-key-1",
             "authIndex": "codex-smoke-auth",
             "serviceTier": " default ",
+            "reasoningEffort": " high ",
             "latency": 120,
             "tokens": {
                 "input_tokens": 10,
@@ -279,6 +282,7 @@ def build_usage_payload() -> dict[str, Any]:
             "source": "codex-key-1",
             "auth_index": "codex-smoke-auth",
             "ServiceTier": " flex ",
+            "ReasoningEffort": " low ",
             "latency": 140,
             "tokens": {
                 "input_tokens": 11,
@@ -289,26 +293,44 @@ def build_usage_payload() -> dict[str, Any]:
             },
             "failed": False,
         },
+        {
+            "timestamp": timestamp(5),
+            "source": "codex-key-1",
+            "auth_index": "codex-smoke-auth",
+            "service_tier": " cache-import ",
+            "reasoning_effort": "max",
+            "latency": 150,
+            "tokens": {
+                "input_tokens": 20,
+                "output_tokens": 5,
+                "reasoning_tokens": 0,
+                "cached_tokens": 0,
+                "cache_read_tokens": 0,
+                "cache_creation_tokens": 7,
+                "total_tokens": 32,
+            },
+            "failed": False,
+        },
     ]
 
     return {
         "usage": {
-            "total_requests": 4,
-            "success_count": 3,
+            "total_requests": 5,
+            "success_count": 4,
             "failure_count": 1,
-            "total_tokens": 70,
+            "total_tokens": 102,
             "apis": {
                 "POST /v1/responses": {
-                    "total_requests": 4,
-                    "success_count": 3,
+                    "total_requests": 5,
+                    "success_count": 4,
                     "failure_count": 1,
-                    "total_tokens": 70,
+                    "total_tokens": 102,
                     "models": {
                         "gpt-5.6-sol": {
-                            "total_requests": 4,
-                            "success_count": 3,
+                            "total_requests": 5,
+                            "success_count": 4,
                             "failure_count": 1,
-                            "total_tokens": 70,
+                            "total_tokens": 102,
                             "details": details,
                         }
                     },
@@ -717,8 +739,11 @@ class MockCoreHandler(BaseHTTPRequestHandler):
         routes: dict[str, Any] = {
             "/v0/management/config": config_payload,
             "/v0/management/auth-files": build_auth_files_payload(),
-            "/v0/management/usage": build_usage_payload(),
-            "/v0/management/usage/export": {"version": 1, "usage": build_usage_payload()["usage"]},
+            "/v0/management/usage": self.state.usage_payload,
+            "/v0/management/usage/export": {
+                "version": 1,
+                "usage": self.state.usage_payload["usage"],
+            },
             "/v0/management/api-key-usage": build_api_key_usage_payload(),
             "/v0/management/ampcode": {"ampcode": config_payload["ampcode"]},
             "/v0/management/vertex-api-key": {
@@ -813,6 +838,16 @@ class MockCoreHandler(BaseHTTPRequestHandler):
         self.state.record_body("POST", parsed.path, body)
         if parsed.path == "/v0/management/api-call":
             self._send_json(self._mock_api_call_response(body))
+            return
+        if parsed.path == "/v0/management/usage/import":
+            self._send_json(
+                {
+                    "added": 0,
+                    "skipped": 2,
+                    "total_requests": 5,
+                    "failed_requests": 1,
+                }
+            )
             return
         self._send_json({"status": "ok"})
 
@@ -1523,6 +1558,12 @@ def run_quota_runtime_smoke(page: Any, app_url: str) -> None:
         xai_card.get_by_role("button", name="Click here to refresh quota").click()
     xai_card.get_by_text("Weekly limit", exact=True).wait_for()
     xai_card.get_by_text("Used 40%", exact=True).wait_for()
+    weekly_row = xai_card.get_by_text("Weekly limit", exact=True).locator(
+        "xpath=ancestor::div[contains(@class, 'quotaRow')][1]"
+    )
+    weekly_row.get_by_text(re.compile(r"^Resets ", re.I)).wait_for()
+    if " ~ " in weekly_row.inner_text():
+        raise AssertionError("xAI weekly quota still renders the redundant full period range")
     xai_card.get_by_text("Grok 4 usage", exact=True).wait_for()
     xai_card.get_by_text("Used 25%", exact=True).wait_for()
     xai_card.get_by_text("Pay as you go", exact=True).wait_for()
@@ -1586,6 +1627,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     card = page.get_by_text("Request Events", exact=True).locator("xpath=../..")
     card.wait_for()
     card.get_by_role("columnheader", name="Tier", exact=True).wait_for()
+    card.get_by_role("columnheader", name="Effort", exact=True).wait_for()
     card.get_by_role("columnheader", name="Cache Read Tokens", exact=True).wait_for()
     card.get_by_role("columnheader", name="Cache Write Tokens", exact=True).wait_for()
 
@@ -1600,14 +1642,18 @@ def run_usage_service_tier_smoke(page: Any) -> None:
             f"Expected {expected} request event row(s), found {rows.count()}"
         )
 
-    wait_for_row_count(4)
+    wait_for_row_count(5)
     for expected_label in [
         "Fast / Priority",
         "Standard",
         "Legacy / Unknown",
         "Other: flex",
+        "Other: cache-import",
+        "Max / Ultra wire",
+        "high",
+        "low",
     ]:
-        card.get_by_text(expected_label, exact=True).wait_for()
+        card.get_by_text(expected_label, exact=True).first.wait_for()
 
     priority_rows = rows.filter(has_text="Fast / Priority")
     if priority_rows.count() != 1:
@@ -1629,8 +1675,13 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     with Path(csv_path).open("r", encoding="utf-8", newline="") as csv_file:
         csv_rows = list(csv.DictReader(csv_file))
     csv_tiers = sorted(row.get("service_tier", "") for row in csv_rows)
-    if csv_tiers != ["", "default", "flex", "priority"]:
+    if csv_tiers != ["", "cache-import", "default", "flex", "priority"]:
         raise AssertionError(f"Request-event CSV lost raw service_tier values: {csv_tiers!r}")
+    csv_efforts = sorted(row.get("reasoning_effort", "") for row in csv_rows)
+    if csv_efforts != ["", "high", "low", "max", "max"]:
+        raise AssertionError(
+            f"Request-event CSV lost raw reasoning_effort values: {csv_efforts!r}"
+        )
     priority_csv_rows = [row for row in csv_rows if row.get("service_tier") == "priority"]
     if len(priority_csv_rows) != 1:
         raise AssertionError(
@@ -1662,8 +1713,16 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         "<null>" if row.get("service_tier") is None else str(row.get("service_tier"))
         for row in json_rows
     )
-    if json_tiers != ["<null>", "default", "flex", "priority"]:
+    if json_tiers != ["<null>", "cache-import", "default", "flex", "priority"]:
         raise AssertionError(f"Request-event JSON lost raw service_tier values: {json_tiers!r}")
+    json_efforts = sorted(
+        "<null>" if row.get("reasoning_effort") is None else str(row.get("reasoning_effort"))
+        for row in json_rows
+    )
+    if json_efforts != ["<null>", "high", "low", "max", "max"]:
+        raise AssertionError(
+            f"Request-event JSON lost raw reasoning_effort values: {json_efforts!r}"
+        )
     priority_json_rows = [row for row in json_rows if row.get("service_tier") == "priority"]
     if len(priority_json_rows) != 1:
         raise AssertionError(
@@ -1691,6 +1750,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         "Standard",
         "Legacy / Unknown",
         "Other: flex",
+        "Other: cache-import",
     ]:
         tier_select.click()
         page.get_by_role("option", name=option_label, exact=True).click()
@@ -1701,7 +1761,18 @@ def run_usage_service_tier_smoke(page: Any) -> None:
             )
 
     card.get_by_role("button", name="Clear Filters", exact=True).click()
-    wait_for_row_count(4)
+    wait_for_row_count(5)
+
+    effort_select = card.get_by_label("Effort", exact=True)
+    effort_select.click()
+    page.get_by_role("option", name="Max / Ultra wire", exact=True).click()
+    wait_for_row_count(2)
+    for row_text in rows.all_inner_texts():
+        if "Max / Ultra wire" not in row_text:
+            raise AssertionError("Effort filter returned a row without the selected wire effort")
+
+    card.get_by_role("button", name="Clear Filters", exact=True).click()
+    wait_for_row_count(5)
 
     page.set_viewport_size({"width": 390, "height": 844})
     tier_select.wait_for()
@@ -1787,6 +1858,78 @@ def run_branded_provider_visibility_smoke(
         state.include_branded_providers = True
 
 
+def run_usage_import_review_smoke(page: Any, state: MockCoreState) -> None:
+    current_detail = state.usage_payload["usage"]["apis"]["POST /v1/responses"]["models"][
+        "gpt-5.6-sol"
+    ]["details"][-1]
+    legacy_detail = json.loads(json.dumps(current_detail))
+    legacy_tokens = legacy_detail["tokens"]
+    legacy_tokens["cached_tokens"] = legacy_tokens["cache_creation_tokens"]
+    legacy_tokens["cache_read_tokens"] = 0
+
+    import_payload = {
+        "version": 1,
+        "usage": {
+            "apis": {
+                "POST /v1/responses": {
+                    "models": {
+                        "gpt-5.6-sol": {
+                            "details": [legacy_detail, json.loads(json.dumps(legacy_detail))]
+                        }
+                    }
+                }
+            }
+        },
+    }
+    import_route = "POST /v0/management/usage/import"
+    before_posts = sum(request == import_route for request in state.requests)
+
+    page.locator('input[type="file"][accept*=".json"]').set_input_files(
+        {
+            "name": "usage-import-legacy-cache.json",
+            "mimeType": "application/json",
+            "buffer": json.dumps(import_payload).encode("utf-8"),
+        }
+    )
+
+    dialog = page.get_by_role("dialog", name="Review usage import")
+    dialog.wait_for()
+    for expected_text in [
+        "Version 1 · 2 request details",
+        "2 legacy cache aliases · 0 independent cache-write records",
+        "1 potential duplicates inside this file",
+        "1 potential overlaps with current usage",
+        "Export a current backup before continuing.",
+    ]:
+        dialog.get_by_text(expected_text, exact=False).wait_for()
+
+    if sum(request == import_route for request in state.requests) != before_posts:
+        raise AssertionError("Usage import POST occurred before the review dialog was confirmed")
+
+    with page.expect_response(
+        lambda response: response.request.method == "POST"
+        and response.url.endswith("/v0/management/usage/import")
+    ):
+        dialog.get_by_role("button", name="Import anyway", exact=True).click()
+
+    page.get_by_text(
+        "Import complete: added 0, skipped 2, total 5, failed 1",
+        exact=True,
+    ).wait_for()
+    if sum(request == import_route for request in state.requests) != before_posts + 1:
+        raise AssertionError("Usage import POST count did not change exactly once after confirmation")
+
+    posted_payload = json.loads(state.request_bodies[import_route][-1])
+    posted_details = posted_payload["usage"]["apis"]["POST /v1/responses"]["models"][
+        "gpt-5.6-sol"
+    ]["details"]
+    posted_tokens = posted_details[0]["tokens"]
+    if len(posted_details) != 2 or posted_tokens != legacy_tokens:
+        raise AssertionError(
+            "Usage import review mutated the uploaded legacy cache snapshot before POST"
+        )
+
+
 def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: bool) -> None:
     try:
         from playwright.sync_api import Error as PlaywrightError
@@ -1870,6 +2013,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
                 page.get_by_text(expected_text, exact=False).first.wait_for()
                 if route == "/usage":
                     run_usage_service_tier_smoke(page)
+                    run_usage_import_review_smoke(page, state)
 
             page.goto(f"{app_url}?route=plugin-store-auth#/plugin-store", wait_until="domcontentloaded")
             page.wait_for_function("() => window.location.hash.endsWith('/plugin-store')")
