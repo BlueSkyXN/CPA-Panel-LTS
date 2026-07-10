@@ -32,6 +32,7 @@ CPA Panel LTS 是 `CPA-Core-LTS` 的长期维护版 Web 管理面板。
 - 必须保持与 `CPA-Core-LTS` Management API usage endpoints 的兼容。
 - 可以选择性跟进上游 UI 修复，但不要盲目同步会移除或削弱完整统计能力的上游改动。
 - 后续轻量化改造可以移除推广文案、无用 UI、非 LTS 发布链路，但不能破坏使用统计契约。
+- 文档与运行界面保持商业中立，不包含返利链接、注册优惠、付费推荐位，也不在空配置状态推荐特定品牌。
 - Panel 的上游处理模式是 protected selective-port，不是 Core 那种 protected full-sync，因为 Panel upstream 直接删除了完整统计 UI 本身。
 
 维护参考：

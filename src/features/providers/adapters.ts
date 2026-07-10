@@ -1,12 +1,6 @@
 import type { GeminiKeyConfig, OpenAIProviderConfig, ProviderKeyConfig } from '@/types';
 import { hasDisableAllModelsRule, stripDisableAllModelsRule } from '@/components/providers/utils';
 import { maskApiKey } from '@/utils/format';
-import {
-  APIKEY_FUN_DISPLAY_NAME,
-  APIKEY_FUN_PROTOCOLS,
-  getApiKeyFunProtocolUrls,
-  resolveApiKeyFunBaseUrl,
-} from './sponsor';
 import { CLAUDE_API_DISPLAY_NAME } from './claudeApi';
 import {
   CODE0_DISPLAY_NAME,
@@ -220,10 +214,7 @@ function sponsorRawToResource(
     (raw.claude.length > 0 && !claudeDisabled ? 1 : 0) +
     (raw.gemini.length > 0 && !geminiDisabled ? 1 : 0);
   const allResourcesConfigured =
-    raw.openai.length > 0 ||
-    raw.codex.length > 0 ||
-    raw.claude.length > 0 ||
-    raw.gemini.length > 0;
+    raw.openai.length > 0 || raw.codex.length > 0 || raw.claude.length > 0 || raw.gemini.length > 0;
   const disabled = allResourcesConfigured && enabledCount === 0;
   const models = [
     ...raw.openai.flatMap((item) => collectModelNames(item.config.models)),
@@ -307,15 +298,6 @@ function sponsorRawToResource(
     } as ProviderResourceSelector,
     raw,
   };
-}
-
-export function apiKeyFunToResource(raw: SponsorProviderRaw): ProviderResource | null {
-  return sponsorRawToResource('apikeyFun', raw, {
-    displayName: APIKEY_FUN_DISPLAY_NAME,
-    protocolLabels: APIKEY_FUN_PROTOCOLS,
-    resolveBaseUrl: resolveApiKeyFunBaseUrl,
-    getProtocolUrls: getApiKeyFunProtocolUrls,
-  });
 }
 
 export function code0ToResource(raw: SponsorProviderRaw): ProviderResource | null {

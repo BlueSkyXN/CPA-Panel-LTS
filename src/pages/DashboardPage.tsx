@@ -5,7 +5,6 @@ import { IconKey, IconBot, IconFileText, IconSatellite } from '@/components/ui/i
 import { useAuthStore, useConfigStore, useModelsStore } from '@/stores';
 import { authFilesApi } from '@/services/api';
 import { useApiKeysForModels } from '@/hooks/useApiKeysForModels';
-import { hasApiKeyFunConfig } from '@/features/providers/sponsor';
 import type { AmpcodeConfig } from '@/types';
 import { formatDateValue } from '@/utils/format';
 import styles from './DashboardPage.module.scss';
@@ -128,7 +127,6 @@ export function DashboardPage() {
   const totalProviderKeys = providerStats
     ? Object.values(providerStats).reduce((sum, count) => sum + count, 0)
     : 0;
-  const isApiKeyFunConfigured = hasApiKeyFunConfig(config);
 
   const quickStats: QuickStat[] = [
     {
@@ -172,17 +170,6 @@ export function DashboardPage() {
       loading: modelsLoading,
       sublabel: t('dashboard.available_models_desc'),
     },
-    ...(!isApiKeyFunConfigured
-      ? [
-          {
-            label: t('dashboard.quick_start_card'),
-            value: t('dashboard.quick_start_entry'),
-            icon: <IconKey size={24} />,
-            path: '/quick-start',
-            sublabel: t('dashboard.quick_start_entry_desc'),
-          },
-        ]
-      : []),
   ];
 
   const routingStrategyRaw = config?.routingStrategy?.trim() || '';

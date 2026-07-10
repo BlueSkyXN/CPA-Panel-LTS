@@ -1,15 +1,4 @@
 import {
-  APIKEY_FUN_AFFILIATE_URL,
-  APIKEY_FUN_BASE_URL_OPTIONS,
-  APIKEY_FUN_DASHBOARD_URL,
-  APIKEY_FUN_DISPLAY_NAME,
-  APIKEY_FUN_PROTOCOLS,
-  APIKEY_FUN_PROVIDER_NAME,
-  getApiKeyFunProtocolUrls,
-  resolveApiKeyFunBaseUrl,
-} from './sponsor';
-import {
-  CODE0_AFFILIATE_URL,
   CODE0_BASE_URL_OPTIONS,
   CODE0_DISPLAY_NAME,
   CODE0_PROTOCOL_LABELS,
@@ -18,7 +7,6 @@ import {
   resolveCode0BaseUrl,
 } from './code0';
 import {
-  FENNO_AI_AFFILIATE_URL,
   FENNO_AI_BASE_URL_OPTIONS,
   FENNO_AI_DISPLAY_NAME,
   FENNO_AI_PROTOCOL_LABELS,
@@ -27,7 +15,6 @@ import {
   resolveFennoAIBaseUrl,
 } from './fennoAI';
 import {
-  QINIU_CLOUD_AFFILIATE_URL,
   QINIU_CLOUD_BASE_URL_OPTIONS,
   QINIU_CLOUD_DISPLAY_NAME,
   QINIU_CLOUD_PROTOCOL_LABELS,
@@ -58,42 +45,23 @@ export interface SponsorProviderDefinition {
   brand: SponsorProviderBrand;
   displayName: string;
   providerName: string;
-  affiliateUrl: string;
-  dashboardUrl?: string;
   protocols: readonly SponsorProtocol[];
   protocolLabels: readonly string[];
   defaultProtocol: SponsorProtocol;
   baseUrlOptions: readonly SponsorBaseUrlOption[];
-  supportsUsageCheck: boolean;
   resolveBaseUrl: (value: string | undefined | null) => string;
   getProtocolUrls: (value: string | undefined | null) => SponsorProtocolUrls;
 }
 
 const SPONSOR_DEFINITIONS: Record<SponsorProviderBrand, SponsorProviderDefinition> = {
-  apikeyFun: {
-    brand: 'apikeyFun',
-    displayName: APIKEY_FUN_DISPLAY_NAME,
-    providerName: APIKEY_FUN_PROVIDER_NAME,
-    affiliateUrl: APIKEY_FUN_AFFILIATE_URL,
-    dashboardUrl: APIKEY_FUN_DASHBOARD_URL,
-    protocols: ['codex', 'claude', 'openai'],
-    protocolLabels: APIKEY_FUN_PROTOCOLS,
-    defaultProtocol: 'codex',
-    baseUrlOptions: APIKEY_FUN_BASE_URL_OPTIONS,
-    supportsUsageCheck: true,
-    resolveBaseUrl: resolveApiKeyFunBaseUrl,
-    getProtocolUrls: getApiKeyFunProtocolUrls,
-  },
   code0: {
     brand: 'code0',
     displayName: CODE0_DISPLAY_NAME,
     providerName: CODE0_PROVIDER_NAME,
-    affiliateUrl: CODE0_AFFILIATE_URL,
     protocols: ['openai', 'claude', 'gemini', 'codex'],
     protocolLabels: CODE0_PROTOCOL_LABELS,
     defaultProtocol: 'openai',
     baseUrlOptions: CODE0_BASE_URL_OPTIONS,
-    supportsUsageCheck: false,
     resolveBaseUrl: resolveCode0BaseUrl,
     getProtocolUrls: getCode0ProtocolUrls,
   },
@@ -101,12 +69,10 @@ const SPONSOR_DEFINITIONS: Record<SponsorProviderBrand, SponsorProviderDefinitio
     brand: 'fennoAI',
     displayName: FENNO_AI_DISPLAY_NAME,
     providerName: FENNO_AI_PROVIDER_NAME,
-    affiliateUrl: FENNO_AI_AFFILIATE_URL,
     protocols: ['codex', 'claude'],
     protocolLabels: FENNO_AI_PROTOCOL_LABELS,
     defaultProtocol: 'codex',
     baseUrlOptions: FENNO_AI_BASE_URL_OPTIONS,
-    supportsUsageCheck: false,
     resolveBaseUrl: resolveFennoAIBaseUrl,
     getProtocolUrls: getFennoAIProtocolUrls,
   },
@@ -114,24 +80,17 @@ const SPONSOR_DEFINITIONS: Record<SponsorProviderBrand, SponsorProviderDefinitio
     brand: 'qiniuCloud',
     displayName: QINIU_CLOUD_DISPLAY_NAME,
     providerName: QINIU_CLOUD_PROVIDER_NAME,
-    affiliateUrl: QINIU_CLOUD_AFFILIATE_URL,
     protocols: ['openai', 'claude', 'gemini', 'codex'],
     protocolLabels: QINIU_CLOUD_PROTOCOL_LABELS,
     defaultProtocol: 'openai',
     baseUrlOptions: QINIU_CLOUD_BASE_URL_OPTIONS,
-    supportsUsageCheck: false,
     resolveBaseUrl: resolveQiniuCloudBaseUrl,
     getProtocolUrls: getQiniuCloudProtocolUrls,
   },
 };
 
-export const isMultiProtocolSponsorBrand = (
-  brand: ProviderBrand
-): brand is SponsorProviderBrand =>
-  brand === 'apikeyFun' ||
-  brand === 'code0' ||
-  brand === 'fennoAI' ||
-  brand === 'qiniuCloud';
+export const isMultiProtocolSponsorBrand = (brand: ProviderBrand): brand is SponsorProviderBrand =>
+  brand === 'code0' || brand === 'fennoAI' || brand === 'qiniuCloud';
 
 export const getSponsorProviderDefinition = (
   brand: SponsorProviderBrand

@@ -13,7 +13,6 @@ interface ProviderHeaderCardProps {
   showNewAction?: boolean;
   showSummary?: boolean;
   newLabel?: string;
-  variant?: 'quickStart';
   onRefresh: () => void;
   onNew: () => void;
 }
@@ -29,17 +28,13 @@ export function ProviderHeaderCard({
   showNewAction = true,
   showSummary = true,
   newLabel,
-  variant,
   onRefresh,
   onNew,
 }: ProviderHeaderCardProps) {
   const { t } = useTranslation();
-  const cardClassName = [styles.card, variant === 'quickStart' ? styles.quickStartCard : '']
-    .filter(Boolean)
-    .join(' ');
 
   return (
-    <section className={cardClassName}>
+    <section className={styles.card}>
       <div className={styles.row}>
         <div className={styles.titleArea}>
           <h1 className={styles.title}>{title ?? t('providersPage.header.title')}</h1>
