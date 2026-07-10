@@ -121,8 +121,7 @@
     "plugin_store": "插件商店",
     "config_management": "配置面板",
     "logs": "日志查看",
-    "system_info": "中心信息",
-    "quick_start": "快速开始"
+    "system_info": "中心信息"
   },
   "nav_groups": {
     "operate": "运行",
@@ -165,10 +164,7 @@
     "caring_afternoon": "稳步推进中，继续加油。",
     "caring_evening": "今天辛苦了，收尾工作做好哦。",
     "caring_night": "夜深了，别忘了早些休息。",
-    "system_overview": "系统概览",
-    "quick_start_card": "快速开始",
-    "quick_start_entry": "快速开始",
-    "quick_start_entry_desc": "进入快速开始页面"
+    "system_overview": "系统概览"
   },
   "basic_settings": {
     "title": "基础设置",
@@ -1915,8 +1911,7 @@
     },
     "categories": {
       "title": "提供商",
-      "activeCount": "{{active}}/{{total}} 活跃",
-      "quickFill": "快速填入"
+      "activeCount": "{{active}}/{{total}} 活跃"
     },
     "providerNames": {
       "gemini": "Gemini",
@@ -1925,7 +1920,6 @@
       "vertex": "Vertex",
       "openaiCompatibility": "OpenAI 兼容",
       "claudeApi": "ClaudeAPI",
-      "apikeyFun": "APIKEY.FUN",
       "code0": "Code0",
       "fennoAI": "FennoAI",
       "qiniuCloud": "七牛云"
@@ -2103,19 +2097,7 @@
     "sponsor": {
       "protocolSummary": "Anthropic / OpenAI / Gemini / Codex API (Responses)",
       "detailHint": "{{provider}} 会按协议分别写入对应的 API Key 配置,这里只做聚合管理。",
-      "registerLink": "点此注册",
-      "registerNow": "立即注册",
-      "dashboardLink": "控制面板",
-      "emptyRegisterHint": "尚未添加配置",
       "apiKeyHint": "此 Key 只会写入当前选择的分组/协议配置。",
-      "usageCheck": "查询额度",
-      "usageChecking": "查询中",
-      "usageRemaining": "剩余额度: {{amount}} {{unit}}",
-      "usageBreakdown": "已用 {{used}} / 总额 {{limit}}",
-      "usageStatus": "状态: {{status}}",
-      "usageInvalid": "Key 无效",
-      "usageEmpty": "端点未返回额度数据",
-      "usageApiKeyRequired": "API 密钥必填",
       "groupedKeysTitle": "分组 Key",
       "groupedKeysHint": "平台创建 Key 时可能需要选择分组,这里每个分组 Key 只管理一个协议,模型也只从该协议拉取。",
       "groupedKey": "分组 Key #{{index}}",

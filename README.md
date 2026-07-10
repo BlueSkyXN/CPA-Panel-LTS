@@ -32,6 +32,7 @@ Maintenance rules:
 - Keep compatibility with `CPA-Core-LTS` Management API usage endpoints.
 - Track upstream UI fixes selectively, but do not blindly sync upstream if the change removes or weakens full statistics.
 - Planned cleanup can remove promotional copy, unused UI surfaces, and non-LTS release machinery, but must not break the usage statistics contract.
+- Keep documentation and runtime UI commercial-neutral: no referral URLs, registration incentives, paid placement, or empty-state brand recommendations.
 - Panel upstream handling uses protected selective-port, not Core-style protected full-sync, because upstream deletes the full usage UI itself.
 
 Maintenance references:
