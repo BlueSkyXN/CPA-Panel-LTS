@@ -19,6 +19,7 @@ import {
   normalizeAuthIndex,
   type UsageThinking,
 } from '@/utils/usage';
+import { getUsageCacheTokenCounts } from '@/utils/usage/cacheTokens';
 import { downloadBlob } from '@/utils/download';
 import styles from '@/pages/UsagePage.module.scss';
 
@@ -53,7 +54,8 @@ type RequestEventRow = {
   inputTokens: number;
   outputTokens: number;
   reasoningTokens: number;
-  cachedTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
   totalTokens: number;
 };
 
@@ -219,10 +221,7 @@ export function RequestEventsDetailsCard({
       const inputTokens = Math.max(toNumber(detail.tokens?.input_tokens), 0);
       const outputTokens = Math.max(toNumber(detail.tokens?.output_tokens), 0);
       const reasoningTokens = Math.max(toNumber(detail.tokens?.reasoning_tokens), 0);
-      const cachedTokens = Math.max(
-        Math.max(toNumber(detail.tokens?.cached_tokens), 0),
-        Math.max(toNumber(detail.tokens?.cache_tokens), 0)
-      );
+      const { cacheReadTokens, cacheWriteTokens } = getUsageCacheTokenCounts(detail.tokens);
       const totalTokens = Math.max(
         toNumber(detail.tokens?.total_tokens),
         extractTotalTokens(detail)
@@ -253,7 +252,8 @@ export function RequestEventsDetailsCard({
         inputTokens,
         outputTokens,
         reasoningTokens,
-        cachedTokens,
+        cacheReadTokens,
+        cacheWriteTokens,
         totalTokens,
       };
     });
@@ -443,6 +443,8 @@ export function RequestEventsDetailsCard({
       'output_tokens',
       'reasoning_tokens',
       'cached_tokens',
+      'cache_read_tokens',
+      'cache_creation_tokens',
       'total_tokens',
     ];
 
@@ -463,7 +465,9 @@ export function RequestEventsDetailsCard({
         row.inputTokens,
         row.outputTokens,
         row.reasoningTokens,
-        row.cachedTokens,
+        row.cacheReadTokens,
+        row.cacheReadTokens,
+        row.cacheWriteTokens,
         row.totalTokens,
       ]
         .map((value) => encodeCsv(value))
@@ -495,7 +499,9 @@ export function RequestEventsDetailsCard({
         input_tokens: row.inputTokens,
         output_tokens: row.outputTokens,
         reasoning_tokens: row.reasoningTokens,
-        cached_tokens: row.cachedTokens,
+        cached_tokens: row.cacheReadTokens,
+        cache_read_tokens: row.cacheReadTokens,
+        cache_creation_tokens: row.cacheWriteTokens,
         total_tokens: row.totalTokens,
       },
     }));
@@ -637,7 +643,8 @@ export function RequestEventsDetailsCard({
                   <th>{t('usage_stats.input_tokens')}</th>
                   <th>{t('usage_stats.output_tokens')}</th>
                   <th>{t('usage_stats.reasoning_tokens')}</th>
-                  <th>{t('usage_stats.cached_tokens')}</th>
+                  <th>{t('usage_stats.cache_read_tokens')}</th>
+                  <th>{t('usage_stats.cache_write_tokens')}</th>
                   <th>{t('usage_stats.total_tokens')}</th>
                 </tr>
               </thead>
@@ -718,7 +725,8 @@ export function RequestEventsDetailsCard({
                     <td>{row.inputTokens.toLocaleString()}</td>
                     <td>{row.outputTokens.toLocaleString()}</td>
                     <td>{row.reasoningTokens.toLocaleString()}</td>
-                    <td>{row.cachedTokens.toLocaleString()}</td>
+                    <td>{row.cacheReadTokens.toLocaleString()}</td>
+                    <td>{row.cacheWriteTokens.toLocaleString()}</td>
                     <td>{row.totalTokens.toLocaleString()}</td>
                   </tr>
                 ))}

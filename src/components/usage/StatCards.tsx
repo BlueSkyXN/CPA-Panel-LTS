@@ -23,6 +23,7 @@ import {
 import { sparklineOptions } from '@/utils/usage/chartConfig';
 import type { UsagePayload } from './hooks/useUsageData';
 import type { SparklineBundle } from './hooks/useSparklines';
+import { getUsageCacheTokenCounts } from '@/utils/usage/cacheTokens';
 import styles from '@/pages/UsagePage.module.scss';
 
 interface StatCardData {
@@ -62,7 +63,7 @@ export function StatCards({ usage, loading, modelPrices, nowMs, sparklines }: St
 
   const { tokenBreakdown, rateStats, totalCost, latencyStats } = useMemo(() => {
     const empty = {
-      tokenBreakdown: { cachedTokens: 0, reasoningTokens: 0 },
+      tokenBreakdown: { cacheReadTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0 },
       rateStats: { rpm: 0, tpm: 0, windowMinutes: 30, requestCount: 0, tokenCount: 0 },
       totalCost: 0,
       latencyStats: {
@@ -78,7 +79,8 @@ export function StatCards({ usage, loading, modelPrices, nowMs, sparklines }: St
 
     const latencyStats = calculateLatencyStatsFromDetails(details);
 
-    let cachedTokens = 0;
+    let cacheReadTokens = 0;
+    let cacheWriteTokens = 0;
     let reasoningTokens = 0;
     let totalCost = 0;
 
@@ -91,10 +93,9 @@ export function StatCards({ usage, loading, modelPrices, nowMs, sparklines }: St
 
     details.forEach((detail) => {
       const tokens = detail.tokens;
-      cachedTokens += Math.max(
-        typeof tokens.cached_tokens === 'number' ? Math.max(tokens.cached_tokens, 0) : 0,
-        typeof tokens.cache_tokens === 'number' ? Math.max(tokens.cache_tokens, 0) : 0
-      );
+      const cacheTokens = getUsageCacheTokenCounts(tokens);
+      cacheReadTokens += cacheTokens.cacheReadTokens;
+      cacheWriteTokens += cacheTokens.cacheWriteTokens;
       if (typeof tokens.reasoning_tokens === 'number') {
         reasoningTokens += tokens.reasoning_tokens;
       }
@@ -117,7 +118,7 @@ export function StatCards({ usage, loading, modelPrices, nowMs, sparklines }: St
 
     const denominator = windowMinutes > 0 ? windowMinutes : 1;
     return {
-      tokenBreakdown: { cachedTokens, reasoningTokens },
+      tokenBreakdown: { cacheReadTokens, cacheWriteTokens, reasoningTokens },
       rateStats: {
         rpm: requestCount / denominator,
         tpm: tokenCount / denominator,
@@ -170,8 +171,12 @@ export function StatCards({ usage, loading, modelPrices, nowMs, sparklines }: St
       meta: (
         <>
           <span className={styles.statMetaItem}>
-            {t('usage_stats.cached_tokens')}:{' '}
-            {loading ? '-' : formatCompactNumber(tokenBreakdown.cachedTokens)}
+            {t('usage_stats.cache_read_tokens')}:{' '}
+            {loading ? '-' : formatCompactNumber(tokenBreakdown.cacheReadTokens)}
+          </span>
+          <span className={styles.statMetaItem}>
+            {t('usage_stats.cache_write_tokens')}:{' '}
+            {loading ? '-' : formatCompactNumber(tokenBreakdown.cacheWriteTokens)}
           </span>
           <span className={styles.statMetaItem}>
             {t('usage_stats.reasoning_tokens')}:{' '}

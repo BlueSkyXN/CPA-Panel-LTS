@@ -10,6 +10,7 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,scss}\"",
     "type-check": "tsc --noEmit",
+    "test:usage-cache": "node --test src/utils/usage/cacheTokens.test.mjs",
     "check:feature-contract": "node scripts/check-panel-feature-contracts.mjs",
     "check:lts": "scripts/check-lts-panel-contract.sh",
     "validate:lts": "npm run check:lts && npm run type-check && npm run lint && npm run build",

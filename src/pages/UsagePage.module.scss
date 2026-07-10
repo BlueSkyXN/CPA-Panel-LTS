@@ -667,6 +667,12 @@
   }
 }
 
+.priceFieldHint {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
 .pricesList {
   display: flex;
   flex-direction: column;

@@ -12,6 +12,12 @@ import {
   extractLatencyMs,
   finalizeLatencyStats,
 } from './usage/latency';
+import {
+  calculateFallbackUsageTotalTokens,
+  calculateUsageCost,
+  getUsageCacheTokenCounts,
+  type UsageTokenFields,
+} from './usage/cacheTokens';
 import { maskApiKey } from './format';
 import { parseTimestampMs } from './timestamp';
 
@@ -35,7 +41,8 @@ export interface KeyStats {
 }
 
 export interface TokenBreakdown {
-  cachedTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
   reasoningTokens: number;
 }
 
@@ -58,6 +65,19 @@ export interface ModelPrice {
   prompt: number;
   completion: number;
   cache: number;
+  cacheWrite?: number;
+}
+
+export interface UsageTokenStats extends UsageTokenFields {
+  input_tokens?: number;
+  output_tokens?: number;
+  reasoning_tokens?: number;
+  cached_tokens?: number;
+  cache_tokens?: number;
+  cache_read_tokens?: number;
+  cache_creation_tokens?: number;
+  cache_write_tokens?: number;
+  total_tokens?: number;
 }
 
 export interface UsageDetail {
@@ -66,14 +86,7 @@ export interface UsageDetail {
   auth_index: string | number | null;
   service_tier?: string | null;
   latency_ms?: number;
-  tokens: {
-    input_tokens: number;
-    output_tokens: number;
-    reasoning_tokens: number;
-    cached_tokens: number;
-    cache_tokens?: number;
-    total_tokens: number;
-  };
+  tokens: UsageTokenStats;
   thinking?: UsageThinking | null;
   failed: boolean;
   __modelName?: string;
@@ -113,7 +126,6 @@ export interface ModelStatsSummary {
 
 export type UsageTimeRange = '7h' | '24h' | '7d' | 'all';
 
-const TOKENS_PER_PRICE_UNIT = 1_000_000;
 const MODEL_PRICE_STORAGE_KEY = 'cli-proxy-model-prices-v2';
 const USAGE_ENDPOINT_METHOD_REGEX = /^(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\s+(\S+)/i;
 const USAGE_TIME_RANGE_MS: Record<Exclude<UsageTimeRange, 'all'>, number> = {
@@ -129,6 +141,16 @@ const getApisRecord = (usageData: unknown): Record<string, unknown> | null => {
   const usageRecord = isRecord(usageData) ? usageData : null;
   const apisRaw = usageRecord ? usageRecord.apis : null;
   return isRecord(apisRaw) ? apisRaw : null;
+};
+
+const normalizeUsageDetailTokens = (tokensRaw: Record<string, unknown>): UsageTokenStats => {
+  const { cacheReadTokens, cacheWriteTokens } = getUsageCacheTokenCounts(tokensRaw);
+  return {
+    ...tokensRaw,
+    cached_tokens: cacheReadTokens,
+    cache_read_tokens: cacheReadTokens,
+    cache_creation_tokens: cacheWriteTokens,
+  } as UsageTokenStats;
 };
 
 const normalizeUsageThinking = (value: unknown): UsageThinking | null => {
@@ -239,7 +261,7 @@ export function filterUsageByTimeRange<T>(
         } else {
           modelSummary.successCount += 1;
         }
-        modelSummary.totalTokens += extractTotalTokens(detailRecord);
+        modelSummary.totalTokens += extractTotalTokens(detailRecord, modelName);
       });
 
       if (!filteredDetails.length) {
@@ -602,7 +624,7 @@ export function collectUsageDetails(usageData: unknown): UsageDetail[] {
             null) as UsageDetail['auth_index'],
           service_tier: extractServiceTier(detailRaw),
           latency_ms: latencyMs ?? undefined,
-          tokens: tokensRaw as unknown as UsageDetail['tokens'],
+          tokens: normalizeUsageDetailTokens(tokensRaw),
           thinking: normalizeUsageThinking(detailRaw.thinking),
           failed: detailRaw.failed === true,
           __modelName: modelName,
@@ -680,7 +702,7 @@ export function collectUsageDetailsWithEndpoint(usageData: unknown): UsageDetail
             null) as UsageDetail['auth_index'],
           service_tier: extractServiceTier(detailRaw),
           latency_ms: latencyMs ?? undefined,
-          tokens: tokensRaw as unknown as UsageDetail['tokens'],
+          tokens: normalizeUsageDetailTokens(tokensRaw),
           thinking: normalizeUsageThinking(detailRaw.thinking),
           failed: detailRaw.failed === true,
           __modelName: modelName,
@@ -702,22 +724,16 @@ export function collectUsageDetailsWithEndpoint(usageData: unknown): UsageDetail
 /**
  * 从单条明细提取总 tokens
  */
-export function extractTotalTokens(detail: unknown): number {
+export function extractTotalTokens(detail: unknown, modelNameOverride?: string): number {
   const record = isRecord(detail) ? detail : null;
   const tokensRaw = record?.tokens;
   const tokens = isRecord(tokensRaw) ? tokensRaw : {};
   if (typeof tokens.total_tokens === 'number') {
     return tokens.total_tokens;
   }
-  const inputTokens = typeof tokens.input_tokens === 'number' ? tokens.input_tokens : 0;
-  const outputTokens = typeof tokens.output_tokens === 'number' ? tokens.output_tokens : 0;
-  const reasoningTokens = typeof tokens.reasoning_tokens === 'number' ? tokens.reasoning_tokens : 0;
-  const cachedTokens = Math.max(
-    typeof tokens.cached_tokens === 'number' ? Math.max(tokens.cached_tokens, 0) : 0,
-    typeof tokens.cache_tokens === 'number' ? Math.max(tokens.cache_tokens, 0) : 0
-  );
-
-  return inputTokens + outputTokens + reasoningTokens + cachedTokens;
+  const modelName =
+    modelNameOverride ?? (typeof record?.__modelName === 'string' ? record.__modelName : '');
+  return calculateFallbackUsageTotalTokens(tokens, modelName);
 }
 
 /**
@@ -733,24 +749,24 @@ export function calculateLatencyStats(usageData: unknown): LatencyStats {
 export function calculateTokenBreakdown(usageData: unknown): TokenBreakdown {
   const details = collectUsageDetails(usageData);
   if (!details.length) {
-    return { cachedTokens: 0, reasoningTokens: 0 };
+    return { cacheReadTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0 };
   }
 
-  let cachedTokens = 0;
+  let cacheReadTokens = 0;
+  let cacheWriteTokens = 0;
   let reasoningTokens = 0;
 
   details.forEach((detail) => {
     const tokens = detail.tokens;
-    cachedTokens += Math.max(
-      typeof tokens.cached_tokens === 'number' ? Math.max(tokens.cached_tokens, 0) : 0,
-      typeof tokens.cache_tokens === 'number' ? Math.max(tokens.cache_tokens, 0) : 0
-    );
+    const cacheTokens = getUsageCacheTokenCounts(tokens);
+    cacheReadTokens += cacheTokens.cacheReadTokens;
+    cacheWriteTokens += cacheTokens.cacheWriteTokens;
     if (typeof tokens.reasoning_tokens === 'number') {
       reasoningTokens += tokens.reasoning_tokens;
     }
   });
 
-  return { cachedTokens, reasoningTokens };
+  return { cacheReadTokens, cacheWriteTokens, reasoningTokens };
 }
 
 /**
@@ -827,28 +843,7 @@ export function calculateCost(
   if (!price) {
     return 0;
   }
-  const tokens = detail.tokens;
-  const rawInputTokens = Number(tokens.input_tokens);
-  const rawCompletionTokens = Number(tokens.output_tokens);
-  const rawCachedTokensPrimary = Number(tokens.cached_tokens);
-  const rawCachedTokensAlternate = Number(tokens.cache_tokens);
-
-  const inputTokens = Number.isFinite(rawInputTokens) ? Math.max(rawInputTokens, 0) : 0;
-  const completionTokens = Number.isFinite(rawCompletionTokens)
-    ? Math.max(rawCompletionTokens, 0)
-    : 0;
-  const cachedTokens = Math.max(
-    Number.isFinite(rawCachedTokensPrimary) ? Math.max(rawCachedTokensPrimary, 0) : 0,
-    Number.isFinite(rawCachedTokensAlternate) ? Math.max(rawCachedTokensAlternate, 0) : 0
-  );
-  const promptTokens = Math.max(inputTokens - cachedTokens, 0);
-
-  const promptCost = (promptTokens / TOKENS_PER_PRICE_UNIT) * (Number(price.prompt) || 0);
-  const cachedCost = (cachedTokens / TOKENS_PER_PRICE_UNIT) * (Number(price.cache) || 0);
-  const completionCost =
-    (completionTokens / TOKENS_PER_PRICE_UNIT) * (Number(price.completion) || 0);
-  const total = promptCost + cachedCost + completionCost;
-  return Number.isFinite(total) && total > 0 ? total : 0;
+  return calculateUsageCost(detail.tokens, modelName, price);
 }
 
 /**
@@ -888,6 +883,7 @@ export function loadModelPrices(): Record<string, ModelPrice> {
       const promptRaw = Number(priceRecord?.prompt);
       const completionRaw = Number(priceRecord?.completion);
       const cacheRaw = Number(priceRecord?.cache);
+      const cacheWriteRaw = Number(priceRecord?.cacheWrite);
 
       if (
         !Number.isFinite(promptRaw) &&
@@ -910,6 +906,9 @@ export function loadModelPrices(): Record<string, ModelPrice> {
         prompt,
         completion,
         cache,
+        ...(Number.isFinite(cacheWriteRaw) && cacheWriteRaw >= 0
+          ? { cacheWrite: cacheWriteRaw }
+          : {}),
       };
     });
     return normalized;
@@ -1741,7 +1740,7 @@ export function computeKeyStatsFromDetails(usageDetails: UsageDetail[]): KeyStat
   return { bySource, byAuthIndex };
 }
 
-export type TokenCategory = 'input' | 'output' | 'cached' | 'reasoning';
+export type TokenCategory = 'input' | 'output' | 'cacheRead' | 'cacheWrite' | 'reasoning';
 
 export interface TokenBreakdownSeries {
   labels: string[];
@@ -1777,7 +1776,8 @@ export function buildHourlyTokenBreakdown(
   const dataByCategory: Record<TokenCategory, number[]> = {
     input: new Array(labels.length).fill(0),
     output: new Array(labels.length).fill(0),
-    cached: new Array(labels.length).fill(0),
+    cacheRead: new Array(labels.length).fill(0),
+    cacheWrite: new Array(labels.length).fill(0),
     reasoning: new Array(labels.length).fill(0),
   };
 
@@ -1801,16 +1801,14 @@ export function buildHourlyTokenBreakdown(
     const tokens = detail.tokens;
     const input = typeof tokens.input_tokens === 'number' ? Math.max(tokens.input_tokens, 0) : 0;
     const output = typeof tokens.output_tokens === 'number' ? Math.max(tokens.output_tokens, 0) : 0;
-    const cached = Math.max(
-      typeof tokens.cached_tokens === 'number' ? Math.max(tokens.cached_tokens, 0) : 0,
-      typeof tokens.cache_tokens === 'number' ? Math.max(tokens.cache_tokens, 0) : 0
-    );
+    const { cacheReadTokens, cacheWriteTokens } = getUsageCacheTokenCounts(tokens);
     const reasoning =
       typeof tokens.reasoning_tokens === 'number' ? Math.max(tokens.reasoning_tokens, 0) : 0;
 
     dataByCategory.input[bucketIndex] += input;
     dataByCategory.output[bucketIndex] += output;
-    dataByCategory.cached[bucketIndex] += cached;
+    dataByCategory.cacheRead[bucketIndex] += cacheReadTokens;
+    dataByCategory.cacheWrite[bucketIndex] += cacheWriteTokens;
     dataByCategory.reasoning[bucketIndex] += reasoning;
     hasData = true;
   });
@@ -1836,22 +1834,20 @@ export function buildDailyTokenBreakdown(usageData: unknown): TokenBreakdownSeri
     if (!dayLabel) return;
 
     if (!dayMap[dayLabel]) {
-      dayMap[dayLabel] = { input: 0, output: 0, cached: 0, reasoning: 0 };
+      dayMap[dayLabel] = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0 };
     }
 
     const tokens = detail.tokens;
     const input = typeof tokens.input_tokens === 'number' ? Math.max(tokens.input_tokens, 0) : 0;
     const output = typeof tokens.output_tokens === 'number' ? Math.max(tokens.output_tokens, 0) : 0;
-    const cached = Math.max(
-      typeof tokens.cached_tokens === 'number' ? Math.max(tokens.cached_tokens, 0) : 0,
-      typeof tokens.cache_tokens === 'number' ? Math.max(tokens.cache_tokens, 0) : 0
-    );
+    const { cacheReadTokens, cacheWriteTokens } = getUsageCacheTokenCounts(tokens);
     const reasoning =
       typeof tokens.reasoning_tokens === 'number' ? Math.max(tokens.reasoning_tokens, 0) : 0;
 
     dayMap[dayLabel].input += input;
     dayMap[dayLabel].output += output;
-    dayMap[dayLabel].cached += cached;
+    dayMap[dayLabel].cacheRead += cacheReadTokens;
+    dayMap[dayLabel].cacheWrite += cacheWriteTokens;
     dayMap[dayLabel].reasoning += reasoning;
     hasData = true;
   });
@@ -1860,7 +1856,8 @@ export function buildDailyTokenBreakdown(usageData: unknown): TokenBreakdownSeri
   const dataByCategory: Record<TokenCategory, number[]> = {
     input: labels.map((l) => dayMap[l].input),
     output: labels.map((l) => dayMap[l].output),
-    cached: labels.map((l) => dayMap[l].cached),
+    cacheRead: labels.map((l) => dayMap[l].cacheRead),
+    cacheWrite: labels.map((l) => dayMap[l].cacheWrite),
     reasoning: labels.map((l) => dayMap[l].reasoning),
   };
 

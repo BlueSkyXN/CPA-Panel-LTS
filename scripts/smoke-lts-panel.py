@@ -207,6 +207,8 @@ def build_usage_payload() -> dict[str, Any]:
                 "output_tokens": 8,
                 "reasoning_tokens": 2,
                 "cached_tokens": 1,
+                "cache_read_tokens": 1,
+                "cache_creation_tokens": 4,
                 "total_tokens": 23,
             },
             "failed": False,
@@ -270,7 +272,7 @@ def build_usage_payload() -> dict[str, Any]:
                     "failure_count": 1,
                     "total_tokens": 70,
                     "models": {
-                        "gpt-5.5": {
+                        "gpt-5.6-sol": {
                             "total_requests": 4,
                             "success_count": 3,
                             "failure_count": 1,
@@ -1519,6 +1521,8 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     card = page.get_by_text("Request Events", exact=True).locator("xpath=../..")
     card.wait_for()
     card.get_by_role("columnheader", name="Tier", exact=True).wait_for()
+    card.get_by_role("columnheader", name="Cache Read Tokens", exact=True).wait_for()
+    card.get_by_role("columnheader", name="Cache Write Tokens", exact=True).wait_for()
 
     rows = card.locator("tbody tr")
 
@@ -1540,6 +1544,18 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     ]:
         card.get_by_text(expected_label, exact=True).wait_for()
 
+    priority_rows = rows.filter(has_text="Fast / Priority")
+    if priority_rows.count() != 1:
+        raise AssertionError(
+            f"Expected one combined service-tier/cache row, found {priority_rows.count()}"
+        )
+    priority_cells = [text.strip() for text in priority_rows.first.locator("td").all_inner_texts()]
+    if priority_cells[-6:] != ["12", "8", "2", "1", "4", "23"]:
+        raise AssertionError(
+            "Combined service-tier/cache row rendered the wrong token values: "
+            f"{priority_cells!r}"
+        )
+
     with page.expect_download() as csv_download:
         card.get_by_role("button", name="Export CSV", exact=True).click()
     csv_path = csv_download.value.path()
@@ -1550,6 +1566,26 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     csv_tiers = sorted(row.get("service_tier", "") for row in csv_rows)
     if csv_tiers != ["", "default", "flex", "priority"]:
         raise AssertionError(f"Request-event CSV lost raw service_tier values: {csv_tiers!r}")
+    priority_csv_rows = [row for row in csv_rows if row.get("service_tier") == "priority"]
+    if len(priority_csv_rows) != 1:
+        raise AssertionError(
+            f"Request-event CSV lost the combined priority row: {priority_csv_rows!r}"
+        )
+    priority_csv = priority_csv_rows[0]
+    expected_priority_csv_tokens = {
+        "cached_tokens": "1",
+        "cache_read_tokens": "1",
+        "cache_creation_tokens": "4",
+        "total_tokens": "23",
+    }
+    actual_priority_csv_tokens = {
+        key: priority_csv.get(key, "") for key in expected_priority_csv_tokens
+    }
+    if actual_priority_csv_tokens != expected_priority_csv_tokens:
+        raise AssertionError(
+            "Request-event CSV lost combined service-tier/cache token values: "
+            f"{actual_priority_csv_tokens!r}"
+        )
 
     with page.expect_download() as json_download:
         card.get_by_role("button", name="Export JSON", exact=True).click()
@@ -1563,6 +1599,26 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     )
     if json_tiers != ["<null>", "default", "flex", "priority"]:
         raise AssertionError(f"Request-event JSON lost raw service_tier values: {json_tiers!r}")
+    priority_json_rows = [row for row in json_rows if row.get("service_tier") == "priority"]
+    if len(priority_json_rows) != 1:
+        raise AssertionError(
+            f"Request-event JSON lost the combined priority row: {priority_json_rows!r}"
+        )
+    priority_json_tokens = priority_json_rows[0].get("tokens", {})
+    expected_priority_json_tokens = {
+        "input_tokens": 12,
+        "output_tokens": 8,
+        "reasoning_tokens": 2,
+        "cached_tokens": 1,
+        "cache_read_tokens": 1,
+        "cache_creation_tokens": 4,
+        "total_tokens": 23,
+    }
+    if priority_json_tokens != expected_priority_json_tokens:
+        raise AssertionError(
+            "Request-event JSON lost combined service-tier/cache token values: "
+            f"{priority_json_tokens!r}"
+        )
 
     tier_select = card.get_by_label("Tier", exact=True)
     for option_label in [
