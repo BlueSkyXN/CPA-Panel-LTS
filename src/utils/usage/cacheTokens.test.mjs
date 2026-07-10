@@ -125,6 +125,7 @@ test('GPT-5.6 variants and Codex family aliases receive the 1.25x default write 
   }
 
   assert.equal(resolveCacheWriteUnitPrice('gpt-5.6-sol', 10, 1, 7), 7);
+  assert.equal(resolveCacheWriteUnitPrice('gpt-5.6-sol', 10, 1, 0), 0);
   assert.equal(resolveCacheWriteUnitPrice('claude-sonnet-4-5', 10, 1), 1);
 });
 
