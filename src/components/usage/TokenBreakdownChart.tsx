@@ -16,11 +16,12 @@ import styles from '@/pages/UsagePage.module.scss';
 const TOKEN_COLORS: Record<TokenCategory, string> = {
   input: '#8CC21F',
   output: '#FA6450',
-  cached: '#F5ED58',
+  cacheRead: '#F5ED58',
+  cacheWrite: '#F59E0B',
   reasoning: '#00ABA5',
 };
 
-const CATEGORIES: TokenCategory[] = ['input', 'output', 'cached', 'reasoning'];
+const CATEGORIES: TokenCategory[] = ['input', 'output', 'cacheRead', 'cacheWrite', 'reasoning'];
 
 function formatTokens(num: number): string {
   if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
@@ -54,7 +55,8 @@ export function TokenBreakdownChart({
     const categoryLabels: Record<TokenCategory, string> = {
       input: t('usage_stats.input_tokens'),
       output: t('usage_stats.output_tokens'),
-      cached: t('usage_stats.cached_tokens'),
+      cacheRead: t('usage_stats.cache_read_tokens'),
+      cacheWrite: t('usage_stats.cache_write_tokens'),
       reasoning: t('usage_stats.reasoning_tokens'),
     };
 
@@ -104,7 +106,7 @@ export function TokenBreakdownChart({
               const cat = CATEGORIES[context.datasetIndex];
               let text = `${context.dataset.label}: ${formatTokens(val)}`;
 
-              if (cat === 'cached') {
+              if (cat === 'cacheRead' || cat === 'cacheWrite') {
                 const inputVal = Number(series.dataByCategory.input[context.dataIndex]) || 0;
                 if (inputVal > 0) {
                   const perc = ((val / inputVal) * 100).toFixed(2);

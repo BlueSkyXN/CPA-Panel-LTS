@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { Select } from '@/components/ui/Select';
 import type { ModelPrice } from '@/utils/usage';
+import { resolveCacheWriteUnitPrice } from '@/utils/usage/cacheTokens';
 import styles from '@/pages/UsagePage.module.scss';
 
 export interface PriceSettingsCardProps {
@@ -17,7 +18,7 @@ export interface PriceSettingsCardProps {
 export function PriceSettingsCard({
   modelNames,
   modelPrices,
-  onPricesChange
+  onPricesChange,
 }: PriceSettingsCardProps) {
   const { t } = useTranslation();
 
@@ -26,24 +27,42 @@ export function PriceSettingsCard({
   const [promptPrice, setPromptPrice] = useState('');
   const [completionPrice, setCompletionPrice] = useState('');
   const [cachePrice, setCachePrice] = useState('');
+  const [cacheWritePrice, setCacheWritePrice] = useState('');
 
   // Edit modal state
   const [editModel, setEditModel] = useState<string | null>(null);
   const [editPrompt, setEditPrompt] = useState('');
   const [editCompletion, setEditCompletion] = useState('');
   const [editCache, setEditCache] = useState('');
+  const [editCacheWrite, setEditCacheWrite] = useState('');
+
+  const parseOptionalPrice = (value: string): number | undefined => {
+    if (value.trim() === '') return undefined;
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+  };
 
   const handleSavePrice = () => {
     if (!selectedModel) return;
     const prompt = parseFloat(promptPrice) || 0;
     const completion = parseFloat(completionPrice) || 0;
     const cache = cachePrice.trim() === '' ? prompt : parseFloat(cachePrice) || 0;
-    const newPrices = { ...modelPrices, [selectedModel]: { prompt, completion, cache } };
+    const cacheWrite = parseOptionalPrice(cacheWritePrice);
+    const newPrices = {
+      ...modelPrices,
+      [selectedModel]: {
+        prompt,
+        completion,
+        cache,
+        ...(cacheWrite !== undefined ? { cacheWrite } : {}),
+      },
+    };
     onPricesChange(newPrices);
     setSelectedModel('');
     setPromptPrice('');
     setCompletionPrice('');
     setCachePrice('');
+    setCacheWritePrice('');
   };
 
   const handleDeletePrice = (model: string) => {
@@ -58,6 +77,7 @@ export function PriceSettingsCard({
     setEditPrompt(price?.prompt?.toString() || '');
     setEditCompletion(price?.completion?.toString() || '');
     setEditCache(price?.cache?.toString() || '');
+    setEditCacheWrite(price?.cacheWrite?.toString() || '');
   };
 
   const handleSaveEdit = () => {
@@ -65,7 +85,16 @@ export function PriceSettingsCard({
     const prompt = parseFloat(editPrompt) || 0;
     const completion = parseFloat(editCompletion) || 0;
     const cache = editCache.trim() === '' ? prompt : parseFloat(editCache) || 0;
-    const newPrices = { ...modelPrices, [editModel]: { prompt, completion, cache } };
+    const cacheWrite = parseOptionalPrice(editCacheWrite);
+    const newPrices = {
+      ...modelPrices,
+      [editModel]: {
+        prompt,
+        completion,
+        cache,
+        ...(cacheWrite !== undefined ? { cacheWrite } : {}),
+      },
+    };
     onPricesChange(newPrices);
     setEditModel(null);
   };
@@ -77,17 +106,19 @@ export function PriceSettingsCard({
       setPromptPrice(price.prompt.toString());
       setCompletionPrice(price.completion.toString());
       setCachePrice(price.cache.toString());
+      setCacheWritePrice(price.cacheWrite?.toString() || '');
     } else {
       setPromptPrice('');
       setCompletionPrice('');
       setCachePrice('');
+      setCacheWritePrice('');
     }
   };
 
   const options = useMemo(
     () => [
       { value: '', label: t('usage_stats.model_price_select_placeholder') },
-      ...modelNames.map((name) => ({ value: name, label: name }))
+      ...modelNames.map((name) => ({ value: name, label: name })),
     ],
     [modelNames, t]
   );
@@ -137,9 +168,26 @@ export function PriceSettingsCard({
                 step="0.0001"
               />
             </div>
+            <div className={styles.formField}>
+              <label htmlFor="usage-cache-write-price">
+                {t('usage_stats.model_price_cache_write')} ($/1M)
+              </label>
+              <Input
+                id="usage-cache-write-price"
+                type="number"
+                value={cacheWritePrice}
+                onChange={(e) => setCacheWritePrice(e.target.value)}
+                placeholder={t('usage_stats.model_price_cache_write_auto')}
+                step="0.0001"
+                aria-describedby="usage-cache-write-price-hint"
+              />
+            </div>
             <Button variant="primary" onClick={handleSavePrice} disabled={!selectedModel}>
               {t('common.save')}
             </Button>
+          </div>
+          <div id="usage-cache-write-price-hint" className={styles.priceFieldHint}>
+            {t('usage_stats.model_price_cache_write_hint')}
           </div>
         </div>
 
@@ -161,6 +209,19 @@ export function PriceSettingsCard({
                       </span>
                       <span>
                         {t('usage_stats.model_price_cache')}: ${price.cache.toFixed(4)}/1M
+                      </span>
+                      <span>
+                        {t('usage_stats.model_price_cache_write')}: $
+                        {resolveCacheWriteUnitPrice(
+                          model,
+                          price.prompt,
+                          price.cache,
+                          price.cacheWrite
+                        ).toFixed(4)}
+                        /1M
+                        {price.cacheWrite === undefined
+                          ? ` (${t('usage_stats.model_price_cache_write_auto')})`
+                          : ''}
                       </span>
                     </div>
                   </div>
@@ -228,6 +289,23 @@ export function PriceSettingsCard({
               placeholder="0.00"
               step="0.0001"
             />
+          </div>
+          <div className={styles.formField}>
+            <label htmlFor="usage-cache-write-price-edit">
+              {t('usage_stats.model_price_cache_write')} ($/1M)
+            </label>
+            <Input
+              id="usage-cache-write-price-edit"
+              type="number"
+              value={editCacheWrite}
+              onChange={(e) => setEditCacheWrite(e.target.value)}
+              placeholder={t('usage_stats.model_price_cache_write_auto')}
+              step="0.0001"
+              aria-describedby="usage-cache-write-price-edit-hint"
+            />
+            <span id="usage-cache-write-price-edit-hint" className={styles.priceFieldHint}>
+              {t('usage_stats.model_price_cache_write_hint')}
+            </span>
           </div>
         </div>
       </Modal>
