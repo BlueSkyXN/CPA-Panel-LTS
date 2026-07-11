@@ -4,25 +4,20 @@
   display: flex;
   flex-direction: column;
   gap: clamp(16px, 2vw, 22px);
-  height: clamp(520px, calc(100dvh - var(--header-height, 64px) - 250px), 780px);
+  min-height: clamp(520px, calc(100dvh - var(--header-height, 64px) - 210px), 760px);
   min-width: 0;
   box-sizing: border-box;
-  overflow-y: auto;
-  overscroll-behavior: auto;
   padding: clamp(20px, 2.4vw, 28px);
   border: 1px solid var(--border-color);
   border-radius: 8px;
   background: color-mix(in srgb, var(--bg-primary) 82%, transparent);
-  scroll-margin-top: 104px;
-  scroll-snap-align: start;
-  scroll-snap-stop: always;
-  scrollbar-width: thin;
+  scroll-margin-top: calc(var(--header-height, 64px) + 18px);
 
   @include mobile {
     gap: 14px;
-    height: clamp(420px, calc(100dvh - var(--header-height, 64px) - 260px), 680px);
+    min-height: 0;
     padding: 16px;
-    scroll-margin-top: 92px;
+    scroll-margin-top: calc(var(--header-height, 64px) + 86px);
   }
 }
 
