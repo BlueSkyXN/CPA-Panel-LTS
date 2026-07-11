@@ -14,6 +14,7 @@ import { pluginsApi } from '@/services/api/plugins';
 import { useConfigStore } from './useConfigStore';
 import { useUsageStatsStore } from './useUsageStatsStore';
 import { useModelsStore } from './useModelsStore';
+import { useQuotaStore } from './useQuotaStore';
 import { detectApiBaseFromLocation, normalizeApiBase } from '@/utils/connection';
 
 interface AuthStoreState extends AuthState {
@@ -136,6 +137,7 @@ export const useAuthStore = create<AuthStoreState>()(
             pluginSupportKnown: false
           });
           useModelsStore.getState().clearCache();
+          useQuotaStore.getState().clearQuotaCache();
 
           // 配置 API 客户端
           apiClient.setConfig({
@@ -187,6 +189,7 @@ export const useAuthStore = create<AuthStoreState>()(
         useConfigStore.getState().clearCache();
         useUsageStatsStore.getState().clearUsageStats();
         useModelsStore.getState().clearCache();
+        useQuotaStore.getState().clearQuotaCache();
         set({
           isAuthenticated: false,
           apiBase: '',

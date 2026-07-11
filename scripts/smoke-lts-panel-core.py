@@ -139,6 +139,10 @@ def build_core_config(port: int, temp_dir: Path) -> str:
         transient-error-cooldown-seconds: 30
         routing:
           strategy: round-robin
+        codex:
+          abnormal-reasoning-retry:
+            hedged-retry:
+              require-distinct-auth: false
         plugins:
           enabled: true
           dir: "{plugins_dir.as_posix()}"
@@ -657,12 +661,12 @@ def run_write_smoke(api_url: str) -> list[str]:
 
 def run_auth_files_write_smoke(api_url: str) -> list[str]:
     seen: list[str] = []
-    auth_name = "lts-auth-smoke.json"
+    auth_name = "lts-xai-auth-smoke.json"
     upload_path = f"/v0/management/auth-files?{urlencode({'name': auth_name})}"
     download_path = f"/v0/management/auth-files/download?{urlencode({'name': auth_name})}"
     auth_payload = {
-        "type": "codex",
-        "email": "lts-auth-smoke@example.test",
+        "type": "xai",
+        "email": "lts-xai-auth-smoke@example.test",
         "access_token": "dummy-lts-smoke-access-token",
         "refresh_token": "dummy-lts-smoke-refresh-token",
         "note": "created by lts smoke",
@@ -679,8 +683,8 @@ def run_auth_files_write_smoke(api_url: str) -> list[str]:
     seen.append("GET /v0/management/auth-files after auth upload")
     if (
         not created_entry
-        or created_entry.get("type") != "codex"
-        or created_entry.get("email") != "lts-auth-smoke@example.test"
+        or created_entry.get("type") != "xai"
+        or created_entry.get("email") != "lts-xai-auth-smoke@example.test"
     ):
         raise AssertionError(f"Auth file upload did not appear in list: {created_entry!r}")
 
@@ -691,6 +695,7 @@ def run_auth_files_write_smoke(api_url: str) -> list[str]:
         "proxy_url": "http://127.0.0.1:7890",
         "priority": 7,
         "websockets": True,
+        "using_api": True,
         "note": "updated by lts smoke",
         "headers": {
             "X-LTS-Smoke": "1",
@@ -712,6 +717,8 @@ def run_auth_files_write_smoke(api_url: str) -> list[str]:
     if patched_entry.get("note") != "updated by lts smoke":
         raise AssertionError(f"Auth file note did not round-trip through list: {patched_entry!r}")
 
+    # /auth-files intentionally returns a curated list shape and does not expose every
+    # arbitrary auth-file field. The raw download is the persistence truth for using_api.
     downloaded = json.loads(request_text(api_url, download_path))
     seen.append("GET /v0/management/auth-files/download after auth fields patch")
     if (
@@ -719,6 +726,7 @@ def run_auth_files_write_smoke(api_url: str) -> list[str]:
         or downloaded.get("proxy_url") != "http://127.0.0.1:7890"
         or downloaded.get("priority") != 7
         or downloaded.get("websockets") is not True
+        or downloaded.get("using_api") is not True
         or downloaded.get("note") != "updated by lts smoke"
         or downloaded.get("headers") != {"X-LTS-Smoke": "1"}
     ):
@@ -755,7 +763,9 @@ def run_auth_files_write_smoke(api_url: str) -> list[str]:
     seen.append("GET /v0/management/auth-files after auth delete")
     if deleted_entry is not None:
         raise AssertionError(f"Auth file delete did not remove smoke file: {deleted_entry!r}")
-    seen.append("Auth files smoke uploaded patched disabled and deleted temporary auth file")
+    seen.append(
+        "Auth files smoke uploaded patched xAI using_api disabled and deleted temporary auth file"
+    )
 
     return seen
 
@@ -768,7 +778,7 @@ def run_plugin_config_smoke(api_url: str) -> list[str]:
     plugin_path = f"/v0/management/plugins/{plugin_id}"
 
     plugin_payload = {
-        "enabled": False,
+        "enabled": True,
         "priority": 4,
         "mode": "safe",
         "permissions": {
@@ -788,14 +798,26 @@ def run_plugin_config_smoke(api_url: str) -> list[str]:
     saved_config = assert_mapping(request_json(api_url, config_path), config_path)
     seen.append(f"GET {config_path} after put")
     if (
-        saved_config.get("enabled") is not False
+        saved_config.get("enabled") is not True
         or saved_config.get("priority") != 4
         or saved_config.get("mode") != "safe"
         or saved_config.get("nested") != {"keep": "yes"}
     ):
         raise AssertionError(f"Plugin config PUT did not round-trip: {saved_config!r}")
 
-    seen.append(f"PATCH {enabled_path}")
+    seen.append(f"PATCH {enabled_path} disabled")
+    assert_mapping(
+        request_json(api_url, enabled_path, method="PATCH", payload={"enabled": False}),
+        enabled_path,
+    )
+    disabled_config = assert_mapping(request_json(api_url, config_path), config_path)
+    seen.append(f"GET {config_path} after disable")
+    if disabled_config.get("enabled") is not False:
+        raise AssertionError(
+            f"Plugin enabled endpoint did not expose disabled state: {disabled_config!r}"
+        )
+
+    seen.append(f"PATCH {enabled_path} enabled")
     assert_mapping(
         request_json(api_url, enabled_path, method="PATCH", payload={"enabled": True}),
         enabled_path,

@@ -73,6 +73,7 @@ class MockCoreState:
         self.config_yaml_puts: list[str] = []
         self.runtime_kind = "cpa"
         self.include_branded_providers = True
+        self.plugin_enabled = True
         self.usage_payload = build_usage_payload()
 
     def record(self, method: str, path: str, query: str = "") -> None:
@@ -431,10 +432,14 @@ ampcode:
   upstream-url: https://amp.example.test
   upstream-api-key: sk-amp-smoke
   force-model-mappings: true
+codex:
+  abnormal-reasoning-retry:
+    hedged-retry:
+      require-distinct-auth: false
 """
 
 
-def build_plugin_list_payload() -> dict[str, Any]:
+def build_plugin_list_payload(enabled: bool = True) -> dict[str, Any]:
     return {
         "plugins_enabled": True,
         "plugins_dir": "plugins",
@@ -444,15 +449,26 @@ def build_plugin_list_payload() -> dict[str, Any]:
                 "path": "plugins/mock-plugin",
                 "configured": True,
                 "registered": True,
-                "enabled": True,
-                "effective_enabled": True,
+                "enabled": enabled,
+                "effective_enabled": enabled,
                 "metadata": {
                     "name": "Mock Resource Plugin",
                     "version": "0.1.0",
                     "author": "LTS smoke",
                     "github_repository": "router-for-me/mock-plugin",
                     "logo": "",
-                    "config_fields": [],
+                    "config_fields": [
+                        {
+                            "name": "label",
+                            "type": "string",
+                            "description": "Smoke label",
+                        },
+                        {
+                            "name": "advanced",
+                            "type": "object",
+                            "description": "Smoke object",
+                        },
+                    ],
                 },
                 "menus": [
                     {
@@ -767,7 +783,7 @@ class MockCoreHandler(BaseHTTPRequestHandler):
             "/v0/management/model-definitions/codex": {
                 "models": [{"id": "gpt-5", "display_name": "GPT-5"}]
             },
-            "/v0/management/plugins": build_plugin_list_payload(),
+            "/v0/management/plugins": build_plugin_list_payload(self.state.plugin_enabled),
             "/v0/management/plugin-store": build_plugin_store_payload(),
             "/v0/management/logs": self._mock_logs_response(parsed.query),
             "/v0/management/request-error-logs": {
@@ -794,6 +810,28 @@ class MockCoreHandler(BaseHTTPRequestHandler):
                 self.state.config_yaml.encode("utf-8"),
                 content_type="application/yaml; charset=utf-8",
             )
+            return
+
+        if path == "/v0/management/auth-files/download":
+            name = parse_qs(parsed.query).get("name", [""])[0]
+            auth_files = {
+                "codex-smoke.json": {
+                    "type": "codex",
+                    "email": "codex-smoke@example.test",
+                    "websockets": True,
+                },
+                "xai-smoke.json": {
+                    "type": "xai",
+                    "email": "xai-smoke@example.test",
+                    "using_api": False,
+                    "unmanaged-smoke-field": "keep-me",
+                },
+            }
+            payload = auth_files.get(name)
+            if payload is None:
+                self._send_json({"error": "auth file not found"}, status=404)
+                return
+            self._send_json(payload)
             return
 
         if path == "/v0/management/nodes":
@@ -826,7 +864,15 @@ class MockCoreHandler(BaseHTTPRequestHandler):
             return
 
         if re.match(r"^/v0/management/plugins/[^/]+/config$", path):
-            self._send_json({"enabled": True, "priority": 0})
+            self._send_json(
+                {
+                    "enabled": True,
+                    "priority": 7,
+                    "label": "original-label",
+                    "advanced": {"mode": "safe"},
+                    "untouched-server-field": {"keep": True},
+                }
+            )
             return
 
         self._send_json({"error": f"unhandled mock route: {path}"}, status=404)
@@ -928,6 +974,12 @@ class MockCoreHandler(BaseHTTPRequestHandler):
         self.state.record("PATCH", parsed.path, parsed.query)
         body = self._read_body_text()
         self.state.record_body("PATCH", parsed.path, body)
+        if parsed.path == "/v0/management/plugins/mock-plugin/enabled":
+            try:
+                payload = json.loads(body) if body.strip() else {}
+            except json.JSONDecodeError:
+                payload = {}
+            self.state.plugin_enabled = payload.get("enabled") is True
         self._send_json({"status": "ok"})
 
     def do_DELETE(self) -> None:
@@ -1040,6 +1092,32 @@ def assert_request_seen_after(
             f"Expected mock API request {target_prefix} after {after_prefix}; "
             f"saw: {state.requests}"
         )
+
+
+def assert_each_request_immediately_preceded_by(
+    state: MockCoreState,
+    method: str,
+    path: str,
+    preceding_method: str,
+    preceding_path: str,
+) -> None:
+    target_prefix = f"{method} {path}"
+    preceding_prefix = f"{preceding_method} {preceding_path}"
+    target_indexes = [
+        index
+        for index, entry in enumerate(state.requests)
+        if entry == target_prefix or entry.startswith(f"{target_prefix}?")
+    ]
+    if not target_indexes:
+        raise AssertionError(f"Expected mock API request {target_prefix}; saw: {state.requests}")
+
+    for index in target_indexes:
+        previous = state.requests[index - 1] if index > 0 else ""
+        if previous != preceding_prefix and not previous.startswith(f"{preceding_prefix}?"):
+            raise AssertionError(
+                f"Expected {target_prefix} to use a latest-state read immediately before writing; "
+                f"previous request was {previous!r}: {state.requests}"
+            )
 
 
 def request_count(state: MockCoreState, method: str, path: str) -> int:
@@ -1402,6 +1480,134 @@ def assert_config_yaml_roundtrip(state: MockCoreState) -> None:
             "Visual config save did not persist codex abnormal retry require-distinct-auth:\n"
             f"{visual_payload}"
         )
+
+    if "concurrent-managed-smoke: keep-me" not in visual_payload:
+        raise AssertionError(
+            "Visual config save dropped a concurrent server-side marker:\n"
+            f"{visual_payload}"
+        )
+    if "usage-statistics-enabled: false" not in visual_payload:
+        raise AssertionError(
+            "Visual config save overwrote a concurrent managed-field update:\n"
+            f"{visual_payload}"
+        )
+    if "redis-usage-queue-retention-seconds: 60" not in visual_payload:
+        raise AssertionError(
+            "Visual config save did not persist the validated Redis retention value:\n"
+            f"{visual_payload}"
+        )
+
+
+def run_plugin_config_patch_smoke(page: Any, app_url: str) -> None:
+    page.goto(f"{app_url}?route=plugin-config-patch#/plugins", wait_until="domcontentloaded")
+    page.wait_for_function("() => window.location.hash.endsWith('/plugins')")
+    page.get_by_text("Plugin Management", exact=False).first.wait_for()
+    page.get_by_role("button", name="Edit config").click()
+    config_dialog = page.get_by_role("dialog", name="Configure Mock Resource Plugin")
+    config_dialog.wait_for()
+    config_dialog.get_by_label("label", exact=True).fill("updated-label")
+    enabled_toggle = config_dialog.get_by_label("Enabled", exact=True)
+    enabled_toggle.evaluate("(element) => { if (element.checked) element.click(); }")
+    with page.expect_response(
+        lambda response: response.request.method == "PATCH"
+        and response.url.endswith("/v0/management/plugins/mock-plugin/config")
+    ), page.expect_response(
+        lambda response: response.request.method == "PATCH"
+        and response.url.endswith("/v0/management/plugins/mock-plugin/enabled")
+    ):
+        config_dialog.get_by_role("button", name="Save", exact=True).click()
+    page.get_by_text("Plugin config saved", exact=False).first.wait_for()
+
+
+def run_oauth_editor_smoke(page: Any, app_url: str) -> None:
+    page.goto(
+        f"{app_url}?route=oauth-alias-empty-draft#/auth-files/oauth-model-alias",
+        wait_until="domcontentloaded",
+    )
+    page.wait_for_function("() => window.location.hash.includes('/auth-files/oauth-model-alias')")
+    page.get_by_text("Add provider model aliases", exact=False).first.wait_for()
+    page.get_by_role("button", name="Back", exact=True).click()
+    page.wait_for_function("() => window.location.hash.endsWith('/auth-files')")
+    if page.get_by_role("dialog", name="Unsaved changes").count() != 0:
+        raise AssertionError("empty OAuth alias draft must not trigger the unsaved changes guard")
+
+    page.goto(
+        f"{app_url}?route=oauth-editor#/auth-files/oauth-excluded",
+        wait_until="domcontentloaded",
+    )
+    page.wait_for_function("() => window.location.hash.includes('/auth-files/oauth-excluded')")
+    page.get_by_text("Add provider model disablement", exact=False).first.wait_for()
+    page.get_by_role("button", name="Codex", exact=True).click()
+    page.get_by_text("Edit model disablement for codex", exact=False).first.wait_for()
+    page.get_by_label("Custom model rule", exact=True).fill("gpt-*")
+
+    page.get_by_role("button", name="Back", exact=True).click()
+    unsaved_dialog = page.get_by_role("dialog", name="Unsaved changes")
+    unsaved_dialog.wait_for()
+    unsaved_dialog.get_by_role("button", name="Stay", exact=True).click()
+    unsaved_dialog.wait_for(state="hidden")
+
+    with page.expect_response(
+        lambda response: response.request.method == "PATCH"
+        and response.url.endswith("/v0/management/oauth-excluded-models")
+    ):
+        page.get_by_role("button", name="Save/Update", exact=True).click()
+    page.get_by_text("Model disablement updated", exact=False).first.wait_for()
+
+
+def run_auth_file_using_api_smoke(page: Any, app_url: str) -> None:
+    page.goto(f"{app_url}?route=auth-file-using-api#/auth-files", wait_until="domcontentloaded")
+    page.wait_for_function("() => window.location.hash.endsWith('/auth-files')")
+    page.get_by_text("Auth Files Management", exact=False).first.wait_for()
+
+    codex_card = page.get_by_text("codex-smoke.json", exact=True).locator(
+        "xpath=ancestor::div[contains(@class, 'fileCard')][1]"
+    )
+    with page.expect_response(
+        lambda response: response.request.method == "GET"
+        and "/v0/management/auth-files/download" in response.url
+        and "codex-smoke.json" in response.url
+    ):
+        codex_card.locator('button[title="Auth File Details / Edit"]').click()
+    codex_dialog = page.get_by_role(
+        "dialog", name="Auth File Details / Edit - codex-smoke.json"
+    )
+    codex_dialog.wait_for()
+    if codex_dialog.get_by_label("Use official API (using_api)").count() != 0:
+        raise AssertionError("using_api control must stay hidden for non-xAI auth files")
+    codex_dialog.locator(".modal-footer").get_by_role(
+        "button", name="Close", exact=True
+    ).click()
+    codex_dialog.wait_for(state="hidden")
+
+    xai_card = page.get_by_text("xai-smoke.json", exact=True).locator(
+        "xpath=ancestor::div[contains(@class, 'fileCard')][1]"
+    )
+    with page.expect_response(
+        lambda response: response.request.method == "GET"
+        and "/v0/management/auth-files/download" in response.url
+        and "xai-smoke.json" in response.url
+    ):
+        xai_card.locator('button[title="Auth File Details / Edit"]').click()
+    xai_dialog = page.get_by_role("dialog", name="Auth File Details / Edit - xai-smoke.json")
+    xai_dialog.wait_for()
+    using_api_toggle = xai_dialog.get_by_label("Use official API (using_api)")
+    if using_api_toggle.is_checked():
+        raise AssertionError("xAI using_api smoke baseline must start in CLI chat-proxy mode")
+    using_api_toggle.evaluate("(element) => element.click()")
+    page.wait_for_function(
+        "() => document.querySelector('input[aria-label=\"Use official API (using_api)\"]')?.checked === true"
+    )
+    xai_dialog.get_by_text(
+        "Use the official xAI API when enabled; use Grok CLI chat-proxy when disabled.",
+        exact=True,
+    ).wait_for()
+    with page.expect_response(
+        lambda response: response.request.method == "PATCH"
+        and response.url.endswith("/v0/management/auth-files/fields")
+    ):
+        xai_dialog.get_by_role("button", name="Save", exact=True).click()
+    page.get_by_text('Updated auth file "xai-smoke.json" successfully', exact=True).wait_for()
 
 
 def run_logs_runtime_smoke(page: Any, app_url: str) -> None:
@@ -2022,6 +2228,10 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             page.get_by_text("Install: Github Release", exact=False).first.wait_for()
             page.get_by_text("Platforms: darwin/arm64", exact=False).first.wait_for()
 
+            run_plugin_config_patch_smoke(page, app_url)
+            run_oauth_editor_smoke(page, app_url)
+            run_auth_file_using_api_smoke(page, app_url)
+
             page.goto(f"{app_url}?route=dashboard#/", wait_until="domcontentloaded")
             page.wait_for_function("() => window.location.hash.endsWith('/')")
             page.get_by_text("A:1", exact=False).first.wait_for()
@@ -2139,6 +2349,10 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             page.get_by_label("Log to File").evaluate(
                 "(element) => { if (element.checked) element.click(); }"
             )
+            redis_retention = page.get_by_label("Redis Usage Queue Retention (seconds)")
+            redis_retention.fill("0")
+            page.get_by_text("Enter a whole number between 1 and 3600", exact=True).wait_for()
+            redis_retention.fill("60")
             page.get_by_label("Transient Error Cooldown (seconds)").fill("-1")
             page.get_by_label("Retry action").click()
             page.get_by_role("option", name="Retry").click()
@@ -2160,6 +2374,13 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             page.get_by_role("option", name="Max output").click()
             page.get_by_label("Fallback policy").click()
             page.get_by_role("option", name="Max output special").click()
+            state.config_yaml = state.config_yaml.replace(
+                "usage-statistics-enabled: true",
+                "usage-statistics-enabled: false",
+            )
+            state.config_yaml = (
+                f"{state.config_yaml.rstrip()}\nconcurrent-managed-smoke: keep-me\n"
+            )
             page.locator('button[aria-label="Save"]').click()
             with page.expect_response(
                 lambda response: response.request.method == "PUT"
@@ -2201,6 +2422,11 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
         ("GET", "/v0/management/request-log-by-id/req-smoke"),
         ("GET", "/v0/management/request-log-by-id/home-req-smoke"),
         ("POST", "/v0/management/api-call"),
+        ("GET", "/v0/management/auth-files/download"),
+        ("PATCH", "/v0/management/auth-files/fields"),
+        ("PATCH", "/v0/management/plugins/mock-plugin/config"),
+        ("PATCH", "/v0/management/plugins/mock-plugin/enabled"),
+        ("PATCH", "/v0/management/oauth-excluded-models"),
         ("PUT", "/v0/management/gemini-api-key"),
         ("PUT", "/v0/management/codex-api-key"),
         ("DELETE", "/v0/management/codex-api-key"),
@@ -2215,6 +2441,18 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
         "GET",
         "/v0/management/config",
     )
+    for provider_path in [
+        "/v0/management/gemini-api-key",
+        "/v0/management/codex-api-key",
+        "/v0/management/openai-compatibility",
+    ]:
+        assert_each_request_immediately_preceded_by(
+            state,
+            "PUT",
+            provider_path,
+            "GET",
+            "/v0/management/config",
+        )
     assert_request_seen_after(
         state,
         "PUT",
@@ -2249,6 +2487,37 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
         "home_ip=10.99.0.7",
     )
     assert_provider_mutation_payloads(state)
+    assert_payload_match(
+        state,
+        "PATCH",
+        "/v0/management/auth-files/fields",
+        lambda payload: payload == {"name": "xai-smoke.json", "using_api": True},
+        "only the touched xAI using_api field",
+    )
+    assert_payload_match(
+        state,
+        "PATCH",
+        "/v0/management/plugins/mock-plugin/config",
+        lambda payload: payload == {"label": "updated-label"},
+        "only the touched plugin config field",
+    )
+    assert_payload_match(
+        state,
+        "PATCH",
+        "/v0/management/plugins/mock-plugin/enabled",
+        lambda payload: payload == {"enabled": False},
+        "the dedicated plugin enabled update",
+    )
+    assert_payload_match(
+        state,
+        "PATCH",
+        "/v0/management/oauth-excluded-models",
+        lambda payload: isinstance(payload, dict)
+        and payload.get("provider") == "codex"
+        and "gpt-5-disabled" in payload.get("models", [])
+        and "gpt-*" in payload.get("models", []),
+        "the pending custom OAuth exclusion rule",
+    )
     assert_config_yaml_roundtrip(state)
     assert_api_call_url_seen(state, "backend-api/wham/usage", "Codex quota usage")
     assert_api_call_url_seen(

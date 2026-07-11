@@ -63,6 +63,7 @@ for path in \
   src/router/MainRoutes.tsx \
   src/pages/DashboardPage.tsx \
   src/pages/DashboardPage.module.scss \
+  src/utils/dashboard.ts \
   src/pages/UsagePage.tsx \
   src/pages/UsagePage.module.scss \
   src/components/usage \
@@ -85,6 +86,7 @@ for path in \
   src/features/providers/qiniuCloud.ts \
   src/features/providers/claudeApi.ts \
   src/features/providers/sponsorDefinitions.ts \
+  src/features/providers/sponsorMutationRecovery.ts \
   src/features/providers/sheets/forms/BaseProviderForm.tsx \
   src/features/providers/sheets/forms/SponsorProviderForm.tsx \
   src/features/providers/sheets/forms/useConnectivityTest.ts \
@@ -94,6 +96,7 @@ for path in \
   src/features/plugins/PluginResourcePage.tsx \
   src/features/plugins/pluginReleaseVersions.ts \
   src/features/plugins/pluginResources.ts \
+  src/features/plugins/pluginConfigDraft.ts \
   src/features/plugins/components/PluginInstallGateModal.tsx \
   src/features/plugins/components/PluginInstallGateModal.module.scss \
   src/pages/ConfigPage.tsx \
@@ -118,9 +121,13 @@ for path in \
   src/services/api/apiCall.ts \
   src/lts/codexRemoteCloudConnect/api.ts \
   src/pages/AuthFilesPage.tsx \
+  src/pages/AuthFilesOAuthExcludedEditPage.tsx \
+  src/pages/AuthFilesOAuthModelAliasEditPage.tsx \
   src/pages/OAuthPage.tsx \
+  src/components/modelAlias \
   src/pages/QuotaPage.tsx \
   src/features/authFiles \
+  src/hooks/useUnsavedChangesGuard.ts \
   src/features/authFiles/components/AuthFileQuotaSection.tsx \
   src/features/authFiles/constants.ts \
   src/components/quota \
@@ -133,6 +140,7 @@ for path in \
   src/types/ampcode.ts \
   src/types/plugin.ts \
   src/types/authFile.ts \
+  src/types/oauth.ts \
   src/types/quota.ts \
   src/types/visualConfig.ts \
   src/utils/usage.ts \
@@ -218,6 +226,11 @@ require_file_contains docs/lts/panel-feature-contracts.yaml "npm run test:usage-
 # Accepted upstream feature regression checks.
 require_file_contains src/router/MainRoutes.tsx "path: '/ai-providers/workbench'"
 require_file_contains src/router/MainRoutes.tsx "ProvidersWorkbenchPage"
+require_file_contains src/services/api/providers.ts "mutateLatestProviderList"
+require_file_contains src/services/api/providers.ts "replaceLatestProviderRecord"
+require_file_contains src/features/providers/sponsorDefinitions.ts "getSponsorAggregationConflict"
+require_file_contains src/features/providers/sponsorMutationRecovery.ts "runSponsorMutationWithRecovery"
+require_file_contains scripts/smoke-lts-panel.py "assert_each_request_immediately_preceded_by"
 require_file_not_contains src/router/MainRoutes.tsx "path: '/quick-start'"
 require_file_not_contains src/components/layout/MainLayout.tsx "path: '/quick-start'"
 require_repo_not_contains "apikey"".""fun"
@@ -257,8 +270,14 @@ require_file_contains src/services/api/plugins.ts "PluginStoreInstallOptions"
 require_file_contains src/services/api/plugins.ts "params.set('version'"
 require_file_contains src/features/plugins/pluginResources.ts "DEFAULT_PLUGIN_STORE_SOURCE_ID"
 require_file_contains src/features/plugins/pluginResources.ts "isDefaultPluginStoreSource"
+require_file_contains src/features/plugins/pluginResources.ts "isOfficialRepository"
 require_file_contains src/features/plugins/pluginReleaseVersions.ts "fetchPluginReleaseVersions"
 require_file_contains src/features/plugins/pluginReleaseVersions.ts "https://api.github.com"
+require_file_contains src/features/plugins/pluginReleaseVersions.ts "supportsPluginVersionSelection"
+require_file_contains src/features/plugins/pluginConfigDraft.ts "buildPluginConfigPatch"
+require_file_contains src/features/plugins/PluginsPage.tsx "pluginsApi.patchConfig"
+require_file_contains src/features/plugins/PluginsPage.tsx "pluginsApi.updateEnabled"
+require_file_contains src/features/plugins/PluginsPage.tsx "delete configPatch.enabled"
 require_file_contains src/features/plugins/PluginStorePage.tsx "PluginInstallOptionsModal"
 require_file_contains src/features/plugins/PluginStorePage.tsx "install_version_release_mode"
 require_file_contains src/features/plugins/PluginStorePage.tsx "source_errors_title"
@@ -274,6 +293,7 @@ require_file_contains src/i18n/locales/ru.json "install_version_release_mode"
 require_file_contains scripts/smoke-lts-panel.py "store-auth"
 require_file_contains scripts/smoke-lts-panel.py "CLIPROXY_PLUGIN_STORE_TOKEN"
 require_file_contains scripts/smoke-lts-panel.py "Some plugin sources failed to load"
+require_file_contains scripts/smoke-lts-panel.py "run_plugin_config_patch_smoke"
 require_file_contains src/features/plugins/components/PluginInstallGateModal.tsx "getPluginConfirmToken"
 require_file_contains src/features/plugins/components/PluginInstallGateModal.tsx "buildRepositoryURL"
 require_file_contains src/features/plugins/components/PluginInstallGateModal.tsx "gate_effect_runs_code"
@@ -299,8 +319,10 @@ require_file_contains src/types/visualConfig.ts "PluginStoreAuthRule"
 require_file_contains src/pages/ConfigPage.tsx "visualBaseYaml"
 require_file_contains src/pages/ConfigPage.tsx "normalizeYamlForVisualDiff"
 require_file_contains src/pages/ConfigPage.tsx "applyVisualChangesToYaml"
-require_file_contains src/hooks/useVisualConfig.ts "shouldWriteManagedField"
+require_file_contains src/pages/ConfigPage.tsx "latestServerYaml"
 require_file_contains src/hooks/useVisualConfig.ts "hasPayloadDirtyFields"
+require_file_contains src/hooks/useVisualConfig.ts "dirtyFields.has('host')"
+require_file_contains src/hooks/useVisualConfig.ts "integer_range_1_3600"
 require_file_contains src/types/visualConfig.ts "transientErrorCooldownSeconds"
 require_file_contains src/hooks/useVisualConfig.ts "transient-error-cooldown-seconds"
 require_file_contains src/components/config/VisualConfigEditor.tsx "transient_error_cooldown_seconds"
@@ -309,6 +331,7 @@ require_file_contains src/i18n/locales/zh-CN.json "transient_error_cooldown_seco
 require_file_contains src/i18n/locales/zh-TW.json "transient_error_cooldown_seconds"
 require_file_contains src/i18n/locales/ru.json "transient_error_cooldown_seconds"
 require_file_contains scripts/smoke-lts-panel.py "transient-error-cooldown-seconds: -1"
+require_file_contains scripts/smoke-lts-panel.py "concurrent-managed-smoke"
 require_file_contains scripts/smoke-lts-panel-core.py "transient-error-cooldown-seconds: 0"
 require_file_contains docs/lts/panel-feature-contracts.yaml "transientErrorCooldownSeconds"
 require_file_contains docs/lts/panel-feature-contracts.yaml "transient-error-cooldown-seconds"
@@ -348,7 +371,8 @@ require_file_contains src/hooks/useVisualConfig.ts "hedged-retry"
 require_file_contains src/hooks/useVisualConfig.ts "quality"
 require_file_contains src/hooks/useVisualConfig.ts "hedge-delay-ms"
 require_file_contains src/hooks/useVisualConfig.ts "require-distinct-auth"
-require_file_contains src/hooks/useVisualConfig.ts "shouldWriteCodexAbnormalReasoningRetryBlock"
+require_file_contains src/hooks/useVisualConfig.ts "hasCodexAbnormalReasoningRetryDirtyFields"
+require_file_contains src/hooks/useVisualConfig.ts "dirtyFields.has('codexAbnormalReasoningRetryAction')"
 require_file_contains src/components/config/VisualConfigEditor.tsx "codex_abnormal_reasoning_retry_title"
 require_file_contains src/components/config/VisualConfigEditor.tsx "codex_abnormal_reasoning_retry_action_label"
 require_file_contains src/components/config/VisualConfigEditor.tsx "codex_abnormal_reasoning_retry_stream_buffer_max_bytes_label"
@@ -535,6 +559,12 @@ require_file_contains src/services/api/authFiles.ts "/auth-files/models"
 require_file_contains src/services/api/authFiles.ts "normalizeBatchUploadResponse"
 require_file_contains src/services/api/authFiles.ts "normalizeBatchDeleteResponse"
 require_file_contains src/services/api/authFiles.ts "AUTH_FILE_INVALID_JSON_OBJECT_ERROR"
+require_file_contains src/services/api/authFiles.ts "force-mapping"
+require_file_contains src/components/modelAlias/aliasValidation.ts "hasModelAliasConflict"
+require_file_contains src/features/authFiles/oauthEditorState.ts "isOAuthEditorDirty"
+require_file_contains src/features/authFiles/oauthExcludedRules.ts "getEffectiveOAuthExcludedRules"
+require_file_contains src/pages/AuthFilesOAuthExcludedEditPage.tsx "useUnsavedChangesGuard"
+require_file_contains scripts/smoke-lts-panel.py "run_oauth_editor_smoke"
 require_file_contains src/pages/AuthFilesPage.tsx "CodexRemoteCloudConnectEnvironmentsModal"
 require_file_contains src/pages/AuthFilesPage.tsx "useCodexRemoteCloudConnectEnvironments"
 require_file_contains src/features/authFiles/components/AuthFileCard.tsx "CodexRemoteCloudConnectAuthFileAction"
@@ -556,12 +586,27 @@ require_file_contains src/features/authFiles/constants.ts "OAUTH_PROVIDER_PRESET
 require_file_contains src/features/authFiles/constants.ts "xai"
 require_file_contains src/features/authFiles/constants.ts "AUTH_FILE_WEBSOCKET_PROVIDERS"
 require_file_contains src/features/authFiles/constants.ts "supportsAuthFileWebsockets"
+require_file_contains src/features/authFiles/constants.ts "AUTH_FILE_USING_API_PROVIDERS"
+require_file_contains src/features/authFiles/constants.ts "supportsAuthFileUsingApi"
+require_file_contains src/features/authFiles/constants.ts "readAuthFileUsingApi"
+require_file_contains src/features/authFiles/constants.ts "applyAuthFileUsingApi"
 require_file_contains src/features/authFiles/components/AuthFilesPrefixProxyEditorModal.tsx "supportsAuthFileWebsockets"
+require_file_contains src/features/authFiles/components/AuthFilesPrefixProxyEditorModal.tsx "using_api_label"
 require_file_contains src/features/authFiles/hooks/useAuthFilesPrefixProxyEditor.ts "supportsAuthFileWebsockets"
+require_file_contains src/features/authFiles/hooks/useAuthFilesPrefixProxyEditor.ts "usingApiTouched"
+require_file_contains src/features/authFiles/hooks/useAuthFilesPrefixProxyEditor.ts "patch.using_api"
+require_file_contains src/services/api/authFiles.ts "using_api?: boolean"
 require_file_contains src/i18n/locales/en.json "websockets_label"
 require_file_contains src/i18n/locales/zh-CN.json "websockets_label"
 require_file_contains src/i18n/locales/zh-TW.json "websockets_label"
 require_file_contains src/i18n/locales/ru.json "websockets_label"
+require_file_contains src/i18n/locales/en.json "using_api_label"
+require_file_contains src/i18n/locales/zh-CN.json "using_api_label"
+require_file_contains src/i18n/locales/zh-TW.json "using_api_label"
+require_file_contains src/i18n/locales/ru.json "using_api_label"
+require_file_contains scripts/smoke-lts-panel.py "run_auth_file_using_api_smoke"
+require_file_contains scripts/smoke-lts-panel.py '"using_api": True'
+require_file_contains scripts/smoke-lts-panel-core.py '"using_api": True'
 require_file_contains src/features/authFiles/components/AuthFileQuotaSection.tsx "XAI_CONFIG"
 require_file_contains src/features/authFiles/components/AuthFileQuotaSection.tsx "CODEX_CONFIG"
 require_file_contains src/components/quota/quotaConfigs.ts "CODEX_CONFIG"
@@ -610,6 +655,9 @@ require_file_contains src/components/quota/quotaConfigs.ts "fetchXaiQuota"
 require_file_contains src/components/quota/quotaConfigs.ts "XAI_BILLING_WEEKLY_URL"
 require_file_contains src/components/quota/quotaConfigs.ts "XAI_BILLING_MONTHLY_URL"
 require_file_contains src/components/quota/quotaConfigs.ts "batchConcurrency"
+require_file_contains src/stores/useQuotaStore.ts "captureQuotaCacheGeneration"
+require_file_contains src/stores/useQuotaStore.ts "commitIfQuotaCacheCurrent"
+require_file_contains src/stores/useAuthStore.ts "clearQuotaCache"
 require_file_contains src/stores/useQuotaStore.ts "setXaiQuota"
 require_file_contains src/types/quota.ts "XaiQuotaState"
 require_file_contains src/pages/DashboardPage.tsx "useConfigStore"
@@ -617,6 +665,7 @@ require_file_contains src/pages/DashboardPage.tsx "fetchConfig"
 require_file_contains src/pages/DashboardPage.tsx "countAmpcodeConfig"
 require_file_contains src/pages/DashboardPage.tsx "config.ampcode"
 require_file_contains src/pages/DashboardPage.tsx "ampcode: providerStats.ampcode"
+require_file_contains src/utils/dashboard.ts "getDashboardModelsStatValue"
 require_file_contains src/stores/useModelsStore.ts "modelsApi.fetchModels"
 require_file_contains src/i18n/locales/en.json "A:{{ampcode}}"
 require_file_contains src/i18n/locales/zh-CN.json "A:{{ampcode}}"

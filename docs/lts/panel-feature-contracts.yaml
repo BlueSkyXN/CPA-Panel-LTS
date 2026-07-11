@@ -64,7 +64,7 @@ features:
 
   - id: dashboard-overview
     status: shared
-    reason: Dashboard provider counts must derive from cached config without dropping LTS-maintained providers.
+    reason: Dashboard provider counts must derive from cached config without dropping LTS-maintained providers or presenting load failures as real zero counts.
     routes:
       - /
       - /dashboard
@@ -78,6 +78,7 @@ features:
       - src/stores/useConfigStore.ts
       - src/stores/useModelsStore.ts
       - src/types/ampcode.ts
+      - src/utils/dashboard.ts
       - src/i18n/locales/
     core_endpoints:
       - /v0/management/config
@@ -89,6 +90,7 @@ features:
       - countAmpcodeConfig
       - config.ampcode
       - modelsApi.fetchModels
+      - getDashboardModelsStatValue
       - "A:{{ampcode}}"
 
   - id: provider-stable-lts-page
@@ -134,6 +136,7 @@ features:
       - src/features/providers/qiniuCloud.ts
       - src/features/providers/claudeApi.ts
       - src/features/providers/sponsorDefinitions.ts
+      - src/features/providers/sponsorMutationRecovery.ts
       - src/features/providers/sheets/forms/BaseProviderForm.tsx
       - src/features/providers/sheets/forms/SponsorProviderForm.tsx
       - src/features/providers/sheets/forms/useModelDiscovery.ts
@@ -182,6 +185,11 @@ features:
       - run_browser_provider_key_crud_smoke
       - BROWSER provider workbench OpenAI Compatibility save PUT /v0/management/openai-compatibility
       - Provider write smoke persisted response-only auth-index
+      - mutateLatestProviderList
+      - replaceLatestProviderRecord
+      - getSponsorAggregationConflict
+      - runSponsorMutationWithRecovery
+      - assert_each_request_immediately_preceded_by
     validation:
       - npm run smoke:lts
       - npm run smoke:lts:core
@@ -225,6 +233,7 @@ features:
       - src/features/plugins/PluginResourcePage.tsx
       - src/features/plugins/pluginReleaseVersions.ts
       - src/features/plugins/pluginResources.ts
+      - src/features/plugins/pluginConfigDraft.ts
       - src/features/plugins/components/PluginInstallGateModal.tsx
       - src/features/plugins/components/PluginInstallGateModal.module.scss
       - src/components/config/VisualConfigEditor.tsx
@@ -236,6 +245,7 @@ features:
       - src/components/layout/MainLayout.tsx
       - src/stores/useAuthStore.ts
       - src/services/api/client.ts
+      - scripts/smoke-lts-panel.py
       - scripts/smoke-lts-panel-core.py
     core_endpoints:
       - /v0/management/plugins
@@ -260,6 +270,13 @@ features:
       - pluginSupportKnown
       - probePluginSupport
       - run_plugin_config_smoke
+      - isOfficialRepository
+      - supportsPluginVersionSelection
+      - buildPluginConfigPatch
+      - patchConfig
+      - updateEnabled
+      - delete configPatch.enabled
+      - run_plugin_config_patch_smoke
       - plugin_id = "lts-smoke-plugin"
 
   - id: recent-requests
@@ -312,7 +329,7 @@ features:
 
   - id: config-management
     status: shared
-    reason: Source and visual config saves must preserve unmanaged YAML and plugin store sources.
+    reason: Source and visual config saves must preserve unmanaged YAML, plugin store sources, and concurrent server-side changes.
     routes:
       - /config
     panel_files:
@@ -333,7 +350,6 @@ features:
       - visualBaseYaml
       - normalizeYamlForVisualDiff
       - applyVisualChangesToYaml
-      - shouldWriteManagedField
       - hasPayloadDirtyFields
       - payloadRuleRawParamRow
       - payloadJsonInput
@@ -343,6 +359,10 @@ features:
       - transientErrorCooldownSeconds
       - transient-error-cooldown-seconds
       - transient_error_cooldown_seconds
+      - latestServerYaml
+      - dirtyFields.has('host')
+      - integer_range_1_3600
+      - concurrent-managed-smoke
 
   - id: codex-abnormal-reasoning-retry-config
     status: lts-maintained
@@ -395,6 +415,8 @@ features:
       - mode
       - hedge-delay-ms
       - require-distinct-auth
+      - hasCodexAbnormalReasoningRetryDirtyFields
+      - dirtyFields.has('codexAbnormalReasoningRetryAction')
       - StrategyBadge
       - StrategyGroup
       - ABNORMAL_RETRY_ACTION_HINT_KEYS
@@ -471,25 +493,35 @@ features:
 
   - id: auth-files-management
     status: shared
-    reason: Auth files are shared credential management and quota state inputs.
+    reason: Auth files are shared credential management, OAuth alias and exclusion editing, xAI official API routing, and quota state inputs.
     routes:
       - /auth-files
+      - /auth-files/oauth-excluded
+      - /auth-files/oauth-model-alias
       - /oauth
     panel_files:
       - src/pages/AuthFilesPage.tsx
+      - src/pages/AuthFilesOAuthExcludedEditPage.tsx
+      - src/pages/AuthFilesOAuthModelAliasEditPage.tsx
       - src/pages/OAuthPage.tsx
+      - src/components/modelAlias/
       - src/features/authFiles/
+      - src/hooks/useUnsavedChangesGuard.ts
       - src/services/api/authFiles.ts
       - src/services/api/oauth.ts
       - src/lts/codexRemoteCloudConnect/
       - src/i18n/locales/
       - src/types/authFile.ts
+      - src/types/oauth.ts
+      - scripts/smoke-lts-panel.py
       - scripts/smoke-lts-panel-core.py
     core_endpoints:
       - /v0/management/auth-files
       - /v0/management/auth-files/status
       - /v0/management/auth-files/fields
       - /v0/management/auth-files/models
+      - /v0/management/oauth-excluded-models
+      - /v0/management/oauth-model-alias
     required_markers:
       - normalizeBatchUploadResponse
       - normalizeBatchDeleteResponse
@@ -504,7 +536,18 @@ features:
       - AUTH_FILE_WEBSOCKET_PROVIDERS
       - supportsAuthFileWebsockets
       - websockets_label
+      - AUTH_FILE_USING_API_PROVIDERS
+      - supportsAuthFileUsingApi
+      - readAuthFileUsingApi
+      - using_api_label
+      - run_auth_file_using_api_smoke
       - run_auth_files_write_smoke
+      - force-mapping
+      - hasModelAliasConflict
+      - isOAuthEditorDirty
+      - getEffectiveOAuthExcludedRules
+      - useUnsavedChangesGuard
+      - run_oauth_editor_smoke
 
   - id: quota-management
     status: shared
@@ -517,6 +560,7 @@ features:
       - src/features/authFiles/components/AuthFileQuotaSection.tsx
       - src/features/authFiles/constants.ts
       - src/services/api/apiCall.ts
+      - src/stores/useAuthStore.ts
       - src/stores/useQuotaStore.ts
       - src/types/quota.ts
       - src/lts/codexQuota/
@@ -534,6 +578,9 @@ features:
       - XAI_BILLING_WEEKLY_URL
       - XAI_BILLING_MONTHLY_URL
       - batchConcurrency
+      - captureQuotaCacheGeneration
+      - commitIfQuotaCacheCurrent
+      - clearQuotaCache
       - run_quota_runtime_smoke
       - codex-smoke-auth
       - xai-smoke-auth

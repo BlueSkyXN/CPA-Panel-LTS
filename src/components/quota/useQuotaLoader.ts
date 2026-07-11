@@ -5,7 +5,11 @@
 import { useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AuthFileItem } from '@/types';
-import { useQuotaStore } from '@/stores';
+import {
+  captureQuotaCacheGeneration,
+  commitIfQuotaCacheCurrent,
+  useQuotaStore,
+} from '@/stores';
 import { getStatusFromError } from '@/utils/quota';
 import type { QuotaConfig } from './quotaConfigs';
 
@@ -55,6 +59,7 @@ export function useQuotaLoader<TState, TData>(config: QuotaConfig<TState, TData>
       if (loadingRef.current) return;
       loadingRef.current = true;
       const requestId = ++requestIdRef.current;
+      const cacheGeneration = captureQuotaCacheGeneration();
       setLoading(true, scope);
 
       try {
@@ -71,16 +76,18 @@ export function useQuotaLoader<TState, TData>(config: QuotaConfig<TState, TData>
         const applyResult = (result: LoadQuotaResult<TData>) => {
           if (requestId !== requestIdRef.current) return;
 
-          setQuota((prev) => ({
-            ...prev,
-            [result.name]:
-              result.status === 'success'
-                ? config.buildSuccessState(result.data as TData)
-                : config.buildErrorState(
-                    result.error || t('common.unknown_error'),
-                    result.errorStatus
-                  ),
-          }));
+          commitIfQuotaCacheCurrent(cacheGeneration, () => {
+            setQuota((prev) => ({
+              ...prev,
+              [result.name]:
+                result.status === 'success'
+                  ? config.buildSuccessState(result.data as TData)
+                  : config.buildErrorState(
+                      result.error || t('common.unknown_error'),
+                      result.errorStatus
+                    ),
+            }));
+          });
         };
 
         const fetchOne = async (file: AuthFileItem): Promise<void> => {
