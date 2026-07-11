@@ -1521,6 +1521,17 @@ def run_plugin_config_patch_smoke(page: Any, app_url: str) -> None:
 
 def run_oauth_editor_smoke(page: Any, app_url: str) -> None:
     page.goto(
+        f"{app_url}?route=oauth-alias-empty-draft#/auth-files/oauth-model-alias",
+        wait_until="domcontentloaded",
+    )
+    page.wait_for_function("() => window.location.hash.includes('/auth-files/oauth-model-alias')")
+    page.get_by_text("Add provider model aliases", exact=False).first.wait_for()
+    page.get_by_role("button", name="Back", exact=True).click()
+    page.wait_for_function("() => window.location.hash.endsWith('/auth-files')")
+    if page.get_by_role("dialog", name="Unsaved changes").count() != 0:
+        raise AssertionError("empty OAuth alias draft must not trigger the unsaved changes guard")
+
+    page.goto(
         f"{app_url}?route=oauth-editor#/auth-files/oauth-excluded",
         wait_until="domcontentloaded",
     )

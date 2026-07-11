@@ -24,13 +24,7 @@ export const getModelAliasDraftSignature = (entries: ModelAliasDraftEntry[]): st
         fork: entry.fork === true,
         forceMapping: typeof entry.forceMapping === 'boolean' ? entry.forceMapping : undefined,
       }))
-      .filter(
-        (entry) =>
-          entry.name !== '' ||
-          entry.alias !== '' ||
-          entry.fork !== true ||
-          entry.forceMapping !== undefined
-      )
+      .filter((entry) => entry.name !== '' || entry.alias !== '')
   );
 
 export const isOAuthEditorDirty = (

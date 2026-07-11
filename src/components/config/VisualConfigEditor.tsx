@@ -1080,12 +1080,12 @@ export function VisualConfigEditor({
                   disabled={disabled}
                   error={errorLogsMaxFilesError}
                 />
-                  <Input
-                    label={t('config_management.visual.sections.system.redis_usage_retention')}
-                    type="number"
-                    min={1}
-                    max={3600}
-                    placeholder="60"
+                <Input
+                  label={t('config_management.visual.sections.system.redis_usage_retention')}
+                  type="number"
+                  min={1}
+                  max={3600}
+                  placeholder="60"
                   value={values.redisUsageQueueRetentionSeconds}
                   onChange={(e) => onChange({ redisUsageQueueRetentionSeconds: e.target.value })}
                   disabled={disabled}
