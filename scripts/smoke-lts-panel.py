@@ -73,6 +73,7 @@ class MockCoreState:
         self.config_yaml_puts: list[str] = []
         self.runtime_kind = "cpa"
         self.include_branded_providers = True
+        self.plugin_enabled = True
         self.usage_payload = build_usage_payload()
 
     def record(self, method: str, path: str, query: str = "") -> None:
@@ -438,7 +439,7 @@ codex:
 """
 
 
-def build_plugin_list_payload() -> dict[str, Any]:
+def build_plugin_list_payload(enabled: bool = True) -> dict[str, Any]:
     return {
         "plugins_enabled": True,
         "plugins_dir": "plugins",
@@ -448,8 +449,8 @@ def build_plugin_list_payload() -> dict[str, Any]:
                 "path": "plugins/mock-plugin",
                 "configured": True,
                 "registered": True,
-                "enabled": True,
-                "effective_enabled": True,
+                "enabled": enabled,
+                "effective_enabled": enabled,
                 "metadata": {
                     "name": "Mock Resource Plugin",
                     "version": "0.1.0",
@@ -782,7 +783,7 @@ class MockCoreHandler(BaseHTTPRequestHandler):
             "/v0/management/model-definitions/codex": {
                 "models": [{"id": "gpt-5", "display_name": "GPT-5"}]
             },
-            "/v0/management/plugins": build_plugin_list_payload(),
+            "/v0/management/plugins": build_plugin_list_payload(self.state.plugin_enabled),
             "/v0/management/plugin-store": build_plugin_store_payload(),
             "/v0/management/logs": self._mock_logs_response(parsed.query),
             "/v0/management/request-error-logs": {
@@ -973,6 +974,12 @@ class MockCoreHandler(BaseHTTPRequestHandler):
         self.state.record("PATCH", parsed.path, parsed.query)
         body = self._read_body_text()
         self.state.record_body("PATCH", parsed.path, body)
+        if parsed.path == "/v0/management/plugins/mock-plugin/enabled":
+            try:
+                payload = json.loads(body) if body.strip() else {}
+            except json.JSONDecodeError:
+                payload = {}
+            self.state.plugin_enabled = payload.get("enabled") is True
         self._send_json({"status": "ok"})
 
     def do_DELETE(self) -> None:
@@ -1496,13 +1503,19 @@ def run_plugin_config_patch_smoke(page: Any, app_url: str) -> None:
     page.wait_for_function("() => window.location.hash.endsWith('/plugins')")
     page.get_by_text("Plugin Management", exact=False).first.wait_for()
     page.get_by_role("button", name="Edit config").click()
-    page.get_by_text("Configure Mock Resource Plugin", exact=False).first.wait_for()
-    page.get_by_label("label", exact=True).fill("updated-label")
+    config_dialog = page.get_by_role("dialog", name="Configure Mock Resource Plugin")
+    config_dialog.wait_for()
+    config_dialog.get_by_label("label", exact=True).fill("updated-label")
+    enabled_toggle = config_dialog.get_by_label("Enabled", exact=True)
+    enabled_toggle.evaluate("(element) => { if (element.checked) element.click(); }")
     with page.expect_response(
         lambda response: response.request.method == "PATCH"
         and response.url.endswith("/v0/management/plugins/mock-plugin/config")
+    ), page.expect_response(
+        lambda response: response.request.method == "PATCH"
+        and response.url.endswith("/v0/management/plugins/mock-plugin/enabled")
     ):
-        page.get_by_role("button", name="Save", exact=True).last.click()
+        config_dialog.get_by_role("button", name="Save", exact=True).click()
     page.get_by_text("Plugin config saved", exact=False).first.wait_for()
 
 
@@ -2401,6 +2414,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
         ("GET", "/v0/management/auth-files/download"),
         ("PATCH", "/v0/management/auth-files/fields"),
         ("PATCH", "/v0/management/plugins/mock-plugin/config"),
+        ("PATCH", "/v0/management/plugins/mock-plugin/enabled"),
         ("PATCH", "/v0/management/oauth-excluded-models"),
         ("PUT", "/v0/management/gemini-api-key"),
         ("PUT", "/v0/management/codex-api-key"),
@@ -2475,6 +2489,13 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
         "/v0/management/plugins/mock-plugin/config",
         lambda payload: payload == {"label": "updated-label"},
         "only the touched plugin config field",
+    )
+    assert_payload_match(
+        state,
+        "PATCH",
+        "/v0/management/plugins/mock-plugin/enabled",
+        lambda payload: payload == {"enabled": False},
+        "the dedicated plugin enabled update",
     )
     assert_payload_match(
         state,

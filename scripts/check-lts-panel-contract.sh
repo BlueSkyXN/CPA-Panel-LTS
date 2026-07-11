@@ -276,6 +276,8 @@ require_file_contains src/features/plugins/pluginReleaseVersions.ts "https://api
 require_file_contains src/features/plugins/pluginReleaseVersions.ts "supportsPluginVersionSelection"
 require_file_contains src/features/plugins/pluginConfigDraft.ts "buildPluginConfigPatch"
 require_file_contains src/features/plugins/PluginsPage.tsx "pluginsApi.patchConfig"
+require_file_contains src/features/plugins/PluginsPage.tsx "pluginsApi.updateEnabled"
+require_file_contains src/features/plugins/PluginsPage.tsx "delete configPatch.enabled"
 require_file_contains src/features/plugins/PluginStorePage.tsx "PluginInstallOptionsModal"
 require_file_contains src/features/plugins/PluginStorePage.tsx "install_version_release_mode"
 require_file_contains src/features/plugins/PluginStorePage.tsx "source_errors_title"

@@ -274,6 +274,8 @@ features:
       - supportsPluginVersionSelection
       - buildPluginConfigPatch
       - patchConfig
+      - updateEnabled
+      - delete configPatch.enabled
       - run_plugin_config_patch_smoke
       - plugin_id = "lts-smoke-plugin"
 

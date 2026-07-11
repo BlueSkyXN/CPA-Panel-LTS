@@ -295,7 +295,13 @@ export function PluginsPage() {
       return;
     }
 
-    if (Object.keys(patch).length === 0) {
+    const enabledChanged =
+      typeof patch.enabled === 'boolean' && patch.enabled !== editingPlugin.enabled;
+    const configPatch = { ...patch };
+    delete configPatch.enabled;
+    const hasConfigChanges = Object.keys(configPatch).length > 0;
+
+    if (!enabledChanged && !hasConfigChanges) {
       setEditingPlugin(null);
       setDraft(null);
       showNotification(t('plugin_management.save_success'), 'success');
@@ -304,10 +310,13 @@ export function PluginsPage() {
 
     setMutatingID(editingPlugin.id);
     try {
-      await pluginsApi.patchConfig(editingPlugin.id, patch);
+      if (hasConfigChanges) {
+        await pluginsApi.patchConfig(editingPlugin.id, configPatch);
+      }
+      if (enabledChanged) {
+        await pluginsApi.updateEnabled(editingPlugin.id, patch.enabled === true);
+      }
       clearConfigCache();
-      const enabledChanged =
-        typeof patch.enabled === 'boolean' && patch.enabled !== editingPlugin.enabled;
       const status = enabledChanged
         ? await waitForPluginRuntimeState(editingPlugin.id, patch.enabled === true)
         : await loadPlugins().then((): PluginRuntimeWaitStatus => 'ready');

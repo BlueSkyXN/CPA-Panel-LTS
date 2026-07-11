@@ -139,6 +139,10 @@ def build_core_config(port: int, temp_dir: Path) -> str:
         transient-error-cooldown-seconds: 30
         routing:
           strategy: round-robin
+        codex:
+          abnormal-reasoning-retry:
+            hedged-retry:
+              require-distinct-auth: false
         plugins:
           enabled: true
           dir: "{plugins_dir.as_posix()}"
@@ -774,7 +778,7 @@ def run_plugin_config_smoke(api_url: str) -> list[str]:
     plugin_path = f"/v0/management/plugins/{plugin_id}"
 
     plugin_payload = {
-        "enabled": False,
+        "enabled": True,
         "priority": 4,
         "mode": "safe",
         "permissions": {
@@ -794,14 +798,26 @@ def run_plugin_config_smoke(api_url: str) -> list[str]:
     saved_config = assert_mapping(request_json(api_url, config_path), config_path)
     seen.append(f"GET {config_path} after put")
     if (
-        saved_config.get("enabled") is not False
+        saved_config.get("enabled") is not True
         or saved_config.get("priority") != 4
         or saved_config.get("mode") != "safe"
         or saved_config.get("nested") != {"keep": "yes"}
     ):
         raise AssertionError(f"Plugin config PUT did not round-trip: {saved_config!r}")
 
-    seen.append(f"PATCH {enabled_path}")
+    seen.append(f"PATCH {enabled_path} disabled")
+    assert_mapping(
+        request_json(api_url, enabled_path, method="PATCH", payload={"enabled": False}),
+        enabled_path,
+    )
+    disabled_config = assert_mapping(request_json(api_url, config_path), config_path)
+    seen.append(f"GET {config_path} after disable")
+    if disabled_config.get("enabled") is not False:
+        raise AssertionError(
+            f"Plugin enabled endpoint did not expose disabled state: {disabled_config!r}"
+        )
+
+    seen.append(f"PATCH {enabled_path} enabled")
     assert_mapping(
         request_json(api_url, enabled_path, method="PATCH", payload={"enabled": True}),
         enabled_path,
