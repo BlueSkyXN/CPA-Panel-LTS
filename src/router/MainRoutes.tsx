@@ -24,14 +24,16 @@ import { SystemPage } from '@/pages/SystemPage';
 import { PluginsPage } from '@/features/plugins/PluginsPage';
 import { PluginStorePage } from '@/features/plugins/PluginStorePage';
 import { PluginResourcePage } from '@/features/plugins/PluginResourcePage';
+import { PluginRuntimeUnavailable } from '@/features/plugins/PluginRuntimeUnavailable';
 import { ProvidersWorkbenchPage } from '@/features/providers/ProvidersWorkbenchPage';
-import { useAuthStore } from '@/stores';
+import { useAuthStore, useConfigStore } from '@/stores';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
 function RequirePluginSupport({ children }: { children: ReactNode }) {
   const supportsPlugin = useAuthStore((state) => state.supportsPlugin);
   const pluginSupportKnown = useAuthStore((state) => state.pluginSupportKnown);
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
+  const pluginsConfigured = useConfigStore((state) => state.config?.pluginsEnabled === true);
   if (connectionStatus !== 'connected' || !pluginSupportKnown) {
     return (
       <div className="main-content">
@@ -39,7 +41,10 @@ function RequirePluginSupport({ children }: { children: ReactNode }) {
       </div>
     );
   }
-  return supportsPlugin ? <>{children}</> : <Navigate to="/" replace />;
+  if (supportsPlugin) {
+    return <>{children}</>;
+  }
+  return pluginsConfigured ? <PluginRuntimeUnavailable /> : <Navigate to="/" replace />;
 }
 
 const mainRoutes = [

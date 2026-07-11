@@ -225,6 +225,7 @@ export function MainLayout() {
 
   const logout = useAuthStore((state) => state.logout);
   const supportsPlugin = useAuthStore((state) => state.supportsPlugin);
+  const pluginSupportKnown = useAuthStore((state) => state.pluginSupportKnown);
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
 
   const config = useConfigStore((state) => state.config);
@@ -251,6 +252,11 @@ export function MainLayout() {
   const isLogsPage = location.pathname.startsWith('/logs');
   const showSidebarLabels = !sidebarCollapsed || sidebarOpen;
   const canLoadPlugins = supportsPlugin && connectionStatus === 'connected';
+  const showPluginRuntimeDiagnostic =
+    connectionStatus === 'connected' &&
+    pluginSupportKnown &&
+    !supportsPlugin &&
+    config?.pluginsEnabled === true;
 
   const loadPluginResources = useCallback(async () => {
     if (!canLoadPlugins) {
@@ -448,7 +454,15 @@ export function MainLayout() {
             icon: sidebarIcons.plugins,
           })),
         ]
-      : []),
+      : showPluginRuntimeDiagnostic
+        ? [
+            {
+              path: '/plugins',
+              label: t('nav.plugins_runtime_unavailable'),
+              icon: sidebarIcons.plugins,
+            },
+          ]
+        : []),
     ...(config?.loggingToFile
       ? [{ path: '/logs', label: t('nav.logs'), icon: sidebarIcons.logs }]
       : []),

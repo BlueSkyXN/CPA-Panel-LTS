@@ -21,11 +21,13 @@ export interface AuthState {
   serverRuntimeKind: ServerRuntimeKind;
   supportsPlugin: boolean;
   pluginSupportKnown: boolean;
+  pluginSupportSource: PluginSupportSource;
 }
 
 // 连接状态
 export type ConnectionStatus = 'connected' | 'disconnected' | 'connecting' | 'error';
 export type ServerRuntimeKind = 'unknown' | 'cpa' | 'home';
+export type PluginSupportSource = 'unknown' | 'header' | 'probe';
 
 export interface ConnectionInfo {
   status: ConnectionStatus;

@@ -72,6 +72,7 @@ class MockCoreState:
         self.config_yaml = build_config_yaml()
         self.config_yaml_puts: list[str] = []
         self.runtime_kind = "cpa"
+        self.supports_plugin = True
         self.include_branded_providers = True
         self.plugin_enabled = True
         self.usage_payload = build_usage_payload()
@@ -1026,7 +1027,10 @@ class MockCoreHandler(BaseHTTPRequestHandler):
         else:
             self.send_header("x-cpa-version", "6.9.49-smoke")
             self.send_header("x-cpa-build-date", "2026-06-16T00:00:00Z")
-        self.send_header("x-cpa-support-plugin", "true")
+        self.send_header(
+            "x-cpa-support-plugin",
+            "true" if self.state.supports_plugin else "false",
+        )
 
     def _read_body_text(self) -> str:
         raw_length = self.headers.get("Content-Length")
@@ -2136,6 +2140,35 @@ def run_usage_import_review_smoke(page: Any, state: MockCoreState) -> None:
         )
 
 
+def run_plugin_runtime_mismatch_smoke(
+    page: Any,
+    api_url: str,
+    state: MockCoreState,
+) -> None:
+    state.supports_plugin = False
+    try:
+        page.get_by_title("Logout").click()
+        page.wait_for_function("() => window.location.hash.endsWith('/login')")
+
+        page.locator('input[type="checkbox"]').first.check(force=True)
+        page.locator("input.input").first.fill(api_url)
+        page.locator('input[name="cpa-management-key"]').fill("smoke-management-key")
+        page.get_by_role("button", name=re.compile("Login|Connect", re.I)).click()
+        page.wait_for_function("() => window.location.hash === '#/'")
+
+        unavailable_link = page.get_by_role("link", name="Plugins (runtime unavailable)")
+        unavailable_link.wait_for()
+        if page.get_by_role("link", name="Plugin Store").count() != 0:
+            raise AssertionError("Plugin Store must remain gated when runtime support is unavailable")
+
+        unavailable_link.click()
+        page.wait_for_function("() => window.location.hash.endsWith('/plugins')")
+        page.get_by_text("Plugin runtime unavailable", exact=True).wait_for()
+        page.get_by_text("x-cpa-support-plugin: 0", exact=False).wait_for()
+    finally:
+        state.supports_plugin = True
+
+
 def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: bool) -> None:
     try:
         from playwright.sync_api import Error as PlaywrightError
@@ -2393,6 +2426,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             run_remote_cloud_connect_runtime_smoke(page, app_url)
             run_logs_runtime_smoke(page, app_url)
             run_home_logs_runtime_smoke(page, app_url, state)
+            run_plugin_runtime_mismatch_smoke(page, api_url, state)
         except PlaywrightError as exc:
             with contextlib.suppress(Exception):
                 body_text = page.locator("body").inner_text(timeout=1000)
