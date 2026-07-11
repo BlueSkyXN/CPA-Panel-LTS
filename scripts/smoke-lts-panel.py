@@ -72,6 +72,7 @@ class MockCoreState:
         self.config_yaml = build_config_yaml()
         self.config_yaml_puts: list[str] = []
         self.runtime_kind = "cpa"
+        self.include_branded_providers = True
 
     def record(self, method: str, path: str, query: str = "") -> None:
         suffix = f"?{query}" if query else ""
@@ -93,7 +94,71 @@ def build_recent_buckets() -> list[dict[str, Any]]:
     ]
 
 
-def build_config_payload() -> dict[str, Any]:
+def build_config_payload(include_branded_providers: bool = True) -> dict[str, Any]:
+    claude_api_keys = [
+        {
+            "api-key": "claude-key-1",
+            "base-url": "https://api.anthropic.com",
+            "models": [{"name": "claude-sonnet-4"}],
+        }
+    ]
+    openai_compatibility = [
+        {
+            "name": "OpenRouter",
+            "base-url": "https://openrouter.ai/api/v1",
+            "x-lts-unknown-provider": {"preserve": "provider"},
+            "api-key-entries": [
+                {
+                    "api-key": "openai-key-1",
+                    "auth-index": "openrouter-a",
+                    "x-lts-entry-note": "keep-entry-a",
+                },
+                {
+                    "api-key": "openai-key-2",
+                    "auth-index": "openrouter-b",
+                    "proxy-url": "http://127.0.0.1:7890",
+                    "x-lts-entry-note": "keep-entry-b",
+                },
+            ],
+            "models": [
+                {
+                    "name": "openai/mock-model",
+                    "alias": "mock-model",
+                    "test-model": "mock-model",
+                    "x-lts-model-note": "keep-model",
+                }
+            ],
+        }
+    ]
+
+    if include_branded_providers:
+        claude_api_keys.append(
+            {
+                "api-key": "claudeapi-smoke-key",
+                "base-url": "https://gw.claudeapi.com",
+                "models": [{"name": "claude-sonnet-4"}],
+            }
+        )
+        openai_compatibility.extend(
+            [
+                {
+                    "name": "code0",
+                    "base-url": "https://code0.ai/v1",
+                    "api-key-entries": [{"api-key": "code0-smoke-key"}],
+                },
+                {
+                    "name": "fennoAI",
+                    "base-url": "https://api.fenno.ai/v1",
+                    "api-key-entries": [{"api-key": "fenno-smoke-key"}],
+                },
+                {
+                    "name": "qiniuCloud",
+                    "base-url": "https://api.qnaigc.com/v1",
+                    "api-key-entries": [{"api-key": "qiniu-smoke-key"}],
+                },
+            ]
+        )
+
     return {
         "debug": False,
         "usage-statistics-enabled": True,
@@ -117,13 +182,7 @@ def build_config_payload() -> dict[str, Any]:
                 "models": [{"name": "gpt-5"}],
             }
         ],
-        "claude-api-key": [
-            {
-                "api-key": "claude-key-1",
-                "base-url": "https://api.anthropic.com",
-                "models": [{"name": "claude-sonnet-4"}],
-            }
-        ],
+        "claude-api-key": claude_api_keys,
         "vertex-api-key": [
             {
                 "api-key": "vertex-key-1",
@@ -131,34 +190,7 @@ def build_config_payload() -> dict[str, Any]:
                 "models": [{"name": "vertex-model", "alias": "vertex-alias"}],
             }
         ],
-        "openai-compatibility": [
-            {
-                "name": "OpenRouter",
-                "base-url": "https://openrouter.ai/api/v1",
-                "x-lts-unknown-provider": {"preserve": "provider"},
-                "api-key-entries": [
-                    {
-                        "api-key": "openai-key-1",
-                        "auth-index": "openrouter-a",
-                        "x-lts-entry-note": "keep-entry-a",
-                    },
-                    {
-                        "api-key": "openai-key-2",
-                        "auth-index": "openrouter-b",
-                        "proxy-url": "http://127.0.0.1:7890",
-                        "x-lts-entry-note": "keep-entry-b",
-                    },
-                ],
-                "models": [
-                    {
-                        "name": "openai/mock-model",
-                        "alias": "mock-model",
-                        "test-model": "mock-model",
-                        "x-lts-model-note": "keep-model",
-                    }
-                ],
-            }
-        ],
+        "openai-compatibility": openai_compatibility,
         "ampcode": {
             "upstream-url": "https://amp.example.test",
             "upstream-api-key": "sk-amp-smoke",
@@ -678,25 +710,28 @@ class MockCoreHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         self.state.record("GET", path, parsed.query)
+        config_payload = build_config_payload(
+            include_branded_providers=self.state.include_branded_providers
+        )
 
         routes: dict[str, Any] = {
-            "/v0/management/config": build_config_payload(),
+            "/v0/management/config": config_payload,
             "/v0/management/auth-files": build_auth_files_payload(),
             "/v0/management/usage": build_usage_payload(),
             "/v0/management/usage/export": {"version": 1, "usage": build_usage_payload()["usage"]},
             "/v0/management/api-key-usage": build_api_key_usage_payload(),
-            "/v0/management/ampcode": {"ampcode": build_config_payload()["ampcode"]},
+            "/v0/management/ampcode": {"ampcode": config_payload["ampcode"]},
             "/v0/management/vertex-api-key": {
-                "vertex-api-key": build_config_payload()["vertex-api-key"]
+                "vertex-api-key": config_payload["vertex-api-key"]
             },
             "/v0/management/openai-compatibility": {
-                "openai-compatibility": build_config_payload()["openai-compatibility"]
+                "openai-compatibility": config_payload["openai-compatibility"]
             },
             "/v0/management/ampcode/upstream-api-keys": {
-                "upstream-api-keys": build_config_payload()["ampcode"]["upstream-api-keys"]
+                "upstream-api-keys": config_payload["ampcode"]["upstream-api-keys"]
             },
             "/v0/management/ampcode/model-mappings": {
-                "model-mappings": build_config_payload()["ampcode"]["model-mappings"]
+                "model-mappings": config_payload["ampcode"]["model-mappings"]
             },
             "/v0/management/oauth-excluded-models": {
                 "oauth-excluded-models": {"codex": ["gpt-5-disabled"]}
@@ -1212,6 +1247,36 @@ def assert_provider_mutation_payloads(state: MockCoreState) -> None:
                 "OpenAI Compatibility PUT payload dropped model unknown field: "
                 f"{payload!r}"
             )
+        for provider_name, base_url, api_key in [
+            ("code0", "https://code0.ai/v1", "code0-smoke-key"),
+            ("fennoAI", "https://api.fenno.ai/v1", "fenno-smoke-key"),
+            ("qiniuCloud", "https://api.qnaigc.com/v1", "qiniu-smoke-key"),
+        ]:
+            branded_provider = next(
+                (
+                    item
+                    for item in payload
+                    if isinstance(item, dict) and item.get("name") == provider_name
+                ),
+                None,
+            )
+            branded_entries = (
+                branded_provider.get("api-key-entries", [])
+                if isinstance(branded_provider, dict)
+                else []
+            )
+            if (
+                not isinstance(branded_provider, dict)
+                or branded_provider.get("base-url") != base_url
+                or not any(
+                    isinstance(entry, dict) and entry.get("api-key") == api_key
+                    for entry in branded_entries
+                )
+            ):
+                raise AssertionError(
+                    "OpenAI Compatibility PUT payload dropped configured branded provider "
+                    f"{provider_name!r}: {payload!r}"
+                )
 
 
 def assert_config_yaml_roundtrip(state: MockCoreState) -> None:
@@ -1654,6 +1719,74 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     page.set_viewport_size({"width": 1280, "height": 720})
 
 
+def run_branded_provider_visibility_smoke(
+    page: Any,
+    app_url: str,
+    state: MockCoreState,
+) -> None:
+    branded_labels = ["ClaudeAPI", "Code0", "FennoAI", "Qiniu Cloud"]
+
+    for label in branded_labels:
+        category = page.get_by_role(
+            "button",
+            name=re.compile(rf"^{re.escape(label)}(?:\s|$)", re.I),
+        )
+        category.wait_for()
+        category.click()
+        page.get_by_role("heading", name=label, exact=True).wait_for()
+        for action in ["View", "Edit", "Delete"]:
+            action_buttons = page.get_by_role("button", name=action, exact=True)
+            action_buttons.first.wait_for()
+            if action_buttons.count() != 1:
+                raise AssertionError(
+                    f"Configured branded provider {label!r} should expose exactly one "
+                    f"{action!r} action; found {action_buttons.count()}"
+                )
+            if not action_buttons.first.is_enabled():
+                raise AssertionError(
+                    f"Configured branded provider {label!r} has disabled {action!r} action"
+                )
+
+    body_text = page.locator("body").inner_text()
+    for forbidden_text in ["Quick" + " Fill", "Register" + " here"]:
+        if forbidden_text in body_text:
+            raise AssertionError(
+                f"Provider workbench rendered removed promotional text: {forbidden_text!r}"
+            )
+
+    state.include_branded_providers = False
+    try:
+        page.goto(
+            f"{app_url}?route=workbench-no-brands#/ai-providers/workbench",
+            wait_until="domcontentloaded",
+        )
+        page.wait_for_function("() => window.location.hash.endsWith('/ai-providers/workbench')")
+        page.get_by_text("AI Providers", exact=False).first.wait_for()
+        page.get_by_role("button", name=re.compile(r"^Gemini(?:\s|$)", re.I)).wait_for()
+
+        for label in branded_labels:
+            category = page.get_by_role(
+                "button",
+                name=re.compile(rf"^{re.escape(label)}(?:\s|$)", re.I),
+            )
+            if category.count() != 0:
+                raise AssertionError(
+                    f"Unconfigured branded provider {label!r} was shown as a recommendation"
+                )
+
+        body_text = page.locator("body").inner_text()
+        for forbidden_text in ["Quick" + " Fill", "Register" + " here"]:
+            if forbidden_text in body_text:
+                raise AssertionError(
+                    f"Unconfigured provider workbench rendered promotional text: "
+                    f"{forbidden_text!r}"
+                )
+        if page.locator('a[href*="quick-start"]').count() != 0:
+            raise AssertionError("Unconfigured provider workbench exposed a quick-start route")
+    finally:
+        state.include_branded_providers = True
+
+
 def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: bool) -> None:
     try:
         from playwright.sync_api import Error as PlaywrightError
@@ -1838,6 +1971,8 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             ):
                 sheet.get_by_role("button", name="Save").click()
             wait_for_no_dialog()
+
+            run_branded_provider_visibility_smoke(page, app_url, state)
 
             page.goto(f"{app_url}?route=config-source-save#/config", wait_until="domcontentloaded")
             page.wait_for_function("() => window.location.hash.endsWith('/config')")

@@ -13,9 +13,9 @@ import {
   finalizeLatencyStats,
 } from './usage/latency';
 import {
-  calculateFallbackUsageTotalTokens,
   calculateUsageCost,
   getUsageCacheTokenCounts,
+  resolveUsageTotalTokens,
   type UsageTokenFields,
 } from './usage/cacheTokens';
 import { maskApiKey } from './format';
@@ -728,12 +728,9 @@ export function extractTotalTokens(detail: unknown, modelNameOverride?: string):
   const record = isRecord(detail) ? detail : null;
   const tokensRaw = record?.tokens;
   const tokens = isRecord(tokensRaw) ? tokensRaw : {};
-  if (typeof tokens.total_tokens === 'number') {
-    return tokens.total_tokens;
-  }
   const modelName =
     modelNameOverride ?? (typeof record?.__modelName === 'string' ? record.__modelName : '');
-  return calculateFallbackUsageTotalTokens(tokens, modelName);
+  return resolveUsageTotalTokens(tokens, modelName);
 }
 
 /**

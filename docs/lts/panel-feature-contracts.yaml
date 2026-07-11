@@ -30,6 +30,7 @@ features:
       - src/utils/usage.ts
       - src/utils/usageIndex.ts
       - src/utils/usage/
+      - src/utils/usage/cacheTokens.test.mjs
     core_endpoints:
       - /v0/management/usage
       - /v0/management/usage/export
@@ -41,9 +42,12 @@ features:
       - usageApi.importUsage
       - calculateStatusBarData
       - collectUsageDetailsForCandidates
+      - resolveUsageTotalTokens
+      - resolveCacheWriteUnitPrice
       - service_tier
       - request_events_filter_tier
     validation:
+      - npm run test:usage-cache
       - npm run check:lts
       - npm run check:feature-contract
       - npm run type-check
@@ -161,6 +165,10 @@ features:
       - x-lts-model-note
       - dropped provider unknown fields
       - dropped model unknown field
+      - dropped configured branded provider
+      - include_branded_providers
+      - run_branded_provider_visibility_smoke
+      - shown as a recommendation
       - run_browser_provider_workbench_smoke
       - run_browser_provider_key_crud_smoke
       - BROWSER provider workbench OpenAI Compatibility save PUT /v0/management/openai-compatibility

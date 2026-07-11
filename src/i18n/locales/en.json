@@ -1053,7 +1053,7 @@
     "model_price_cache": "Cache read price",
     "model_price_cache_write": "Cache write price",
     "model_price_cache_write_auto": "Auto",
-    "model_price_cache_write_hint": "Leave blank to use prompt price ×1.25 for GPT-5.6; other models reuse the cache read price.",
+    "model_price_cache_write_hint": "Leave blank to use prompt price ×1.25 for GPT-5.6. Other models add no cache-write cost unless you enter one.",
     "model_price_save": "Save Price",
     "model_price_empty": "No model prices set",
     "model_price_model": "Model",

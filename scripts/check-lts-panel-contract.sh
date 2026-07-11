@@ -138,6 +138,7 @@ for path in \
   src/utils/usage.ts \
   src/utils/usageIndex.ts \
   src/utils/usage \
+  src/utils/usage/cacheTokens.test.mjs \
   src/utils/recentRequests.ts \
   src/utils/quota \
   src/utils/constants.ts \
@@ -147,6 +148,7 @@ for path in \
   scripts/check-panel-feature-contracts.mjs \
   scripts/smoke-lts-panel.py \
   scripts/smoke-lts-panel-core.py \
+  .github/workflows/lts-panel-contract.yml \
   src/i18n/locales/en.json \
   src/i18n/locales/zh-CN.json \
   src/i18n/locales/zh-TW.json \
@@ -174,6 +176,9 @@ require_file_contains src/stores/useUsageStatsStore.ts "usageApi.getUsage"
 require_file_contains src/services/api/config.ts "'/usage-statistics-enabled'"
 require_file_contains src/utils/constants.ts "USAGE: '/usage'"
 require_file_contains src/utils/usage.ts "service_tier"
+require_file_contains src/utils/usage.ts "resolveUsageTotalTokens"
+require_file_contains src/utils/usage/cacheTokens.ts "resolveCacheWriteUnitPrice"
+require_file_contains src/utils/usage/cacheTokens.test.mjs "only explicit GPT-5.6 model slugs"
 require_file_contains src/components/usage/RequestEventsDetailsCard.tsx "service_tier"
 require_file_contains src/components/usage/RequestEventsDetailsCard.tsx "request_events_filter_tier"
 require_file_contains src/i18n/locales/en.json "request_events_filter_tier"
@@ -192,6 +197,7 @@ require_file_contains docs/lts/panel-protected-deltas.yaml "full-usage-statistic
 require_file_contains docs/lts/panel-protected-deltas.yaml "cpa-core-lts-management-api-compatibility"
 require_file_contains docs/lts/panel-protected-deltas.yaml "panel-release-contract"
 require_file_contains docs/lts/sync-runbook.md "protected selective-port"
+require_file_contains docs/lts/panel-feature-contracts.yaml "npm run test:usage-cache"
 
 # Accepted upstream feature regression checks.
 require_file_contains src/router/MainRoutes.tsx "path: '/ai-providers/workbench'"
@@ -617,6 +623,10 @@ require_file_contains scripts/smoke-lts-panel.py "x-lts-entry-note"
 require_file_contains scripts/smoke-lts-panel.py "x-lts-model-note"
 require_file_contains scripts/smoke-lts-panel.py "dropped provider unknown fields"
 require_file_contains scripts/smoke-lts-panel.py "dropped model unknown field"
+require_file_contains scripts/smoke-lts-panel.py "dropped configured branded provider"
+require_file_contains scripts/smoke-lts-panel.py "include_branded_providers"
+require_file_contains scripts/smoke-lts-panel.py "run_branded_provider_visibility_smoke"
+require_file_contains scripts/smoke-lts-panel.py "shown as a recommendation"
 require_file_contains scripts/smoke-lts-panel.py "OpenAI Compatibility PUT payload must not write response-only auth-index"
 require_file_contains scripts/smoke-lts-panel.py "openrouter-a"
 require_file_contains scripts/smoke-lts-panel.py "openrouter-b"
@@ -626,6 +636,9 @@ require_file_contains scripts/smoke-lts-panel.py "openai/smoke-discovered"
 require_file_contains scripts/smoke-lts-panel-core.py "Provider write smoke persisted response-only auth-index"
 
 # Smoke coverage markers.
+require_file_contains package.json "\"test:usage-cache\""
+require_file_contains package.json "\"validate:lts\": \"npm run test:usage-cache"
+require_file_contains .github/workflows/lts-panel-contract.yml "npm run test:usage-cache"
 require_file_contains package.json "\"smoke:lts\""
 require_file_contains package.json "\"smoke:lts:core\""
 require_file_contains scripts/check-panel-feature-contracts.mjs "panel-feature-contracts.yaml"

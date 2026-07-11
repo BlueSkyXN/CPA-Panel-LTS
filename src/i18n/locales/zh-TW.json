@@ -1079,7 +1079,7 @@
     "model_price_cache": "快取讀取定價",
     "model_price_cache_write": "快取寫入定價",
     "model_price_cache_write_auto": "自動",
-    "model_price_cache_write_hint": "留空時 GPT-5.6 按提示定價的 1.25 倍計算，其他模型沿用快取讀取定價。",
+    "model_price_cache_write_hint": "留空時 GPT-5.6 按提示定價的 1.25 倍計算；其他模型預設不新增快取寫入成本，如需計費請明確填寫。",
     "model_price_save": "儲存定價",
     "model_price_empty": "尚未設定任何模型定價",
     "model_price_model": "模型",

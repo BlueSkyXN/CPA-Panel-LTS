@@ -13,7 +13,7 @@
     "test:usage-cache": "node --test src/utils/usage/cacheTokens.test.mjs",
     "check:feature-contract": "node scripts/check-panel-feature-contracts.mjs",
     "check:lts": "scripts/check-lts-panel-contract.sh",
-    "validate:lts": "npm run check:lts && npm run type-check && npm run lint && npm run build",
+    "validate:lts": "npm run test:usage-cache && npm run check:lts && npm run type-check && npm run lint && npm run build",
     "smoke:lts": "npm run build && python3 scripts/smoke-lts-panel.py",
     "smoke:lts:core": "npm run build && python3 scripts/smoke-lts-panel-core.py"
   },

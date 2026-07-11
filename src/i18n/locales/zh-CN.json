@@ -1053,7 +1053,7 @@
     "model_price_cache": "缓存读取价格",
     "model_price_cache_write": "缓存写入价格",
     "model_price_cache_write_auto": "自动",
-    "model_price_cache_write_hint": "留空时 GPT-5.6 按提示价格的 1.25 倍计算，其他模型沿用缓存读取价格。",
+    "model_price_cache_write_hint": "留空时 GPT-5.6 按提示价格的 1.25 倍计算；其他模型默认不新增缓存写入成本，如需计费请显式填写。",
     "model_price_save": "保存价格",
     "model_price_empty": "暂未设置任何模型价格",
     "model_price_model": "模型",
