@@ -20,6 +20,10 @@ import {
   type UsageThinking,
 } from '@/utils/usage';
 import { getUsageCacheTokenCounts } from '@/utils/usage/cacheTokens';
+import {
+  classifyUsageReasoningEffort,
+  type UsageReasoningEffortKind,
+} from '@/utils/usage/reasoningEffort';
 import { downloadBlob } from '@/utils/download';
 import styles from '@/pages/UsagePage.module.scss';
 
@@ -28,6 +32,9 @@ const SERVICE_TIER_PRIORITY_FILTER = '__service_tier_priority__';
 const SERVICE_TIER_STANDARD_FILTER = '__service_tier_standard__';
 const SERVICE_TIER_LEGACY_UNKNOWN_FILTER = '__service_tier_legacy_unknown__';
 const SERVICE_TIER_OTHER_FILTER_PREFIX = '__service_tier_other__:';
+const REASONING_EFFORT_LEGACY_UNKNOWN_FILTER = '__reasoning_effort_legacy_unknown__';
+const REASONING_EFFORT_MAX_ULTRA_WIRE_FILTER = '__reasoning_effort_max_ultra_wire__';
+const REASONING_EFFORT_RAW_FILTER_PREFIX = '__reasoning_effort_raw__:';
 const MAX_RENDERED_EVENTS = 500;
 
 type ServiceTierKind = 'priority' | 'standard' | 'legacy-unknown' | 'other';
@@ -47,6 +54,10 @@ type RequestEventRow = {
   serviceTierKind: ServiceTierKind;
   serviceTierFilterValue: string;
   serviceTierLabel: string;
+  reasoningEffort: string | null;
+  reasoningEffortKind: UsageReasoningEffortKind;
+  reasoningEffortFilterValue: string;
+  reasoningEffortLabel: string;
   failed: boolean;
   latencyMs: number | null;
   thinking: UsageThinking | null;
@@ -93,6 +104,17 @@ const getServiceTierFilterValue = (serviceTier: string | null, kind: ServiceTier
   if (kind === 'standard') return SERVICE_TIER_STANDARD_FILTER;
   if (kind === 'legacy-unknown') return SERVICE_TIER_LEGACY_UNKNOWN_FILTER;
   return `${SERVICE_TIER_OTHER_FILTER_PREFIX}${encodeURIComponent(serviceTier ?? '')}`;
+};
+
+const getReasoningEffortFilterValue = (
+  reasoningEffort: string | null,
+  kind: UsageReasoningEffortKind
+): string => {
+  if (kind === 'legacy-unknown') return REASONING_EFFORT_LEGACY_UNKNOWN_FILTER;
+  if (kind === 'max-ultra-wire') return REASONING_EFFORT_MAX_ULTRA_WIRE_FILTER;
+  return `${REASONING_EFFORT_RAW_FILTER_PREFIX}${encodeURIComponent(
+    reasoningEffort?.toLowerCase() ?? ''
+  )}`;
 };
 
 const formatThinkingLabel = (thinking: UsageThinking | null): string => {
@@ -147,6 +169,7 @@ export function RequestEventsDetailsCard({
   const [sourceFilter, setSourceFilter] = useState(ALL_FILTER);
   const [authIndexFilter, setAuthIndexFilter] = useState(ALL_FILTER);
   const [serviceTierFilter, setServiceTierFilter] = useState(ALL_FILTER);
+  const [reasoningEffortFilter, setReasoningEffortFilter] = useState(ALL_FILTER);
   const [authFileMap, setAuthFileMap] = useState<Map<string, CredentialInfo>>(new Map());
 
   useEffect(() => {
@@ -218,6 +241,22 @@ export function RequestEventsDetailsCard({
             : serviceTierKind === 'legacy-unknown'
               ? t('usage_stats.request_events_tier_legacy_unknown')
               : t('usage_stats.request_events_tier_other', { tier: serviceTier });
+      const reasoningEffortPresentation = classifyUsageReasoningEffort(
+        model,
+        detail.reasoning_effort
+      );
+      const reasoningEffort = reasoningEffortPresentation.raw;
+      const reasoningEffortKind = reasoningEffortPresentation.kind;
+      const reasoningEffortFilterValue = getReasoningEffortFilterValue(
+        reasoningEffort,
+        reasoningEffortKind
+      );
+      const reasoningEffortLabel =
+        reasoningEffortKind === 'legacy-unknown'
+          ? t('usage_stats.request_events_effort_legacy_unknown')
+          : reasoningEffortKind === 'max-ultra-wire'
+            ? t('usage_stats.request_events_effort_max_ultra_wire')
+            : (reasoningEffort ?? '-');
       const inputTokens = Math.max(toNumber(detail.tokens?.input_tokens), 0);
       const outputTokens = Math.max(toNumber(detail.tokens?.output_tokens), 0);
       const reasoningTokens = Math.max(toNumber(detail.tokens?.reasoning_tokens), 0);
@@ -245,6 +284,10 @@ export function RequestEventsDetailsCard({
         serviceTierKind,
         serviceTierFilterValue,
         serviceTierLabel,
+        reasoningEffort,
+        reasoningEffortKind,
+        reasoningEffortFilterValue,
+        reasoningEffortLabel,
         failed: detail.failed === true,
         latencyMs,
         thinking,
@@ -359,6 +402,22 @@ export function RequestEventsDetailsCard({
     ];
   }, [i18n.language, rows, t]);
 
+  const reasoningEffortOptions = useMemo(() => {
+    const optionMap = new Map<string, string>();
+    rows.forEach((row) => {
+      if (!optionMap.has(row.reasoningEffortFilterValue)) {
+        optionMap.set(row.reasoningEffortFilterValue, row.reasoningEffortLabel);
+      }
+    });
+
+    return [
+      { value: ALL_FILTER, label: t('usage_stats.filter_all') },
+      ...Array.from(optionMap.entries())
+        .sort(([, left], [, right]) => left.localeCompare(right, i18n.language))
+        .map(([value, label]) => ({ value, label })),
+    ];
+  }, [i18n.language, rows, t]);
+
   const modelOptionSet = useMemo(
     () => new Set(modelOptions.map((option) => option.value)),
     [modelOptions]
@@ -375,6 +434,10 @@ export function RequestEventsDetailsCard({
     () => new Set(serviceTierOptions.map((option) => option.value)),
     [serviceTierOptions]
   );
+  const reasoningEffortOptionSet = useMemo(
+    () => new Set(reasoningEffortOptions.map((option) => option.value)),
+    [reasoningEffortOptions]
+  );
 
   const effectiveModelFilter = modelOptionSet.has(modelFilter) ? modelFilter : ALL_FILTER;
   const effectiveSourceFilter = sourceOptionSet.has(sourceFilter) ? sourceFilter : ALL_FILTER;
@@ -383,6 +446,9 @@ export function RequestEventsDetailsCard({
     : ALL_FILTER;
   const effectiveServiceTierFilter = serviceTierOptionSet.has(serviceTierFilter)
     ? serviceTierFilter
+    : ALL_FILTER;
+  const effectiveReasoningEffortFilter = reasoningEffortOptionSet.has(reasoningEffortFilter)
+    ? reasoningEffortFilter
     : ALL_FILTER;
 
   const filteredRows = useMemo(
@@ -397,11 +463,21 @@ export function RequestEventsDetailsCard({
         const serviceTierMatched =
           effectiveServiceTierFilter === ALL_FILTER ||
           row.serviceTierFilterValue === effectiveServiceTierFilter;
-        return modelMatched && sourceMatched && authIndexMatched && serviceTierMatched;
+        const reasoningEffortMatched =
+          effectiveReasoningEffortFilter === ALL_FILTER ||
+          row.reasoningEffortFilterValue === effectiveReasoningEffortFilter;
+        return (
+          modelMatched &&
+          sourceMatched &&
+          authIndexMatched &&
+          serviceTierMatched &&
+          reasoningEffortMatched
+        );
       }),
     [
       effectiveAuthIndexFilter,
       effectiveModelFilter,
+      effectiveReasoningEffortFilter,
       effectiveServiceTierFilter,
       effectiveSourceFilter,
       rows,
@@ -414,13 +490,15 @@ export function RequestEventsDetailsCard({
     effectiveModelFilter !== ALL_FILTER ||
     effectiveSourceFilter !== ALL_FILTER ||
     effectiveAuthIndexFilter !== ALL_FILTER ||
-    effectiveServiceTierFilter !== ALL_FILTER;
+    effectiveServiceTierFilter !== ALL_FILTER ||
+    effectiveReasoningEffortFilter !== ALL_FILTER;
 
   const handleClearFilters = () => {
     setModelFilter(ALL_FILTER);
     setSourceFilter(ALL_FILTER);
     setAuthIndexFilter(ALL_FILTER);
     setServiceTierFilter(ALL_FILTER);
+    setReasoningEffortFilter(ALL_FILTER);
   };
 
   const handleExportCsv = () => {
@@ -433,6 +511,7 @@ export function RequestEventsDetailsCard({
       'source_raw',
       'auth_index',
       'service_tier',
+      'reasoning_effort',
       'result',
       ...(hasLatencyData ? ['latency_ms'] : []),
       'thinking_intensity',
@@ -456,6 +535,7 @@ export function RequestEventsDetailsCard({
         row.sourceRaw,
         row.authIndex,
         row.serviceTier ?? '',
+        row.reasoningEffort ?? '',
         row.failed ? 'failed' : 'success',
         ...(hasLatencyData ? [row.latencyMs ?? ''] : []),
         row.thinking?.intensity ?? '',
@@ -492,6 +572,7 @@ export function RequestEventsDetailsCard({
       source_raw: row.sourceRaw,
       auth_index: row.authIndex,
       service_tier: row.serviceTier,
+      reasoning_effort: row.reasoningEffort,
       failed: row.failed,
       ...(hasLatencyData && row.latencyMs !== null ? { latency_ms: row.latencyMs } : {}),
       ...(row.thinking ? { thinking: row.thinking } : {}),
@@ -599,6 +680,19 @@ export function RequestEventsDetailsCard({
             fullWidth={false}
           />
         </div>
+        <div className={styles.requestEventsFilterItem}>
+          <span className={styles.requestEventsFilterLabel}>
+            {t('usage_stats.request_events_filter_effort')}
+          </span>
+          <Select
+            value={effectiveReasoningEffortFilter}
+            options={reasoningEffortOptions}
+            onChange={setReasoningEffortFilter}
+            className={styles.requestEventsSelect}
+            ariaLabel={t('usage_stats.request_events_filter_effort')}
+            fullWidth={false}
+          />
+        </div>
       </div>
 
       {loading && rows.length === 0 ? (
@@ -629,7 +723,7 @@ export function RequestEventsDetailsCard({
           </div>
 
           <div className={styles.requestEventsTableWrapper}>
-            <table className={styles.table}>
+            <table className={`${styles.table} ${styles.requestEventsTable}`}>
               <thead>
                 <tr>
                   <th>{t('usage_stats.request_events_timestamp')}</th>
@@ -640,6 +734,7 @@ export function RequestEventsDetailsCard({
                   <th>{t('usage_stats.request_events_result')}</th>
                   {hasLatencyData && <th title={latencyHint}>{t('usage_stats.time')}</th>}
                   <th>{t('usage_stats.thinking_intensity')}</th>
+                  <th>{t('usage_stats.request_events_effort')}</th>
                   <th>{t('usage_stats.input_tokens')}</th>
                   <th>{t('usage_stats.output_tokens')}</th>
                   <th>{t('usage_stats.reasoning_tokens')}</th>
@@ -720,6 +815,22 @@ export function RequestEventsDetailsCard({
                         }
                       >
                         {row.thinkingLabel}
+                      </span>
+                    </td>
+                    <td>
+                      <span
+                        className={
+                          row.reasoningEffortKind === 'legacy-unknown'
+                            ? styles.requestEventsThinkingEmpty
+                            : styles.requestEventsThinkingBadge
+                        }
+                        title={
+                          row.reasoningEffortKind === 'max-ultra-wire'
+                            ? t('usage_stats.request_events_effort_max_ultra_wire_hint')
+                            : (row.reasoningEffort ?? undefined)
+                        }
+                      >
+                        {row.reasoningEffortLabel}
                       </span>
                     </td>
                     <td>{row.inputTokens.toLocaleString()}</td>

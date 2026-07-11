@@ -31,6 +31,10 @@ features:
       - src/utils/usageIndex.ts
       - src/utils/usage/
       - src/utils/usage/cacheTokens.test.mjs
+      - src/utils/usage/importPreflight.ts
+      - src/utils/usage/importPreflight.test.mjs
+      - src/utils/usage/reasoningEffort.ts
+      - src/utils/usage/reasoningEffort.test.mjs
     core_endpoints:
       - /v0/management/usage
       - /v0/management/usage/export
@@ -44,10 +48,15 @@ features:
       - collectUsageDetailsForCandidates
       - resolveUsageTotalTokens
       - resolveCacheWriteUnitPrice
+      - analyzeUsageImport
+      - classifyUsageReasoningEffort
       - service_tier
       - request_events_filter_tier
+      - reasoning_effort
+      - request_events_filter_effort
     validation:
       - npm run test:usage-cache
+      - npm run test:usage
       - npm run check:lts
       - npm run check:feature-contract
       - npm run type-check

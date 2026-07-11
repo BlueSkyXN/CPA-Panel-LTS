@@ -1146,15 +1146,6 @@ const formatXaiPercent = (value: number | null): string => {
   return `${Math.round(value)}%`;
 };
 
-const formatXaiPeriodRange = (start?: string, end?: string): string => {
-  const startLabel = formatQuotaResetTime(start);
-  const endLabel = formatQuotaResetTime(end);
-  if (startLabel !== '-' && endLabel !== '-') return `${startLabel} ~ ${endLabel}`;
-  if (endLabel !== '-') return endLabel;
-  if (startLabel !== '-') return startLabel;
-  return '';
-};
-
 const XAI_SUPERGROK_LIMIT_CENTS = 15_000;
 const XAI_SUPERGROK_HEAVY_LIMIT_CENTS = 150_000;
 
@@ -1204,7 +1195,6 @@ const renderXaiItems = (
       ? Math.max(0, Math.min(100, billing.usagePercent))
       : null;
   const weeklyRemaining = weeklyUsed === null ? null : Math.max(0, Math.min(100, 100 - weeklyUsed));
-  const weeklyPeriodLabel = formatXaiPeriodRange(billing.periodStart, billing.periodEnd);
   const weeklyResetLabel = formatQuotaResetTime(billing.periodEnd);
   const hasWeeklyData =
     billing.periodType === 'weekly' &&
@@ -1247,9 +1237,6 @@ const renderXaiItems = (
                   percent: formatXaiPercent(weeklyUsed),
                 })
               ),
-              weeklyPeriodLabel
-                ? h('span', { className: styleMap.quotaAmount }, weeklyPeriodLabel)
-                : null,
               weeklyResetLabel !== '-'
                 ? h(
                     'span',
