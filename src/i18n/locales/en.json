@@ -632,6 +632,8 @@
     "disable_cooling_label": "Disable cooling (disable_cooling)",
     "disable_cooling_placeholder": "e.g. true / false / 1 / 0",
     "disable_cooling_hint": "Supports booleans, numeric 0/non-0, and strings like true/false/1/0; unparseable values are ignored.",
+    "using_api_label": "Use official API (using_api)",
+    "using_api_hint": "Use the official xAI API when enabled; use Grok CLI chat-proxy when disabled.",
     "note_label": "Note",
     "note_placeholder": "Enter a note, e.g.: John's account",
     "note_hint": "Optional. Used to describe the purpose or owner of this credential; leave empty to omit.",

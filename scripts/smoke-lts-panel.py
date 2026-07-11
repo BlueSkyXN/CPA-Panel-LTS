@@ -811,6 +811,28 @@ class MockCoreHandler(BaseHTTPRequestHandler):
             )
             return
 
+        if path == "/v0/management/auth-files/download":
+            name = parse_qs(parsed.query).get("name", [""])[0]
+            auth_files = {
+                "codex-smoke.json": {
+                    "type": "codex",
+                    "email": "codex-smoke@example.test",
+                    "websockets": True,
+                },
+                "xai-smoke.json": {
+                    "type": "xai",
+                    "email": "xai-smoke@example.test",
+                    "using_api": False,
+                    "unmanaged-smoke-field": "keep-me",
+                },
+            }
+            payload = auth_files.get(name)
+            if payload is None:
+                self._send_json({"error": "auth file not found"}, status=404)
+                return
+            self._send_json(payload)
+            return
+
         if path == "/v0/management/nodes":
             self._send_json({"error": "not found"}, status=404)
             return
@@ -1509,6 +1531,61 @@ def run_oauth_editor_smoke(page: Any, app_url: str) -> None:
     page.get_by_text("Model disablement updated", exact=False).first.wait_for()
 
 
+def run_auth_file_using_api_smoke(page: Any, app_url: str) -> None:
+    page.goto(f"{app_url}?route=auth-file-using-api#/auth-files", wait_until="domcontentloaded")
+    page.wait_for_function("() => window.location.hash.endsWith('/auth-files')")
+    page.get_by_text("Auth Files Management", exact=False).first.wait_for()
+
+    codex_card = page.get_by_text("codex-smoke.json", exact=True).locator(
+        "xpath=ancestor::div[contains(@class, 'fileCard')][1]"
+    )
+    with page.expect_response(
+        lambda response: response.request.method == "GET"
+        and "/v0/management/auth-files/download" in response.url
+        and "codex-smoke.json" in response.url
+    ):
+        codex_card.locator('button[title="Auth File Details / Edit"]').click()
+    codex_dialog = page.get_by_role(
+        "dialog", name="Auth File Details / Edit - codex-smoke.json"
+    )
+    codex_dialog.wait_for()
+    if codex_dialog.get_by_label("Use official API (using_api)").count() != 0:
+        raise AssertionError("using_api control must stay hidden for non-xAI auth files")
+    codex_dialog.locator(".modal-footer").get_by_role(
+        "button", name="Close", exact=True
+    ).click()
+    codex_dialog.wait_for(state="hidden")
+
+    xai_card = page.get_by_text("xai-smoke.json", exact=True).locator(
+        "xpath=ancestor::div[contains(@class, 'fileCard')][1]"
+    )
+    with page.expect_response(
+        lambda response: response.request.method == "GET"
+        and "/v0/management/auth-files/download" in response.url
+        and "xai-smoke.json" in response.url
+    ):
+        xai_card.locator('button[title="Auth File Details / Edit"]').click()
+    xai_dialog = page.get_by_role("dialog", name="Auth File Details / Edit - xai-smoke.json")
+    xai_dialog.wait_for()
+    using_api_toggle = xai_dialog.get_by_label("Use official API (using_api)")
+    if using_api_toggle.is_checked():
+        raise AssertionError("xAI using_api smoke baseline must start in CLI chat-proxy mode")
+    using_api_toggle.evaluate("(element) => element.click()")
+    page.wait_for_function(
+        "() => document.querySelector('input[aria-label=\"Use official API (using_api)\"]')?.checked === true"
+    )
+    xai_dialog.get_by_text(
+        "Use the official xAI API when enabled; use Grok CLI chat-proxy when disabled.",
+        exact=True,
+    ).wait_for()
+    with page.expect_response(
+        lambda response: response.request.method == "PATCH"
+        and response.url.endswith("/v0/management/auth-files/fields")
+    ):
+        xai_dialog.get_by_role("button", name="Save", exact=True).click()
+    page.get_by_text('Updated auth file "xai-smoke.json" successfully', exact=True).wait_for()
+
+
 def run_logs_runtime_smoke(page: Any, app_url: str) -> None:
     page.goto(f"{app_url}?route=logs-runtime#/logs", wait_until="domcontentloaded")
     page.wait_for_function("() => window.location.hash.endsWith('/logs')")
@@ -2129,6 +2206,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
 
             run_plugin_config_patch_smoke(page, app_url)
             run_oauth_editor_smoke(page, app_url)
+            run_auth_file_using_api_smoke(page, app_url)
 
             page.goto(f"{app_url}?route=dashboard#/", wait_until="domcontentloaded")
             page.wait_for_function("() => window.location.hash.endsWith('/')")
@@ -2320,6 +2398,8 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
         ("GET", "/v0/management/request-log-by-id/req-smoke"),
         ("GET", "/v0/management/request-log-by-id/home-req-smoke"),
         ("POST", "/v0/management/api-call"),
+        ("GET", "/v0/management/auth-files/download"),
+        ("PATCH", "/v0/management/auth-files/fields"),
         ("PATCH", "/v0/management/plugins/mock-plugin/config"),
         ("PATCH", "/v0/management/oauth-excluded-models"),
         ("PUT", "/v0/management/gemini-api-key"),
@@ -2382,6 +2462,13 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
         "home_ip=10.99.0.7",
     )
     assert_provider_mutation_payloads(state)
+    assert_payload_match(
+        state,
+        "PATCH",
+        "/v0/management/auth-files/fields",
+        lambda payload: payload == {"name": "xai-smoke.json", "using_api": True},
+        "only the touched xAI using_api field",
+    )
     assert_payload_match(
         state,
         "PATCH",
