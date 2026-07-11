@@ -1047,7 +1047,7 @@
     "model_price_cache": "Цена чтения из кэша",
     "model_price_cache_write": "Цена записи в кэш",
     "model_price_cache_write_auto": "Авто",
-    "model_price_cache_write_hint": "Если поле пустое, для GPT-5.6 используется цена prompt ×1,25; для других моделей — цена чтения из кэша.",
+    "model_price_cache_write_hint": "Если поле пустое, для GPT-5.6 используется цена prompt ×1,25; для других моделей стоимость записи в кэш не добавляется, если она не указана явно.",
     "model_price_save": "Сохранить цену",
     "model_price_empty": "Цена для моделей не задана",
     "model_price_model": "Модель",

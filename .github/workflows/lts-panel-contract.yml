@@ -23,6 +23,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Test usage cache semantics
+        run: npm run test:usage-cache
+
       - name: Check LTS panel contract
         run: npm run check:lts
 

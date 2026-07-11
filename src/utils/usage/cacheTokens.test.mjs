@@ -15,6 +15,7 @@ const {
   calculateUsageCost,
   getUsageCacheTokenCounts,
   isGpt56CacheWriteModel,
+  resolveUsageTotalTokens,
   resolveCacheWriteUnitPrice,
   splitUsageTokensForCost,
 } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
@@ -92,6 +93,17 @@ test('Core GPT-5.6 usage fixture keeps cache read and write independent', () => 
   assert.equal(calculateFallbackUsageTotalTokens(tokens, 'gpt-5.6-sol'), 1210);
 });
 
+test('explicit Core totals win while missing-total legacy details use the Panel fallback', () => {
+  const tokens = {
+    input_tokens: 1200,
+    output_tokens: 10,
+    cache_creation_tokens: 1024,
+  };
+
+  assert.equal(resolveUsageTotalTokens({ ...tokens, total_tokens: 2234 }, 'gpt-5.6-sol'), 2234);
+  assert.equal(resolveUsageTotalTokens(tokens, 'gpt-5.6-sol'), 1210);
+});
+
 test('non GPT-5.6 models preserve the existing prompt-minus-cache-read behavior', () => {
   const split = splitUsageTokensForCost(
     {
@@ -115,18 +127,40 @@ test('non GPT-5.6 models preserve the existing prompt-minus-cache-read behavior'
     'claude-sonnet-4-5',
     { prompt: 10, completion: 20, cache: 1 }
   );
-  assert.ok(Math.abs(cost - 0.00117) < 1e-12, `cost = ${cost}, want approximately 0.00117`);
+  assert.ok(Math.abs(cost - 0.00113) < 1e-12, `cost = ${cost}, want approximately 0.00113`);
+
+  const configuredWriteCost = calculateUsageCost(
+    {
+      input_tokens: 100,
+      output_tokens: 20,
+      cache_read_tokens: 30,
+      cache_creation_tokens: 40,
+    },
+    'claude-sonnet-4-5',
+    { prompt: 10, completion: 20, cache: 1, cacheWrite: 2 }
+  );
+  assert.ok(
+    Math.abs(configuredWriteCost - 0.00121) < 1e-12,
+    `cost = ${configuredWriteCost}, want approximately 0.00121`
+  );
 });
 
-test('GPT-5.6 variants and Codex family aliases receive the 1.25x default write price', () => {
-  for (const model of ['gpt-5.6-sol', 'openai/gpt-5.6-terra', 'luna']) {
+test('only explicit GPT-5.6 model slugs receive the 1.25x default write price', () => {
+  for (const model of ['gpt-5.6-sol', 'openai/gpt-5.6-terra', 'custom:gpt-5.6-luna']) {
     assert.equal(isGpt56CacheWriteModel(model), true);
     assert.equal(resolveCacheWriteUnitPrice(model, 10, 1), 12.5);
   }
 
+  for (const model of ['sol', 'luna', 'vendor/luna', 'custom:terra']) {
+    assert.equal(isGpt56CacheWriteModel(model), false);
+    assert.equal(resolveCacheWriteUnitPrice(model, 10, 1), 0);
+  }
+
   assert.equal(resolveCacheWriteUnitPrice('gpt-5.6-sol', 10, 1, 7), 7);
   assert.equal(resolveCacheWriteUnitPrice('gpt-5.6-sol', 10, 1, 0), 0);
-  assert.equal(resolveCacheWriteUnitPrice('claude-sonnet-4-5', 10, 1), 1);
+  assert.equal(resolveCacheWriteUnitPrice('claude-sonnet-4-5', 10, 1), 0);
+  assert.equal(resolveCacheWriteUnitPrice('claude-sonnet-4-5', 10, 1, 2), 2);
+  assert.equal(resolveCacheWriteUnitPrice('claude-sonnet-4-5', 10, 1, 0), 0);
 });
 
 test('cost calculation prices normal input, cache read, cache write, and output independently', () => {

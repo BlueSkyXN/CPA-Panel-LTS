@@ -32,7 +32,6 @@ export interface UsagePriceFields {
 const TOKENS_PER_PRICE_UNIT = 1_000_000;
 
 const GPT_56_MODEL_PATTERN = /(?:^|[/:])gpt-5\.6(?:$|[-_.:/])/;
-const GPT_56_CODEX_ALIASES = new Set(['sol', 'terra', 'luna']);
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -65,10 +64,7 @@ export function getUsageCacheTokenCounts(tokens: unknown): UsageCacheTokenCounts
 export function isGpt56CacheWriteModel(modelName: string): boolean {
   const normalized = modelName.trim().toLowerCase();
   if (!normalized) return false;
-  if (GPT_56_MODEL_PATTERN.test(normalized)) return true;
-
-  const modelSegments = normalized.split(/[/:]/).filter(Boolean);
-  return modelSegments.some((segment) => GPT_56_CODEX_ALIASES.has(segment));
+  return GPT_56_MODEL_PATTERN.test(normalized);
 }
 
 export function splitUsageTokensForCost(
@@ -103,10 +99,15 @@ export function calculateFallbackUsageTotalTokens(
   return inputTokens + outputTokens + reasoningTokens + cacheTokens;
 }
 
+export function resolveUsageTotalTokens(tokens: UsageTokenFields, modelName: string): number {
+  const explicitTotal = toOptionalTokenCount(tokens.total_tokens);
+  return explicitTotal ?? calculateFallbackUsageTotalTokens(tokens, modelName);
+}
+
 export function resolveCacheWriteUnitPrice(
   modelName: string,
   promptUnitPrice: number,
-  cacheReadUnitPrice: number,
+  _cacheReadUnitPrice: number,
   configuredCacheWriteUnitPrice?: number
 ): number {
   if (
@@ -122,7 +123,7 @@ export function resolveCacheWriteUnitPrice(
     return prompt * 1.25;
   }
 
-  return Number.isFinite(cacheReadUnitPrice) ? Math.max(cacheReadUnitPrice, 0) : 0;
+  return 0;
 }
 
 export function calculateUsageCost(
