@@ -431,6 +431,10 @@ ampcode:
   upstream-url: https://amp.example.test
   upstream-api-key: sk-amp-smoke
   force-model-mappings: true
+codex:
+  abnormal-reasoning-retry:
+    hedged-retry:
+      require-distinct-auth: false
 """
 
 
@@ -452,7 +456,18 @@ def build_plugin_list_payload() -> dict[str, Any]:
                     "author": "LTS smoke",
                     "github_repository": "router-for-me/mock-plugin",
                     "logo": "",
-                    "config_fields": [],
+                    "config_fields": [
+                        {
+                            "name": "label",
+                            "type": "string",
+                            "description": "Smoke label",
+                        },
+                        {
+                            "name": "advanced",
+                            "type": "object",
+                            "description": "Smoke object",
+                        },
+                    ],
                 },
                 "menus": [
                     {
@@ -826,7 +841,15 @@ class MockCoreHandler(BaseHTTPRequestHandler):
             return
 
         if re.match(r"^/v0/management/plugins/[^/]+/config$", path):
-            self._send_json({"enabled": True, "priority": 0})
+            self._send_json(
+                {
+                    "enabled": True,
+                    "priority": 7,
+                    "label": "original-label",
+                    "advanced": {"mode": "safe"},
+                    "untouched-server-field": {"keep": True},
+                }
+            )
             return
 
         self._send_json({"error": f"unhandled mock route: {path}"}, status=404)
@@ -1040,6 +1063,32 @@ def assert_request_seen_after(
             f"Expected mock API request {target_prefix} after {after_prefix}; "
             f"saw: {state.requests}"
         )
+
+
+def assert_each_request_immediately_preceded_by(
+    state: MockCoreState,
+    method: str,
+    path: str,
+    preceding_method: str,
+    preceding_path: str,
+) -> None:
+    target_prefix = f"{method} {path}"
+    preceding_prefix = f"{preceding_method} {preceding_path}"
+    target_indexes = [
+        index
+        for index, entry in enumerate(state.requests)
+        if entry == target_prefix or entry.startswith(f"{target_prefix}?")
+    ]
+    if not target_indexes:
+        raise AssertionError(f"Expected mock API request {target_prefix}; saw: {state.requests}")
+
+    for index in target_indexes:
+        previous = state.requests[index - 1] if index > 0 else ""
+        if previous != preceding_prefix and not previous.startswith(f"{preceding_prefix}?"):
+            raise AssertionError(
+                f"Expected {target_prefix} to use a latest-state read immediately before writing; "
+                f"previous request was {previous!r}: {state.requests}"
+            )
 
 
 def request_count(state: MockCoreState, method: str, path: str) -> int:
@@ -1402,6 +1451,62 @@ def assert_config_yaml_roundtrip(state: MockCoreState) -> None:
             "Visual config save did not persist codex abnormal retry require-distinct-auth:\n"
             f"{visual_payload}"
         )
+
+    if "concurrent-managed-smoke: keep-me" not in visual_payload:
+        raise AssertionError(
+            "Visual config save dropped a concurrent server-side marker:\n"
+            f"{visual_payload}"
+        )
+    if "usage-statistics-enabled: false" not in visual_payload:
+        raise AssertionError(
+            "Visual config save overwrote a concurrent managed-field update:\n"
+            f"{visual_payload}"
+        )
+    if "redis-usage-queue-retention-seconds: 60" not in visual_payload:
+        raise AssertionError(
+            "Visual config save did not persist the validated Redis retention value:\n"
+            f"{visual_payload}"
+        )
+
+
+def run_plugin_config_patch_smoke(page: Any, app_url: str) -> None:
+    page.goto(f"{app_url}?route=plugin-config-patch#/plugins", wait_until="domcontentloaded")
+    page.wait_for_function("() => window.location.hash.endsWith('/plugins')")
+    page.get_by_text("Plugin Management", exact=False).first.wait_for()
+    page.get_by_role("button", name="Edit config").click()
+    page.get_by_text("Configure Mock Resource Plugin", exact=False).first.wait_for()
+    page.get_by_label("label", exact=True).fill("updated-label")
+    with page.expect_response(
+        lambda response: response.request.method == "PATCH"
+        and response.url.endswith("/v0/management/plugins/mock-plugin/config")
+    ):
+        page.get_by_role("button", name="Save", exact=True).last.click()
+    page.get_by_text("Plugin config saved", exact=False).first.wait_for()
+
+
+def run_oauth_editor_smoke(page: Any, app_url: str) -> None:
+    page.goto(
+        f"{app_url}?route=oauth-editor#/auth-files/oauth-excluded",
+        wait_until="domcontentloaded",
+    )
+    page.wait_for_function("() => window.location.hash.includes('/auth-files/oauth-excluded')")
+    page.get_by_text("Add provider model disablement", exact=False).first.wait_for()
+    page.get_by_role("button", name="Codex", exact=True).click()
+    page.get_by_text("Edit model disablement for codex", exact=False).first.wait_for()
+    page.get_by_label("Custom model rule", exact=True).fill("gpt-*")
+
+    page.get_by_role("button", name="Back", exact=True).click()
+    unsaved_dialog = page.get_by_role("dialog", name="Unsaved changes")
+    unsaved_dialog.wait_for()
+    unsaved_dialog.get_by_role("button", name="Stay", exact=True).click()
+    unsaved_dialog.wait_for(state="hidden")
+
+    with page.expect_response(
+        lambda response: response.request.method == "PATCH"
+        and response.url.endswith("/v0/management/oauth-excluded-models")
+    ):
+        page.get_by_role("button", name="Save/Update", exact=True).click()
+    page.get_by_text("Model disablement updated", exact=False).first.wait_for()
 
 
 def run_logs_runtime_smoke(page: Any, app_url: str) -> None:
@@ -2022,6 +2127,9 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             page.get_by_text("Install: Github Release", exact=False).first.wait_for()
             page.get_by_text("Platforms: darwin/arm64", exact=False).first.wait_for()
 
+            run_plugin_config_patch_smoke(page, app_url)
+            run_oauth_editor_smoke(page, app_url)
+
             page.goto(f"{app_url}?route=dashboard#/", wait_until="domcontentloaded")
             page.wait_for_function("() => window.location.hash.endsWith('/')")
             page.get_by_text("A:1", exact=False).first.wait_for()
@@ -2139,6 +2247,10 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             page.get_by_label("Log to File").evaluate(
                 "(element) => { if (element.checked) element.click(); }"
             )
+            redis_retention = page.get_by_label("Redis Usage Queue Retention (seconds)")
+            redis_retention.fill("0")
+            page.get_by_text("Enter a whole number between 1 and 3600", exact=True).wait_for()
+            redis_retention.fill("60")
             page.get_by_label("Transient Error Cooldown (seconds)").fill("-1")
             page.get_by_label("Retry action").click()
             page.get_by_role("option", name="Retry").click()
@@ -2160,6 +2272,13 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             page.get_by_role("option", name="Max output").click()
             page.get_by_label("Fallback policy").click()
             page.get_by_role("option", name="Max output special").click()
+            state.config_yaml = state.config_yaml.replace(
+                "usage-statistics-enabled: true",
+                "usage-statistics-enabled: false",
+            )
+            state.config_yaml = (
+                f"{state.config_yaml.rstrip()}\nconcurrent-managed-smoke: keep-me\n"
+            )
             page.locator('button[aria-label="Save"]').click()
             with page.expect_response(
                 lambda response: response.request.method == "PUT"
@@ -2201,6 +2320,8 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
         ("GET", "/v0/management/request-log-by-id/req-smoke"),
         ("GET", "/v0/management/request-log-by-id/home-req-smoke"),
         ("POST", "/v0/management/api-call"),
+        ("PATCH", "/v0/management/plugins/mock-plugin/config"),
+        ("PATCH", "/v0/management/oauth-excluded-models"),
         ("PUT", "/v0/management/gemini-api-key"),
         ("PUT", "/v0/management/codex-api-key"),
         ("DELETE", "/v0/management/codex-api-key"),
@@ -2215,6 +2336,18 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
         "GET",
         "/v0/management/config",
     )
+    for provider_path in [
+        "/v0/management/gemini-api-key",
+        "/v0/management/codex-api-key",
+        "/v0/management/openai-compatibility",
+    ]:
+        assert_each_request_immediately_preceded_by(
+            state,
+            "PUT",
+            provider_path,
+            "GET",
+            "/v0/management/config",
+        )
     assert_request_seen_after(
         state,
         "PUT",
@@ -2249,6 +2382,23 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
         "home_ip=10.99.0.7",
     )
     assert_provider_mutation_payloads(state)
+    assert_payload_match(
+        state,
+        "PATCH",
+        "/v0/management/plugins/mock-plugin/config",
+        lambda payload: payload == {"label": "updated-label"},
+        "only the touched plugin config field",
+    )
+    assert_payload_match(
+        state,
+        "PATCH",
+        "/v0/management/oauth-excluded-models",
+        lambda payload: isinstance(payload, dict)
+        and payload.get("provider") == "codex"
+        and "gpt-5-disabled" in payload.get("models", [])
+        and "gpt-*" in payload.get("models", []),
+        "the pending custom OAuth exclusion rule",
+    )
     assert_config_yaml_roundtrip(state)
     assert_api_call_url_seen(state, "backend-api/wham/usage", "Codex quota usage")
     assert_api_call_url_seen(
