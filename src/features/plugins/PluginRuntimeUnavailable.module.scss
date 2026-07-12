@@ -1,0 +1,28 @@
+.root {
+  min-width: 0;
+}
+
+.action {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .root :global(.empty-state) {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .root :global(.empty-content) {
+    align-items: flex-start;
+  }
+
+  .root :global(.empty-action) {
+    align-self: stretch;
+    padding-left: 58px;
+  }
+
+  .action {
+    width: 100%;
+  }
+}

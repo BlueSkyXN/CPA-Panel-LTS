@@ -72,9 +72,17 @@ class MockCoreState:
         self.config_yaml = build_config_yaml()
         self.config_yaml_puts: list[str] = []
         self.runtime_kind = "cpa"
+        self.supports_plugin = True
+        self.emit_plugin_support_header = True
+        self.plugin_endpoint_available = True
+        self.plugins_config_enabled = True
         self.include_branded_providers = True
         self.plugin_enabled = True
         self.usage_payload = build_usage_payload()
+        self.delay_next_config_response = False
+        self.delayed_config_status = 200
+        self.delayed_config_started = threading.Event()
+        self.release_delayed_config = threading.Event()
 
     def record(self, method: str, path: str, query: str = "") -> None:
         suffix = f"?{query}" if query else ""
@@ -88,6 +96,12 @@ class MockCoreState:
         self.config_yaml = content
         self.config_yaml_puts.append(content)
 
+    def arm_delayed_config_response(self, status: int = 200) -> None:
+        self.delayed_config_started.clear()
+        self.release_delayed_config.clear()
+        self.delayed_config_status = status
+        self.delay_next_config_response = True
+
 
 def build_recent_buckets() -> list[dict[str, Any]]:
     return [
@@ -96,7 +110,10 @@ def build_recent_buckets() -> list[dict[str, Any]]:
     ]
 
 
-def build_config_payload(include_branded_providers: bool = True) -> dict[str, Any]:
+def build_config_payload(
+    include_branded_providers: bool = True,
+    plugins_enabled: bool = True,
+) -> dict[str, Any]:
     claude_api_keys = [
         {
             "api-key": "claude-key-1",
@@ -203,7 +220,7 @@ def build_config_payload(include_branded_providers: bool = True) -> dict[str, An
             ],
         },
         "plugins": {
-            "enabled": True,
+            "enabled": plugins_enabled,
             "store-sources": [
                 {
                     "id": "official",
@@ -749,8 +766,30 @@ class MockCoreHandler(BaseHTTPRequestHandler):
         path = parsed.path
         self.state.record("GET", path, parsed.query)
         config_payload = build_config_payload(
-            include_branded_providers=self.state.include_branded_providers
+            include_branded_providers=self.state.include_branded_providers,
+            plugins_enabled=self.state.plugins_config_enabled,
         )
+
+        if path == "/v0/management/config" and self.state.delay_next_config_response:
+            self.state.delay_next_config_response = False
+            plugin_support = self.state.supports_plugin
+            self.state.delayed_config_started.set()
+            if not self.state.release_delayed_config.wait(timeout=10):
+                self._send_json({"error": "delayed config response timed out"}, status=504)
+                return
+            if self.state.delayed_config_status != 200:
+                self._send_json(
+                    {"error": "delayed config response failed"},
+                    status=self.state.delayed_config_status,
+                    plugin_support_override=plugin_support,
+                )
+                return
+            self._send_json(config_payload, plugin_support_override=plugin_support)
+            return
+
+        if path == "/v0/management/plugins" and not self.state.plugin_endpoint_available:
+            self._send_json({"error": "plugin endpoint unavailable"}, status=404)
+            return
 
         routes: dict[str, Any] = {
             "/v0/management/config": config_payload,
@@ -992,24 +1031,35 @@ class MockCoreHandler(BaseHTTPRequestHandler):
         self._send_cors_headers()
         self.end_headers()
 
-    def _send_json(self, payload: Any, status: int = 200) -> None:
+    def _send_json(
+        self,
+        payload: Any,
+        status: int = 200,
+        plugin_support_override: bool | None = None,
+    ) -> None:
         body = json.dumps(payload).encode("utf-8")
-        self._send_bytes(body, status=status, content_type="application/json; charset=utf-8")
+        self._send_bytes(
+            body,
+            status=status,
+            content_type="application/json; charset=utf-8",
+            plugin_support_override=plugin_support_override,
+        )
 
     def _send_bytes(
         self,
         body: bytes,
         status: int = 200,
         content_type: str = "application/octet-stream",
+        plugin_support_override: bool | None = None,
     ) -> None:
         self.send_response(status)
-        self._send_cors_headers()
+        self._send_cors_headers(plugin_support_override=plugin_support_override)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
 
-    def _send_cors_headers(self) -> None:
+    def _send_cors_headers(self, plugin_support_override: bool | None = None) -> None:
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "authorization,content-type")
@@ -1026,7 +1076,13 @@ class MockCoreHandler(BaseHTTPRequestHandler):
         else:
             self.send_header("x-cpa-version", "6.9.49-smoke")
             self.send_header("x-cpa-build-date", "2026-06-16T00:00:00Z")
-        self.send_header("x-cpa-support-plugin", "true")
+        if self.state.emit_plugin_support_header:
+            supports_plugin = (
+                self.state.supports_plugin
+                if plugin_support_override is None
+                else plugin_support_override
+            )
+            self.send_header("x-cpa-support-plugin", "1" if supports_plugin else "0")
 
     def _read_body_text(self) -> str:
         raw_length = self.headers.get("Content-Length")
@@ -2142,6 +2198,135 @@ def run_usage_import_review_smoke(page: Any, state: MockCoreState) -> None:
         )
 
 
+def run_plugin_runtime_mismatch_smoke(
+    page: Any,
+    api_url: str,
+    state: MockCoreState,
+) -> None:
+    def logout() -> None:
+        page.get_by_title("Logout").click()
+        page.wait_for_function("() => window.location.hash.endsWith('/login')")
+
+    def login() -> None:
+        page.locator('input[type="checkbox"]').first.check(force=True)
+        page.locator("input.input").first.fill(api_url)
+        page.locator('input[name="cpa-management-key"]').fill("smoke-management-key")
+        page.get_by_role("button", name=re.compile("Login|Connect", re.I)).click()
+        page.wait_for_function("() => window.location.hash === '#/'")
+
+    def open_diagnostic_from_nav() -> None:
+        unavailable_link = page.get_by_role("link", name="Plugins (runtime unavailable)")
+        unavailable_link.wait_for()
+        if page.get_by_role("link", name="Plugin Store").count() != 0:
+            raise AssertionError("Plugin Store must remain gated when runtime support is unavailable")
+        unavailable_link.click()
+        page.wait_for_function("() => window.location.hash.endsWith('/plugins')")
+        page.get_by_text("Plugin runtime unavailable", exact=True).first.wait_for()
+
+    try:
+        state.supports_plugin = False
+        state.emit_plugin_support_header = True
+        state.plugin_endpoint_available = True
+        state.plugins_config_enabled = True
+        logout()
+        login()
+
+        open_diagnostic_from_nav()
+        page.get_by_text("x-cpa-support-plugin: 0", exact=False).wait_for()
+
+        page.set_viewport_size({"width": 390, "height": 844})
+        mobile_metrics = page.evaluate(
+            """
+            () => ({
+              clientWidth: document.documentElement.clientWidth,
+              scrollWidth: document.documentElement.scrollWidth,
+            })
+            """
+        )
+        if mobile_metrics["scrollWidth"] > mobile_metrics["clientWidth"] + 1:
+            raise AssertionError(
+                f"Plugin runtime diagnostics overflow on mobile: {mobile_metrics!r}"
+            )
+        page.set_viewport_size({"width": 1280, "height": 720})
+
+        page.get_by_title("Refresh All").click()
+        page.wait_for_function("() => window.location.hash.endsWith('/plugins')")
+        page.get_by_text("Plugin runtime unavailable", exact=True).first.wait_for()
+
+        for route in ["/plugin-store", "/plugin-pages/mock-plugin/0"]:
+            page.evaluate("route => { window.location.hash = `#${route}`; }", route)
+            page.wait_for_function("route => window.location.hash.endsWith(route)", arg=route)
+            page.get_by_text("Plugin runtime unavailable", exact=True).first.wait_for()
+
+        state.supports_plugin = True
+        state.emit_plugin_support_header = False
+        state.plugin_endpoint_available = True
+        logout()
+        login()
+        page.get_by_role("link", name="Plugin Store").wait_for()
+
+        state.supports_plugin = False
+        state.plugin_endpoint_available = False
+        logout()
+        login()
+        open_diagnostic_from_nav()
+        page.get_by_text("could not verify plugin runtime support", exact=False).wait_for()
+
+        state.emit_plugin_support_header = True
+        state.plugins_config_enabled = False
+        logout()
+        login()
+        if page.get_by_role("link", name="Plugins (runtime unavailable)").count() != 0:
+            raise AssertionError("Disabled plugin config must not expose runtime diagnostics")
+        page.evaluate("() => { window.location.hash = '#/plugins'; }")
+        page.wait_for_function("() => window.location.hash === '#/'")
+
+        state.supports_plugin = True
+        state.plugin_endpoint_available = True
+        state.plugins_config_enabled = True
+        logout()
+        login()
+        page.get_by_role("link", name="Plugin Store").wait_for()
+
+        state.supports_plugin = False
+        state.arm_delayed_config_response()
+        page.get_by_title("Refresh All").click()
+        if not state.delayed_config_started.wait(timeout=5):
+            raise AssertionError("Delayed stale config request did not start")
+
+        logout()
+        state.supports_plugin = True
+        login()
+        page.get_by_role("link", name="Plugin Store").wait_for()
+
+        state.release_delayed_config.set()
+        page.wait_for_timeout(500)
+        page.get_by_role("link", name="Plugin Store").wait_for()
+        if page.get_by_role("link", name="Plugins (runtime unavailable)").count() != 0:
+            raise AssertionError("A stale capability response polluted the active connection")
+
+        state.arm_delayed_config_response(status=401)
+        page.get_by_title("Refresh All").click()
+        if not state.delayed_config_started.wait(timeout=5):
+            raise AssertionError("Delayed stale unauthorized request did not start")
+
+        logout()
+        login()
+        page.get_by_role("link", name="Plugin Store").wait_for()
+
+        state.release_delayed_config.set()
+        page.wait_for_timeout(500)
+        if page.get_by_title("Logout").count() != 1:
+            raise AssertionError("A stale unauthorized response logged out the active connection")
+        page.get_by_role("link", name="Plugin Store").wait_for()
+    finally:
+        state.release_delayed_config.set()
+        state.supports_plugin = True
+        state.emit_plugin_support_header = True
+        state.plugin_endpoint_available = True
+        state.plugins_config_enabled = True
+
+
 def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: bool) -> None:
     try:
         from playwright.sync_api import Error as PlaywrightError
@@ -2401,6 +2586,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             run_remote_cloud_connect_runtime_smoke(page, app_url)
             run_logs_runtime_smoke(page, app_url)
             run_home_logs_runtime_smoke(page, app_url, state)
+            run_plugin_runtime_mismatch_smoke(page, api_url, state)
         except PlaywrightError as exc:
             with contextlib.suppress(Exception):
                 body_text = page.locator("body").inner_text(timeout=1000)

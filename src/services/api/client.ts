@@ -19,10 +19,15 @@ import { computeApiUrl } from '@/utils/connection';
 import { isRecord } from '@/utils/helpers';
 import type { ServerRuntimeKind } from '@/types';
 
+type ConnectionScopedRequestConfig = AxiosRequestConfig & {
+  __cpaConnectionGeneration?: number;
+};
+
 class ApiClient {
   private instance: AxiosInstance;
   private apiBase: string = '';
   private managementKey: string = '';
+  private connectionGeneration = 0;
 
   constructor() {
     this.instance = axios.create({
@@ -38,7 +43,8 @@ class ApiClient {
   /**
    * 设置 API 配置
    */
-  setConfig(config: ApiClientConfig): void {
+  setConfig(config: ApiClientConfig): number {
+    this.connectionGeneration += 1;
     this.apiBase = computeApiUrl(config.apiBase);
     this.managementKey = config.managementKey;
 
@@ -47,6 +53,24 @@ class ApiClient {
     } else {
       this.instance.defaults.timeout = REQUEST_TIMEOUT_MS;
     }
+
+    return this.connectionGeneration;
+  }
+
+  clearConfig(): void {
+    this.connectionGeneration += 1;
+    this.apiBase = '';
+    this.managementKey = '';
+    this.instance.defaults.timeout = REQUEST_TIMEOUT_MS;
+  }
+
+  isCurrentConnection(generation: number): boolean {
+    return generation === this.connectionGeneration;
+  }
+
+  private isCurrentRequest(config: unknown): boolean {
+    const scopedConfig = config as ConnectionScopedRequestConfig | undefined;
+    return scopedConfig?.__cpaConnectionGeneration === this.connectionGeneration;
   }
 
   private readHeader(
@@ -108,6 +132,9 @@ class ApiClient {
     // 请求拦截器
     this.instance.interceptors.request.use(
       (config) => {
+        const scopedConfig = config as typeof config & ConnectionScopedRequestConfig;
+        scopedConfig.__cpaConnectionGeneration = this.connectionGeneration;
+
         // 设置 baseURL
         config.baseURL = this.apiBase;
         if (config.url) {
@@ -128,6 +155,10 @@ class ApiClient {
     // 响应拦截器
     this.instance.interceptors.response.use(
       (response) => {
+        if (!this.isCurrentRequest(response.config)) {
+          return response;
+        }
+
         const headers = response.headers as Record<string, string | undefined>;
         const homeVersion = this.readHeader(headers, HOME_VERSION_HEADER_KEYS);
         const homeBuildDate = this.readHeader(headers, HOME_BUILD_DATE_HEADER_KEYS);
@@ -186,7 +217,7 @@ class ApiClient {
       apiError.data = responseData;
 
       // 401 未授权 - 触发登出事件
-      if (error.response?.status === 401) {
+      if (error.response?.status === 401 && this.isCurrentRequest(error.config)) {
         window.dispatchEvent(new Event('unauthorized'));
       }
 

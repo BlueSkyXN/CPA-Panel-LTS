@@ -94,6 +94,8 @@ for path in \
   src/features/plugins/PluginsPage.tsx \
   src/features/plugins/PluginStorePage.tsx \
   src/features/plugins/PluginResourcePage.tsx \
+  src/features/plugins/PluginRuntimeUnavailable.tsx \
+  src/features/plugins/PluginRuntimeUnavailable.module.scss \
   src/features/plugins/pluginReleaseVersions.ts \
   src/features/plugins/pluginResources.ts \
   src/features/plugins/pluginConfigDraft.ts \
@@ -138,6 +140,7 @@ for path in \
   src/stores/useQuotaStore.ts \
   src/types/usage.ts \
   src/types/ampcode.ts \
+  src/types/auth.ts \
   src/types/plugin.ts \
   src/types/authFile.ts \
   src/types/oauth.ts \
@@ -276,8 +279,20 @@ require_file_contains src/components/layout/MainLayout.tsx "path: '/plugin-store
 require_file_contains src/utils/constants.ts "x-cpa-support-plugin"
 require_file_contains src/stores/useAuthStore.ts "server-plugin-support-update"
 require_file_contains src/stores/useAuthStore.ts "pluginSupportKnown"
+require_file_contains src/stores/useAuthStore.ts "pluginSupportSource"
 require_file_contains src/stores/useAuthStore.ts "probePluginSupport"
 require_file_contains src/stores/useAuthStore.ts "currentRuntimeKind"
+require_file_contains src/stores/useAuthStore.ts "delete nextState.pluginSupportSource"
+require_file_contains src/services/api/client.ts "connectionGeneration"
+require_file_contains src/services/api/client.ts "isCurrentConnection"
+require_file_contains src/services/api/client.ts "clearConfig"
+require_file_contains src/router/MainRoutes.tsx "PluginRuntimeUnavailable"
+require_file_contains scripts/smoke-lts-panel.py "run_plugin_runtime_mismatch_smoke"
+require_file_contains scripts/smoke-lts-panel.py "arm_delayed_config_response"
+require_file_contains src/i18n/locales/en.json "runtime_unavailable_title"
+require_file_contains src/i18n/locales/zh-CN.json "runtime_unavailable_title"
+require_file_contains src/i18n/locales/zh-TW.json "runtime_unavailable_title"
+require_file_contains src/i18n/locales/ru.json "runtime_unavailable_title"
 require_file_contains src/services/api/index.ts "export * from './apiKeyUsage'"
 require_file_contains src/services/api/index.ts "export * from './plugins'"
 require_file_contains src/services/api/apiKeyUsage.ts "'/api-key-usage'"
