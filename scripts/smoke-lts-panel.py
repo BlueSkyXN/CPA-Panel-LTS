@@ -1838,6 +1838,8 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     card.wait_for()
     card.get_by_role("columnheader", name="Tier", exact=True).wait_for()
     card.get_by_role("columnheader", name="Effort", exact=True).wait_for()
+    if card.get_by_role("columnheader", name="Thinking", exact=True).count() != 0:
+        raise AssertionError("Request events must expose one canonical effort column")
     card.get_by_role("columnheader", name="Cache Read Tokens", exact=True).wait_for()
     card.get_by_role("columnheader", name="Cache Write Tokens", exact=True).wait_for()
 
@@ -1859,7 +1861,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         "Legacy / Unknown",
         "Other: flex",
         "Other: cache-import",
-        "Max / Ultra wire",
+        "max",
         "high",
         "low",
     ]:
@@ -1884,6 +1886,8 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         raise AssertionError("Request-event CSV export did not create a download")
     with Path(csv_path).open("r", encoding="utf-8", newline="") as csv_file:
         csv_rows = list(csv.DictReader(csv_file))
+    if any(column.startswith("thinking_") for column in csv_rows[0]):
+        raise AssertionError("Request-event CSV must not export legacy thinking fields")
     csv_tiers = sorted(row.get("service_tier", "") for row in csv_rows)
     if csv_tiers != ["", "cache-import", "default", "flex", "priority"]:
         raise AssertionError(f"Request-event CSV lost raw service_tier values: {csv_tiers!r}")
@@ -1919,6 +1923,8 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     if not json_path:
         raise AssertionError("Request-event JSON export did not create a download")
     json_rows = json.loads(Path(json_path).read_text(encoding="utf-8"))
+    if any("thinking" in row for row in json_rows):
+        raise AssertionError("Request-event JSON must not export legacy thinking data")
     json_tiers = sorted(
         "<null>" if row.get("service_tier") is None else str(row.get("service_tier"))
         for row in json_rows
@@ -1975,11 +1981,11 @@ def run_usage_service_tier_smoke(page: Any) -> None:
 
     effort_select = card.get_by_label("Effort", exact=True)
     effort_select.click()
-    page.get_by_role("option", name="Max / Ultra wire", exact=True).click()
+    page.get_by_role("option", name="max", exact=True).click()
     wait_for_row_count(2)
     for row_text in rows.all_inner_texts():
-        if "Max / Ultra wire" not in row_text:
-            raise AssertionError("Effort filter returned a row without the selected wire effort")
+        if "max" not in row_text:
+            raise AssertionError("Effort filter returned a row without the selected raw effort")
 
     card.get_by_role("button", name="Clear Filters", exact=True).click()
     wait_for_row_count(5)
@@ -2386,7 +2392,9 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             redis_retention.fill("0")
             page.get_by_text("Enter a whole number between 1 and 3600", exact=True).wait_for()
             redis_retention.fill("60")
+            page.get_by_role("tab", name="Network & Routing", exact=True).click()
             page.get_by_label("Transient Error Cooldown (seconds)").fill("-1")
+            page.get_by_role("tab", name="Headers & Codex Strategy", exact=True).click()
             page.get_by_label("Retry action").click()
             page.get_by_role("option", name="Retry").click()
             page.get_by_label("Stream buffer max bytes").fill("4096")

@@ -1017,9 +1017,11 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
     logging_was_checked = logging_toggle.is_checked()
     logging_toggle.evaluate("(element) => element.click()")
     expected_logging = not logging_was_checked
+    page.get_by_role("tab", name="Network & Routing", exact=True).click()
     transient_cooldown_input = page.get_by_label("Transient Error Cooldown (seconds)")
     transient_cooldown_input.scroll_into_view_if_needed()
     transient_cooldown_input.fill("0")
+    page.get_by_role("tab", name="Headers & Codex Strategy", exact=True).click()
     retry_action_select = page.get_by_label("Retry action")
     retry_action_select.scroll_into_view_if_needed()
     retry_action_select.click()
