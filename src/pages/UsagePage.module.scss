@@ -988,8 +988,8 @@
   white-space: nowrap;
 }
 
-.requestEventsThinkingBadge,
-.requestEventsThinkingEmpty {
+.requestEventsEffortBadge,
+.requestEventsEffortEmpty {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1001,13 +1001,13 @@
   white-space: nowrap;
 }
 
-.requestEventsThinkingBadge {
+.requestEventsEffortBadge {
   color: var(--primary-color);
   background: color-mix(in srgb, var(--primary-color) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--primary-color) 28%, transparent);
 }
 
-.requestEventsThinkingEmpty {
+.requestEventsEffortEmpty {
   color: var(--text-tertiary);
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);

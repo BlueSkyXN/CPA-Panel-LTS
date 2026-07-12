@@ -49,7 +49,7 @@ features:
       - resolveUsageTotalTokens
       - resolveCacheWriteUnitPrice
       - analyzeUsageImport
-      - classifyUsageReasoningEffort
+      - normalizeReasoningEffort
       - service_tier
       - request_events_filter_tier
       - reasoning_effort

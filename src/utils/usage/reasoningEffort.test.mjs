@@ -10,44 +10,22 @@ const compiled = ts.transpileModule(source, {
     target: ts.ScriptTarget.ES2020,
   },
 }).outputText;
-const { classifyUsageReasoningEffort, isGPT56UltraWireModel } = await import(
+const { normalizeReasoningEffort } = await import(
   `data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`
 );
 
-test('known Sol and Terra Max usage is presented as the Ultra wire value', () => {
-  for (const model of ['gpt-5.6-sol', 'gpt-5.6-terra(ultra)', 'openai/gpt-5.6-sol']) {
-    assert.deepEqual(classifyUsageReasoningEffort(model, ' Max '), {
-      raw: 'Max',
-      kind: 'max-ultra-wire',
-    });
-  }
+test('normalizes surrounding whitespace without inferring model-specific semantics', () => {
+  assert.equal(normalizeReasoningEffort(' Max '), 'Max');
+  assert.equal(normalizeReasoningEffort('custom-effort'), 'custom-effort');
 });
 
-test('Luna, custom, and unknown models preserve their raw effort semantics', () => {
-  assert.deepEqual(classifyUsageReasoningEffort('gpt-5.6-luna', 'max'), {
-    raw: 'max',
-    kind: 'raw',
-  });
-  assert.deepEqual(classifyUsageReasoningEffort('custom:gpt-5.6-sol', 'max'), {
-    raw: 'max',
-    kind: 'raw',
-  });
-  assert.deepEqual(classifyUsageReasoningEffort('custom-codex-ultra', 'Ultra'), {
-    raw: 'Ultra',
-    kind: 'raw',
-  });
+test('preserves non-empty unknown values as supplied', () => {
+  assert.equal(normalizeReasoningEffort('experimental:42'), 'experimental:42');
+  assert.equal(normalizeReasoningEffort('custom-effort'), 'custom-effort');
 });
 
-test('missing effort remains explicitly legacy or unknown', () => {
-  assert.deepEqual(classifyUsageReasoningEffort('gpt-5.6-sol', '  '), {
-    raw: null,
-    kind: 'legacy-unknown',
-  });
-});
-
-test('the GPT-5.6 wire allowlist is narrow and does not match custom aliases', () => {
-  assert.equal(isGPT56UltraWireModel('codex/gpt-5.6-terra'), true);
-  assert.equal(isGPT56UltraWireModel('gpt-5.6-luna'), false);
-  assert.equal(isGPT56UltraWireModel('vendor/gpt-5.6-sol'), false);
-  assert.equal(isGPT56UltraWireModel('custom:gpt-5.6-terra'), false);
+test('maps missing, empty, and non-string values to legacy or unknown', () => {
+  assert.equal(normalizeReasoningEffort(undefined), null);
+  assert.equal(normalizeReasoningEffort('  '), null);
+  assert.equal(normalizeReasoningEffort(42), null);
 });
