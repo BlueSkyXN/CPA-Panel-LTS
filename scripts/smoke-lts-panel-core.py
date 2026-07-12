@@ -137,6 +137,7 @@ def build_core_config(port: int, temp_dir: Path) -> str:
         max-retry-credentials: 1
         max-retry-interval: 1
         transient-error-cooldown-seconds: 30
+        disable-image-generation: chat
         routing:
           strategy: round-robin
         codex:
@@ -1021,6 +1022,12 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
     transient_cooldown_input = page.get_by_label("Transient Error Cooldown (seconds)")
     transient_cooldown_input.scroll_into_view_if_needed()
     transient_cooldown_input.fill("0")
+    disable_image_generation_select = page.get_by_label("Disable Image Generation")
+    disable_image_generation_select.scroll_into_view_if_needed()
+    disable_image_generation_select.click()
+    page.get_by_role(
+        "option", name="passthrough (preserve client tools)", exact=True
+    ).click()
     page.get_by_role("tab", name="Headers & Codex Strategy", exact=True).click()
     retry_action_select = page.get_by_label("Retry action")
     retry_action_select.scroll_into_view_if_needed()
@@ -1078,6 +1085,10 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
     if "transient-error-cooldown-seconds: 0" not in visual_saved_yaml:
         raise AssertionError(
             "Browser visual save did not persist transient-error-cooldown-seconds"
+        )
+    if "disable-image-generation: passthrough" not in visual_saved_yaml:
+        raise AssertionError(
+            "Browser visual save did not persist disable-image-generation passthrough"
         )
     if "action: retry" not in visual_saved_yaml:
         raise AssertionError(

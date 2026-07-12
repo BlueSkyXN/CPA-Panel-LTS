@@ -427,6 +427,7 @@ usage-statistics-enabled: true
 request-log: true
 logging-to-file: true
 transient-error-cooldown-seconds: 30
+disable-image-generation: chat
 unmanaged-lts-smoke: keep-me
 routing:
   strategy: round-robin
@@ -1478,6 +1479,11 @@ def assert_config_yaml_roundtrip(state: MockCoreState) -> None:
     if "transient-error-cooldown-seconds: -1" not in visual_payload:
         raise AssertionError(
             "Visual config save did not persist transient-error-cooldown-seconds:\n"
+            f"{visual_payload}"
+        )
+    if "disable-image-generation: passthrough" not in visual_payload:
+        raise AssertionError(
+            "Visual config save did not persist disable-image-generation passthrough:\n"
             f"{visual_payload}"
         )
     if "action: retry" not in visual_payload:
@@ -2546,6 +2552,10 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             redis_retention.fill("60")
             page.get_by_role("tab", name="Network & Routing", exact=True).click()
             page.get_by_label("Transient Error Cooldown (seconds)").fill("-1")
+            page.get_by_label("Disable Image Generation").click()
+            page.get_by_role(
+                "option", name="passthrough (preserve client tools)", exact=True
+            ).click()
             page.get_by_role("tab", name="Headers & Codex Strategy", exact=True).click()
             page.get_by_label("Retry action").click()
             page.get_by_role("option", name="Retry").click()
