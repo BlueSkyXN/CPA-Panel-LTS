@@ -271,6 +271,7 @@ require_repo_not_contains "register""Link"
 require_repo_not_contains "QUICK""_FILL_BRANDS"
 require_repo_not_contains '"quick'"Fill"'"'
 require_repo_not_contains "sponsor""Link"
+require_file_contains docs/lts/panel-protected-deltas.yaml "commercial-neutral"
 require_file_contains src/router/MainRoutes.tsx "path: '/plugins'"
 require_file_contains src/router/MainRoutes.tsx "path: '/plugin-store'"
 require_file_contains src/router/MainRoutes.tsx "path: '/plugin-pages/:pluginId/:menuIndex'"
