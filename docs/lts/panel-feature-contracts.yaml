@@ -231,6 +231,8 @@ features:
       - src/features/plugins/PluginStorePage.tsx
       - src/features/plugins/PluginStorePage.module.scss
       - src/features/plugins/PluginResourcePage.tsx
+      - src/features/plugins/PluginRuntimeUnavailable.tsx
+      - src/features/plugins/PluginRuntimeUnavailable.module.scss
       - src/features/plugins/pluginReleaseVersions.ts
       - src/features/plugins/pluginResources.ts
       - src/features/plugins/pluginConfigDraft.ts
@@ -240,11 +242,13 @@ features:
       - src/components/config/VisualConfigEditorBlocks.tsx
       - src/hooks/useVisualConfig.ts
       - src/services/api/plugins.ts
+      - src/types/auth.ts
       - src/types/plugin.ts
       - src/types/visualConfig.ts
       - src/components/layout/MainLayout.tsx
       - src/stores/useAuthStore.ts
       - src/services/api/client.ts
+      - src/i18n/locales/
       - scripts/smoke-lts-panel.py
       - scripts/smoke-lts-panel-core.py
     core_endpoints:
@@ -268,7 +272,13 @@ features:
       - gate_effect_runs_code
       - server-plugin-support-update
       - pluginSupportKnown
+      - pluginSupportSource
       - probePluginSupport
+      - connectionGeneration
+      - PluginRuntimeUnavailable
+      - runtime_unavailable_title
+      - run_plugin_runtime_mismatch_smoke
+      - arm_delayed_config_response
       - run_plugin_config_smoke
       - isOfficialRepository
       - supportsPluginVersionSelection
