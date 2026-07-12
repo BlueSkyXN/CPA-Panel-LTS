@@ -427,6 +427,7 @@ usage-statistics-enabled: true
 request-log: true
 logging-to-file: true
 transient-error-cooldown-seconds: 30
+disable-image-generation: chat
 unmanaged-lts-smoke: keep-me
 routing:
   strategy: round-robin
@@ -1478,6 +1479,11 @@ def assert_config_yaml_roundtrip(state: MockCoreState) -> None:
     if "transient-error-cooldown-seconds: -1" not in visual_payload:
         raise AssertionError(
             "Visual config save did not persist transient-error-cooldown-seconds:\n"
+            f"{visual_payload}"
+        )
+    if "disable-image-generation: passthrough" not in visual_payload:
+        raise AssertionError(
+            "Visual config save did not persist disable-image-generation passthrough:\n"
             f"{visual_payload}"
         )
     if "action: retry" not in visual_payload:
@@ -2546,6 +2552,17 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             redis_retention.fill("60")
             page.get_by_role("tab", name="Network & Routing", exact=True).click()
             page.get_by_label("Transient Error Cooldown (seconds)").fill("-1")
+            disable_image_generation_select = page.get_by_label("Disable Image Generation")
+            if disable_image_generation_select.inner_text().strip() != (
+                "chat (remove image tool from non-image endpoints)"
+            ):
+                raise AssertionError(
+                    "Visual config did not parse disable-image-generation: chat"
+                )
+            disable_image_generation_select.click()
+            page.get_by_role(
+                "option", name="passthrough (preserve client tools)", exact=True
+            ).click()
             page.get_by_role("tab", name="Headers & Codex Strategy", exact=True).click()
             page.get_by_label("Retry action").click()
             page.get_by_role("option", name="Retry").click()
@@ -2581,6 +2598,18 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             ):
                 page.get_by_role("button", name="Confirm Save").click()
             page.get_by_text("Configuration saved successfully", exact=False).first.wait_for()
+
+            page.reload(wait_until="domcontentloaded")
+            page.wait_for_function("() => window.location.hash.endsWith('/config')")
+            page.get_by_text("Config Panel", exact=False).first.wait_for()
+            page.get_by_role("button", name="Visual Editor").click()
+            page.get_by_role("tab", name="Network & Routing", exact=True).click()
+            if page.get_by_label("Disable Image Generation").inner_text().strip() != (
+                "passthrough (preserve client tools)"
+            ):
+                raise AssertionError(
+                    "Visual config did not reload disable-image-generation: passthrough"
+                )
 
             run_quota_runtime_smoke(page, app_url)
             run_remote_cloud_connect_runtime_smoke(page, app_url)

@@ -41,6 +41,7 @@ protected_deltas:
       - Panel built-in Codex quota/cloud UI unless intentionally replaced
       - Codex remote cloud connect environment UI unless intentionally replaced
       - visual config support for codex.abnormal-reasoning-retry unless intentionally replaced
+      - commercial-neutral documentation and runtime UI with no referral incentives, paid placement, or empty-state provider recommendations
       - local i18n and panel compatibility fixes
 
 upstream_boundaries:

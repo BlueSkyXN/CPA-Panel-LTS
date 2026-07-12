@@ -369,6 +369,10 @@ features:
       - transientErrorCooldownSeconds
       - transient-error-cooldown-seconds
       - transient_error_cooldown_seconds
+      - disableImageGeneration
+      - disable-image-generation
+      - disable_image_generation_passthrough
+      - "disable-image-generation: passthrough"
       - latestServerYaml
       - dirtyFields.has('host')
       - integer_range_1_3600

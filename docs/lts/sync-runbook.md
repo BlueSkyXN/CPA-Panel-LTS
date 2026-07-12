@@ -17,15 +17,17 @@ main = CPA-Panel-LTS product line
      + local downstream panel customizations
 ```
 
-## Last audited state
+## Audited upstream intake snapshot (2026-07-12)
 
-Checked on 2026-06-10:
+Refs captured before Panel PR #20:
 
-- `origin/main`: `bbfa08bdaefa389a5924dae15862cf23d8ad95d3`
-- `upstream/main`: `657e5a82cbed738e82bdcf4cd3778a8a40fade48`
+- `origin/main`: `cb97685678d862890c6d5bd845a4ef596baffb71`
+- `upstream/main`: `79589155875d35a96e47787a61ac15ff050c1149` (`v1.18.2`)
 - merge-base: `8ed837c3d734c3970a6d6799c557bb6a6753360d`
-- `origin/main..upstream/main`: 89 commits
-- `upstream/main..origin/main`: 25 commits
+- `origin/main..upstream/main`: 241 commits
+- `upstream/main..origin/main`: 130 commits
+
+The raw 241-commit count is not the selective-port backlog. Panel PR #10 and PR #16 already adapted substantial upstream work without making those upstream commits ancestors of `main`. The latest completed intake boundary before this audit was upstream `v1.18.1` / `07562b7`, adapted by Panel PR #16 and released as `v1-tls-0.0.8`.
 
 The upstream diff deletes or replaces protected LTS usage files, including:
 
@@ -40,17 +42,26 @@ The upstream diff deletes or replaces protected LTS usage files, including:
 
 This confirms that upstream full-sync is unsafe for Panel.
 
+Recent upstream intake:
+
+| Upstream release / commit | Classification | Panel evidence | Decision |
+|---|---|---|---|
+| `v1.18.0` / `4af4cf4` | `reject` | PR #16 records the controlled npm security subset | Reject Bun CI, `bun.lock`, and package-manager migration. |
+| `v1.18.1` / `07562b7` | `adapt-port` | PR #16 / `v1-tls-0.0.8` | Preserve LTS auth/quota/provider boundaries while adapting official xAI API routing. |
+| `v1.18.2` / `7958915` | `adapt-port` | PR #20 | Add `disable-image-generation: passthrough` through the existing visual-config and browser-smoke architecture; do not copy upstream Bun tests or missing search-index architecture. |
+
 ## Maintenance rules
 
 Use protected selective-port:
 
 1. Fetch upstream and inspect first.
-2. Classify upstream commits as safe-port, adapt-port, reject, or defer.
+2. Classify upstream commits as direct-port, adapt-port, already-equivalent, reject, or defer.
 3. Cherry-pick or manually port compatible changes into a Panel LTS branch.
 4. Preserve complete usage UI and CPA-Core-LTS API compatibility.
-5. When Core-owned config keys change, update the visual config types, YAML mapper, editor UI, active locale catalogs, feature contract, and contract guard together.
-6. Run `npm run validate:lts` before PR, or run the equivalent contract, type-check, lint, and build commands separately when diagnosing failures.
-7. Merge Panel maintenance PRs normally. Do not use GitHub Sync fork.
+5. When Panel explicitly manages or displays a Core-owned config key, update the visual config types, YAML mapper, editor UI, active locale catalogs, feature contract, contract guard, and relevant smoke together.
+6. Core-owned keys that Panel does not manage must still survive source and visual saves through the complete YAML `Document` preservation path; do not add a UI merely to claim schema coverage.
+7. Run `npm run validate:lts` before PR, or run the equivalent contract, type-check, lint, and build commands separately when diagnosing failures.
+8. Merge Panel maintenance PRs normally. Do not use GitHub Sync fork.
 
 Do not:
 
@@ -63,23 +74,30 @@ Do not:
 
 ## Classification guide
 
-Safe-port candidates:
+Every non-deferred decision must record the upstream SHA, classification, Panel commit or PR, reason, and validation scope. Use these result classes consistently:
 
-- Form validation and browser autofill fixes.
-- UI bug fixes that do not touch usage contracts.
-- Provider UX improvements that can be adapted without deleting complete usage details.
-- Auth file display fixes that preserve LTS-specific Codex environment behavior.
-- Release workflow hardening that keeps `management.html` and `v*-tls-*`.
-- Dependency/tooling updates after `npm run type-check`, `npm run build`, and `npm run lint` pass.
+Direct-port candidates:
+
+- Localized form validation, browser autofill, accessibility, or copy fixes that do not touch a protected/shared seam.
+- UI bug fixes whose patch applies without changing LTS routes, data contracts, build tooling, or downstream integrations.
+- Patch/minor dependency updates that retain npm/`package-lock.json` and require no LTS-specific code adaptation.
 
 Adapt-port candidates:
 
+- Provider UX improvements that must preserve the stable provider page and complete usage details.
 - Provider workbench refactors.
 - Status bar or provider stats changes.
-- Auth-file stats changes.
+- Auth-file display or stats changes that overlap LTS-specific Codex environment behavior.
 - Config schema changes that overlap `usage-statistics-enabled`.
 - Visual config changes around downstream Core LTS surfaces such as `codex.abnormal-reasoning-retry`.
 - Quota page changes that share parsing, account identity, or provider metadata.
+- Release workflow hardening that must retain `management.html`, npm, and `v*-tls-*` semantics.
+- Tooling changes that need LTS-specific command, lockfile, CI, or smoke adaptation.
+
+Already-equivalent:
+
+- The current Panel behavior or a prior LTS PR already implements the upstream outcome.
+- Record the upstream SHA and the existing Panel commit/PR; do not create a duplicate code change merely to mirror ancestry.
 
 Reject by default:
 
@@ -98,8 +116,8 @@ Defer:
 
 ```bash
 cd /Users/sky/Github/CPA-Panel-LTS
-git fetch origin --prune
-git fetch upstream --prune
+git fetch origin --prune --tags
+git fetch upstream --prune --tags
 
 git status --short --branch
 git log --oneline --first-parent origin/main..upstream/main
@@ -134,7 +152,8 @@ npm run smoke:lts:core -- --no-write-smoke  # optional real Core smoke; requires
 Each Panel upstream-port PR should state:
 
 - upstream commit(s) considered
-- commits ported
+- classification for every considered commit: direct-port, adapt-port, already-equivalent, reject, or defer
+- Panel commit/PR evidence for ported or already-equivalent items
 - commits rejected or deferred, with reason
 - usage UI contract impact
 - CPA-Core-LTS Management API compatibility impact
