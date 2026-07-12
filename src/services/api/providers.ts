@@ -20,7 +20,8 @@ import type {
 const serializeHeaders = (headers?: Record<string, string>) =>
   headers && Object.keys(headers).length ? headers : undefined;
 
-const RESPONSE_ONLY_FIELDS = ['auth-index'] as const;
+const RESPONSE_ONLY_FIELDS = ['auth-index', 'authIndex', 'auth_index'] as const;
+const RESPONSE_ONLY_FIELD_SET = new Set<string>(RESPONSE_ONLY_FIELDS);
 
 const PROVIDER_COMMON_KEY_FIELDS = [
   'api-key',
@@ -65,7 +66,15 @@ const OPENAI_PROVIDER_FIELDS = [
   'disable-cooling',
 ] as const;
 
-const MODEL_ALIAS_FIELDS = ['name', 'alias', 'priority', 'test-model'] as const;
+const MODEL_ALIAS_FIELDS = [
+  'name',
+  'alias',
+  'display-name',
+  'displayName',
+  'display_name',
+  'priority',
+  'test-model',
+] as const;
 const OPENAI_MODEL_ALIAS_FIELDS = [...MODEL_ALIAS_FIELDS, 'image', 'thinking'] as const;
 
 const API_KEY_ENTRY_FIELDS = ['api-key', 'proxy-url'] as const;
@@ -121,6 +130,25 @@ const mergeKnownFields = (
   });
   return next;
 };
+
+const stripResponseOnlyRecordFields = (value: unknown): unknown => {
+  if (!isRecord(value)) return value;
+  return Object.fromEntries(
+    Object.entries(value).filter(([key]) => !RESPONSE_ONLY_FIELD_SET.has(key))
+  );
+};
+
+const stripResponseOnlyProviderFields = (items: unknown[]): unknown[] =>
+  items.map((item) => {
+    const provider = stripResponseOnlyRecordFields(item);
+    if (!isRecord(provider) || !Array.isArray(provider['api-key-entries'])) {
+      return provider;
+    }
+    return {
+      ...provider,
+      'api-key-entries': provider['api-key-entries'].map(stripResponseOnlyRecordFields),
+    };
+  });
 
 const findRawRecord = (
   rawRecords: Array<Record<string, unknown> | undefined>,
@@ -221,7 +249,7 @@ const mutateLatestProviderList = async (
 ) => {
   const rawConfig = await apiClient.get('/config');
   const latestItems = getRawSectionList(rawConfig, section);
-  await apiClient.put(`/${section}`, mutate(latestItems));
+  await apiClient.put(`/${section}`, stripResponseOnlyProviderFields(mutate(latestItems)));
 };
 
 const buildPreservedList = async <T>(
@@ -322,6 +350,9 @@ const serializeModelAliases = (models?: ModelAlias[], includeOpenAIFields = fals
           if (model.alias && model.alias !== model.name) {
             payload.alias = model.alias;
           }
+          if (model.displayName?.trim()) {
+            payload['display-name'] = model.displayName.trim();
+          }
           if (model.priority !== undefined) {
             payload.priority = model.priority;
           }
@@ -390,8 +421,10 @@ const serializeVertexModelAliases = (models?: ModelAlias[]) =>
         .map((model) => {
           const name = typeof model?.name === 'string' ? model.name.trim() : '';
           const alias = typeof model?.alias === 'string' ? model.alias.trim() : '';
+          const displayName =
+            typeof model?.displayName === 'string' ? model.displayName.trim() : '';
           if (!name || !alias) return null;
-          return { name, alias };
+          return displayName ? { name, alias, 'display-name': displayName } : { name, alias };
         })
         .filter(Boolean)
     : undefined;

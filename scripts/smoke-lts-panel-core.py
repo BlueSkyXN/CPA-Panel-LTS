@@ -154,23 +154,27 @@ def build_core_config(port: int, temp_dir: Path) -> str:
             base-url: "https://generativelanguage.googleapis.com"
             models:
               - name: "gemini-2.5-flash"
+                display-name: "Gemini Flash Smoke"
         codex-api-key:
           - api-key: "codex-smoke-key"
             base-url: "https://api.openai.com"
             websockets: true
             models:
               - name: "gpt-5"
+                display-name: "GPT-5 Smoke"
         claude-api-key:
           - api-key: "claude-smoke-key"
             base-url: "https://api.anthropic.com"
             models:
               - name: "claude-sonnet-4"
+                display-name: "Claude Sonnet Smoke"
         vertex-api-key:
           - api-key: "vertex-smoke-key"
             base-url: "https://vertex.example.test"
             models:
               - name: "vertex-smoke-model"
                 alias: "vertex-smoke"
+                display-name: "Vertex Smoke"
         openai-compatibility:
           - name: "Smoke OpenAI Compatible"
             base-url: "https://openai-compatible.example.test/v1"
@@ -179,6 +183,7 @@ def build_core_config(port: int, temp_dir: Path) -> str:
             models:
               - name: "openai-smoke-model"
                 alias: "openai-smoke"
+                display-name: "OpenAI Smoke"
         ampcode:
           upstream-url: "https://amp.example.test"
           upstream-api-key: "amp-smoke-upstream-key"
@@ -540,7 +545,7 @@ def run_write_smoke(api_url: str) -> list[str]:
             "api-key": "gemini-real-write-key",
             "base-url": "https://generativelanguage.googleapis.com",
             "excluded-models": ["*"],
-            "models": [{"name": "gemini-2.5-flash"}],
+            "models": [{"name": "gemini-2.5-flash", "display-name": "Gemini Flash Write"}],
         }
     ]
     seen.append("PUT /v0/management/gemini-api-key")
@@ -558,6 +563,11 @@ def run_write_smoke(api_url: str) -> list[str]:
         isinstance(item, dict)
         and item.get("api-key") == "gemini-real-write-key"
         and item.get("excluded-models") == ["*"]
+        and any(
+            isinstance(model, dict)
+            and model.get("display-name") == "Gemini Flash Write"
+            for model in item.get("models", [])
+        )
         for item in gemini_items
     ):
         raise AssertionError(f"Gemini write smoke did not round-trip excluded-models: {gemini_items!r}")
@@ -567,7 +577,13 @@ def run_write_smoke(api_url: str) -> list[str]:
             "api-key": "codex-real-write-key",
             "base-url": "https://api.openai.com",
             "websockets": True,
-            "models": [{"name": "gpt-5", "alias": "gpt-5-real-write"}],
+            "models": [
+                {
+                    "name": "gpt-5",
+                    "alias": "gpt-5-real-write",
+                    "display-name": "GPT-5 Real Write",
+                }
+            ],
         }
     ]
     seen.append("PUT /v0/management/codex-api-key")
@@ -585,6 +601,11 @@ def run_write_smoke(api_url: str) -> list[str]:
         isinstance(item, dict)
         and item.get("api-key") == "codex-real-write-key"
         and item.get("websockets") is True
+        and any(
+            isinstance(model, dict)
+            and model.get("display-name") == "GPT-5 Real Write"
+            for model in item.get("models", [])
+        )
         for item in codex_items
     ):
         raise AssertionError(f"Codex write smoke did not round-trip websockets: {codex_items!r}")
@@ -622,6 +643,7 @@ def run_write_smoke(api_url: str) -> list[str]:
                 {
                     "name": "openai-real-write-model",
                     "alias": "openai-real-write",
+                    "display-name": "OpenAI Real Write",
                     "image": True,
                 }
             ],
@@ -647,6 +669,11 @@ def run_write_smoke(api_url: str) -> list[str]:
         isinstance(item, dict)
         and item.get("name") == "Smoke OpenAI Compatible"
         and item.get("prefix") == "real-write"
+        and any(
+            isinstance(model, dict)
+            and model.get("display-name") == "OpenAI Real Write"
+            for model in item.get("models", [])
+        )
         for item in openai_items
     ):
         raise AssertionError(f"OpenAI Compatibility write smoke did not round-trip prefix: {openai_items!r}")
@@ -1214,6 +1241,10 @@ def run_browser_provider_key_crud_smoke(
     update_base_url: str,
 ) -> list[str]:
     seen: list[str] = []
+    model_name = f"{label.lower()}-browser-model"
+    model_alias = f"{label.lower()}-browser-alias"
+    created_display_name = f"{label} Browser Model"
+    updated_display_name = f"{label} Browser Model Updated"
 
     page.get_by_role("button", name=re.compile(button_pattern, re.I)).click()
     page.get_by_role("heading", name=label).wait_for()
@@ -1221,6 +1252,10 @@ def run_browser_provider_key_crud_smoke(
     sheet = page.get_by_role("dialog").last
     sheet.get_by_role("textbox", name="API key").fill(api_key)
     sheet.get_by_label("Base URL").fill(create_base_url)
+    sheet.get_by_text("Custom models", exact=True).click()
+    sheet.get_by_label("Upstream model name").fill(model_name)
+    sheet.get_by_label("Routing alias (optional)").fill(model_alias)
+    sheet.get_by_label("Display name (optional)").fill(created_display_name)
     with page.expect_response(
         lambda response: response.request.method == "PUT"
         and response.url.endswith(endpoint)
@@ -1233,6 +1268,13 @@ def run_browser_provider_key_crud_smoke(
         isinstance(item, dict)
         and item.get("api-key") == api_key
         and item.get("base-url") == create_base_url
+        and any(
+            isinstance(model, dict)
+            and model.get("name") == model_name
+            and model.get("alias") == model_alias
+            and model.get("display-name") == created_display_name
+            for model in item.get("models", [])
+        )
         for item in items_after_create
     ):
         raise AssertionError(f"{label} browser create did not round-trip: {items_after_create!r}")
@@ -1241,6 +1283,8 @@ def run_browser_provider_key_crud_smoke(
     row.get_by_role("button", name="Edit").click()
     sheet = page.get_by_role("dialog").last
     sheet.get_by_label("Base URL").fill(update_base_url)
+    sheet.get_by_text("Custom models", exact=True).click()
+    sheet.get_by_label("Display name (optional)").fill(updated_display_name)
     with page.expect_response(
         lambda response: response.request.method == "PUT"
         and response.url.endswith(endpoint)
@@ -1253,9 +1297,17 @@ def run_browser_provider_key_crud_smoke(
         isinstance(item, dict)
         and item.get("api-key") == api_key
         and item.get("base-url") == update_base_url
+        and any(
+            isinstance(model, dict)
+            and model.get("name") == model_name
+            and model.get("display-name") == updated_display_name
+            for model in item.get("models", [])
+        )
         for item in items_after_update
     ):
         raise AssertionError(f"{label} browser update did not round-trip: {items_after_update!r}")
+    seen.append(f"BROWSER provider workbench {label} new model display-name")
+    seen.append(f"BROWSER provider workbench {label} updated model display-name")
 
     row = provider_row_for_api_key(page, api_key)
     row.get_by_role("button", name="Delete").click()
@@ -1289,6 +1341,16 @@ def run_browser_provider_workbench_smoke(page: Any, app_url: str, api_url: str) 
     )
     if not gemini_before:
         raise AssertionError("Browser workbench smoke expected at least one Gemini resource")
+    expected_gemini_display_name = next(
+        (
+            model.get("display-name")
+            for model in gemini_before[0].get("models", [])
+            if isinstance(model, dict) and model.get("name") == "gemini-2.5-flash"
+        ),
+        None,
+    )
+    if not expected_gemini_display_name:
+        raise AssertionError(f"Gemini fixture missing model display-name: {gemini_before!r}")
     gemini_was_disabled = is_provider_disabled(gemini_before[0])
     with page.expect_response(
         lambda response: response.request.method == "PUT"
@@ -1305,6 +1367,13 @@ def run_browser_provider_workbench_smoke(page: Any, app_url: str, api_url: str) 
     )
     if not gemini_after or is_provider_disabled(gemini_after[0]) == gemini_was_disabled:
         raise AssertionError(f"Gemini browser toggle did not change disabled state: {gemini_after!r}")
+    if not any(
+        isinstance(model, dict)
+        and model.get("name") == "gemini-2.5-flash"
+        and model.get("display-name") == expected_gemini_display_name
+        for model in gemini_after[0].get("models", [])
+    ):
+        raise AssertionError(f"Gemini toggle dropped model display-name: {gemini_after!r}")
 
     page.get_by_role("button", name=re.compile(r"Codex", re.I)).click()
     page.get_by_role("heading", name="Codex").wait_for()
@@ -1313,6 +1382,10 @@ def run_browser_provider_workbench_smoke(page: Any, app_url: str, api_url: str) 
     sheet.get_by_role("textbox", name="API key").fill("codex-browser-new")
     sheet.get_by_label("Base URL").fill("https://codex.browser.example/v1")
     sheet.get_by_label("Enable WebSockets").check()
+    sheet.get_by_text("Custom models", exact=True).click()
+    sheet.get_by_label("Upstream model name").fill("gpt-5")
+    sheet.get_by_label("Routing alias (optional)").fill("gpt-5-browser")
+    sheet.get_by_label("Display name (optional)").fill("Codex Browser Model")
     with page.expect_response(
         lambda response: response.request.method == "PUT"
         and response.url.endswith("/v0/management/codex-api-key")
@@ -1330,6 +1403,12 @@ def run_browser_provider_workbench_smoke(page: Any, app_url: str, api_url: str) 
         and item.get("api-key") == "codex-browser-new"
         and item.get("base-url") == "https://codex.browser.example/v1"
         and item.get("websockets") is True
+        and any(
+            isinstance(model, dict)
+            and model.get("name") == "gpt-5"
+            and model.get("display-name") == "Codex Browser Model"
+            for model in item.get("models", [])
+        )
         for item in codex_after_create
     ):
         raise AssertionError(f"Codex browser create did not round-trip: {codex_after_create!r}")
@@ -1337,6 +1416,8 @@ def run_browser_provider_workbench_smoke(page: Any, app_url: str, api_url: str) 
     page.get_by_role("button", name="Edit").first.click()
     sheet = page.get_by_role("dialog").last
     sheet.get_by_label("Base URL").fill("https://codex.browser-updated.example/v1")
+    sheet.get_by_text("Custom models", exact=True).click()
+    sheet.get_by_label("Display name (optional)").fill("Codex Browser Model Updated")
     with page.expect_response(
         lambda response: response.request.method == "PUT"
         and response.url.endswith("/v0/management/codex-api-key")
@@ -1353,6 +1434,11 @@ def run_browser_provider_workbench_smoke(page: Any, app_url: str, api_url: str) 
         isinstance(item, dict)
         and item.get("api-key") == "codex-browser-new"
         and item.get("base-url") == "https://codex.browser-updated.example/v1"
+        and any(
+            isinstance(model, dict)
+            and model.get("display-name") == "Codex Browser Model Updated"
+            for model in item.get("models", [])
+        )
         for item in codex_after_update
     ):
         raise AssertionError(f"Codex browser update did not round-trip: {codex_after_update!r}")
@@ -1405,9 +1491,33 @@ def run_browser_provider_workbench_smoke(page: Any, app_url: str, api_url: str) 
 
     page.get_by_role("button", name=re.compile(r"OpenAI Compatible", re.I)).click()
     page.get_by_role("heading", name="OpenAI Compatible").wait_for()
+    openai_before_edit = provider_items(
+        request_json(api_url, "/v0/management/openai-compatibility"),
+        "openai-compatibility",
+        "/v0/management/openai-compatibility",
+    )
+    expected_openai_display_name = next(
+        (
+            model.get("display-name")
+            for item in openai_before_edit
+            if isinstance(item, dict) and item.get("name") == "Smoke OpenAI Compatible"
+            for model in item.get("models", [])
+            if isinstance(model, dict) and model.get("name") == "openai-real-write-model"
+        ),
+        None,
+    )
+    if not expected_openai_display_name:
+        raise AssertionError(f"OpenAI fixture missing model display-name: {openai_before_edit!r}")
     page.get_by_role("button", name="Edit").first.click()
     sheet = page.get_by_role("dialog").last
     sheet.get_by_label("Prefix").fill("browser-oa-smoke")
+    sheet.get_by_text("Custom models", exact=True).click()
+    if (
+        sheet.get_by_label("Display name (optional)").first.input_value()
+        != expected_openai_display_name
+    ):
+        raise AssertionError("OpenAI workbench did not parse existing model display-name")
+    sheet.get_by_label("Display name (optional)").first.fill("OpenAI Smoke Updated")
     with page.expect_response(
         lambda response: response.request.method == "PUT"
         and response.url.endswith("/v0/management/openai-compatibility")
@@ -1426,9 +1536,16 @@ def run_browser_provider_workbench_smoke(page: Any, app_url: str, api_url: str) 
         isinstance(item, dict)
         and item.get("name") == "Smoke OpenAI Compatible"
         and item.get("prefix") == "browser-oa-smoke"
+        and any(
+            isinstance(model, dict)
+            and model.get("display-name") == "OpenAI Smoke Updated"
+            for model in item.get("models", [])
+        )
         for item in openai_after_save
     ):
         raise AssertionError(f"OpenAI browser save did not round-trip prefix: {openai_after_save!r}")
+    seen.append("BROWSER provider workbench new model display-name round-trip")
+    seen.append("BROWSER provider workbench updated model display-name round-trip")
     persisted_yaml = request_text(api_url, "/v0/management/config.yaml")
     if "auth-index" in persisted_yaml or "authIndex" in persisted_yaml:
         raise AssertionError("Browser provider workbench persisted response-only auth-index")

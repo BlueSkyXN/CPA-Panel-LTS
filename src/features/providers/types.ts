@@ -119,6 +119,7 @@ export interface SponsorProviderRaw {
 export interface ModelEntryInput {
   name: string;
   alias?: string;
+  displayName?: string;
   priority?: number;
   testModel?: string;
   image?: boolean;

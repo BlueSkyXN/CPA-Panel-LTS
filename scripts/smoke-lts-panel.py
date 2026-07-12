@@ -125,7 +125,10 @@ def build_config_payload(
         {
             "name": "OpenRouter",
             "base-url": "https://openrouter.ai/api/v1",
-            "x-lts-unknown-provider": {"preserve": "provider"},
+            "x-lts-unknown-provider": {
+                "preserve": "provider",
+                "authIndex": "custom-extension-value",
+            },
             "api-key-entries": [
                 {
                     "api-key": "openai-key-1",
@@ -143,9 +146,26 @@ def build_config_payload(
                 {
                     "name": "openai/mock-model",
                     "alias": "mock-model",
+                    "display-name": "Mock Model",
                     "test-model": "mock-model",
                     "x-lts-model-note": "keep-model",
-                }
+                },
+                {
+                    "name": "openai/clear-display-name",
+                    "alias": "clear-display-name",
+                    "display-name": "Clear Me",
+                    "x-lts-model-note": "keep-after-clear",
+                },
+                {
+                    "name": "openai/legacy-snake",
+                    "display_name": "legacy-snake-alias",
+                    "x-lts-model-note": "keep-legacy-snake",
+                },
+                {
+                    "name": "openai/legacy-camel",
+                    "displayName": "legacy-camel-alias",
+                    "x-lts-model-note": "keep-legacy-camel",
+                },
             ],
         }
     ]
@@ -164,6 +184,14 @@ def build_config_payload(
                     "name": "code0",
                     "base-url": "https://code0.ai/v1",
                     "api-key-entries": [{"api-key": "code0-smoke-key"}],
+                    "models": [
+                        {
+                            "name": "code0/mock-model",
+                            "alias": "code0-route",
+                            "display-name": "Code0 Model",
+                            "x-lts-model-note": "keep-code0-model",
+                        }
+                    ],
                 },
                 {
                     "name": "fennoAI",
@@ -1359,12 +1387,120 @@ def assert_provider_mutation_payloads(state: MockCoreState) -> None:
         ),
         "saved OpenAI Compatibility discovered model",
     )
-    for payload in parse_json_bodies(state, "PUT", "/v0/management/openai-compatibility"):
-        if json_contains_key(payload, "auth-index") or json_contains_key(payload, "authIndex"):
-            raise AssertionError(
-                "OpenAI Compatibility PUT payload must not write response-only auth-index: "
-                f"{payload!r}"
+    assert_payload_match(
+        state,
+        "PUT",
+        "/v0/management/openai-compatibility",
+        lambda payload: any(
+            item.get("name") == "OpenRouter"
+            and any(
+                isinstance(model, dict)
+                and model.get("name") == "openai/mock-model"
+                and model.get("display-name") == "Updated Mock Model"
+                for model in item.get("models", [])
             )
+            for item in payload
+            if isinstance(item, dict)
+        ),
+        "updated model display-name",
+    )
+    assert_payload_match(
+        state,
+        "PUT",
+        "/v0/management/openai-compatibility",
+        lambda payload: any(
+            item.get("name") == "OpenRouter"
+            and any(
+                isinstance(model, dict)
+                and model.get("name") == "openai/smoke-discovered"
+                and model.get("display-name") == "Discovered Model"
+                for model in item.get("models", [])
+            )
+            for item in payload
+            if isinstance(item, dict)
+        ),
+        "new model display-name",
+    )
+    assert_payload_match(
+        state,
+        "PUT",
+        "/v0/management/openai-compatibility",
+        lambda payload: any(
+            item.get("name") == "OpenRouter"
+            and all(
+                any(
+                    isinstance(model, dict)
+                    and model.get("name") == model_name
+                    and model.get("alias") == expected_alias
+                    and "display-name" not in model
+                    and "display_name" not in model
+                    and "displayName" not in model
+                    for model in item.get("models", [])
+                )
+                for model_name, expected_alias in (
+                    ("openai/legacy-snake", "legacy-snake-alias"),
+                    ("openai/legacy-camel", "legacy-camel-alias"),
+                )
+            )
+            for item in payload
+            if isinstance(item, dict)
+        ),
+        "preserved legacy model routing aliases",
+    )
+    assert_payload_match(
+        state,
+        "PUT",
+        "/v0/management/openai-compatibility",
+        lambda payload: any(
+            item.get("name") == "OpenRouter"
+            and any(
+                isinstance(model, dict)
+                and model.get("name") == "openai/clear-display-name"
+                and "display-name" not in model
+                and model.get("x-lts-model-note") == "keep-after-clear"
+                for model in item.get("models", [])
+            )
+            for item in payload
+            if isinstance(item, dict)
+        ),
+        "cleared model display-name without dropping unknown fields",
+    )
+    assert_payload_match(
+        state,
+        "PUT",
+        "/v0/management/openai-compatibility",
+        lambda payload: any(
+            item.get("name") == "code0"
+            and any(
+                isinstance(model, dict)
+                and model.get("name") == "code0/mock-model"
+                and model.get("alias") == "code0-route"
+                and model.get("display-name") == "Code0 Model Updated"
+                and model.get("x-lts-model-note") == "keep-code0-model"
+                for model in item.get("models", [])
+            )
+            for item in payload
+            if isinstance(item, dict)
+        ),
+        "updated sponsor model display-name",
+    )
+    for payload in parse_json_bodies(state, "PUT", "/v0/management/openai-compatibility"):
+        for provider in payload:
+            if not isinstance(provider, dict):
+                continue
+            if any(key in provider for key in ("auth-index", "authIndex", "auth_index")):
+                raise AssertionError(
+                    "OpenAI Compatibility provider payload wrote response-only auth-index: "
+                    f"{payload!r}"
+                )
+            for entry in provider.get("api-key-entries", []):
+                if isinstance(entry, dict) and any(
+                    key in entry for key in ("auth-index", "authIndex", "auth_index")
+                ):
+                    raise AssertionError(
+                        "OpenAI Compatibility key payload wrote response-only auth-index: "
+                        f"{payload!r}"
+                    )
         openrouter = next(
             (
                 item
@@ -1375,7 +1511,10 @@ def assert_provider_mutation_payloads(state: MockCoreState) -> None:
         )
         if not isinstance(openrouter, dict):
             continue
-        if openrouter.get("x-lts-unknown-provider") != {"preserve": "provider"}:
+        if openrouter.get("x-lts-unknown-provider") != {
+            "preserve": "provider",
+            "authIndex": "custom-extension-value",
+        }:
             raise AssertionError(
                 "OpenAI Compatibility PUT payload dropped provider unknown fields: "
                 f"{payload!r}"
@@ -2092,6 +2231,26 @@ def run_branded_provider_visibility_smoke(
                     f"Configured branded provider {label!r} has disabled {action!r} action"
                 )
 
+    code0_category = page.get_by_role("button", name=re.compile(r"^Code0(?:\s|$)", re.I))
+    code0_category.click()
+    page.get_by_role("heading", name="Code0", exact=True).wait_for()
+    page.get_by_role("button", name="Edit", exact=True).click()
+    code0_sheet = page.get_by_role("dialog").last
+    code0_sheet.get_by_text("Grouped key #1", exact=True).click()
+    code0_sheet.get_by_text("OpenAI-compatible models", exact=True).click()
+    code0_display_name = code0_sheet.get_by_label("Display name (optional)").first
+    if code0_display_name.input_value() != "Code0 Model":
+        raise AssertionError("Sponsor form did not parse existing model display-name")
+    if code0_sheet.get_by_label("Routing alias (optional)").first.input_value() != "code0-route":
+        raise AssertionError("Sponsor form did not keep routing alias separate from display-name")
+    code0_display_name.fill("Code0 Model Updated")
+    with page.expect_response(
+        lambda response: response.request.method == "PUT"
+        and response.url.endswith("/v0/management/openai-compatibility")
+    ):
+        code0_sheet.get_by_role("button", name="Save", exact=True).click()
+    code0_sheet.wait_for(state="detached")
+
     body_text = page.locator("body").inner_text()
     for forbidden_text in ["Quick" + " Fill", "Register" + " here"]:
         if forbidden_text in body_text:
@@ -2500,6 +2659,20 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             page.wait_for_timeout(500)
 
             sheet.get_by_text("Custom models", exact=True).click()
+            display_name_inputs = sheet.get_by_label("Display name (optional)")
+            if display_name_inputs.first.input_value() != "Mock Model":
+                raise AssertionError("Workbench did not parse existing model display-name")
+            if display_name_inputs.nth(1).input_value() != "Clear Me":
+                raise AssertionError("Workbench did not parse clearable model display-name")
+            routing_alias_inputs = sheet.get_by_label("Routing alias (optional)")
+            if routing_alias_inputs.nth(2).input_value() != "legacy-snake-alias":
+                raise AssertionError("Workbench changed legacy display_name routing alias semantics")
+            if routing_alias_inputs.nth(3).input_value() != "legacy-camel-alias":
+                raise AssertionError("Workbench changed legacy displayName routing alias semantics")
+            if display_name_inputs.nth(2).input_value() or display_name_inputs.nth(3).input_value():
+                raise AssertionError("Workbench misread legacy routing aliases as display names")
+            display_name_inputs.first.fill("Updated Mock Model")
+            display_name_inputs.nth(1).fill("")
             with page.expect_response(
                 lambda response: response.request.method == "POST"
                 and response.url.endswith("/v0/management/api-call")
@@ -2514,6 +2687,22 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
                   .some((input) => input.value === 'openai/smoke-discovered')
                 """
             )
+            sheet.get_by_label("Display name (optional)").last.fill("Discovered Model")
+
+            page.set_viewport_size({"width": 390, "height": 844})
+            model_form_metrics = page.evaluate(
+                """
+                () => ({
+                  clientWidth: document.documentElement.clientWidth,
+                  scrollWidth: document.documentElement.scrollWidth,
+                })
+                """
+            )
+            if model_form_metrics["scrollWidth"] > model_form_metrics["clientWidth"] + 1:
+                raise AssertionError(
+                    f"Provider model display-name fields overflow on mobile: {model_form_metrics!r}"
+                )
+            page.set_viewport_size({"width": 1280, "height": 720})
 
             sheet.get_by_label("Prefix").fill("oa-smoke")
             with page.expect_response(

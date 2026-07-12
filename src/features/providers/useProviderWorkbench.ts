@@ -135,6 +135,7 @@ const buildModelAliases = (
       const entry: ModelAlias = {
         name: m.name.trim(),
         alias: m.alias?.trim() || undefined,
+        displayName: m.displayName?.trim() || undefined,
         priority: m.priority,
         testModel: m.testModel,
       };
