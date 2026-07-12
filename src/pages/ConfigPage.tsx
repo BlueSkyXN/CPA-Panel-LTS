@@ -100,11 +100,11 @@ export function ConfigPage() {
   });
   const [lastSearchedQuery, setLastSearchedQuery] = useState('');
   const editorRef = useRef<ReactCodeMirrorRef | null>(null);
-  const floatingActionsRef = useRef<HTMLDivElement>(null);
+  const actionBarRef = useRef<HTMLDivElement>(null);
 
   const disableControls = connectionStatus !== 'connected';
   const isDirty = dirty || visualDirty;
-  const shouldRenderFloatingActions = isCurrentLayer;
+  const shouldRenderActionBar = isCurrentLayer;
   const hasVisualModeError = !!visualParseError;
   const hasVisualValidationErrors =
     activeTab === 'visual' &&
@@ -456,8 +456,7 @@ export function ConfigPage() {
     performSearch(lastSearchedQuery, 'next');
   }, [lastSearchedQuery, performSearch]);
 
-  // Keep bottom floating actions from covering page content by syncing its height to a CSS variable.
-  useActionBarHeightVar(floatingActionsRef, '--config-action-bar-height', shouldRenderFloatingActions);
+  useActionBarHeightVar(actionBarRef, '--config-action-bar-height', shouldRenderActionBar);
 
   // Status text
   const getStatusText = () => {
@@ -479,7 +478,7 @@ export function ConfigPage() {
     return '';
   };
 
-  const getFloatingStatusText = () => {
+  const getActionStatusText = () => {
     if (!isMobile) return getStatusText();
     if (disableControls)
       return t('config_management.status_disconnected_short', { defaultValue: 'Disconnected' });
@@ -512,29 +511,32 @@ export function ConfigPage() {
     });
   }, [isDirty, loadConfig, showConfirmation, t]);
 
-  const floatingActions = (
-    <div className={styles.floatingActionContainer} ref={floatingActionsRef}>
-      <div className={styles.floatingActionList}>
+  const actionBar = (
+    <div className={styles.actionBar} ref={actionBarRef}>
+      <div className={styles.actionBarStatusGroup}>
         <div
-          className={`${styles.floatingStatus} ${
-            isMobile ? styles.floatingStatusCompact : ''
+          className={`${styles.actionStatus} ${
+            isMobile ? styles.actionStatusCompact : ''
           } ${getStatusClass()}`}
         >
-          {getFloatingStatusText()}
+          {getActionStatusText()}
         </div>
+      </div>
+      <div className={styles.actionBarButtons}>
         <button
           type="button"
-          className={styles.floatingActionButton}
+          className={styles.actionButton}
           onClick={handleReload}
           disabled={loading || saving}
           title={t('config_management.reload')}
           aria-label={t('config_management.reload')}
         >
           <IconRefreshCw size={16} />
+          <span>{t('config_management.reload')}</span>
         </button>
         <button
           type="button"
-          className={styles.floatingActionButton}
+          className={`${styles.actionButton} ${styles.actionButtonPrimary}`}
           onClick={handleSave}
           disabled={
             disableControls ||
@@ -549,6 +551,7 @@ export function ConfigPage() {
           aria-label={t('config_management.save')}
         >
           <IconCheck size={16} />
+          <span>{t('config_management.save')}</span>
           {isDirty && <span className={styles.dirtyDot} aria-hidden="true" />}
         </button>
       </div>
@@ -558,26 +561,24 @@ export function ConfigPage() {
   return (
     <div className={styles.container}>
       <div className={styles.pageHeader}>
-        <div className={styles.pageHeaderCopy}>
-          <h1 className={styles.pageTitle}>{t('config_management.title')}</h1>
-          <div className={styles.tabBar}>
-            <button
-              type="button"
-              className={`${styles.tabItem} ${activeTab === 'visual' ? styles.tabActive : ''}`}
-              onClick={() => handleTabChange('visual')}
-              disabled={saving || loading}
-            >
-              {t('config_management.tabs.visual', { defaultValue: '可视化编辑' })}
-            </button>
-            <button
-              type="button"
-              className={`${styles.tabItem} ${activeTab === 'source' ? styles.tabActive : ''}`}
-              onClick={() => handleTabChange('source')}
-              disabled={saving || loading}
-            >
-              {t('config_management.tabs.source', { defaultValue: '源代码编辑' })}
-            </button>
-          </div>
+        <h1 className={styles.pageTitle}>{t('config_management.title')}</h1>
+        <div className={styles.tabBar}>
+          <button
+            type="button"
+            className={`${styles.tabItem} ${activeTab === 'visual' ? styles.tabActive : ''}`}
+            onClick={() => handleTabChange('visual')}
+            disabled={saving || loading}
+          >
+            {t('config_management.tabs.visual', { defaultValue: '可视化编辑' })}
+          </button>
+          <button
+            type="button"
+            className={`${styles.tabItem} ${activeTab === 'source' ? styles.tabActive : ''}`}
+            onClick={() => handleTabChange('source')}
+            disabled={saving || loading}
+          >
+            {t('config_management.tabs.source', { defaultValue: '源代码编辑' })}
+          </button>
         </div>
       </div>
 
@@ -679,8 +680,8 @@ export function ConfigPage() {
         </div>
       </div>
 
-      {shouldRenderFloatingActions && typeof document !== 'undefined'
-        ? createPortal(floatingActions, document.body)
+      {shouldRenderActionBar && typeof document !== 'undefined'
+        ? createPortal(actionBar, document.body)
         : null}
       <DiffModal
         open={diffModalOpen}

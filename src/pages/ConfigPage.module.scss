@@ -2,6 +2,11 @@
 @use '../styles/variables' as *;
 
 .container {
+  --config-accent: #3f7f78;
+  --config-accent-strong: #2f6b65;
+  --config-accent-soft: color-mix(in srgb, var(--config-accent) 12%, transparent);
+  --config-accent-border: color-mix(in srgb, var(--config-accent) 32%, var(--border-color));
+
   width: min(100%, 1480px);
   min-height: 100%;
   display: flex;
@@ -10,21 +15,22 @@
   margin: 0 auto;
   overflow-y: auto;
   padding-bottom: calc(
-    var(--config-action-bar-height, 0px) + 16px + env(safe-area-inset-bottom) + #{$spacing-md}
+    var(--config-action-bar-height, 0px) + 18px + env(safe-area-inset-bottom) + #{$spacing-md}
   );
 }
 
 .pageHeader {
   display: flex;
-  align-items: flex-start;
-}
-
-.pageHeaderCopy {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
   min-width: 0;
-  width: min(100%, 360px);
+
+  @media (max-width: 900px) {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+  }
 }
 
 .pageTitle {
@@ -32,23 +38,29 @@
   font-weight: 700;
   color: var(--text-primary);
   margin: 0;
+  white-space: nowrap;
 }
 
 .tabBar {
-  display: grid;
+  display: inline-grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
+  gap: 3px;
+  width: min(100%, 356px);
+  padding: 3px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-primary) 66%, transparent);
+
+  @media (max-width: 900px) {
+    width: 100%;
+  }
 }
 
 .tabItem {
   @include button-reset;
   min-height: 38px;
   padding: 0 12px;
-  border-radius: 6px;
+  border-radius: 7px;
   border: 1px solid transparent;
   color: var(--text-secondary);
   font-size: 13px;
@@ -58,7 +70,8 @@
   transition:
     color 0.15s ease,
     background-color 0.15s ease,
-    border-color 0.15s ease;
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 
   &:hover:not(:disabled) {
     color: var(--text-primary);
@@ -69,12 +82,19 @@
     opacity: 0.58;
     cursor: not-allowed;
   }
+
+  &:focus,
+  &:focus-visible {
+    outline: 2px solid var(--config-accent);
+    outline-offset: 2px;
+  }
 }
 
 .tabActive {
-  color: var(--bg-primary);
-  background: var(--text-primary);
-  border-color: var(--text-primary);
+  color: var(--config-accent-strong);
+  background: var(--config-accent-soft);
+  border-color: var(--config-accent-border);
+  box-shadow: inset 0 -2px 0 var(--config-accent);
 }
 
 .workspaceShell {
@@ -281,84 +301,128 @@
   border-color: var(--warning-border);
 }
 
-.floatingActionContainer {
+.actionBar {
+  --config-accent: #3f7f78;
+  --config-accent-strong: #2f6b65;
+  --config-accent-soft: color-mix(in srgb, var(--config-accent) 12%, transparent);
+  --config-accent-border: color-mix(in srgb, var(--config-accent) 32%, var(--border-color));
+
   position: fixed;
   left: var(--content-center-x, 50%);
-  bottom: calc(16px + env(safe-area-inset-bottom));
-  transform: translateX(-50%);
+  bottom: calc(12px + env(safe-area-inset-bottom));
   z-index: 50;
-  pointer-events: auto;
-  width: fit-content;
-  max-width: calc(100vw - 24px);
-}
-
-.floatingActionList {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px;
-  max-width: inherit;
-  overflow-x: auto;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-primary) 92%, transparent);
-  box-shadow: var(--shadow-lg);
-  scrollbar-width: none;
-
-  &::-webkit-scrollbar {
-    display: none;
-  }
+  justify-content: space-between;
+  gap: 14px;
+  width: min(
+    1480px,
+    calc(
+      200vw - var(--content-center-x, 50vw) - var(--content-center-x, 50vw) -
+        clamp(40px, 6vw, 96px)
+    )
+  );
+  max-width: calc(100vw - 24px);
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 82%, var(--config-accent) 18%);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-primary) 91%, transparent);
+  box-shadow: 0 10px 28px rgb(45 42 38 / 0.12);
+  backdrop-filter: blur(14px);
+  transform: translateX(-50%);
 }
 
-.floatingStatus {
+.actionBarStatusGroup {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 1;
+}
+
+.actionStatus {
   display: inline-flex;
   align-items: center;
   min-width: 0;
-  min-height: 34px;
-  padding: 0 10px;
-  border-radius: 6px;
+  min-height: 32px;
+  padding: 0 11px;
+  border-radius: 999px;
   border: 1px solid transparent;
   color: var(--text-primary);
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 650;
   line-height: 1.2;
-  text-align: center;
-  max-width: min(300px, 46vw);
+  max-width: min(560px, 100%);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.floatingStatusCompact {
-  max-width: 112px;
+.actionStatusCompact {
+  max-width: 132px;
   padding: 0 8px;
-  font-size: 10px;
+  font-size: 11px;
 }
 
-.floatingActionButton {
-  @include button-reset;
-  position: relative;
+.actionBarButtons {
   display: flex;
   align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.actionButton {
+  @include button-reset;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 6px;
+  gap: 7px;
+  min-width: 102px;
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-secondary) 68%, transparent);
   color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 650;
   cursor: pointer;
   transition:
     background-color 0.15s ease,
+    border-color 0.15s ease,
     color 0.15s ease,
+    transform 0.15s ease,
     opacity 0.15s ease;
 
   &:hover:not(:disabled) {
-    background: var(--text-primary);
-    color: var(--bg-primary);
+    border-color: var(--config-accent-border);
+    background: var(--config-accent-soft);
+    color: var(--config-accent-strong);
+    transform: translateY(-1px);
+  }
+
+  &:focus,
+  &:focus-visible {
+    outline: 2px solid var(--config-accent);
+    outline-offset: 2px;
   }
 
   &:disabled {
     opacity: 0.45;
     cursor: not-allowed;
+  }
+}
+
+.actionButtonPrimary {
+  border-color: var(--config-accent);
+  background: var(--config-accent);
+  color: #fff;
+
+  &:hover:not(:disabled) {
+    border-color: var(--config-accent-strong);
+    background: var(--config-accent-strong);
+    color: #fff;
   }
 }
 
@@ -369,27 +433,60 @@
   width: 7px;
   height: 7px;
   border-radius: 999px;
-  background: var(--warning-color);
+  background: #d4a64f;
   box-shadow: 0 0 0 2px var(--bg-primary);
 }
 
-@media (max-width: 1200px) {
-  .floatingActionContainer {
-    bottom: calc(12px + env(safe-area-inset-bottom));
-    max-width: calc(100vw - 16px);
-  }
-
-  .floatingStatus {
-    max-width: min(180px, 40vw);
-  }
-}
-
 @media (max-width: 480px) {
-  .floatingStatus {
-    max-width: min(132px, 38vw);
+  .actionBar {
+    bottom: calc(6px + env(safe-area-inset-bottom));
+    gap: 8px;
+    width: calc(100vw - 32px);
+    padding: 8px;
+  }
+
+  .actionStatus {
+    max-width: min(132px, 44vw);
+  }
+
+  .actionButton {
+    width: 42px;
+    min-width: 42px;
+    height: 42px;
+    padding: 0;
+
+    > span:not(.dirtyDot) {
+      display: none;
+    }
   }
 
   .searchInput {
     padding-right: 108px !important;
+  }
+}
+
+:global([data-theme='dark']) .container,
+:global([data-theme='dark']) .actionBar {
+  --config-accent: #69aaa2;
+  --config-accent-strong: #8dc3bd;
+  --config-accent-soft: color-mix(in srgb, var(--config-accent) 14%, transparent);
+  --config-accent-border: color-mix(in srgb, var(--config-accent) 42%, var(--border-color));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tabItem,
+  .actionButton {
+    transition: none;
+  }
+
+  .actionButton:hover:not(:disabled) {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .actionBar {
+    background: var(--bg-primary);
+    backdrop-filter: none;
   }
 }

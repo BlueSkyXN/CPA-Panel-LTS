@@ -3,38 +3,50 @@
 .section {
   display: flex;
   flex-direction: column;
-  gap: clamp(16px, 2vw, 22px);
+  gap: clamp(18px, 2vw, 24px);
   min-height: clamp(520px, calc(100dvh - var(--header-height, 64px) - 210px), 760px);
   min-width: 0;
   box-sizing: border-box;
   padding: clamp(20px, 2.4vw, 28px);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-primary) 82%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-color) 88%, var(--config-accent) 12%);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-primary) 88%, transparent);
+  box-shadow: 0 10px 30px rgb(45 42 38 / 0.045);
   scroll-margin-top: calc(var(--header-height, 64px) + 18px);
+
+  @media (min-width: 769px) and (max-width: 1180px) {
+    scroll-margin-top: calc(var(--header-height, 64px) + 96px);
+  }
 
   @include mobile {
     gap: 14px;
     min-height: 0;
     padding: 16px;
-    scroll-margin-top: calc(var(--header-height, 64px) + 86px);
+    scroll-margin-top: calc(var(--header-height, 64px) + 164px);
   }
 }
 
 .header {
+  position: relative;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 10px;
+  gap: 12px;
   align-items: start;
-  padding-bottom: 14px;
+  padding: 2px 0 17px 14px;
   border-bottom: 1px solid var(--border-color);
-  background: color-mix(in srgb, var(--bg-primary) 88%, transparent);
+
+  &::before {
+    position: absolute;
+    inset: 2px auto 18px 0;
+    width: 3px;
+    border-radius: 999px;
+    background: var(--config-accent);
+    content: '';
+  }
 
   @include mobile {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 10px;
-    padding-bottom: 12px;
-    background: transparent;
+    gap: 9px;
+    padding: 0 0 14px 12px;
   }
 }
 
@@ -48,15 +60,11 @@
 .indexBadge {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  min-width: 32px;
+  min-width: 26px;
   height: 28px;
-  padding: 0 8px;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  color: var(--text-secondary);
+  color: #a8792e;
   font-size: 11px;
-  font-weight: 750;
+  font-weight: 650;
   letter-spacing: 0.08em;
 }
 
@@ -66,8 +74,9 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: 6px;
-  color: var(--text-secondary);
+  border-radius: 7px;
+  background: var(--config-accent-soft);
+  color: var(--config-accent-strong);
   flex: 0 0 auto;
 }
 
@@ -82,7 +91,7 @@
   margin: 0;
   color: var(--text-primary);
   font-size: clamp(18px, 1.6vw, 22px);
-  font-weight: 680;
+  font-weight: 700;
   line-height: 1.18;
   letter-spacing: 0;
 }
@@ -105,4 +114,14 @@
   gap: 16px;
   width: 100%;
   min-width: 0;
+}
+
+:global([data-theme='dark']) .indexBadge {
+  color: #d5b36d;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .section {
+    background: var(--bg-primary);
+  }
 }

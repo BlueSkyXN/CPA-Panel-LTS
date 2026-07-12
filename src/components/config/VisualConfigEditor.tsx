@@ -775,6 +775,12 @@ export function VisualConfigEditor({
         case 'End':
           nextIndex = systemSections.length - 1;
           break;
+        case 'Enter':
+        case ' ':
+        case 'Spacebar':
+          event.preventDefault();
+          handleSystemSectionChange(systemSections[currentIndex].id);
+          return;
         default:
           return;
       }
