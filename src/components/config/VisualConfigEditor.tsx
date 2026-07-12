@@ -1,15 +1,13 @@
 import {
   useCallback,
-  useEffect,
   useId,
   useMemo,
-  useRef,
   useState,
   type ComponentType,
+  type KeyboardEvent,
   type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
@@ -17,6 +15,8 @@ import {
   IconCode,
   IconDiamond,
   IconKey,
+  IconNetwork,
+  IconPlug,
   IconSatellite,
   IconSettings,
   IconShield,
@@ -50,10 +50,20 @@ import {
 import styles from './VisualConfigEditor.module.scss';
 
 type VisualSectionId = 'server' | 'auth' | 'system' | 'quota' | 'streaming' | 'payload';
+type SystemSectionId = 'runtime' | 'plugins' | 'headers' | 'network';
 
 type VisualSection = {
   id: VisualSectionId;
   title: string;
+  description: string;
+  icon: ComponentType<IconProps>;
+  errorCount: number;
+};
+
+type SystemSection = {
+  id: SystemSectionId;
+  title: string;
+  description: string;
   icon: ComponentType<IconProps>;
   errorCount: number;
 };
@@ -168,7 +178,8 @@ function SectionSubsection({
 type ConfigHeaderI18nKey = `config_management.visual.sections.headers.${string}`;
 
 const ABNORMAL_RETRY_ACTION_HINT_KEYS = {
-  retry: 'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_action_retry_desc',
+  retry:
+    'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_action_retry_desc',
   'observe-only':
     'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_action_observe_only_desc',
   disabled:
@@ -272,9 +283,9 @@ export function VisualConfigEditor({
   onChange,
 }: VisualConfigEditorProps) {
   const { t } = useTranslation();
-  const pageTransitionLayer = usePageTransitionLayer();
-  const isCurrentLayer = pageTransitionLayer ? pageTransitionLayer.isCurrentLayer : true;
-  const isMobile = useMediaQuery('(max-width: 768px)');
+  const useCompactNavigation = useMediaQuery('(max-width: 1180px)');
+  const sectionNavLabelId = useId();
+  const systemSectionNavLabelId = useId();
   const routingStrategyLabelId = useId();
   const routingStrategyHintId = `${routingStrategyLabelId}-hint`;
   const disableImageGenerationLabelId = useId();
@@ -297,12 +308,8 @@ export function VisualConfigEditor({
   const nonstreamKeepaliveInputId = useId();
   const nonstreamKeepaliveHintId = `${nonstreamKeepaliveInputId}-hint`;
   const nonstreamKeepaliveErrorId = `${nonstreamKeepaliveInputId}-error`;
-  const [activeSectionId, setActiveSectionId] = useState<VisualSectionId>('server');
-  const sectionRefs = useRef<Partial<Record<VisualSectionId, HTMLElement | null>>>({});
-  const mobileNavScrollerRef = useRef<HTMLDivElement | null>(null);
-  const mobileNavButtonRefs = useRef<Partial<Record<VisualSectionId, HTMLButtonElement | null>>>(
-    {}
-  );
+  const [activeSectionId, setActiveSectionId] = useState<VisualSectionId>('system');
+  const [activeSystemSectionId, setActiveSystemSectionId] = useState<SystemSectionId>('runtime');
 
   const isKeepaliveDisabled =
     values.streaming.keepaliveSeconds === '' || values.streaming.keepaliveSeconds === '0';
@@ -539,9 +546,7 @@ export function VisualConfigEditor({
     ABNORMAL_RETRY_ACTION_HINT_KEYS[values.codexAbnormalReasoningRetryAction]
   );
   const abnormalRetryExhaustedBehaviorHint = t(
-    ABNORMAL_RETRY_EXHAUSTED_BEHAVIOR_HINT_KEYS[
-      values.codexAbnormalReasoningRetryExhaustedBehavior
-    ]
+    ABNORMAL_RETRY_EXHAUSTED_BEHAVIOR_HINT_KEYS[values.codexAbnormalReasoningRetryExhaustedBehavior]
   );
   const abnormalRetryUsageAggregationHint = t(
     ABNORMAL_RETRY_USAGE_AGGREGATION_HINT_KEYS[
@@ -608,23 +613,75 @@ export function VisualConfigEditor({
     [validationErrors]
   );
 
+  const systemSections = useMemo<SystemSection[]>(
+    () => [
+      {
+        id: 'runtime',
+        title: t('config_management.visual.sections.system.runtime_group_title'),
+        description: t('config_management.visual.sections.system.runtime_group_desc'),
+        icon: IconSettings,
+        errorCount: countErrors([
+          'errorLogsMaxFiles',
+          'logsMaxTotalSizeMb',
+          'redisUsageQueueRetentionSeconds',
+        ]),
+      },
+      {
+        id: 'plugins',
+        title: t('config_management.visual.sections.system.plugins_group_title'),
+        description: t('config_management.visual.sections.system.plugins_group_desc'),
+        icon: IconPlug,
+        errorCount: 0,
+      },
+      {
+        id: 'headers',
+        title: t('config_management.visual.sections.system.headers_group_title'),
+        description: t('config_management.visual.sections.system.headers_group_desc'),
+        icon: IconCode,
+        errorCount: countErrors([
+          'codexAbnormalReasoningRetryStreamBufferMaxBytes',
+          'codexAbnormalReasoningRetryMaxRetries',
+          'codexAbnormalReasoningRetryHedgeDelayMs',
+          'codexAbnormalReasoningRetryReasoningTokens',
+        ]),
+      },
+      {
+        id: 'network',
+        title: t('config_management.visual.sections.system.network_group_title'),
+        description: t('config_management.visual.sections.system.network_group_desc'),
+        icon: IconNetwork,
+        errorCount: countErrors([
+          'requestRetry',
+          'maxRetryCredentials',
+          'maxRetryInterval',
+          'transientErrorCooldownSeconds',
+          'authAutoRefreshWorkers',
+        ]),
+      },
+    ],
+    [countErrors, t]
+  );
+
   const sections = useMemo<VisualSection[]>(
     () => [
       {
         id: 'server',
         title: t('config_management.visual.sections.server.title'),
+        description: t('config_management.visual.sections.server.description'),
         icon: IconSettings,
         errorCount: countErrors(['port']),
       },
       {
         id: 'auth',
         title: t('config_management.visual.sections.auth.title'),
+        description: t('config_management.visual.sections.auth.description'),
         icon: IconKey,
         errorCount: 0,
       },
       {
         id: 'system',
         title: t('config_management.visual.sections.system.title'),
+        description: t('config_management.visual.sections.system.description'),
         icon: IconDiamond,
         errorCount: countErrors([
           'errorLogsMaxFiles',
@@ -644,12 +701,14 @@ export function VisualConfigEditor({
       {
         id: 'quota',
         title: t('config_management.visual.sections.quota.title'),
+        description: t('config_management.visual.sections.quota.description'),
         icon: IconTimer,
         errorCount: 0,
       },
       {
         id: 'streaming',
         title: t('config_management.visual.sections.streaming.title'),
+        description: t('config_management.visual.sections.streaming.description'),
         icon: IconSatellite,
         errorCount: countErrors([
           'streaming.keepaliveSeconds',
@@ -660,6 +719,7 @@ export function VisualConfigEditor({
       {
         id: 'payload',
         title: t('config_management.visual.sections.payload.title'),
+        description: t('config_management.visual.sections.payload.description'),
         icon: IconCode,
         errorCount: hasPayloadValidationErrors ? 1 : 0,
       },
@@ -670,66 +730,76 @@ export function VisualConfigEditor({
   const hasValidationIssues =
     sections.some((section) => section.errorCount > 0) || hasPayloadValidationErrors;
   const activeSection = sections.find((section) => section.id === activeSectionId) ?? sections[0];
-
-  useEffect(() => {
-    if (!isCurrentLayer) return undefined;
-    if (typeof IntersectionObserver === 'undefined') return undefined;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visibleEntries = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((left, right) => right.intersectionRatio - left.intersectionRatio);
-
-        if (visibleEntries.length === 0) return;
-        setActiveSectionId(visibleEntries[0].target.id as VisualSectionId);
-      },
-      {
-        rootMargin: '-18% 0px -58% 0px',
-        threshold: [0.12, 0.3, 0.55],
-      }
-    );
-
-    for (const section of sections) {
-      const element = sectionRefs.current[section.id];
-      if (element) observer.observe(element);
-    }
-
-    return () => observer.disconnect();
-  }, [isCurrentLayer, sections]);
-
-  useEffect(() => {
-    if (!isCurrentLayer || !isMobile) return;
-    const scroller = mobileNavScrollerRef.current;
-    const button = mobileNavButtonRefs.current[activeSectionId];
-    if (!scroller || !button) return;
-
-    const scrollerRect = scroller.getBoundingClientRect();
-    const buttonRect = button.getBoundingClientRect();
-    const centeredLeft =
-      scroller.scrollLeft +
-      (buttonRect.left - scrollerRect.left) -
-      (scroller.clientWidth - buttonRect.width) / 2;
-    const maxScrollLeft = Math.max(scroller.scrollWidth - scroller.clientWidth, 0);
-    const targetLeft = Math.min(Math.max(centeredLeft, 0), maxScrollLeft);
-
-    scroller.scrollTo({
-      left: targetLeft,
-      behavior: 'smooth',
-    });
-  }, [activeSectionId, isCurrentLayer, isMobile]);
+  const activeSystemSection =
+    systemSections.find((section) => section.id === activeSystemSectionId) ?? systemSections[0];
+  const ActiveSystemIcon = activeSystemSection.icon;
 
   const handleSectionJump = useCallback((sectionId: VisualSectionId) => {
     setActiveSectionId(sectionId);
-    sectionRefs.current[sectionId]?.scrollIntoView({
-      behavior: 'smooth',
-      block: 'nearest',
-      inline: 'start',
+
+    if (typeof window === 'undefined') return;
+    window.requestAnimationFrame(() => {
+      document.getElementById(sectionId)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
     });
   }, []);
 
+  const handleSystemSectionChange = useCallback((sectionId: SystemSectionId) => {
+    setActiveSystemSectionId(sectionId);
+
+    if (typeof window === 'undefined') return;
+    window.requestAnimationFrame(() => {
+      document.getElementById(`system-panel-${sectionId}`)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+      });
+    });
+  }, []);
+
+  const handleSystemTabKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLButtonElement>, currentIndex: number) => {
+      let nextIndex: number | undefined;
+
+      switch (event.key) {
+        case 'ArrowLeft':
+          nextIndex = (currentIndex - 1 + systemSections.length) % systemSections.length;
+          break;
+        case 'ArrowRight':
+          nextIndex = (currentIndex + 1) % systemSections.length;
+          break;
+        case 'Home':
+          nextIndex = 0;
+          break;
+        case 'End':
+          nextIndex = systemSections.length - 1;
+          break;
+        case 'Enter':
+        case ' ':
+        case 'Spacebar':
+          event.preventDefault();
+          handleSystemSectionChange(systemSections[currentIndex].id);
+          return;
+        default:
+          return;
+      }
+
+      event.preventDefault();
+      const nextSection = systemSections[nextIndex];
+      handleSystemSectionChange(nextSection.id);
+      window.requestAnimationFrame(() => {
+        document.getElementById(`system-tab-${nextSection.id}`)?.focus();
+      });
+    },
+    [handleSystemSectionChange, systemSections]
+  );
+
   const navContent = (
-    <div className={styles.navList}>
+    <nav
+      className={styles.navList}
+      aria-label={t('config_management.visual.quick_jump', { defaultValue: '快速跳转' })}
+    >
       {sections.map((section, index) => {
         const Icon = section.icon;
 
@@ -740,6 +810,8 @@ export function VisualConfigEditor({
             className={`${styles.navButton} ${
               activeSectionId === section.id ? styles.navButtonActive : ''
             }`}
+            aria-controls={section.id}
+            aria-current={activeSectionId === section.id ? 'true' : undefined}
             onClick={() => handleSectionJump(section.id)}
           >
             <span className={styles.navIndex}>{String(index + 1).padStart(2, '0')}</span>
@@ -757,7 +829,46 @@ export function VisualConfigEditor({
                   </span>
                 ) : null}
               </span>
+              <span className={styles.navDescription}>{section.description}</span>
             </span>
+          </button>
+        );
+      })}
+    </nav>
+  );
+
+  const systemTabs = (
+    <div
+      className={styles.systemTabList}
+      role="tablist"
+      aria-label={t('config_management.visual.sections.system.group_navigation_label')}
+    >
+      {systemSections.map((section, index) => {
+        const Icon = section.icon;
+        const isActive = activeSystemSectionId === section.id;
+
+        return (
+          <button
+            key={section.id}
+            id={`system-tab-${section.id}`}
+            type="button"
+            role="tab"
+            tabIndex={isActive ? 0 : -1}
+            className={`${styles.systemTab} ${isActive ? styles.systemTabActive : ''}`}
+            aria-selected={isActive}
+            aria-controls={`system-panel-${section.id}`}
+            onClick={() => handleSystemSectionChange(section.id)}
+            onKeyDown={(event) => handleSystemTabKeyDown(event, index)}
+          >
+            <span className={styles.systemTabIcon} aria-hidden="true">
+              <Icon size={15} />
+            </span>
+            <span className={styles.systemTabTitle}>{section.title}</span>
+            {section.errorCount > 0 ? (
+              <span className={styles.systemTabBadge} aria-hidden="true">
+                {section.errorCount}
+              </span>
+            ) : null}
           </button>
         );
       })}
@@ -766,67 +877,86 @@ export function VisualConfigEditor({
 
   return (
     <div className={styles.visualEditor}>
-      <div className={styles.overview}>
-        <div className={styles.overviewHeader}>
-          <div className={styles.overviewMeta}>
-            <span className={styles.overviewPill}>
-              {t('config_management.visual.quick_jump', { defaultValue: '快速跳转' })}
-            </span>
-            <span className={styles.overviewPill}>{activeSection?.title}</span>
-            {hasValidationIssues ? (
-              <span className={`${styles.overviewPill} ${styles.overviewPillWarning}`}>
-                {t('config_management.visual.validation.validation_blocked')}
-              </span>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
       <div className={styles.workspace}>
-        {isMobile ? (
-          <div className={styles.mobileSectionNav}>
-            <div
-              ref={mobileNavScrollerRef}
-              className={styles.mobileSectionNavScroller}
-              aria-label={t('config_management.visual.quick_jump', { defaultValue: '快速跳转' })}
-            >
-              {sections.map((section, index) => (
-                <button
-                  key={section.id}
-                  ref={(node) => {
-                    mobileNavButtonRefs.current[section.id] = node;
-                  }}
-                  type="button"
-                  className={`${styles.mobileSectionNavButton} ${
-                    activeSectionId === section.id ? styles.mobileSectionNavButtonActive : ''
-                  }`}
-                  onClick={() => handleSectionJump(section.id)}
-                >
-                  <span className={styles.mobileSectionNavIndex}>
-                    {String(index + 1).padStart(2, '0')}
-                  </span>
-                  <span className={styles.mobileSectionNavLabel}>{section.title}</span>
-                  {section.errorCount > 0 ? (
-                    <span className={styles.mobileSectionNavBadge} aria-hidden="true">
-                      {section.errorCount}
-                    </span>
-                  ) : null}
-                </button>
-              ))}
+        {useCompactNavigation ? (
+          <div
+            className={`${styles.compactNavigation} ${
+              activeSectionId === 'system' ? styles.compactNavigationWithSystem : ''
+            }`}
+          >
+            <div className={styles.compactNavigationField}>
+              <div className={styles.compactNavigationHeader}>
+                <span id={sectionNavLabelId} className={styles.compactNavigationLabel}>
+                  {t('config_management.visual.quick_jump', { defaultValue: '快速跳转' })}
+                </span>
+                <span className={styles.compactNavigationCurrent}>{activeSection?.title}</span>
+              </div>
+              <Select
+                value={activeSectionId}
+                options={sections.map((section) => ({
+                  value: section.id,
+                  label: section.title,
+                }))}
+                ariaLabelledBy={sectionNavLabelId}
+                onChange={(nextSectionId) => handleSectionJump(nextSectionId as VisualSectionId)}
+              />
             </div>
+
+            {activeSectionId === 'system' ? (
+              <div className={styles.compactNavigationField}>
+                <div className={styles.compactNavigationHeader}>
+                  <span id={systemSectionNavLabelId} className={styles.compactNavigationLabel}>
+                    {t('config_management.visual.sections.system.group_navigation_label')}
+                  </span>
+                  <span className={styles.compactNavigationCurrent}>
+                    {activeSystemSection?.title}
+                  </span>
+                </div>
+                <Select
+                  value={activeSystemSectionId}
+                  options={systemSections.map((section) => ({
+                    value: section.id,
+                    label: section.title,
+                  }))}
+                  ariaLabelledBy={systemSectionNavLabelId}
+                  onChange={(nextSectionId) =>
+                    handleSystemSectionChange(nextSectionId as SystemSectionId)
+                  }
+                />
+              </div>
+            ) : null}
+
+            {hasValidationIssues ? (
+              <div className={styles.compactValidationNotice}>
+                {t('config_management.visual.validation.validation_blocked')}
+              </div>
+            ) : null}
           </div>
         ) : null}
 
         <aside className={styles.sidebar}>
-          <div className={styles.sidebarRail}>{navContent}</div>
+          <div className={styles.sidebarRail}>
+            <div className={styles.sidebarHeader}>
+              <span className={styles.sidebarTitle}>
+                {t('config_management.visual.quick_jump', { defaultValue: '快速跳转' })}
+              </span>
+              {hasValidationIssues ? (
+                <span
+                  className={styles.sidebarIssueBadge}
+                  title={t('config_management.visual.validation.validation_blocked')}
+                >
+                  !
+                </span>
+              ) : null}
+            </div>
+            {navContent}
+          </div>
         </aside>
 
         <div className={styles.sections}>
           <ConfigSection
             id="server"
-            ref={(node) => {
-              sectionRefs.current.server = node;
-            }}
+            hidden={activeSectionId !== 'server'}
             indexLabel="01"
             icon={<IconSettings size={16} />}
             title={t('config_management.visual.sections.server.title')}
@@ -949,9 +1079,7 @@ export function VisualConfigEditor({
 
           <ConfigSection
             id="auth"
-            ref={(node) => {
-              sectionRefs.current.auth = node;
-            }}
+            hidden={activeSectionId !== 'auth'}
             indexLabel="02"
             icon={<IconKey size={16} />}
             title={t('config_management.visual.sections.auth.title')}
@@ -978,946 +1106,1065 @@ export function VisualConfigEditor({
 
           <ConfigSection
             id="system"
-            ref={(node) => {
-              sectionRefs.current.system = node;
-            }}
+            hidden={activeSectionId !== 'system'}
             indexLabel="03"
             icon={<IconDiamond size={16} />}
             title={t('config_management.visual.sections.system.title')}
             description={t('config_management.visual.sections.system.description')}
           >
-            <SectionStack>
-              <SectionGrid>
-                <ToggleRow
-                  title={t('config_management.visual.sections.system.debug')}
-                  description={t('config_management.visual.sections.system.debug_desc')}
-                  checked={values.debug}
-                  disabled={disabled}
-                  onChange={(debug) => onChange({ debug })}
-                />
-                <ToggleRow
-                  title={t('config_management.visual.sections.system.commercial_mode')}
-                  description={t('config_management.visual.sections.system.commercial_mode_desc')}
-                  checked={values.commercialMode}
-                  disabled={disabled}
-                  onChange={(commercialMode) => onChange({ commercialMode })}
-                />
-                <ToggleRow
-                  title={t('config_management.visual.sections.system.logging_to_file')}
-                  description={t('config_management.visual.sections.system.logging_to_file_desc')}
-                  checked={values.loggingToFile}
-                  disabled={disabled}
-                  onChange={(loggingToFile) => onChange({ loggingToFile })}
-                />
-                <ToggleRow
-                  title={t('config_management.visual.sections.system.plugins_enabled')}
-                  description={t('config_management.visual.sections.system.plugins_enabled_desc')}
-                  checked={values.pluginsEnabled}
-                  disabled={disabled}
-                  onChange={(pluginsEnabled) => onChange({ pluginsEnabled })}
-                />
-              </SectionGrid>
+            <div className={styles.systemWorkspace}>
+              {!useCompactNavigation ? systemTabs : null}
 
-              <SectionSubsection
-                title={t('config_management.visual.sections.system.plugin_store_sources')}
-                description={t(
-                  'config_management.visual.sections.system.plugin_store_sources_desc'
-                )}
-              >
-                <div className={styles.fieldShell}>
-                  <label className={styles.fieldLabel}>
-                    {t('config_management.visual.sections.system.plugin_store_sources_label')}
-                  </label>
-                  <StringListEditor
-                    value={values.pluginStoreSources}
-                    disabled={disabled}
-                    placeholder={t(
-                      'config_management.visual.sections.system.plugin_store_sources_placeholder'
-                    )}
-                    inputAriaLabel={t(
-                      'config_management.visual.sections.system.plugin_store_sources_label'
-                    )}
-                    onChange={handlePluginStoreSourcesChange}
-                  />
-                  <div className={styles.fieldHint}>
-                    {t('config_management.visual.sections.system.plugin_store_sources_hint')}
-                  </div>
+              <div className={styles.systemPanelIntro}>
+                <span className={styles.systemPanelIntroIcon} aria-hidden="true">
+                  <ActiveSystemIcon size={18} />
+                </span>
+                <div className={styles.systemPanelIntroCopy}>
+                  <h3 className={styles.systemPanelIntroTitle}>{activeSystemSection.title}</h3>
+                  <p className={styles.systemPanelIntroDescription}>
+                    {activeSystemSection.description}
+                  </p>
                 </div>
-              </SectionSubsection>
+              </div>
 
-              <SectionSubsection
-                title={t('config_management.visual.sections.system.plugin_store_auth')}
-                description={t('config_management.visual.sections.system.plugin_store_auth_desc')}
-              >
-                <div className={styles.fieldShell}>
-                  <div className={styles.fieldHint}>
-                    {t('config_management.visual.sections.system.plugin_store_auth_hint')}
-                  </div>
-                  <PluginStoreAuthEditor
-                    value={values.pluginStoreAuth}
-                    disabled={disabled}
-                    onChange={handlePluginStoreAuthChange}
-                  />
-                </div>
-              </SectionSubsection>
-
-              <SectionGrid>
-                <Input
-                  label={t('config_management.visual.sections.system.logs_max_size')}
-                  type="number"
-                  placeholder="0"
-                  value={values.logsMaxTotalSizeMb}
-                  onChange={(e) => onChange({ logsMaxTotalSizeMb: e.target.value })}
-                  disabled={disabled}
-                  error={logsMaxSizeError}
-                />
-                <Input
-                  label={t('config_management.visual.sections.system.error_logs_max_files')}
-                  type="number"
-                  placeholder="10"
-                  value={values.errorLogsMaxFiles}
-                  onChange={(e) => onChange({ errorLogsMaxFiles: e.target.value })}
-                  disabled={disabled}
-                  error={errorLogsMaxFilesError}
-                />
-                <Input
-                  label={t('config_management.visual.sections.system.redis_usage_retention')}
-                  type="number"
-                  min={1}
-                  max={3600}
-                  placeholder="60"
-                  value={values.redisUsageQueueRetentionSeconds}
-                  onChange={(e) => onChange({ redisUsageQueueRetentionSeconds: e.target.value })}
-                  disabled={disabled}
-                  hint={t('config_management.visual.sections.system.redis_usage_retention_hint')}
-                  error={redisUsageQueueRetentionError}
-                />
-              </SectionGrid>
-              <SectionGrid>
-                <ToggleRow
-                  title={t('config_management.visual.sections.system.usage_statistics_enabled')}
-                  description={t(
-                    'config_management.visual.sections.system.usage_statistics_enabled_desc'
-                  )}
-                  checked={values.usageStatisticsEnabled}
-                  disabled={disabled}
-                  onChange={(usageStatisticsEnabled) => onChange({ usageStatisticsEnabled })}
-                />
-                <ToggleRow
-                  title={t('config_management.visual.sections.system.antigravity_signature_cache')}
-                  description={t(
-                    'config_management.visual.sections.system.antigravity_signature_cache_desc'
-                  )}
-                  checked={values.antigravitySignatureCacheEnabled}
-                  disabled={disabled}
-                  onChange={(antigravitySignatureCacheEnabled) =>
-                    onChange({ antigravitySignatureCacheEnabled })
-                  }
-                />
-                <ToggleRow
-                  title={t('config_management.visual.sections.system.antigravity_signature_strict')}
-                  description={t(
-                    'config_management.visual.sections.system.antigravity_signature_strict_desc'
-                  )}
-                  checked={values.antigravitySignatureBypassStrict}
-                  disabled={disabled}
-                  onChange={(antigravitySignatureBypassStrict) =>
-                    onChange({ antigravitySignatureBypassStrict })
-                  }
-                />
-              </SectionGrid>
-
-              <SectionSubsection
-                title={t('config_management.visual.sections.headers.title')}
-                description={t('config_management.visual.sections.headers.description')}
-              >
-                <SectionStack>
-                  <div className={styles.subsectionHeader}>
-                    <h3 className={styles.subsectionTitle}>
-                      {t('config_management.visual.sections.headers.claude_title')}
-                    </h3>
-                  </div>
-                  <SectionGrid>
-                    <Input
-                      label={t('config_management.visual.sections.headers.user_agent')}
-                      placeholder="claude-cli/2.1.44 (external, sdk-cli)"
-                      value={values.claudeHeaderUserAgent}
-                      onChange={(e) => onChange({ claudeHeaderUserAgent: e.target.value })}
-                      disabled={disabled}
-                    />
-                    <Input
-                      label={t('config_management.visual.sections.headers.package_version')}
-                      placeholder="0.74.0"
-                      value={values.claudeHeaderPackageVersion}
-                      onChange={(e) => onChange({ claudeHeaderPackageVersion: e.target.value })}
-                      disabled={disabled}
-                    />
-                    <Input
-                      label={t('config_management.visual.sections.headers.runtime_version')}
-                      placeholder="v24.3.0"
-                      value={values.claudeHeaderRuntimeVersion}
-                      onChange={(e) => onChange({ claudeHeaderRuntimeVersion: e.target.value })}
-                      disabled={disabled}
-                    />
-                    <Input
-                      label={t('config_management.visual.sections.headers.os')}
-                      placeholder="MacOS"
-                      value={values.claudeHeaderOs}
-                      onChange={(e) => onChange({ claudeHeaderOs: e.target.value })}
-                      disabled={disabled}
-                    />
-                    <Input
-                      label={t('config_management.visual.sections.headers.arch')}
-                      placeholder="arm64"
-                      value={values.claudeHeaderArch}
-                      onChange={(e) => onChange({ claudeHeaderArch: e.target.value })}
-                      disabled={disabled}
-                    />
-                    <Input
-                      label={t('config_management.visual.sections.headers.timeout')}
-                      placeholder="600"
-                      value={values.claudeHeaderTimeout}
-                      onChange={(e) => onChange({ claudeHeaderTimeout: e.target.value })}
-                      disabled={disabled}
-                    />
-                  </SectionGrid>
-                  <SectionGrid>
-                    <ToggleRow
-                      title={t('config_management.visual.sections.headers.stabilize_device')}
+              <div className={styles.systemPanels}>
+                <div
+                  id="system-panel-runtime"
+                  className={styles.systemPanel}
+                  role="tabpanel"
+                  tabIndex={0}
+                  aria-labelledby={useCompactNavigation ? undefined : 'system-tab-runtime'}
+                  aria-label={useCompactNavigation ? systemSections[0].title : undefined}
+                  hidden={activeSystemSectionId !== 'runtime'}
+                >
+                  <SectionStack>
+                    <SectionSubsection
+                      title={t('config_management.visual.sections.system.core_controls_title')}
                       description={t(
-                        'config_management.visual.sections.headers.stabilize_device_desc'
-                      )}
-                      checked={values.claudeHeaderStabilizeDeviceProfile}
-                      disabled={disabled}
-                      onChange={(claudeHeaderStabilizeDeviceProfile) =>
-                        onChange({ claudeHeaderStabilizeDeviceProfile })
-                      }
-                    />
-                  </SectionGrid>
-                  <Divider />
-                  <div className={styles.subsectionHeader}>
-                    <h3 className={styles.subsectionTitle}>
-                      {t('config_management.visual.sections.headers.codex_title')}
-                    </h3>
-                  </div>
-                  <SectionGrid>
-                    <Input
-                      label={t('config_management.visual.sections.headers.user_agent')}
-                      placeholder="codex_cli_rs/0.114.0 (Mac OS 14.2.0; x86_64) vscode/1.111.0"
-                      value={values.codexHeaderUserAgent}
-                      onChange={(e) => onChange({ codexHeaderUserAgent: e.target.value })}
-                      disabled={disabled}
-                    />
-                    <Input
-                      label={t('config_management.visual.sections.headers.beta_features')}
-                      placeholder="multi_agent"
-                      value={values.codexHeaderBetaFeatures}
-                      onChange={(e) => onChange({ codexHeaderBetaFeatures: e.target.value })}
-                      disabled={disabled}
-                    />
-                  </SectionGrid>
-                  <SectionGrid>
-                    <ToggleRow
-                      title={t('config_management.visual.sections.headers.codex_identity_confuse')}
-                      description={t(
-                        'config_management.visual.sections.headers.codex_identity_confuse_desc'
-                      )}
-                      checked={values.codexIdentityConfuse}
-                      disabled={disabled}
-                      onChange={(codexIdentityConfuse) => onChange({ codexIdentityConfuse })}
-                    />
-                  </SectionGrid>
-                  <Divider />
-                  <div className={styles.subsectionHeader}>
-                    <h3 className={styles.subsectionTitle}>
-                      {t(
-                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_title'
-                      )}
-                    </h3>
-                    <p className={styles.subsectionDescription}>
-                      {t(
-                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_desc'
-                      )}
-                    </p>
-                  </div>
-                  <div className={styles.strategyPanel}>
-                    <div className={styles.strategySummary}>
-                      <div className={styles.strategySummaryMain}>
-                        <span className={styles.strategySummaryIcon} aria-hidden="true">
-                          <IconShield size={18} />
-                        </span>
-                        <div className={styles.strategySummaryCopy}>
-                          <div className={styles.strategySummaryTitle}>
-                            {t(
-                              'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_summary_title'
-                            )}
-                          </div>
-                          <p className={styles.strategySummaryDescription}>
-                            {t(
-                              'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_summary_desc'
-                            )}
-                          </p>
-                        </div>
-                      </div>
-                      <div className={styles.strategyBadgeGrid}>
-                        <StrategyBadge
-                          label={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_summary_action'
-                          )}
-                          value={abnormalRetryActionLabel}
-                          tone={abnormalRetryActionTone}
-                        />
-                        <StrategyBadge
-                          label={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_summary_stream_buffer'
-                          )}
-                          value={abnormalRetryStreamBufferStatus}
-                          tone={abnormalRetryStreamBufferTone}
-                        />
-                        <StrategyBadge
-                          label={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_summary_hedged'
-                          )}
-                          value={abnormalRetryHedgedStatus}
-                          tone={abnormalRetryHedgedTone}
-                        />
-                        <StrategyBadge
-                          label={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_summary_distinct_auth'
-                          )}
-                          value={abnormalRetryDistinctAuthStatus}
-                          tone={abnormalRetryDistinctAuthTone}
-                        />
-                      </div>
-                    </div>
-
-                    <StrategyGroup
-                      title={t(
-                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_group_switches_title'
-                      )}
-                      description={t(
-                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_group_switches_desc'
+                        'config_management.visual.sections.system.core_controls_desc'
                       )}
                     >
                       <SectionGrid>
                         <ToggleRow
-                          title={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_enabled'
-                          )}
-                          description={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_enabled_desc'
-                          )}
-                          checked={abnormalRetryEnabled}
+                          title={t('config_management.visual.sections.system.debug')}
+                          description={t('config_management.visual.sections.system.debug_desc')}
+                          checked={values.debug}
                           disabled={disabled}
-                          onChange={(codexAbnormalReasoningRetryEnabled) =>
-                            onChange({
-                              codexAbnormalReasoningRetryEnabled,
-                              codexAbnormalReasoningRetryAction: codexAbnormalReasoningRetryEnabled
-                                ? 'retry'
-                                : 'disabled',
-                            })
-                          }
+                          onChange={(debug) => onChange({ debug })}
                         />
                         <ToggleRow
-                          title={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_stream_buffer'
-                          )}
+                          title={t('config_management.visual.sections.system.commercial_mode')}
                           description={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_stream_buffer_desc'
+                            'config_management.visual.sections.system.commercial_mode_desc'
                           )}
-                          checked={values.codexAbnormalReasoningRetryStreamBuffer}
+                          checked={values.commercialMode}
                           disabled={disabled}
-                          onChange={(codexAbnormalReasoningRetryStreamBuffer) =>
-                            onChange({ codexAbnormalReasoningRetryStreamBuffer })
-                          }
+                          onChange={(commercialMode) => onChange({ commercialMode })}
                         />
                         <ToggleRow
-                          title={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_hedged_retry_enabled'
-                          )}
+                          title={t('config_management.visual.sections.system.logging_to_file')}
                           description={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_hedged_retry_enabled_desc'
+                            'config_management.visual.sections.system.logging_to_file_desc'
                           )}
-                          checked={values.codexAbnormalReasoningRetryHedgedRetryEnabled}
+                          checked={values.loggingToFile}
                           disabled={disabled}
-                          onChange={(codexAbnormalReasoningRetryHedgedRetryEnabled) =>
-                            onChange({ codexAbnormalReasoningRetryHedgedRetryEnabled })
-                          }
+                          onChange={(loggingToFile) => onChange({ loggingToFile })}
                         />
-                        <ToggleRow
-                          title={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_require_distinct_auth'
-                          )}
-                          description={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_require_distinct_auth_desc'
-                          )}
-                          checked={values.codexAbnormalReasoningRetryRequireDistinctAuth}
+                      </SectionGrid>
+                    </SectionSubsection>
+
+                    <SectionSubsection
+                      title={t('config_management.visual.sections.system.operations_title')}
+                      description={t('config_management.visual.sections.system.operations_desc')}
+                    >
+                      <SectionStack>
+                        <SectionGrid>
+                          <Input
+                            label={t('config_management.visual.sections.system.logs_max_size')}
+                            type="number"
+                            placeholder="0"
+                            value={values.logsMaxTotalSizeMb}
+                            onChange={(e) => onChange({ logsMaxTotalSizeMb: e.target.value })}
+                            disabled={disabled}
+                            error={logsMaxSizeError}
+                          />
+                          <Input
+                            label={t(
+                              'config_management.visual.sections.system.error_logs_max_files'
+                            )}
+                            type="number"
+                            placeholder="10"
+                            value={values.errorLogsMaxFiles}
+                            onChange={(e) => onChange({ errorLogsMaxFiles: e.target.value })}
+                            disabled={disabled}
+                            error={errorLogsMaxFilesError}
+                          />
+                          <Input
+                            label={t(
+                              'config_management.visual.sections.system.redis_usage_retention'
+                            )}
+                            type="number"
+                            min={1}
+                            max={3600}
+                            placeholder="60"
+                            value={values.redisUsageQueueRetentionSeconds}
+                            onChange={(e) =>
+                              onChange({ redisUsageQueueRetentionSeconds: e.target.value })
+                            }
+                            disabled={disabled}
+                            hint={t(
+                              'config_management.visual.sections.system.redis_usage_retention_hint'
+                            )}
+                            error={redisUsageQueueRetentionError}
+                          />
+                        </SectionGrid>
+                        <SectionGrid>
+                          <ToggleRow
+                            title={t(
+                              'config_management.visual.sections.system.usage_statistics_enabled'
+                            )}
+                            description={t(
+                              'config_management.visual.sections.system.usage_statistics_enabled_desc'
+                            )}
+                            checked={values.usageStatisticsEnabled}
+                            disabled={disabled}
+                            onChange={(usageStatisticsEnabled) =>
+                              onChange({ usageStatisticsEnabled })
+                            }
+                          />
+                          <ToggleRow
+                            title={t(
+                              'config_management.visual.sections.system.antigravity_signature_cache'
+                            )}
+                            description={t(
+                              'config_management.visual.sections.system.antigravity_signature_cache_desc'
+                            )}
+                            checked={values.antigravitySignatureCacheEnabled}
+                            disabled={disabled}
+                            onChange={(antigravitySignatureCacheEnabled) =>
+                              onChange({ antigravitySignatureCacheEnabled })
+                            }
+                          />
+                          <ToggleRow
+                            title={t(
+                              'config_management.visual.sections.system.antigravity_signature_strict'
+                            )}
+                            description={t(
+                              'config_management.visual.sections.system.antigravity_signature_strict_desc'
+                            )}
+                            checked={values.antigravitySignatureBypassStrict}
+                            disabled={disabled}
+                            onChange={(antigravitySignatureBypassStrict) =>
+                              onChange({ antigravitySignatureBypassStrict })
+                            }
+                          />
+                        </SectionGrid>
+                      </SectionStack>
+                    </SectionSubsection>
+                  </SectionStack>
+                </div>
+
+                <div
+                  id="system-panel-plugins"
+                  className={styles.systemPanel}
+                  role="tabpanel"
+                  tabIndex={0}
+                  aria-labelledby={useCompactNavigation ? undefined : 'system-tab-plugins'}
+                  aria-label={useCompactNavigation ? systemSections[1].title : undefined}
+                  hidden={activeSystemSectionId !== 'plugins'}
+                >
+                  <SectionStack>
+                    <SectionSubsection
+                      title={t('config_management.visual.sections.system.plugin_runtime_title')}
+                      description={t(
+                        'config_management.visual.sections.system.plugin_runtime_desc'
+                      )}
+                    >
+                      <ToggleRow
+                        title={t('config_management.visual.sections.system.plugins_enabled')}
+                        description={t(
+                          'config_management.visual.sections.system.plugins_enabled_desc'
+                        )}
+                        checked={values.pluginsEnabled}
+                        disabled={disabled}
+                        onChange={(pluginsEnabled) => onChange({ pluginsEnabled })}
+                      />
+                    </SectionSubsection>
+
+                    <SectionSubsection
+                      title={t('config_management.visual.sections.system.plugin_store_sources')}
+                      description={t(
+                        'config_management.visual.sections.system.plugin_store_sources_desc'
+                      )}
+                    >
+                      <div className={styles.fieldShell}>
+                        <label className={styles.fieldLabel}>
+                          {t('config_management.visual.sections.system.plugin_store_sources_label')}
+                        </label>
+                        <StringListEditor
+                          value={values.pluginStoreSources}
                           disabled={disabled}
-                          onChange={(codexAbnormalReasoningRetryRequireDistinctAuth) =>
-                            onChange({ codexAbnormalReasoningRetryRequireDistinctAuth })
+                          placeholder={t(
+                            'config_management.visual.sections.system.plugin_store_sources_placeholder'
+                          )}
+                          inputAriaLabel={t(
+                            'config_management.visual.sections.system.plugin_store_sources_label'
+                          )}
+                          onChange={handlePluginStoreSourcesChange}
+                        />
+                        <div className={styles.fieldHint}>
+                          {t('config_management.visual.sections.system.plugin_store_sources_hint')}
+                        </div>
+                      </div>
+                    </SectionSubsection>
+
+                    <SectionSubsection
+                      title={t('config_management.visual.sections.system.plugin_store_auth')}
+                      description={t(
+                        'config_management.visual.sections.system.plugin_store_auth_desc'
+                      )}
+                    >
+                      <div className={styles.fieldShell}>
+                        <div className={styles.fieldHint}>
+                          {t('config_management.visual.sections.system.plugin_store_auth_hint')}
+                        </div>
+                        <PluginStoreAuthEditor
+                          value={values.pluginStoreAuth}
+                          disabled={disabled}
+                          onChange={handlePluginStoreAuthChange}
+                        />
+                      </div>
+                    </SectionSubsection>
+                  </SectionStack>
+                </div>
+
+                <div
+                  id="system-panel-headers"
+                  className={styles.systemPanel}
+                  role="tabpanel"
+                  tabIndex={0}
+                  aria-labelledby={useCompactNavigation ? undefined : 'system-tab-headers'}
+                  aria-label={useCompactNavigation ? systemSections[2].title : undefined}
+                  hidden={activeSystemSectionId !== 'headers'}
+                >
+                  <SectionSubsection
+                    title={t('config_management.visual.sections.headers.title')}
+                    description={t('config_management.visual.sections.headers.description')}
+                  >
+                    <SectionStack>
+                      <div className={styles.subsectionHeader}>
+                        <h3 className={styles.subsectionTitle}>
+                          {t('config_management.visual.sections.headers.claude_title')}
+                        </h3>
+                      </div>
+                      <SectionGrid>
+                        <Input
+                          label={t('config_management.visual.sections.headers.user_agent')}
+                          placeholder="claude-cli/2.1.44 (external, sdk-cli)"
+                          value={values.claudeHeaderUserAgent}
+                          onChange={(e) => onChange({ claudeHeaderUserAgent: e.target.value })}
+                          disabled={disabled}
+                        />
+                        <Input
+                          label={t('config_management.visual.sections.headers.package_version')}
+                          placeholder="0.74.0"
+                          value={values.claudeHeaderPackageVersion}
+                          onChange={(e) => onChange({ claudeHeaderPackageVersion: e.target.value })}
+                          disabled={disabled}
+                        />
+                        <Input
+                          label={t('config_management.visual.sections.headers.runtime_version')}
+                          placeholder="v24.3.0"
+                          value={values.claudeHeaderRuntimeVersion}
+                          onChange={(e) => onChange({ claudeHeaderRuntimeVersion: e.target.value })}
+                          disabled={disabled}
+                        />
+                        <Input
+                          label={t('config_management.visual.sections.headers.os')}
+                          placeholder="MacOS"
+                          value={values.claudeHeaderOs}
+                          onChange={(e) => onChange({ claudeHeaderOs: e.target.value })}
+                          disabled={disabled}
+                        />
+                        <Input
+                          label={t('config_management.visual.sections.headers.arch')}
+                          placeholder="arm64"
+                          value={values.claudeHeaderArch}
+                          onChange={(e) => onChange({ claudeHeaderArch: e.target.value })}
+                          disabled={disabled}
+                        />
+                        <Input
+                          label={t('config_management.visual.sections.headers.timeout')}
+                          placeholder="600"
+                          value={values.claudeHeaderTimeout}
+                          onChange={(e) => onChange({ claudeHeaderTimeout: e.target.value })}
+                          disabled={disabled}
+                        />
+                      </SectionGrid>
+                      <SectionGrid>
+                        <ToggleRow
+                          title={t('config_management.visual.sections.headers.stabilize_device')}
+                          description={t(
+                            'config_management.visual.sections.headers.stabilize_device_desc'
+                          )}
+                          checked={values.claudeHeaderStabilizeDeviceProfile}
+                          disabled={disabled}
+                          onChange={(claudeHeaderStabilizeDeviceProfile) =>
+                            onChange({ claudeHeaderStabilizeDeviceProfile })
                           }
                         />
                       </SectionGrid>
-                    </StrategyGroup>
-
-                    <StrategyGroup
-                      title={t(
-                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_group_retry_title'
-                      )}
-                      description={t(
-                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_group_retry_desc'
-                      )}
-                    >
+                      <Divider />
+                      <div className={styles.subsectionHeader}>
+                        <h3 className={styles.subsectionTitle}>
+                          {t('config_management.visual.sections.headers.codex_title')}
+                        </h3>
+                      </div>
                       <SectionGrid>
-                        <FieldShell
-                          label={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_action_label'
+                        <Input
+                          label={t('config_management.visual.sections.headers.user_agent')}
+                          placeholder="codex_cli_rs/0.114.0 (Mac OS 14.2.0; x86_64) vscode/1.111.0"
+                          value={values.codexHeaderUserAgent}
+                          onChange={(e) => onChange({ codexHeaderUserAgent: e.target.value })}
+                          disabled={disabled}
+                        />
+                        <Input
+                          label={t('config_management.visual.sections.headers.beta_features')}
+                          placeholder="multi_agent"
+                          value={values.codexHeaderBetaFeatures}
+                          onChange={(e) => onChange({ codexHeaderBetaFeatures: e.target.value })}
+                          disabled={disabled}
+                        />
+                      </SectionGrid>
+                      <SectionGrid>
+                        <ToggleRow
+                          title={t(
+                            'config_management.visual.sections.headers.codex_identity_confuse'
                           )}
-                          labelId={abnormalRetryActionLabelId}
-                          hint={abnormalRetryActionHint}
-                          hintId={abnormalRetryActionHintId}
-                          hintVariant="selection"
+                          description={t(
+                            'config_management.visual.sections.headers.codex_identity_confuse_desc'
+                          )}
+                          checked={values.codexIdentityConfuse}
+                          disabled={disabled}
+                          onChange={(codexIdentityConfuse) => onChange({ codexIdentityConfuse })}
+                        />
+                      </SectionGrid>
+                      <Divider />
+                      <div className={styles.subsectionHeader}>
+                        <h3 className={styles.subsectionTitle}>
+                          {t(
+                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_title'
+                          )}
+                        </h3>
+                        <p className={styles.subsectionDescription}>
+                          {t(
+                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_desc'
+                          )}
+                        </p>
+                      </div>
+                      <div className={styles.strategyPanel}>
+                        <div className={styles.strategySummary}>
+                          <div className={styles.strategySummaryMain}>
+                            <span className={styles.strategySummaryIcon} aria-hidden="true">
+                              <IconShield size={18} />
+                            </span>
+                            <div className={styles.strategySummaryCopy}>
+                              <div className={styles.strategySummaryTitle}>
+                                {t(
+                                  'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_summary_title'
+                                )}
+                              </div>
+                              <p className={styles.strategySummaryDescription}>
+                                {t(
+                                  'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_summary_desc'
+                                )}
+                              </p>
+                            </div>
+                          </div>
+                          <div className={styles.strategyBadgeGrid}>
+                            <StrategyBadge
+                              label={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_summary_action'
+                              )}
+                              value={abnormalRetryActionLabel}
+                              tone={abnormalRetryActionTone}
+                            />
+                            <StrategyBadge
+                              label={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_summary_stream_buffer'
+                              )}
+                              value={abnormalRetryStreamBufferStatus}
+                              tone={abnormalRetryStreamBufferTone}
+                            />
+                            <StrategyBadge
+                              label={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_summary_hedged'
+                              )}
+                              value={abnormalRetryHedgedStatus}
+                              tone={abnormalRetryHedgedTone}
+                            />
+                            <StrategyBadge
+                              label={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_summary_distinct_auth'
+                              )}
+                              value={abnormalRetryDistinctAuthStatus}
+                              tone={abnormalRetryDistinctAuthTone}
+                            />
+                          </div>
+                        </div>
+
+                        <StrategyGroup
+                          title={t(
+                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_group_switches_title'
+                          )}
+                          description={t(
+                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_group_switches_desc'
+                          )}
                         >
-                          <Select
-                            value={values.codexAbnormalReasoningRetryAction}
-                            options={abnormalRetryActionOptions}
-                            id={`${abnormalRetryActionLabelId}-select`}
-                            disabled={disabled}
-                            ariaLabelledBy={abnormalRetryActionLabelId}
-                            ariaDescribedBy={abnormalRetryActionHintId}
-                            onChange={(nextValue) =>
-                              onChange({
-                                codexAbnormalReasoningRetryAction:
-                                  nextValue as VisualConfigValues['codexAbnormalReasoningRetryAction'],
-                                codexAbnormalReasoningRetryEnabled: nextValue !== 'disabled',
-                              })
-                            }
-                          />
-                        </FieldShell>
+                          <SectionGrid>
+                            <ToggleRow
+                              title={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_enabled'
+                              )}
+                              description={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_enabled_desc'
+                              )}
+                              checked={abnormalRetryEnabled}
+                              disabled={disabled}
+                              onChange={(codexAbnormalReasoningRetryEnabled) =>
+                                onChange({
+                                  codexAbnormalReasoningRetryEnabled,
+                                  codexAbnormalReasoningRetryAction:
+                                    codexAbnormalReasoningRetryEnabled ? 'retry' : 'disabled',
+                                })
+                              }
+                            />
+                            <ToggleRow
+                              title={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_stream_buffer'
+                              )}
+                              description={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_stream_buffer_desc'
+                              )}
+                              checked={values.codexAbnormalReasoningRetryStreamBuffer}
+                              disabled={disabled}
+                              onChange={(codexAbnormalReasoningRetryStreamBuffer) =>
+                                onChange({ codexAbnormalReasoningRetryStreamBuffer })
+                              }
+                            />
+                            <ToggleRow
+                              title={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_hedged_retry_enabled'
+                              )}
+                              description={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_hedged_retry_enabled_desc'
+                              )}
+                              checked={values.codexAbnormalReasoningRetryHedgedRetryEnabled}
+                              disabled={disabled}
+                              onChange={(codexAbnormalReasoningRetryHedgedRetryEnabled) =>
+                                onChange({ codexAbnormalReasoningRetryHedgedRetryEnabled })
+                              }
+                            />
+                            <ToggleRow
+                              title={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_require_distinct_auth'
+                              )}
+                              description={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_require_distinct_auth_desc'
+                              )}
+                              checked={values.codexAbnormalReasoningRetryRequireDistinctAuth}
+                              disabled={disabled}
+                              onChange={(codexAbnormalReasoningRetryRequireDistinctAuth) =>
+                                onChange({ codexAbnormalReasoningRetryRequireDistinctAuth })
+                              }
+                            />
+                          </SectionGrid>
+                        </StrategyGroup>
+
+                        <StrategyGroup
+                          title={t(
+                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_group_retry_title'
+                          )}
+                          description={t(
+                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_group_retry_desc'
+                          )}
+                        >
+                          <SectionGrid>
+                            <FieldShell
+                              label={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_action_label'
+                              )}
+                              labelId={abnormalRetryActionLabelId}
+                              hint={abnormalRetryActionHint}
+                              hintId={abnormalRetryActionHintId}
+                              hintVariant="selection"
+                            >
+                              <Select
+                                value={values.codexAbnormalReasoningRetryAction}
+                                options={abnormalRetryActionOptions}
+                                id={`${abnormalRetryActionLabelId}-select`}
+                                disabled={disabled}
+                                ariaLabelledBy={abnormalRetryActionLabelId}
+                                ariaDescribedBy={abnormalRetryActionHintId}
+                                onChange={(nextValue) =>
+                                  onChange({
+                                    codexAbnormalReasoningRetryAction:
+                                      nextValue as VisualConfigValues['codexAbnormalReasoningRetryAction'],
+                                    codexAbnormalReasoningRetryEnabled: nextValue !== 'disabled',
+                                  })
+                                }
+                              />
+                            </FieldShell>
+                            <Input
+                              label={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_stream_buffer_max_bytes_label'
+                              )}
+                              type="number"
+                              placeholder="0"
+                              value={values.codexAbnormalReasoningRetryStreamBufferMaxBytes}
+                              onChange={(e) =>
+                                onChange({
+                                  codexAbnormalReasoningRetryStreamBufferMaxBytes: e.target.value,
+                                })
+                              }
+                              disabled={disabled}
+                              hint={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_stream_buffer_max_bytes_hint'
+                              )}
+                              error={codexAbnormalReasoningRetryStreamBufferMaxBytesError}
+                            />
+                            <Input
+                              label={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_hedge_delay_ms_label'
+                              )}
+                              type="number"
+                              placeholder="1000"
+                              value={values.codexAbnormalReasoningRetryHedgeDelayMs}
+                              onChange={(e) =>
+                                onChange({
+                                  codexAbnormalReasoningRetryHedgeDelayMs: e.target.value,
+                                })
+                              }
+                              disabled={disabled}
+                              hint={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_hedge_delay_ms_hint'
+                              )}
+                              error={codexAbnormalReasoningRetryHedgeDelayMsError}
+                            />
+                            <FieldShell
+                              label={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_hedged_retry_mode_label'
+                              )}
+                              labelId={abnormalRetryHedgedModeLabelId}
+                              hint={abnormalRetryHedgedModeHint}
+                              hintId={abnormalRetryHedgedModeHintId}
+                              hintVariant="selection"
+                            >
+                              <Select
+                                value={values.codexAbnormalReasoningRetryHedgedRetryMode}
+                                options={abnormalRetryHedgedModeOptions}
+                                id={`${abnormalRetryHedgedModeLabelId}-select`}
+                                disabled={disabled}
+                                ariaLabelledBy={abnormalRetryHedgedModeLabelId}
+                                ariaDescribedBy={abnormalRetryHedgedModeHintId}
+                                onChange={(nextValue) =>
+                                  onChange({
+                                    codexAbnormalReasoningRetryHedgedRetryMode:
+                                      nextValue as VisualConfigValues['codexAbnormalReasoningRetryHedgedRetryMode'],
+                                  })
+                                }
+                              />
+                            </FieldShell>
+                          </SectionGrid>
+                        </StrategyGroup>
+
+                        <StrategyGroup
+                          title={t(
+                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_group_match_title'
+                          )}
+                          description={t(
+                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_group_match_desc'
+                          )}
+                        >
+                          <SectionGrid>
+                            <FieldShell
+                              label={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_model_contains_label'
+                              )}
+                              hint={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_model_contains_hint'
+                              )}
+                            >
+                              <StringListEditor
+                                value={values.codexAbnormalReasoningRetryModelContains}
+                                disabled={disabled}
+                                placeholder="gpt-5.5"
+                                inputAriaLabel={t(
+                                  'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_model_contains_label'
+                                )}
+                                onChange={(codexAbnormalReasoningRetryModelContains) =>
+                                  onChange({ codexAbnormalReasoningRetryModelContains })
+                                }
+                              />
+                            </FieldShell>
+                            <FieldShell
+                              label={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_reasoning_efforts_label'
+                              )}
+                              hint={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_reasoning_efforts_hint'
+                              )}
+                            >
+                              <StringListEditor
+                                value={values.codexAbnormalReasoningRetryReasoningEfforts}
+                                disabled={disabled}
+                                placeholder="xhigh"
+                                inputAriaLabel={t(
+                                  'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_reasoning_efforts_label'
+                                )}
+                                onChange={(codexAbnormalReasoningRetryReasoningEfforts) =>
+                                  onChange({ codexAbnormalReasoningRetryReasoningEfforts })
+                                }
+                              />
+                            </FieldShell>
+                            <FieldShell
+                              label={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_reasoning_tokens_label'
+                              )}
+                              hint={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_reasoning_tokens_hint'
+                              )}
+                              error={codexAbnormalReasoningRetryReasoningTokensError}
+                            >
+                              <StringListEditor
+                                value={values.codexAbnormalReasoningRetryReasoningTokens}
+                                disabled={disabled}
+                                placeholder="516"
+                                inputAriaLabel={t(
+                                  'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_reasoning_tokens_label'
+                                )}
+                                onChange={(codexAbnormalReasoningRetryReasoningTokens) =>
+                                  onChange({ codexAbnormalReasoningRetryReasoningTokens })
+                                }
+                              />
+                            </FieldShell>
+                            <Input
+                              label={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_max_retries_label'
+                              )}
+                              type="number"
+                              placeholder="2"
+                              value={values.codexAbnormalReasoningRetryMaxRetries}
+                              onChange={(e) =>
+                                onChange({ codexAbnormalReasoningRetryMaxRetries: e.target.value })
+                              }
+                              disabled={disabled}
+                              hint={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_max_retries_hint'
+                              )}
+                              error={codexAbnormalReasoningRetryMaxRetriesError}
+                            />
+                          </SectionGrid>
+                        </StrategyGroup>
+
+                        <StrategyGroup
+                          title={t(
+                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_group_delivery_title'
+                          )}
+                          description={t(
+                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_group_delivery_desc'
+                          )}
+                        >
+                          <SectionGrid>
+                            <FieldShell
+                              label={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_exhausted_behavior_label'
+                              )}
+                              labelId={abnormalRetryExhaustedBehaviorLabelId}
+                              hint={abnormalRetryExhaustedBehaviorHint}
+                              hintId={abnormalRetryExhaustedBehaviorHintId}
+                              hintVariant="selection"
+                            >
+                              <Select
+                                value={values.codexAbnormalReasoningRetryExhaustedBehavior}
+                                options={abnormalRetryExhaustedBehaviorOptions}
+                                id={`${abnormalRetryExhaustedBehaviorLabelId}-select`}
+                                disabled={disabled}
+                                ariaLabelledBy={abnormalRetryExhaustedBehaviorLabelId}
+                                ariaDescribedBy={abnormalRetryExhaustedBehaviorHintId}
+                                onChange={(nextValue) =>
+                                  onChange({
+                                    codexAbnormalReasoningRetryExhaustedBehavior:
+                                      nextValue as VisualConfigValues['codexAbnormalReasoningRetryExhaustedBehavior'],
+                                  })
+                                }
+                              />
+                            </FieldShell>
+                            <FieldShell
+                              label={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_client_usage_aggregation_label'
+                              )}
+                              labelId={abnormalRetryUsageAggregationLabelId}
+                              hint={abnormalRetryUsageAggregationHint}
+                              hintId={abnormalRetryUsageAggregationHintId}
+                              hintVariant="selection"
+                            >
+                              <Select
+                                value={values.codexAbnormalReasoningRetryClientUsageAggregation}
+                                options={abnormalRetryUsageAggregationOptions}
+                                id={`${abnormalRetryUsageAggregationLabelId}-select`}
+                                disabled={disabled}
+                                ariaLabelledBy={abnormalRetryUsageAggregationLabelId}
+                                ariaDescribedBy={abnormalRetryUsageAggregationHintId}
+                                onChange={(nextValue) =>
+                                  onChange({
+                                    codexAbnormalReasoningRetryClientUsageAggregation:
+                                      nextValue as VisualConfigValues['codexAbnormalReasoningRetryClientUsageAggregation'],
+                                  })
+                                }
+                              />
+                            </FieldShell>
+                            <FieldShell
+                              label={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_delivery_policy_label'
+                              )}
+                              labelId={abnormalRetryDeliveryPolicyLabelId}
+                              hint={abnormalRetryDeliveryPolicyHint}
+                              hintId={abnormalRetryDeliveryPolicyHintId}
+                              hintVariant="selection"
+                            >
+                              <Select
+                                value={values.codexAbnormalReasoningRetryDeliveryPolicy}
+                                options={abnormalRetryDeliveryPolicyOptions}
+                                id={`${abnormalRetryDeliveryPolicyLabelId}-select`}
+                                disabled={disabled}
+                                ariaLabelledBy={abnormalRetryDeliveryPolicyLabelId}
+                                ariaDescribedBy={abnormalRetryDeliveryPolicyHintId}
+                                onChange={(nextValue) =>
+                                  onChange({
+                                    codexAbnormalReasoningRetryDeliveryPolicy:
+                                      nextValue as VisualConfigValues['codexAbnormalReasoningRetryDeliveryPolicy'],
+                                  })
+                                }
+                              />
+                            </FieldShell>
+                            <FieldShell
+                              label={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_fallback_policy_label'
+                              )}
+                              labelId={abnormalRetryFallbackPolicyLabelId}
+                              hint={abnormalRetryFallbackPolicyHint}
+                              hintId={abnormalRetryFallbackPolicyHintId}
+                              hintVariant="selection"
+                            >
+                              <Select
+                                value={values.codexAbnormalReasoningRetryFallbackPolicy}
+                                options={abnormalRetryFallbackPolicyOptions}
+                                id={`${abnormalRetryFallbackPolicyLabelId}-select`}
+                                disabled={disabled}
+                                ariaLabelledBy={abnormalRetryFallbackPolicyLabelId}
+                                ariaDescribedBy={abnormalRetryFallbackPolicyHintId}
+                                onChange={(nextValue) =>
+                                  onChange({
+                                    codexAbnormalReasoningRetryFallbackPolicy:
+                                      nextValue as VisualConfigValues['codexAbnormalReasoningRetryFallbackPolicy'],
+                                  })
+                                }
+                              />
+                            </FieldShell>
+                          </SectionGrid>
+                        </StrategyGroup>
+
+                        <StrategyGroup
+                          title={t(
+                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_group_scope_title'
+                          )}
+                          description={t(
+                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_group_scope_desc'
+                          )}
+                        >
+                          <SectionGrid>
+                            <FieldShell
+                              label={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_auth_kinds_label'
+                              )}
+                              hint={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_auth_kinds_hint'
+                              )}
+                            >
+                              <StringListEditor
+                                value={values.codexAbnormalReasoningRetryAuthKinds}
+                                disabled={disabled}
+                                placeholder="oauth"
+                                inputAriaLabel={t(
+                                  'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_auth_kinds_label'
+                                )}
+                                onChange={(codexAbnormalReasoningRetryAuthKinds) =>
+                                  onChange({ codexAbnormalReasoningRetryAuthKinds })
+                                }
+                              />
+                            </FieldShell>
+                            <FieldShell
+                              label={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_auth_ids_label'
+                              )}
+                              hint={t(
+                                'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_auth_ids_hint'
+                              )}
+                            >
+                              <StringListEditor
+                                value={values.codexAbnormalReasoningRetryAuthIds}
+                                disabled={disabled}
+                                placeholder="codex-oauth-primary"
+                                inputAriaLabel={t(
+                                  'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_auth_ids_label'
+                                )}
+                                onChange={(codexAbnormalReasoningRetryAuthIds) =>
+                                  onChange({ codexAbnormalReasoningRetryAuthIds })
+                                }
+                              />
+                            </FieldShell>
+                          </SectionGrid>
+                        </StrategyGroup>
+                      </div>
+                    </SectionStack>
+                  </SectionSubsection>
+                </div>
+
+                <div
+                  id="system-panel-network"
+                  className={styles.systemPanel}
+                  role="tabpanel"
+                  tabIndex={0}
+                  aria-labelledby={useCompactNavigation ? undefined : 'system-tab-network'}
+                  aria-label={useCompactNavigation ? systemSections[3].title : undefined}
+                  hidden={activeSystemSectionId !== 'network'}
+                >
+                  <SectionSubsection
+                    title={t('config_management.visual.sections.network.title')}
+                    description={t('config_management.visual.sections.network.description')}
+                  >
+                    <SectionStack>
+                      <SectionGrid>
+                        <Input
+                          label={t('config_management.visual.sections.network.proxy_url')}
+                          placeholder="socks5://user:pass@127.0.0.1:1080/"
+                          value={values.proxyUrl}
+                          onChange={(e) => onChange({ proxyUrl: e.target.value })}
+                          disabled={disabled}
+                        />
+                        <Input
+                          label={t('config_management.visual.sections.network.request_retry')}
+                          type="number"
+                          placeholder="3"
+                          value={values.requestRetry}
+                          onChange={(e) => onChange({ requestRetry: e.target.value })}
+                          disabled={disabled}
+                          error={requestRetryError}
+                        />
                         <Input
                           label={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_stream_buffer_max_bytes_label'
+                            'config_management.visual.sections.network.max_retry_credentials'
                           )}
                           type="number"
                           placeholder="0"
-                          value={values.codexAbnormalReasoningRetryStreamBufferMaxBytes}
-                          onChange={(e) =>
-                            onChange({
-                              codexAbnormalReasoningRetryStreamBufferMaxBytes: e.target.value,
-                            })
-                          }
+                          value={values.maxRetryCredentials}
+                          onChange={(e) => onChange({ maxRetryCredentials: e.target.value })}
                           disabled={disabled}
                           hint={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_stream_buffer_max_bytes_hint'
+                            'config_management.visual.sections.network.max_retry_credentials_hint'
                           )}
-                          error={codexAbnormalReasoningRetryStreamBufferMaxBytesError}
+                          error={maxRetryCredentialsError}
+                        />
+                        <Input
+                          label={t('config_management.visual.sections.network.max_retry_interval')}
+                          type="number"
+                          placeholder="30"
+                          value={values.maxRetryInterval}
+                          onChange={(e) => onChange({ maxRetryInterval: e.target.value })}
+                          disabled={disabled}
+                          error={maxRetryIntervalError}
                         />
                         <Input
                           label={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_hedge_delay_ms_label'
+                            'config_management.visual.sections.network.transient_error_cooldown_seconds'
                           )}
                           type="number"
-                          placeholder="1000"
-                          value={values.codexAbnormalReasoningRetryHedgeDelayMs}
+                          placeholder="30"
+                          value={values.transientErrorCooldownSeconds}
                           onChange={(e) =>
-                            onChange({ codexAbnormalReasoningRetryHedgeDelayMs: e.target.value })
+                            onChange({ transientErrorCooldownSeconds: e.target.value })
                           }
                           disabled={disabled}
                           hint={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_hedge_delay_ms_hint'
+                            'config_management.visual.sections.network.transient_error_cooldown_seconds_hint'
                           )}
-                          error={codexAbnormalReasoningRetryHedgeDelayMsError}
+                          error={transientErrorCooldownSecondsError}
+                        />
+                        <Input
+                          label={t(
+                            'config_management.visual.sections.network.auth_auto_refresh_workers'
+                          )}
+                          type="number"
+                          placeholder="16"
+                          value={values.authAutoRefreshWorkers}
+                          onChange={(e) => onChange({ authAutoRefreshWorkers: e.target.value })}
+                          disabled={disabled}
+                          hint={t(
+                            'config_management.visual.sections.network.auth_auto_refresh_workers_hint'
+                          )}
+                          error={authAutoRefreshWorkersError}
                         />
                         <FieldShell
-                          label={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_hedged_retry_mode_label'
+                          label={t('config_management.visual.sections.network.routing_strategy')}
+                          labelId={routingStrategyLabelId}
+                          hint={t(
+                            'config_management.visual.sections.network.routing_strategy_hint'
                           )}
-                          labelId={abnormalRetryHedgedModeLabelId}
-                          hint={abnormalRetryHedgedModeHint}
-                          hintId={abnormalRetryHedgedModeHintId}
-                          hintVariant="selection"
+                          hintId={routingStrategyHintId}
                         >
                           <Select
-                            value={values.codexAbnormalReasoningRetryHedgedRetryMode}
-                            options={abnormalRetryHedgedModeOptions}
-                            id={`${abnormalRetryHedgedModeLabelId}-select`}
+                            value={values.routingStrategy}
+                            options={[
+                              {
+                                value: 'round-robin',
+                                label: t(
+                                  'config_management.visual.sections.network.strategy_round_robin'
+                                ),
+                              },
+                              {
+                                value: 'fill-first',
+                                label: t(
+                                  'config_management.visual.sections.network.strategy_fill_first'
+                                ),
+                              },
+                            ]}
+                            id={`${routingStrategyLabelId}-select`}
                             disabled={disabled}
-                            ariaLabelledBy={abnormalRetryHedgedModeLabelId}
-                            ariaDescribedBy={abnormalRetryHedgedModeHintId}
+                            ariaLabelledBy={routingStrategyLabelId}
+                            ariaDescribedBy={routingStrategyHintId}
                             onChange={(nextValue) =>
                               onChange({
-                                codexAbnormalReasoningRetryHedgedRetryMode:
-                                  nextValue as VisualConfigValues['codexAbnormalReasoningRetryHedgedRetryMode'],
+                                routingStrategy: nextValue as VisualConfigValues['routingStrategy'],
                               })
                             }
                           />
                         </FieldShell>
-                      </SectionGrid>
-                    </StrategyGroup>
-
-                    <StrategyGroup
-                      title={t(
-                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_group_match_title'
-                      )}
-                      description={t(
-                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_group_match_desc'
-                      )}
-                    >
-                      <SectionGrid>
                         <FieldShell
                           label={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_model_contains_label'
+                            'config_management.visual.sections.network.disable_image_generation'
                           )}
+                          labelId={disableImageGenerationLabelId}
                           hint={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_model_contains_hint'
+                            'config_management.visual.sections.network.disable_image_generation_hint'
                           )}
+                          hintId={disableImageGenerationHintId}
                         >
-                          <StringListEditor
-                            value={values.codexAbnormalReasoningRetryModelContains}
+                          <Select
+                            value={values.disableImageGeneration}
+                            options={disableImageGenerationOptions}
+                            id={`${disableImageGenerationLabelId}-select`}
                             disabled={disabled}
-                            placeholder="gpt-5.5"
-                            inputAriaLabel={t(
-                              'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_model_contains_label'
-                            )}
-                            onChange={(codexAbnormalReasoningRetryModelContains) =>
-                              onChange({ codexAbnormalReasoningRetryModelContains })
-                            }
-                          />
-                        </FieldShell>
-                        <FieldShell
-                          label={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_reasoning_efforts_label'
-                          )}
-                          hint={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_reasoning_efforts_hint'
-                          )}
-                        >
-                          <StringListEditor
-                            value={values.codexAbnormalReasoningRetryReasoningEfforts}
-                            disabled={disabled}
-                            placeholder="xhigh"
-                            inputAriaLabel={t(
-                              'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_reasoning_efforts_label'
-                            )}
-                            onChange={(codexAbnormalReasoningRetryReasoningEfforts) =>
-                              onChange({ codexAbnormalReasoningRetryReasoningEfforts })
-                            }
-                          />
-                        </FieldShell>
-                        <FieldShell
-                          label={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_reasoning_tokens_label'
-                          )}
-                          hint={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_reasoning_tokens_hint'
-                          )}
-                          error={codexAbnormalReasoningRetryReasoningTokensError}
-                        >
-                          <StringListEditor
-                            value={values.codexAbnormalReasoningRetryReasoningTokens}
-                            disabled={disabled}
-                            placeholder="516"
-                            inputAriaLabel={t(
-                              'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_reasoning_tokens_label'
-                            )}
-                            onChange={(codexAbnormalReasoningRetryReasoningTokens) =>
-                              onChange({ codexAbnormalReasoningRetryReasoningTokens })
+                            ariaLabelledBy={disableImageGenerationLabelId}
+                            ariaDescribedBy={disableImageGenerationHintId}
+                            onChange={(nextValue) =>
+                              onChange({
+                                disableImageGeneration:
+                                  nextValue as VisualConfigValues['disableImageGeneration'],
+                              })
                             }
                           />
                         </FieldShell>
                         <Input
                           label={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_max_retries_label'
+                            'config_management.visual.sections.network.gpt_image_2_base_model'
                           )}
-                          type="number"
-                          placeholder="2"
-                          value={values.codexAbnormalReasoningRetryMaxRetries}
-                          onChange={(e) =>
-                            onChange({ codexAbnormalReasoningRetryMaxRetries: e.target.value })
-                          }
+                          placeholder="gpt-5.4-mini"
+                          value={values.gptImage2BaseModel}
+                          onChange={(e) => onChange({ gptImage2BaseModel: e.target.value })}
                           disabled={disabled}
                           hint={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_max_retries_hint'
+                            'config_management.visual.sections.network.gpt_image_2_base_model_hint'
                           )}
-                          error={codexAbnormalReasoningRetryMaxRetriesError}
+                        />
+                        <Input
+                          label={t(
+                            'config_management.visual.sections.network.session_affinity_ttl'
+                          )}
+                          placeholder="1h"
+                          value={values.routingSessionAffinityTTL}
+                          onChange={(e) => onChange({ routingSessionAffinityTTL: e.target.value })}
+                          disabled={disabled}
                         />
                       </SectionGrid>
-                    </StrategyGroup>
 
-                    <StrategyGroup
-                      title={t(
-                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_group_delivery_title'
-                      )}
-                      description={t(
-                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_group_delivery_desc'
-                      )}
-                    >
                       <SectionGrid>
-                        <FieldShell
-                          label={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_exhausted_behavior_label'
+                        <ToggleRow
+                          title={t('config_management.visual.sections.network.force_model_prefix')}
+                          description={t(
+                            'config_management.visual.sections.network.force_model_prefix_desc'
                           )}
-                          labelId={abnormalRetryExhaustedBehaviorLabelId}
-                          hint={abnormalRetryExhaustedBehaviorHint}
-                          hintId={abnormalRetryExhaustedBehaviorHintId}
-                          hintVariant="selection"
-                        >
-                          <Select
-                            value={values.codexAbnormalReasoningRetryExhaustedBehavior}
-                            options={abnormalRetryExhaustedBehaviorOptions}
-                            id={`${abnormalRetryExhaustedBehaviorLabelId}-select`}
-                            disabled={disabled}
-                            ariaLabelledBy={abnormalRetryExhaustedBehaviorLabelId}
-                            ariaDescribedBy={abnormalRetryExhaustedBehaviorHintId}
-                            onChange={(nextValue) =>
-                              onChange({
-                                codexAbnormalReasoningRetryExhaustedBehavior:
-                                  nextValue as VisualConfigValues['codexAbnormalReasoningRetryExhaustedBehavior'],
-                              })
-                            }
-                          />
-                        </FieldShell>
-                        <FieldShell
-                          label={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_client_usage_aggregation_label'
+                          checked={values.forceModelPrefix}
+                          disabled={disabled}
+                          onChange={(forceModelPrefix) => onChange({ forceModelPrefix })}
+                        />
+                        <ToggleRow
+                          title={t('config_management.visual.sections.network.passthrough_headers')}
+                          description={t(
+                            'config_management.visual.sections.network.passthrough_headers_desc'
                           )}
-                          labelId={abnormalRetryUsageAggregationLabelId}
-                          hint={abnormalRetryUsageAggregationHint}
-                          hintId={abnormalRetryUsageAggregationHintId}
-                          hintVariant="selection"
-                        >
-                          <Select
-                            value={values.codexAbnormalReasoningRetryClientUsageAggregation}
-                            options={abnormalRetryUsageAggregationOptions}
-                            id={`${abnormalRetryUsageAggregationLabelId}-select`}
-                            disabled={disabled}
-                            ariaLabelledBy={abnormalRetryUsageAggregationLabelId}
-                            ariaDescribedBy={abnormalRetryUsageAggregationHintId}
-                            onChange={(nextValue) =>
-                              onChange({
-                                codexAbnormalReasoningRetryClientUsageAggregation:
-                                  nextValue as VisualConfigValues['codexAbnormalReasoningRetryClientUsageAggregation'],
-                              })
-                            }
-                          />
-                        </FieldShell>
-                        <FieldShell
-                          label={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_delivery_policy_label'
+                          checked={values.passthroughHeaders}
+                          disabled={disabled}
+                          onChange={(passthroughHeaders) => onChange({ passthroughHeaders })}
+                        />
+                        <ToggleRow
+                          title={t('config_management.visual.sections.network.disable_cooling')}
+                          description={t(
+                            'config_management.visual.sections.network.disable_cooling_desc'
                           )}
-                          labelId={abnormalRetryDeliveryPolicyLabelId}
-                          hint={abnormalRetryDeliveryPolicyHint}
-                          hintId={abnormalRetryDeliveryPolicyHintId}
-                          hintVariant="selection"
-                        >
-                          <Select
-                            value={values.codexAbnormalReasoningRetryDeliveryPolicy}
-                            options={abnormalRetryDeliveryPolicyOptions}
-                            id={`${abnormalRetryDeliveryPolicyLabelId}-select`}
-                            disabled={disabled}
-                            ariaLabelledBy={abnormalRetryDeliveryPolicyLabelId}
-                            ariaDescribedBy={abnormalRetryDeliveryPolicyHintId}
-                            onChange={(nextValue) =>
-                              onChange({
-                                codexAbnormalReasoningRetryDeliveryPolicy:
-                                  nextValue as VisualConfigValues['codexAbnormalReasoningRetryDeliveryPolicy'],
-                              })
-                            }
-                          />
-                        </FieldShell>
-                        <FieldShell
-                          label={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_fallback_policy_label'
+                          checked={values.disableCooling}
+                          disabled={disabled}
+                          onChange={(disableCooling) => onChange({ disableCooling })}
+                        />
+                        <ToggleRow
+                          title={t('config_management.visual.sections.network.session_affinity')}
+                          checked={values.routingSessionAffinity}
+                          disabled={disabled}
+                          onChange={(routingSessionAffinity) =>
+                            onChange({ routingSessionAffinity })
+                          }
+                        />
+                        <ToggleRow
+                          title={t('config_management.visual.sections.network.ws_auth')}
+                          description={t('config_management.visual.sections.network.ws_auth_desc')}
+                          checked={values.wsAuth}
+                          disabled={disabled}
+                          onChange={(wsAuth) => onChange({ wsAuth })}
+                        />
+                        <ToggleRow
+                          title={t(
+                            'config_management.visual.sections.network.enable_gemini_cli_endpoint'
                           )}
-                          labelId={abnormalRetryFallbackPolicyLabelId}
-                          hint={abnormalRetryFallbackPolicyHint}
-                          hintId={abnormalRetryFallbackPolicyHintId}
-                          hintVariant="selection"
-                        >
-                          <Select
-                            value={values.codexAbnormalReasoningRetryFallbackPolicy}
-                            options={abnormalRetryFallbackPolicyOptions}
-                            id={`${abnormalRetryFallbackPolicyLabelId}-select`}
-                            disabled={disabled}
-                            ariaLabelledBy={abnormalRetryFallbackPolicyLabelId}
-                            ariaDescribedBy={abnormalRetryFallbackPolicyHintId}
-                            onChange={(nextValue) =>
-                              onChange({
-                                codexAbnormalReasoningRetryFallbackPolicy:
-                                  nextValue as VisualConfigValues['codexAbnormalReasoningRetryFallbackPolicy'],
-                              })
-                            }
-                          />
-                        </FieldShell>
+                          description={t(
+                            'config_management.visual.sections.network.enable_gemini_cli_endpoint_desc'
+                          )}
+                          checked={values.enableGeminiCliEndpoint}
+                          disabled={disabled}
+                          onChange={(enableGeminiCliEndpoint) =>
+                            onChange({ enableGeminiCliEndpoint })
+                          }
+                        />
                       </SectionGrid>
-                    </StrategyGroup>
-
-                    <StrategyGroup
-                      title={t(
-                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_group_scope_title'
-                      )}
-                      description={t(
-                        'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_group_scope_desc'
-                      )}
-                    >
-                      <SectionGrid>
-                        <FieldShell
-                          label={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_auth_kinds_label'
-                          )}
-                          hint={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_auth_kinds_hint'
-                          )}
-                        >
-                          <StringListEditor
-                            value={values.codexAbnormalReasoningRetryAuthKinds}
-                            disabled={disabled}
-                            placeholder="oauth"
-                            inputAriaLabel={t(
-                              'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_auth_kinds_label'
-                            )}
-                            onChange={(codexAbnormalReasoningRetryAuthKinds) =>
-                              onChange({ codexAbnormalReasoningRetryAuthKinds })
-                            }
-                          />
-                        </FieldShell>
-                        <FieldShell
-                          label={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_auth_ids_label'
-                          )}
-                          hint={t(
-                            'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_auth_ids_hint'
-                          )}
-                        >
-                          <StringListEditor
-                            value={values.codexAbnormalReasoningRetryAuthIds}
-                            disabled={disabled}
-                            placeholder="codex-oauth-primary"
-                            inputAriaLabel={t(
-                              'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_auth_ids_label'
-                            )}
-                            onChange={(codexAbnormalReasoningRetryAuthIds) =>
-                              onChange({ codexAbnormalReasoningRetryAuthIds })
-                            }
-                          />
-                        </FieldShell>
-                      </SectionGrid>
-                    </StrategyGroup>
-                  </div>
-                </SectionStack>
-              </SectionSubsection>
-
-              <SectionSubsection
-                title={t('config_management.visual.sections.network.title')}
-                description={t('config_management.visual.sections.network.description')}
-              >
-                <SectionStack>
-                  <SectionGrid>
-                    <Input
-                      label={t('config_management.visual.sections.network.proxy_url')}
-                      placeholder="socks5://user:pass@127.0.0.1:1080/"
-                      value={values.proxyUrl}
-                      onChange={(e) => onChange({ proxyUrl: e.target.value })}
-                      disabled={disabled}
-                    />
-                    <Input
-                      label={t('config_management.visual.sections.network.request_retry')}
-                      type="number"
-                      placeholder="3"
-                      value={values.requestRetry}
-                      onChange={(e) => onChange({ requestRetry: e.target.value })}
-                      disabled={disabled}
-                      error={requestRetryError}
-                    />
-                    <Input
-                      label={t('config_management.visual.sections.network.max_retry_credentials')}
-                      type="number"
-                      placeholder="0"
-                      value={values.maxRetryCredentials}
-                      onChange={(e) => onChange({ maxRetryCredentials: e.target.value })}
-                      disabled={disabled}
-                      hint={t(
-                        'config_management.visual.sections.network.max_retry_credentials_hint'
-                      )}
-                      error={maxRetryCredentialsError}
-                    />
-                    <Input
-                      label={t('config_management.visual.sections.network.max_retry_interval')}
-                      type="number"
-                      placeholder="30"
-                      value={values.maxRetryInterval}
-                      onChange={(e) => onChange({ maxRetryInterval: e.target.value })}
-                      disabled={disabled}
-                      error={maxRetryIntervalError}
-                    />
-                    <Input
-                      label={t(
-                        'config_management.visual.sections.network.transient_error_cooldown_seconds'
-                      )}
-                      type="number"
-                      placeholder="30"
-                      value={values.transientErrorCooldownSeconds}
-                      onChange={(e) => onChange({ transientErrorCooldownSeconds: e.target.value })}
-                      disabled={disabled}
-                      hint={t(
-                        'config_management.visual.sections.network.transient_error_cooldown_seconds_hint'
-                      )}
-                      error={transientErrorCooldownSecondsError}
-                    />
-                    <Input
-                      label={t(
-                        'config_management.visual.sections.network.auth_auto_refresh_workers'
-                      )}
-                      type="number"
-                      placeholder="16"
-                      value={values.authAutoRefreshWorkers}
-                      onChange={(e) => onChange({ authAutoRefreshWorkers: e.target.value })}
-                      disabled={disabled}
-                      hint={t(
-                        'config_management.visual.sections.network.auth_auto_refresh_workers_hint'
-                      )}
-                      error={authAutoRefreshWorkersError}
-                    />
-                    <FieldShell
-                      label={t('config_management.visual.sections.network.routing_strategy')}
-                      labelId={routingStrategyLabelId}
-                      hint={t('config_management.visual.sections.network.routing_strategy_hint')}
-                      hintId={routingStrategyHintId}
-                    >
-                      <Select
-                        value={values.routingStrategy}
-                        options={[
-                          {
-                            value: 'round-robin',
-                            label: t(
-                              'config_management.visual.sections.network.strategy_round_robin'
-                            ),
-                          },
-                          {
-                            value: 'fill-first',
-                            label: t(
-                              'config_management.visual.sections.network.strategy_fill_first'
-                            ),
-                          },
-                        ]}
-                        id={`${routingStrategyLabelId}-select`}
-                        disabled={disabled}
-                        ariaLabelledBy={routingStrategyLabelId}
-                        ariaDescribedBy={routingStrategyHintId}
-                        onChange={(nextValue) =>
-                          onChange({
-                            routingStrategy: nextValue as VisualConfigValues['routingStrategy'],
-                          })
-                        }
-                      />
-                    </FieldShell>
-                    <FieldShell
-                      label={t(
-                        'config_management.visual.sections.network.disable_image_generation'
-                      )}
-                      labelId={disableImageGenerationLabelId}
-                      hint={t(
-                        'config_management.visual.sections.network.disable_image_generation_hint'
-                      )}
-                      hintId={disableImageGenerationHintId}
-                    >
-                      <Select
-                        value={values.disableImageGeneration}
-                        options={disableImageGenerationOptions}
-                        id={`${disableImageGenerationLabelId}-select`}
-                        disabled={disabled}
-                        ariaLabelledBy={disableImageGenerationLabelId}
-                        ariaDescribedBy={disableImageGenerationHintId}
-                        onChange={(nextValue) =>
-                          onChange({
-                            disableImageGeneration:
-                              nextValue as VisualConfigValues['disableImageGeneration'],
-                          })
-                        }
-                      />
-                    </FieldShell>
-                    <Input
-                      label={t('config_management.visual.sections.network.gpt_image_2_base_model')}
-                      placeholder="gpt-5.4-mini"
-                      value={values.gptImage2BaseModel}
-                      onChange={(e) => onChange({ gptImage2BaseModel: e.target.value })}
-                      disabled={disabled}
-                      hint={t(
-                        'config_management.visual.sections.network.gpt_image_2_base_model_hint'
-                      )}
-                    />
-                    <Input
-                      label={t('config_management.visual.sections.network.session_affinity_ttl')}
-                      placeholder="1h"
-                      value={values.routingSessionAffinityTTL}
-                      onChange={(e) => onChange({ routingSessionAffinityTTL: e.target.value })}
-                      disabled={disabled}
-                    />
-                  </SectionGrid>
-
-                  <SectionGrid>
-                    <ToggleRow
-                      title={t('config_management.visual.sections.network.force_model_prefix')}
-                      description={t(
-                        'config_management.visual.sections.network.force_model_prefix_desc'
-                      )}
-                      checked={values.forceModelPrefix}
-                      disabled={disabled}
-                      onChange={(forceModelPrefix) => onChange({ forceModelPrefix })}
-                    />
-                    <ToggleRow
-                      title={t('config_management.visual.sections.network.passthrough_headers')}
-                      description={t(
-                        'config_management.visual.sections.network.passthrough_headers_desc'
-                      )}
-                      checked={values.passthroughHeaders}
-                      disabled={disabled}
-                      onChange={(passthroughHeaders) => onChange({ passthroughHeaders })}
-                    />
-                    <ToggleRow
-                      title={t('config_management.visual.sections.network.disable_cooling')}
-                      description={t(
-                        'config_management.visual.sections.network.disable_cooling_desc'
-                      )}
-                      checked={values.disableCooling}
-                      disabled={disabled}
-                      onChange={(disableCooling) => onChange({ disableCooling })}
-                    />
-                    <ToggleRow
-                      title={t('config_management.visual.sections.network.session_affinity')}
-                      checked={values.routingSessionAffinity}
-                      disabled={disabled}
-                      onChange={(routingSessionAffinity) => onChange({ routingSessionAffinity })}
-                    />
-                    <ToggleRow
-                      title={t('config_management.visual.sections.network.ws_auth')}
-                      description={t('config_management.visual.sections.network.ws_auth_desc')}
-                      checked={values.wsAuth}
-                      disabled={disabled}
-                      onChange={(wsAuth) => onChange({ wsAuth })}
-                    />
-                    <ToggleRow
-                      title={t(
-                        'config_management.visual.sections.network.enable_gemini_cli_endpoint'
-                      )}
-                      description={t(
-                        'config_management.visual.sections.network.enable_gemini_cli_endpoint_desc'
-                      )}
-                      checked={values.enableGeminiCliEndpoint}
-                      disabled={disabled}
-                      onChange={(enableGeminiCliEndpoint) => onChange({ enableGeminiCliEndpoint })}
-                    />
-                  </SectionGrid>
-                </SectionStack>
-              </SectionSubsection>
-            </SectionStack>
+                    </SectionStack>
+                  </SectionSubsection>
+                </div>
+              </div>
+            </div>
           </ConfigSection>
 
           <ConfigSection
             id="quota"
-            ref={(node) => {
-              sectionRefs.current.quota = node;
-            }}
+            hidden={activeSectionId !== 'quota'}
             indexLabel="04"
             icon={<IconTimer size={16} />}
             title={t('config_management.visual.sections.quota.title')}
@@ -1949,9 +2196,7 @@ export function VisualConfigEditor({
 
           <ConfigSection
             id="streaming"
-            ref={(node) => {
-              sectionRefs.current.streaming = node;
-            }}
+            hidden={activeSectionId !== 'streaming'}
             indexLabel="05"
             icon={<IconSatellite size={16} />}
             title={t('config_management.visual.sections.streaming.title')}
@@ -2050,9 +2295,7 @@ export function VisualConfigEditor({
 
           <ConfigSection
             id="payload"
-            ref={(node) => {
-              sectionRefs.current.payload = node;
-            }}
+            hidden={activeSectionId !== 'payload'}
             indexLabel="06"
             icon={<IconCode size={16} />}
             title={t('config_management.visual.sections.payload.title')}
