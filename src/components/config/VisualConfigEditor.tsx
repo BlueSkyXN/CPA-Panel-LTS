@@ -1,4 +1,12 @@
-import { useCallback, useId, useMemo, useState, type ComponentType, type ReactNode } from 'react';
+import {
+  useCallback,
+  useId,
+  useMemo,
+  useState,
+  type ComponentType,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
@@ -7,6 +15,8 @@ import {
   IconCode,
   IconDiamond,
   IconKey,
+  IconNetwork,
+  IconPlug,
   IconSatellite,
   IconSettings,
   IconShield,
@@ -54,6 +64,7 @@ type SystemSection = {
   id: SystemSectionId;
   title: string;
   description: string;
+  icon: ComponentType<IconProps>;
   errorCount: number;
 };
 
@@ -272,7 +283,7 @@ export function VisualConfigEditor({
   onChange,
 }: VisualConfigEditorProps) {
   const { t } = useTranslation();
-  const useCompactNavigation = useMediaQuery('(max-width: 1024px)');
+  const useCompactNavigation = useMediaQuery('(max-width: 1180px)');
   const sectionNavLabelId = useId();
   const systemSectionNavLabelId = useId();
   const routingStrategyLabelId = useId();
@@ -608,6 +619,7 @@ export function VisualConfigEditor({
         id: 'runtime',
         title: t('config_management.visual.sections.system.runtime_group_title'),
         description: t('config_management.visual.sections.system.runtime_group_desc'),
+        icon: IconSettings,
         errorCount: countErrors([
           'errorLogsMaxFiles',
           'logsMaxTotalSizeMb',
@@ -618,12 +630,14 @@ export function VisualConfigEditor({
         id: 'plugins',
         title: t('config_management.visual.sections.system.plugins_group_title'),
         description: t('config_management.visual.sections.system.plugins_group_desc'),
+        icon: IconPlug,
         errorCount: 0,
       },
       {
         id: 'headers',
         title: t('config_management.visual.sections.system.headers_group_title'),
         description: t('config_management.visual.sections.system.headers_group_desc'),
+        icon: IconCode,
         errorCount: countErrors([
           'codexAbnormalReasoningRetryStreamBufferMaxBytes',
           'codexAbnormalReasoningRetryMaxRetries',
@@ -635,6 +649,7 @@ export function VisualConfigEditor({
         id: 'network',
         title: t('config_management.visual.sections.system.network_group_title'),
         description: t('config_management.visual.sections.system.network_group_desc'),
+        icon: IconNetwork,
         errorCount: countErrors([
           'requestRetry',
           'maxRetryCredentials',
@@ -717,6 +732,7 @@ export function VisualConfigEditor({
   const activeSection = sections.find((section) => section.id === activeSectionId) ?? sections[0];
   const activeSystemSection =
     systemSections.find((section) => section.id === activeSystemSectionId) ?? systemSections[0];
+  const ActiveSystemIcon = activeSystemSection.icon;
 
   const handleSectionJump = useCallback((sectionId: VisualSectionId) => {
     setActiveSectionId(sectionId);
@@ -741,6 +757,37 @@ export function VisualConfigEditor({
       });
     });
   }, []);
+
+  const handleSystemTabKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLButtonElement>, currentIndex: number) => {
+      let nextIndex: number | undefined;
+
+      switch (event.key) {
+        case 'ArrowLeft':
+          nextIndex = (currentIndex - 1 + systemSections.length) % systemSections.length;
+          break;
+        case 'ArrowRight':
+          nextIndex = (currentIndex + 1) % systemSections.length;
+          break;
+        case 'Home':
+          nextIndex = 0;
+          break;
+        case 'End':
+          nextIndex = systemSections.length - 1;
+          break;
+        default:
+          return;
+      }
+
+      event.preventDefault();
+      const nextSection = systemSections[nextIndex];
+      handleSystemSectionChange(nextSection.id);
+      window.requestAnimationFrame(() => {
+        document.getElementById(`system-tab-${nextSection.id}`)?.focus();
+      });
+    },
+    [handleSystemSectionChange, systemSections]
+  );
 
   const navContent = (
     <nav
@@ -784,62 +831,97 @@ export function VisualConfigEditor({
     </nav>
   );
 
-  const systemNavContent = (
-    <nav
-      className={styles.systemNavList}
+  const systemTabs = (
+    <div
+      className={styles.systemTabList}
+      role="tablist"
       aria-label={t('config_management.visual.sections.system.group_navigation_label')}
     >
-      {systemSections.map((section, index) => (
-        <button
-          key={section.id}
-          type="button"
-          className={`${styles.systemNavButton} ${
-            activeSystemSectionId === section.id ? styles.systemNavButtonActive : ''
-          }`}
-          aria-label={section.title}
-          aria-controls={`system-panel-${section.id}`}
-          aria-current={activeSystemSectionId === section.id ? 'true' : undefined}
-          onClick={() => handleSystemSectionChange(section.id)}
-        >
-          <span className={styles.systemNavIndex}>{String(index + 1).padStart(2, '0')}</span>
-          <span className={styles.systemNavCopy}>
-            <span className={styles.systemNavTitleRow}>
-              <span className={styles.systemNavTitle}>{section.title}</span>
-              {section.errorCount > 0 ? (
-                <span className={styles.systemNavBadge} aria-hidden="true">
-                  {section.errorCount}
-                </span>
-              ) : null}
+      {systemSections.map((section, index) => {
+        const Icon = section.icon;
+        const isActive = activeSystemSectionId === section.id;
+
+        return (
+          <button
+            key={section.id}
+            id={`system-tab-${section.id}`}
+            type="button"
+            role="tab"
+            tabIndex={isActive ? 0 : -1}
+            className={`${styles.systemTab} ${isActive ? styles.systemTabActive : ''}`}
+            aria-selected={isActive}
+            aria-controls={`system-panel-${section.id}`}
+            onClick={() => handleSystemSectionChange(section.id)}
+            onKeyDown={(event) => handleSystemTabKeyDown(event, index)}
+          >
+            <span className={styles.systemTabIcon} aria-hidden="true">
+              <Icon size={15} />
             </span>
-            <span className={styles.systemNavDescription}>{section.description}</span>
-          </span>
-        </button>
-      ))}
-    </nav>
+            <span className={styles.systemTabTitle}>{section.title}</span>
+            {section.errorCount > 0 ? (
+              <span className={styles.systemTabBadge} aria-hidden="true">
+                {section.errorCount}
+              </span>
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
   );
 
   return (
     <div className={styles.visualEditor}>
       <div className={styles.workspace}>
         {useCompactNavigation ? (
-          <div className={styles.mobileSectionNav}>
-            <div className={styles.mobileSectionNavHeader}>
-              <span id={sectionNavLabelId} className={styles.mobileSectionNavLabel}>
-                {t('config_management.visual.quick_jump', { defaultValue: '快速跳转' })}
-              </span>
-              <span className={styles.mobileSectionNavCurrent}>{activeSection?.title}</span>
+          <div
+            className={`${styles.compactNavigation} ${
+              activeSectionId === 'system' ? styles.compactNavigationWithSystem : ''
+            }`}
+          >
+            <div className={styles.compactNavigationField}>
+              <div className={styles.compactNavigationHeader}>
+                <span id={sectionNavLabelId} className={styles.compactNavigationLabel}>
+                  {t('config_management.visual.quick_jump', { defaultValue: '快速跳转' })}
+                </span>
+                <span className={styles.compactNavigationCurrent}>{activeSection?.title}</span>
+              </div>
+              <Select
+                value={activeSectionId}
+                options={sections.map((section) => ({
+                  value: section.id,
+                  label: section.title,
+                }))}
+                ariaLabelledBy={sectionNavLabelId}
+                onChange={(nextSectionId) => handleSectionJump(nextSectionId as VisualSectionId)}
+              />
             </div>
-            <Select
-              value={activeSectionId}
-              options={sections.map((section) => ({
-                value: section.id,
-                label: section.title,
-              }))}
-              ariaLabelledBy={sectionNavLabelId}
-              onChange={(nextSectionId) => handleSectionJump(nextSectionId as VisualSectionId)}
-            />
+
+            {activeSectionId === 'system' ? (
+              <div className={styles.compactNavigationField}>
+                <div className={styles.compactNavigationHeader}>
+                  <span id={systemSectionNavLabelId} className={styles.compactNavigationLabel}>
+                    {t('config_management.visual.sections.system.group_navigation_label')}
+                  </span>
+                  <span className={styles.compactNavigationCurrent}>
+                    {activeSystemSection?.title}
+                  </span>
+                </div>
+                <Select
+                  value={activeSystemSectionId}
+                  options={systemSections.map((section) => ({
+                    value: section.id,
+                    label: section.title,
+                  }))}
+                  ariaLabelledBy={systemSectionNavLabelId}
+                  onChange={(nextSectionId) =>
+                    handleSystemSectionChange(nextSectionId as SystemSectionId)
+                  }
+                />
+              </div>
+            ) : null}
+
             {hasValidationIssues ? (
-              <div className={styles.mobileValidationNotice}>
+              <div className={styles.compactValidationNotice}>
                 {t('config_management.visual.validation.validation_blocked')}
               </div>
             ) : null}
@@ -1025,75 +1107,164 @@ export function VisualConfigEditor({
             description={t('config_management.visual.sections.system.description')}
           >
             <div className={styles.systemWorkspace}>
-              {useCompactNavigation ? (
-                <div className={styles.systemMobileNav}>
-                  <div className={styles.systemMobileNavHeader}>
-                    <span id={systemSectionNavLabelId} className={styles.systemMobileNavLabel}>
-                      {t('config_management.visual.sections.system.group_navigation_label')}
-                    </span>
-                    <span className={styles.systemMobileNavCurrent}>
-                      {activeSystemSection?.title}
-                    </span>
-                  </div>
-                  <Select
-                    value={activeSystemSectionId}
-                    options={systemSections.map((section) => ({
-                      value: section.id,
-                      label: section.title,
-                    }))}
-                    ariaLabelledBy={systemSectionNavLabelId}
-                    onChange={(nextSectionId) =>
-                      handleSystemSectionChange(nextSectionId as SystemSectionId)
-                    }
-                  />
+              {!useCompactNavigation ? systemTabs : null}
+
+              <div className={styles.systemPanelIntro}>
+                <span className={styles.systemPanelIntroIcon} aria-hidden="true">
+                  <ActiveSystemIcon size={18} />
+                </span>
+                <div className={styles.systemPanelIntroCopy}>
+                  <h3 className={styles.systemPanelIntroTitle}>{activeSystemSection.title}</h3>
+                  <p className={styles.systemPanelIntroDescription}>
+                    {activeSystemSection.description}
+                  </p>
                 </div>
-              ) : (
-                <aside className={styles.systemSidebar}>{systemNavContent}</aside>
-              )}
+              </div>
 
               <div className={styles.systemPanels}>
                 <div
                   id="system-panel-runtime"
                   className={styles.systemPanel}
+                  role="tabpanel"
+                  tabIndex={0}
+                  aria-labelledby={useCompactNavigation ? undefined : 'system-tab-runtime'}
+                  aria-label={useCompactNavigation ? systemSections[0].title : undefined}
                   hidden={activeSystemSectionId !== 'runtime'}
                 >
-                  <SectionSubsection
-                    title={t('config_management.visual.sections.system.core_controls_title')}
-                    description={t('config_management.visual.sections.system.core_controls_desc')}
-                  >
-                    <SectionGrid>
-                      <ToggleRow
-                        title={t('config_management.visual.sections.system.debug')}
-                        description={t('config_management.visual.sections.system.debug_desc')}
-                        checked={values.debug}
-                        disabled={disabled}
-                        onChange={(debug) => onChange({ debug })}
-                      />
-                      <ToggleRow
-                        title={t('config_management.visual.sections.system.commercial_mode')}
-                        description={t(
-                          'config_management.visual.sections.system.commercial_mode_desc'
-                        )}
-                        checked={values.commercialMode}
-                        disabled={disabled}
-                        onChange={(commercialMode) => onChange({ commercialMode })}
-                      />
-                      <ToggleRow
-                        title={t('config_management.visual.sections.system.logging_to_file')}
-                        description={t(
-                          'config_management.visual.sections.system.logging_to_file_desc'
-                        )}
-                        checked={values.loggingToFile}
-                        disabled={disabled}
-                        onChange={(loggingToFile) => onChange({ loggingToFile })}
-                      />
-                    </SectionGrid>
-                  </SectionSubsection>
+                  <SectionStack>
+                    <SectionSubsection
+                      title={t('config_management.visual.sections.system.core_controls_title')}
+                      description={t(
+                        'config_management.visual.sections.system.core_controls_desc'
+                      )}
+                    >
+                      <SectionGrid>
+                        <ToggleRow
+                          title={t('config_management.visual.sections.system.debug')}
+                          description={t('config_management.visual.sections.system.debug_desc')}
+                          checked={values.debug}
+                          disabled={disabled}
+                          onChange={(debug) => onChange({ debug })}
+                        />
+                        <ToggleRow
+                          title={t('config_management.visual.sections.system.commercial_mode')}
+                          description={t(
+                            'config_management.visual.sections.system.commercial_mode_desc'
+                          )}
+                          checked={values.commercialMode}
+                          disabled={disabled}
+                          onChange={(commercialMode) => onChange({ commercialMode })}
+                        />
+                        <ToggleRow
+                          title={t('config_management.visual.sections.system.logging_to_file')}
+                          description={t(
+                            'config_management.visual.sections.system.logging_to_file_desc'
+                          )}
+                          checked={values.loggingToFile}
+                          disabled={disabled}
+                          onChange={(loggingToFile) => onChange({ loggingToFile })}
+                        />
+                      </SectionGrid>
+                    </SectionSubsection>
+
+                    <SectionSubsection
+                      title={t('config_management.visual.sections.system.operations_title')}
+                      description={t('config_management.visual.sections.system.operations_desc')}
+                    >
+                      <SectionStack>
+                        <SectionGrid>
+                          <Input
+                            label={t('config_management.visual.sections.system.logs_max_size')}
+                            type="number"
+                            placeholder="0"
+                            value={values.logsMaxTotalSizeMb}
+                            onChange={(e) => onChange({ logsMaxTotalSizeMb: e.target.value })}
+                            disabled={disabled}
+                            error={logsMaxSizeError}
+                          />
+                          <Input
+                            label={t(
+                              'config_management.visual.sections.system.error_logs_max_files'
+                            )}
+                            type="number"
+                            placeholder="10"
+                            value={values.errorLogsMaxFiles}
+                            onChange={(e) => onChange({ errorLogsMaxFiles: e.target.value })}
+                            disabled={disabled}
+                            error={errorLogsMaxFilesError}
+                          />
+                          <Input
+                            label={t(
+                              'config_management.visual.sections.system.redis_usage_retention'
+                            )}
+                            type="number"
+                            min={1}
+                            max={3600}
+                            placeholder="60"
+                            value={values.redisUsageQueueRetentionSeconds}
+                            onChange={(e) =>
+                              onChange({ redisUsageQueueRetentionSeconds: e.target.value })
+                            }
+                            disabled={disabled}
+                            hint={t(
+                              'config_management.visual.sections.system.redis_usage_retention_hint'
+                            )}
+                            error={redisUsageQueueRetentionError}
+                          />
+                        </SectionGrid>
+                        <SectionGrid>
+                          <ToggleRow
+                            title={t(
+                              'config_management.visual.sections.system.usage_statistics_enabled'
+                            )}
+                            description={t(
+                              'config_management.visual.sections.system.usage_statistics_enabled_desc'
+                            )}
+                            checked={values.usageStatisticsEnabled}
+                            disabled={disabled}
+                            onChange={(usageStatisticsEnabled) =>
+                              onChange({ usageStatisticsEnabled })
+                            }
+                          />
+                          <ToggleRow
+                            title={t(
+                              'config_management.visual.sections.system.antigravity_signature_cache'
+                            )}
+                            description={t(
+                              'config_management.visual.sections.system.antigravity_signature_cache_desc'
+                            )}
+                            checked={values.antigravitySignatureCacheEnabled}
+                            disabled={disabled}
+                            onChange={(antigravitySignatureCacheEnabled) =>
+                              onChange({ antigravitySignatureCacheEnabled })
+                            }
+                          />
+                          <ToggleRow
+                            title={t(
+                              'config_management.visual.sections.system.antigravity_signature_strict'
+                            )}
+                            description={t(
+                              'config_management.visual.sections.system.antigravity_signature_strict_desc'
+                            )}
+                            checked={values.antigravitySignatureBypassStrict}
+                            disabled={disabled}
+                            onChange={(antigravitySignatureBypassStrict) =>
+                              onChange({ antigravitySignatureBypassStrict })
+                            }
+                          />
+                        </SectionGrid>
+                      </SectionStack>
+                    </SectionSubsection>
+                  </SectionStack>
                 </div>
 
                 <div
                   id="system-panel-plugins"
                   className={styles.systemPanel}
+                  role="tabpanel"
+                  tabIndex={0}
+                  aria-labelledby={useCompactNavigation ? undefined : 'system-tab-plugins'}
+                  aria-label={useCompactNavigation ? systemSections[1].title : undefined}
                   hidden={activeSystemSectionId !== 'plugins'}
                 >
                   <SectionStack>
@@ -1161,98 +1332,13 @@ export function VisualConfigEditor({
                   </SectionStack>
                 </div>
 
-                <div className={styles.systemPanel} hidden={activeSystemSectionId !== 'runtime'}>
-                  <SectionSubsection
-                    title={t('config_management.visual.sections.system.operations_title')}
-                    description={t('config_management.visual.sections.system.operations_desc')}
-                  >
-                    <SectionStack>
-                      <SectionGrid>
-                        <Input
-                          label={t('config_management.visual.sections.system.logs_max_size')}
-                          type="number"
-                          placeholder="0"
-                          value={values.logsMaxTotalSizeMb}
-                          onChange={(e) => onChange({ logsMaxTotalSizeMb: e.target.value })}
-                          disabled={disabled}
-                          error={logsMaxSizeError}
-                        />
-                        <Input
-                          label={t('config_management.visual.sections.system.error_logs_max_files')}
-                          type="number"
-                          placeholder="10"
-                          value={values.errorLogsMaxFiles}
-                          onChange={(e) => onChange({ errorLogsMaxFiles: e.target.value })}
-                          disabled={disabled}
-                          error={errorLogsMaxFilesError}
-                        />
-                        <Input
-                          label={t(
-                            'config_management.visual.sections.system.redis_usage_retention'
-                          )}
-                          type="number"
-                          min={1}
-                          max={3600}
-                          placeholder="60"
-                          value={values.redisUsageQueueRetentionSeconds}
-                          onChange={(e) =>
-                            onChange({ redisUsageQueueRetentionSeconds: e.target.value })
-                          }
-                          disabled={disabled}
-                          hint={t(
-                            'config_management.visual.sections.system.redis_usage_retention_hint'
-                          )}
-                          error={redisUsageQueueRetentionError}
-                        />
-                      </SectionGrid>
-                      <SectionGrid>
-                        <ToggleRow
-                          title={t(
-                            'config_management.visual.sections.system.usage_statistics_enabled'
-                          )}
-                          description={t(
-                            'config_management.visual.sections.system.usage_statistics_enabled_desc'
-                          )}
-                          checked={values.usageStatisticsEnabled}
-                          disabled={disabled}
-                          onChange={(usageStatisticsEnabled) =>
-                            onChange({ usageStatisticsEnabled })
-                          }
-                        />
-                        <ToggleRow
-                          title={t(
-                            'config_management.visual.sections.system.antigravity_signature_cache'
-                          )}
-                          description={t(
-                            'config_management.visual.sections.system.antigravity_signature_cache_desc'
-                          )}
-                          checked={values.antigravitySignatureCacheEnabled}
-                          disabled={disabled}
-                          onChange={(antigravitySignatureCacheEnabled) =>
-                            onChange({ antigravitySignatureCacheEnabled })
-                          }
-                        />
-                        <ToggleRow
-                          title={t(
-                            'config_management.visual.sections.system.antigravity_signature_strict'
-                          )}
-                          description={t(
-                            'config_management.visual.sections.system.antigravity_signature_strict_desc'
-                          )}
-                          checked={values.antigravitySignatureBypassStrict}
-                          disabled={disabled}
-                          onChange={(antigravitySignatureBypassStrict) =>
-                            onChange({ antigravitySignatureBypassStrict })
-                          }
-                        />
-                      </SectionGrid>
-                    </SectionStack>
-                  </SectionSubsection>
-                </div>
-
                 <div
                   id="system-panel-headers"
                   className={styles.systemPanel}
+                  role="tabpanel"
+                  tabIndex={0}
+                  aria-labelledby={useCompactNavigation ? undefined : 'system-tab-headers'}
+                  aria-label={useCompactNavigation ? systemSections[2].title : undefined}
                   hidden={activeSystemSectionId !== 'headers'}
                 >
                   <SectionSubsection
@@ -1842,6 +1928,10 @@ export function VisualConfigEditor({
                 <div
                   id="system-panel-network"
                   className={styles.systemPanel}
+                  role="tabpanel"
+                  tabIndex={0}
+                  aria-labelledby={useCompactNavigation ? undefined : 'system-tab-network'}
+                  aria-label={useCompactNavigation ? systemSections[3].title : undefined}
                   hidden={activeSystemSectionId !== 'network'}
                 >
                   <SectionSubsection
