@@ -776,14 +776,14 @@
 
 .modelAliasRow {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
   gap: 8px;
 
-  @media (max-width: 520px) {
-    grid-template-columns: 1fr auto;
+  @media (max-width: 760px) {
+    grid-template-columns: 1fr;
 
-    input:first-child {
-      grid-column: 1 / -1;
+    .modelEntryActions {
+      justify-content: flex-end;
     }
   }
 }

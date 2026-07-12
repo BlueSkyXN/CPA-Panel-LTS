@@ -40,7 +40,12 @@ const normalizeModelAliases = (models: unknown): ModelAlias[] => {
 
       const name = item.name || item.id || item.model;
       if (!name) return null;
+      // Preserve the pre-existing compatibility contract: camel/snake
+      // display-name spellings historically represented a routing alias.
+      // Core's catalog label is the distinct canonical `display-name` field.
       const alias = item.alias || item.display_name || item.displayName;
+      const displayName = item['display-name'];
+      const displayNameText = displayName == null ? '' : String(displayName).trim();
       const priority = item.priority ?? item['priority'];
       const testModel = item['test-model'] ?? item.testModel;
       const image = normalizeBoolean(item.image);
@@ -49,6 +54,9 @@ const normalizeModelAliases = (models: unknown): ModelAlias[] => {
       const entry: ModelAlias = { name: String(name) };
       if (alias && alias !== name) {
         entry.alias = String(alias);
+      }
+      if (displayNameText) {
+        entry.displayName = displayNameText;
       }
       if (priority !== undefined) {
         const parsed = Number(priority);

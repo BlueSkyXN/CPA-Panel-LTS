@@ -123,7 +123,7 @@ features:
 
   - id: provider-workbench
     status: coexist
-    reason: Upstream workbench is useful for resource management and recent health, but must not replace the stable LTS provider page; branded groups are config-detected only and must not add promotional quick-start routes or registration links.
+    reason: Upstream workbench is useful for resource management and recent health, but must not replace the stable LTS provider page; it must preserve and edit Core model mapping fields including canonical display-name from Core v7.2.70 or later, while branded groups remain config-detected only and must not add promotional quick-start routes or registration links.
     routes:
       - /ai-providers/workbench
     panel_files:
@@ -138,6 +138,7 @@ features:
       - src/features/providers/sponsorDefinitions.ts
       - src/features/providers/sponsorMutationRecovery.ts
       - src/features/providers/sheets/forms/BaseProviderForm.tsx
+      - src/features/providers/sheets/forms/ModelEntriesEditor.tsx
       - src/features/providers/sheets/forms/SponsorProviderForm.tsx
       - src/features/providers/sheets/forms/useModelDiscovery.ts
       - src/features/providers/sheets/forms/useConnectivityTest.ts
@@ -145,7 +146,9 @@ features:
       - src/components/providers/hooks/useProviderRecentRequests.ts
       - src/services/api/config.ts
       - src/services/api/providers.ts
+      - src/services/api/transformers.ts
       - src/services/api/apiKeyUsage.ts
+      - src/types/provider.ts
       - src/utils/recentRequests.ts
       - scripts/smoke-lts-panel.py
       - scripts/smoke-lts-panel-core.py
@@ -190,6 +193,14 @@ features:
       - getSponsorAggregationConflict
       - runSponsorMutationWithRecovery
       - assert_each_request_immediately_preceded_by
+      - display-name
+      - item.alias || item.display_name || item.displayName
+      - modelDisplayNamePlaceholder
+      - updated model display-name
+      - new model display-name
+      - preserved legacy model routing aliases
+      - cleared model display-name without dropping unknown fields
+      - updated sponsor model display-name
     validation:
       - npm run smoke:lts
       - npm run smoke:lts:core

@@ -41,7 +41,7 @@ interface BaseProviderFormProps {
 }
 
 const emptyHeader = () => ({ key: '', value: '' });
-const emptyModel = (): ModelEntryInput => ({ name: '', alias: '' });
+const emptyModel = (): ModelEntryInput => ({ name: '', alias: '', displayName: '' });
 const emptyApiKeyEntry = (): ApiKeyEntryInput => ({
   apiKey: '',
   proxyUrl: '',
@@ -108,6 +108,7 @@ function buildInitialForm(
         ? cfg.models.map((m) => ({
             name: m.name,
             alias: m.alias ?? '',
+            displayName: m.displayName ?? '',
             priority: m.priority,
             testModel: m.testModel,
             image: m.image === true,
@@ -150,6 +151,7 @@ function buildInitialForm(
       ? cfg.models.map((m) => ({
           name: m.name,
           alias: m.alias ?? '',
+          displayName: m.displayName ?? '',
           priority: m.priority,
           testModel: m.testModel,
         }))
@@ -313,7 +315,8 @@ export function BaseProviderForm({
       });
       // If the existing list is just an empty placeholder row, drop it.
       const placeholderIdx = next.findIndex(
-        (it) => !(it.name ?? '').trim() && !(it.alias ?? '').trim()
+        (it) =>
+          !(it.name ?? '').trim() && !(it.alias ?? '').trim() && !(it.displayName ?? '').trim()
       );
       if (placeholderIdx !== -1) {
         next.splice(placeholderIdx, 1);

@@ -58,16 +58,26 @@ export function ModelEntriesEditor({
             <div className={styles.modelAliasRow}>
               <input
                 className={styles.input}
-                placeholder="model-name"
+                placeholder={t('providersPage.form.modelNamePlaceholder')}
+                aria-label={t('providersPage.form.modelNamePlaceholder')}
                 value={entry.name}
                 onChange={(e) => onUpdate(idx, { name: e.target.value })}
                 disabled={mutating}
               />
               <input
                 className={styles.input}
-                placeholder="alias (optional)"
+                placeholder={t('providersPage.form.modelAliasPlaceholder')}
+                aria-label={t('providersPage.form.modelAliasPlaceholder')}
                 value={entry.alias ?? ''}
                 onChange={(e) => onUpdate(idx, { alias: e.target.value })}
+                disabled={mutating}
+              />
+              <input
+                className={styles.input}
+                placeholder={t('providersPage.form.modelDisplayNamePlaceholder')}
+                aria-label={t('providersPage.form.modelDisplayNamePlaceholder')}
+                value={entry.displayName ?? ''}
+                onChange={(e) => onUpdate(idx, { displayName: e.target.value })}
                 disabled={mutating}
               />
               <div className={styles.modelEntryActions}>

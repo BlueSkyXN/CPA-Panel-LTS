@@ -68,7 +68,7 @@ interface SponsorKeyEntryCardProps {
   onRemove: () => void;
 }
 
-const emptyModel = (): ModelEntryInput => ({ name: '', alias: '' });
+const emptyModel = (): ModelEntryInput => ({ name: '', alias: '', displayName: '' });
 
 const emptySponsorKeyEntry = (
   definition: SponsorProviderDefinition,
@@ -116,13 +116,20 @@ const protocolUrlForEntry = (
 
 const modelsFromConfig = (
   models:
-    | Array<{ name?: string; alias?: string; priority?: number; testModel?: string }>
+    | Array<{
+        name?: string;
+        alias?: string;
+        displayName?: string;
+        priority?: number;
+        testModel?: string;
+      }>
     | undefined
 ): ModelEntryInput[] =>
   models?.length
     ? models.map((model) => ({
         name: model.name ?? '',
         alias: model.alias ?? '',
+        displayName: model.displayName ?? '',
         priority: model.priority,
         testModel: model.testModel,
       }))
@@ -197,7 +204,8 @@ const applyDiscoveredModels = (
     next.push(entry);
   });
   const placeholderIdx = next.findIndex(
-    (entry) => !(entry.name ?? '').trim() && !(entry.alias ?? '').trim()
+    (entry) =>
+      !(entry.name ?? '').trim() && !(entry.alias ?? '').trim() && !(entry.displayName ?? '').trim()
   );
   if (placeholderIdx !== -1) {
     next.splice(placeholderIdx, 1);
@@ -284,26 +292,40 @@ function SponsorModelSection({
           <div key={modelIndex} className={styles.modelAliasRow}>
             <input
               className={styles.input}
-              placeholder="model-name"
+              placeholder={t('providersPage.form.modelNamePlaceholder')}
+              aria-label={t('providersPage.form.modelNamePlaceholder')}
               value={entry.name}
               onChange={(event) => updateModelEntry(modelIndex, { name: event.target.value })}
               disabled={mutating}
             />
             <input
               className={styles.input}
-              placeholder="alias (optional)"
+              placeholder={t('providersPage.form.modelAliasPlaceholder')}
+              aria-label={t('providersPage.form.modelAliasPlaceholder')}
               value={entry.alias ?? ''}
               onChange={(event) => updateModelEntry(modelIndex, { alias: event.target.value })}
               disabled={mutating}
             />
-            <button
-              type="button"
-              className={styles.removeBtn}
-              disabled={mutating || modelsList.length <= 1}
-              onClick={() => removeModelEntry(modelIndex)}
-            >
-              <IconX size={12} />
-            </button>
+            <input
+              className={styles.input}
+              placeholder={t('providersPage.form.modelDisplayNamePlaceholder')}
+              aria-label={t('providersPage.form.modelDisplayNamePlaceholder')}
+              value={entry.displayName ?? ''}
+              onChange={(event) =>
+                updateModelEntry(modelIndex, { displayName: event.target.value })
+              }
+              disabled={mutating}
+            />
+            <div className={styles.modelEntryActions}>
+              <button
+                type="button"
+                className={styles.removeBtn}
+                disabled={mutating || modelsList.length <= 1}
+                onClick={() => removeModelEntry(modelIndex)}
+              >
+                <IconX size={12} />
+              </button>
+            </div>
           </div>
         ))}
         <button
