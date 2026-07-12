@@ -17,9 +17,9 @@ main = CPA-Panel-LTS product line
      + local downstream panel customizations
 ```
 
-## Current audited state
+## Audited upstream intake snapshot (2026-07-12)
 
-Checked on 2026-07-12:
+Refs captured before Panel PR #20:
 
 - `origin/main`: `cb97685678d862890c6d5bd845a4ef596baffb71`
 - `upstream/main`: `79589155875d35a96e47787a61ac15ff050c1149` (`v1.18.2`)
@@ -78,21 +78,21 @@ Every non-deferred decision must record the upstream SHA, classification, Panel 
 
 Direct-port candidates:
 
-- Form validation and browser autofill fixes.
-- UI bug fixes that do not touch usage contracts.
-- Provider UX improvements that can be adapted without deleting complete usage details.
-- Auth file display fixes that preserve LTS-specific Codex environment behavior.
-- Release workflow hardening that keeps `management.html` and `v*-tls-*`.
-- Dependency/tooling updates after `npm run type-check`, `npm run build`, and `npm run lint` pass.
+- Localized form validation, browser autofill, accessibility, or copy fixes that do not touch a protected/shared seam.
+- UI bug fixes whose patch applies without changing LTS routes, data contracts, build tooling, or downstream integrations.
+- Patch/minor dependency updates that retain npm/`package-lock.json` and require no LTS-specific code adaptation.
 
 Adapt-port candidates:
 
+- Provider UX improvements that must preserve the stable provider page and complete usage details.
 - Provider workbench refactors.
 - Status bar or provider stats changes.
-- Auth-file stats changes.
+- Auth-file display or stats changes that overlap LTS-specific Codex environment behavior.
 - Config schema changes that overlap `usage-statistics-enabled`.
 - Visual config changes around downstream Core LTS surfaces such as `codex.abnormal-reasoning-retry`.
 - Quota page changes that share parsing, account identity, or provider metadata.
+- Release workflow hardening that must retain `management.html`, npm, and `v*-tls-*` semantics.
+- Tooling changes that need LTS-specific command, lockfile, CI, or smoke adaptation.
 
 Already-equivalent:
 

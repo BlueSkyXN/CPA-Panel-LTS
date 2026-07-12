@@ -371,7 +371,6 @@ require_file_contains scripts/smoke-lts-panel-core.py "transient-error-cooldown-
 require_file_contains docs/lts/panel-feature-contracts.yaml "transientErrorCooldownSeconds"
 require_file_contains docs/lts/panel-feature-contracts.yaml "transient-error-cooldown-seconds"
 require_file_contains src/types/visualConfig.ts "'passthrough'"
-require_file_contains src/hooks/useVisualConfig.ts "value === 'chat' || value === 'passthrough'"
 require_file_contains src/hooks/useVisualConfig.ts "normalized === 'passthrough'"
 require_file_contains src/components/config/VisualConfigEditor.tsx "disable_image_generation_passthrough"
 require_file_contains src/i18n/locales/en.json "disable_image_generation_passthrough"

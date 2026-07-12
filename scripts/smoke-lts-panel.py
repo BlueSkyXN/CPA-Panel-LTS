@@ -2552,7 +2552,14 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             redis_retention.fill("60")
             page.get_by_role("tab", name="Network & Routing", exact=True).click()
             page.get_by_label("Transient Error Cooldown (seconds)").fill("-1")
-            page.get_by_label("Disable Image Generation").click()
+            disable_image_generation_select = page.get_by_label("Disable Image Generation")
+            if disable_image_generation_select.inner_text().strip() != (
+                "chat (remove image tool from non-image endpoints)"
+            ):
+                raise AssertionError(
+                    "Visual config did not parse disable-image-generation: chat"
+                )
+            disable_image_generation_select.click()
             page.get_by_role(
                 "option", name="passthrough (preserve client tools)", exact=True
             ).click()
@@ -2591,6 +2598,18 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             ):
                 page.get_by_role("button", name="Confirm Save").click()
             page.get_by_text("Configuration saved successfully", exact=False).first.wait_for()
+
+            page.reload(wait_until="domcontentloaded")
+            page.wait_for_function("() => window.location.hash.endsWith('/config')")
+            page.get_by_text("Config Panel", exact=False).first.wait_for()
+            page.get_by_role("button", name="Visual Editor").click()
+            page.get_by_role("tab", name="Network & Routing", exact=True).click()
+            if page.get_by_label("Disable Image Generation").inner_text().strip() != (
+                "passthrough (preserve client tools)"
+            ):
+                raise AssertionError(
+                    "Visual config did not reload disable-image-generation: passthrough"
+                )
 
             run_quota_runtime_smoke(page, app_url)
             run_remote_cloud_connect_runtime_smoke(page, app_url)

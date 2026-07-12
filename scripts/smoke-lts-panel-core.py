@@ -1024,6 +1024,12 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
     transient_cooldown_input.fill("0")
     disable_image_generation_select = page.get_by_label("Disable Image Generation")
     disable_image_generation_select.scroll_into_view_if_needed()
+    if disable_image_generation_select.inner_text().strip() != (
+        "chat (remove image tool from non-image endpoints)"
+    ):
+        raise AssertionError(
+            "Browser visual editor did not parse disable-image-generation: chat"
+        )
     disable_image_generation_select.click()
     page.get_by_role(
         "option", name="passthrough (preserve client tools)", exact=True
@@ -1143,6 +1149,19 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
     if BROWSER_SOURCE_MARKER not in visual_saved_yaml:
         raise AssertionError("Browser visual save dropped the source mode marker comment")
     seen.append("BROWSER visual save preserved plugins.store-sources")
+
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_function("() => window.location.hash.endsWith('/config')")
+    page.get_by_text("Config Panel", exact=False).first.wait_for()
+    page.get_by_role("button", name="Visual Editor").click()
+    page.get_by_role("tab", name="Network & Routing", exact=True).click()
+    if page.get_by_label("Disable Image Generation").inner_text().strip() != (
+        "passthrough (preserve client tools)"
+    ):
+        raise AssertionError(
+            "Browser visual editor did not reload disable-image-generation: passthrough"
+        )
+    seen.append("BROWSER visual reload parsed disable-image-generation passthrough")
 
     return seen
 
