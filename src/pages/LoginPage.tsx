@@ -160,11 +160,12 @@ export function LoginPage() {
     setLoading(true);
     setError('');
     try {
-      await login({
+      const connected = await login({
         apiBase: baseToUse,
         managementKey: managementKey.trim(),
         rememberPassword
       });
+      if (!connected) return;
       showNotification(t('common.connected_status'), 'success');
       navigate('/', { replace: true });
     } catch (err: unknown) {

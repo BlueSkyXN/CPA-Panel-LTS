@@ -27,7 +27,7 @@ interface AuthStoreState extends AuthState {
   connectionError: string | null;
 
   // 操作
-  login: (credentials: LoginCredentials) => Promise<void>;
+  login: (credentials: LoginCredentials) => Promise<boolean>;
   logout: () => void;
   checkAuth: () => Promise<boolean>;
   restoreSession: () => Promise<boolean>;
@@ -53,11 +53,19 @@ const probePluginSupport = async (): Promise<boolean> => {
 };
 
 const resolvePluginSupport = async (
+  connectionGeneration: number,
   getPluginSupportState: () => PluginSupportState
-): Promise<PluginSupportState> => {
+): Promise<PluginSupportState | null> => {
+  if (!apiClient.isCurrentConnection(connectionGeneration)) {
+    return null;
+  }
+
   let pluginSupport = getPluginSupportState();
   if (!pluginSupport.pluginSupportKnown) {
     const probeSupported = await probePluginSupport();
+    if (!apiClient.isCurrentConnection(connectionGeneration)) {
+      return null;
+    }
     pluginSupport = getPluginSupportState();
     if (!pluginSupport.pluginSupportKnown) {
       return {
@@ -128,12 +136,11 @@ export const useAuthStore = create<AuthStoreState>()(
 
           if (wasLoggedIn && resolvedBase && resolvedKey) {
             try {
-              await get().login({
+              return await get().login({
                 apiBase: resolvedBase,
                 managementKey: resolvedKey,
                 rememberPassword: resolvedRememberPassword
               });
-              return true;
             } catch (error) {
               console.warn('Auto login failed:', error);
               return false;
@@ -151,6 +158,10 @@ export const useAuthStore = create<AuthStoreState>()(
         const apiBase = normalizeApiBase(credentials.apiBase);
         const managementKey = credentials.managementKey.trim();
         const rememberPassword = credentials.rememberPassword ?? get().rememberPassword ?? false;
+        const connectionGeneration = apiClient.setConfig({
+          apiBase,
+          managementKey
+        });
 
         try {
           set({
@@ -162,22 +173,26 @@ export const useAuthStore = create<AuthStoreState>()(
             pluginSupportKnown: false,
             pluginSupportSource: 'unknown'
           });
+          useConfigStore.getState().clearCache();
           useModelsStore.getState().clearCache();
           useQuotaStore.getState().clearQuotaCache();
 
-          // 配置 API 客户端
-          apiClient.setConfig({
-            apiBase,
-            managementKey
-          });
-
           // 测试连接 - 获取配置
           await useConfigStore.getState().fetchConfig(undefined, true);
+          if (!apiClient.isCurrentConnection(connectionGeneration)) {
+            return false;
+          }
           const runtimeKind = await detectRuntimeKind(get().serverRuntimeKind);
-          const pluginSupport = await resolvePluginSupport(() => {
+          if (!apiClient.isCurrentConnection(connectionGeneration)) {
+            return false;
+          }
+          const pluginSupport = await resolvePluginSupport(connectionGeneration, () => {
             const { supportsPlugin, pluginSupportKnown, pluginSupportSource } = get();
             return { supportsPlugin, pluginSupportKnown, pluginSupportSource };
           });
+          if (!pluginSupport || !apiClient.isCurrentConnection(connectionGeneration)) {
+            return false;
+          }
 
           // 登录成功
           set({
@@ -195,7 +210,11 @@ export const useAuthStore = create<AuthStoreState>()(
           } else {
             localStorage.removeItem('isLoggedIn');
           }
+          return true;
         } catch (error: unknown) {
+          if (!apiClient.isCurrentConnection(connectionGeneration)) {
+            return false;
+          }
           const message =
             error instanceof Error
               ? error.message
@@ -213,6 +232,7 @@ export const useAuthStore = create<AuthStoreState>()(
       // 登出
       logout: () => {
         restoreSessionPromise = null;
+        apiClient.clearConfig();
         useConfigStore.getState().clearCache();
         useUsageStatsStore.getState().clearUsageStats();
         useModelsStore.getState().clearCache();
@@ -241,9 +261,8 @@ export const useAuthStore = create<AuthStoreState>()(
           return false;
         }
 
+        const connectionGeneration = apiClient.setConfig({ apiBase, managementKey });
         try {
-          // 重新配置客户端
-          apiClient.setConfig({ apiBase, managementKey });
           set({
             supportsPlugin: false,
             pluginSupportKnown: false,
@@ -252,11 +271,20 @@ export const useAuthStore = create<AuthStoreState>()(
 
           // 验证连接
           await useConfigStore.getState().fetchConfig();
+          if (!apiClient.isCurrentConnection(connectionGeneration)) {
+            return false;
+          }
           const runtimeKind = await detectRuntimeKind(get().serverRuntimeKind);
-          const pluginSupport = await resolvePluginSupport(() => {
+          if (!apiClient.isCurrentConnection(connectionGeneration)) {
+            return false;
+          }
+          const pluginSupport = await resolvePluginSupport(connectionGeneration, () => {
             const { supportsPlugin, pluginSupportKnown, pluginSupportSource } = get();
             return { supportsPlugin, pluginSupportKnown, pluginSupportSource };
           });
+          if (!pluginSupport || !apiClient.isCurrentConnection(connectionGeneration)) {
+            return false;
+          }
 
           set({
             isAuthenticated: true,
@@ -267,6 +295,9 @@ export const useAuthStore = create<AuthStoreState>()(
 
           return true;
         } catch {
+          if (!apiClient.isCurrentConnection(connectionGeneration)) {
+            return false;
+          }
           set({
             isAuthenticated: false,
             connectionStatus: 'error',
@@ -321,13 +352,21 @@ export const useAuthStore = create<AuthStoreState>()(
         apiBase: state.apiBase,
         ...(state.rememberPassword ? { managementKey: state.managementKey } : {}),
         rememberPassword: state.rememberPassword,
-        supportsPlugin: state.supportsPlugin,
-        pluginSupportKnown: state.pluginSupportKnown,
-        pluginSupportSource: state.pluginSupportSource,
         serverVersion: state.serverVersion,
         serverBuildDate: state.serverBuildDate,
         serverRuntimeKind: state.serverRuntimeKind
-      })
+      }),
+      version: 1,
+      migrate: (persistedState) => {
+        if (!persistedState || typeof persistedState !== 'object') {
+          return persistedState as AuthStoreState;
+        }
+        const nextState = { ...(persistedState as Record<string, unknown>) };
+        delete nextState.supportsPlugin;
+        delete nextState.pluginSupportKnown;
+        delete nextState.pluginSupportSource;
+        return nextState as unknown as AuthStoreState;
+      }
     }
   )
 );

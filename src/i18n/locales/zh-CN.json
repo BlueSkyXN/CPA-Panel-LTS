@@ -1637,7 +1637,7 @@
     "config_not_found": "无法读取插件配置，后端未找到该插件。",
     "unsupported_backend": "当前后端未暴露插件管理 API。请使用包含插件管理接口的新后端构建，并重启服务。",
     "runtime_unavailable_title": "插件运行时不可用",
-    "runtime_unavailable_desc": "当前 plugins.enabled 为 true，但服务端返回 x-cpa-support-plugin: 0。当前二进制不包含插件运行时支持，因此插件管理和商店操作继续锁定。请部署启用 CGO 的 plugin-capable/glibc 构建并重启后端；若不计划使用插件，则关闭 plugins.enabled。",
+    "runtime_unavailable_desc": "当前 plugins.enabled 为 true，但服务端返回 x-cpa-support-plugin: 0。当前二进制不包含插件运行时支持，因此插件管理和商店操作继续锁定。请部署适用于当前平台且包含插件运行时的 Core 构建并重启后端；Linux 环境通常需要启用 CGO 并使用兼容的 libc。若不计划使用插件，则关闭 plugins.enabled。",
     "runtime_probe_failed_desc": "当前 plugins.enabled 为 true，但面板既无法通过 x-cpa-support-plugin 确认运行时能力，也无法通过插件 API 完成兼容探测。插件操作继续锁定。请检查后端构建及反向代理/CORS 的 header 暴露，然后重新连接。",
     "runtime_unavailable_action": "查看配置",
     "global_status": "全局状态",
