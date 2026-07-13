@@ -150,6 +150,8 @@ for path in \
   src/utils/usageIndex.ts \
   src/utils/usage \
   src/utils/usage/cacheTokens.test.mjs \
+  src/utils/usage/modelPrices.ts \
+  src/utils/usage/modelPrices.test.mjs \
   src/utils/usage/importPreflight.ts \
   src/utils/usage/importPreflight.test.mjs \
   src/utils/usage/reasoningEffort.ts \
@@ -193,7 +195,9 @@ require_file_contains src/utils/constants.ts "USAGE: '/usage'"
 require_file_contains src/utils/usage.ts "service_tier"
 require_file_contains src/utils/usage.ts "resolveUsageTotalTokens"
 require_file_contains src/utils/usage/cacheTokens.ts "resolveCacheWriteUnitPrice"
-require_file_contains src/utils/usage/cacheTokens.test.mjs "only explicit GPT-5.6 model slugs"
+require_file_contains src/utils/usage/cacheTokens.ts "uncached_input_tokens"
+require_file_contains src/utils/usage/cacheTokens.test.mjs "uncached input is authoritative"
+require_file_contains src/utils/usage/modelPrices.ts "normalizePersistedModelPrices"
 require_file_contains src/utils/usage.ts "reasoning_effort"
 require_file_not_contains src/utils/usage.ts "UsageThinking"
 require_file_not_contains src/utils/usage.ts "normalizeUsageThinking"
@@ -767,6 +771,7 @@ require_file_contains scripts/smoke-lts-panel-core.py "Provider write smoke pers
 
 # Smoke coverage markers.
 require_file_contains package.json "\"test:usage-cache\""
+require_file_contains package.json '"test:usage-prices"'
 require_file_contains package.json '"test:usage-import"'
 require_file_contains package.json '"test:usage-effort"'
 require_file_contains package.json '"test:usage"'

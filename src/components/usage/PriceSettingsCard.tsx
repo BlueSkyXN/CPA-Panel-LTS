@@ -7,6 +7,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Select } from '@/components/ui/Select';
 import type { ModelPrice } from '@/utils/usage';
 import { resolveCacheWriteUnitPrice } from '@/utils/usage/cacheTokens';
+import { parseNonNegativePrice } from '@/utils/usage/modelPrices';
 import styles from '@/pages/UsagePage.module.scss';
 
 export interface PriceSettingsCardProps {
@@ -38,15 +39,32 @@ export function PriceSettingsCard({
 
   const parseOptionalPrice = (value: string): number | undefined => {
     if (value.trim() === '') return undefined;
-    const parsed = Number.parseFloat(value);
-    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+    return parseNonNegativePrice(value);
   };
 
+  const isInvalidPriceInput = (value: string): boolean =>
+    value.trim() !== '' && parseNonNegativePrice(value) === undefined;
+
+  const promptPriceInvalid = isInvalidPriceInput(promptPrice);
+  const completionPriceInvalid = isInvalidPriceInput(completionPrice);
+  const cachePriceInvalid = isInvalidPriceInput(cachePrice);
+  const cacheWritePriceInvalid = isInvalidPriceInput(cacheWritePrice);
+  const addPriceInvalid =
+    promptPriceInvalid || completionPriceInvalid || cachePriceInvalid || cacheWritePriceInvalid;
+
+  const editPromptInvalid = isInvalidPriceInput(editPrompt);
+  const editCompletionInvalid = isInvalidPriceInput(editCompletion);
+  const editCacheInvalid = isInvalidPriceInput(editCache);
+  const editCacheWriteInvalid = isInvalidPriceInput(editCacheWrite);
+  const editPriceInvalid =
+    editPromptInvalid || editCompletionInvalid || editCacheInvalid || editCacheWriteInvalid;
+  const invalidPriceMessage = t('usage_stats.model_price_invalid');
+
   const handleSavePrice = () => {
-    if (!selectedModel) return;
-    const prompt = parseFloat(promptPrice) || 0;
-    const completion = parseFloat(completionPrice) || 0;
-    const cache = cachePrice.trim() === '' ? prompt : parseFloat(cachePrice) || 0;
+    if (!selectedModel || addPriceInvalid) return;
+    const prompt = parseNonNegativePrice(promptPrice) ?? 0;
+    const completion = parseNonNegativePrice(completionPrice) ?? 0;
+    const cache = cachePrice.trim() === '' ? prompt : (parseNonNegativePrice(cachePrice) ?? 0);
     const cacheWrite = parseOptionalPrice(cacheWritePrice);
     const newPrices = {
       ...modelPrices,
@@ -81,10 +99,10 @@ export function PriceSettingsCard({
   };
 
   const handleSaveEdit = () => {
-    if (!editModel) return;
-    const prompt = parseFloat(editPrompt) || 0;
-    const completion = parseFloat(editCompletion) || 0;
-    const cache = editCache.trim() === '' ? prompt : parseFloat(editCache) || 0;
+    if (!editModel || editPriceInvalid) return;
+    const prompt = parseNonNegativePrice(editPrompt) ?? 0;
+    const completion = parseNonNegativePrice(editCompletion) ?? 0;
+    const cache = editCache.trim() === '' ? prompt : (parseNonNegativePrice(editCache) ?? 0);
     const cacheWrite = parseOptionalPrice(editCacheWrite);
     const newPrices = {
       ...modelPrices,
@@ -130,8 +148,9 @@ export function PriceSettingsCard({
         <div className={styles.priceForm}>
           <div className={styles.formRow}>
             <div className={styles.formField}>
-              <label>{t('usage_stats.model_name')}</label>
+              <label htmlFor="usage-model-price-model">{t('usage_stats.model_name')}</label>
               <Select
+                id="usage-model-price-model"
                 value={selectedModel}
                 options={options}
                 onChange={handleModelSelect}
@@ -139,33 +158,48 @@ export function PriceSettingsCard({
               />
             </div>
             <div className={styles.formField}>
-              <label>{t('usage_stats.model_price_prompt')} ($/1M)</label>
+              <label htmlFor="usage-prompt-price">
+                {t('usage_stats.model_price_prompt')} ($/1M)
+              </label>
               <Input
+                id="usage-prompt-price"
                 type="number"
                 value={promptPrice}
                 onChange={(e) => setPromptPrice(e.target.value)}
                 placeholder="0.00"
+                min="0"
                 step="0.0001"
+                error={promptPriceInvalid ? invalidPriceMessage : undefined}
               />
             </div>
             <div className={styles.formField}>
-              <label>{t('usage_stats.model_price_completion')} ($/1M)</label>
+              <label htmlFor="usage-completion-price">
+                {t('usage_stats.model_price_completion')} ($/1M)
+              </label>
               <Input
+                id="usage-completion-price"
                 type="number"
                 value={completionPrice}
                 onChange={(e) => setCompletionPrice(e.target.value)}
                 placeholder="0.00"
+                min="0"
                 step="0.0001"
+                error={completionPriceInvalid ? invalidPriceMessage : undefined}
               />
             </div>
             <div className={styles.formField}>
-              <label>{t('usage_stats.model_price_cache')} ($/1M)</label>
+              <label htmlFor="usage-cache-read-price">
+                {t('usage_stats.model_price_cache')} ($/1M)
+              </label>
               <Input
+                id="usage-cache-read-price"
                 type="number"
                 value={cachePrice}
                 onChange={(e) => setCachePrice(e.target.value)}
                 placeholder="0.00"
+                min="0"
                 step="0.0001"
+                error={cachePriceInvalid ? invalidPriceMessage : undefined}
               />
             </div>
             <div className={styles.formField}>
@@ -178,11 +212,17 @@ export function PriceSettingsCard({
                 value={cacheWritePrice}
                 onChange={(e) => setCacheWritePrice(e.target.value)}
                 placeholder={t('usage_stats.model_price_cache_write_auto')}
+                min="0"
                 step="0.0001"
                 aria-describedby="usage-cache-write-price-hint"
+                error={cacheWritePriceInvalid ? invalidPriceMessage : undefined}
               />
             </div>
-            <Button variant="primary" onClick={handleSavePrice} disabled={!selectedModel}>
+            <Button
+              variant="primary"
+              onClick={handleSavePrice}
+              disabled={!selectedModel || addPriceInvalid}
+            >
               {t('common.save')}
             </Button>
           </div>
@@ -252,7 +292,7 @@ export function PriceSettingsCard({
             <Button variant="secondary" onClick={() => setEditModel(null)}>
               {t('common.cancel')}
             </Button>
-            <Button variant="primary" onClick={handleSaveEdit}>
+            <Button variant="primary" onClick={handleSaveEdit} disabled={editPriceInvalid}>
               {t('common.save')}
             </Button>
           </div>
@@ -261,33 +301,48 @@ export function PriceSettingsCard({
       >
         <div className={styles.editModalBody}>
           <div className={styles.formField}>
-            <label>{t('usage_stats.model_price_prompt')} ($/1M)</label>
+            <label htmlFor="usage-prompt-price-edit">
+              {t('usage_stats.model_price_prompt')} ($/1M)
+            </label>
             <Input
+              id="usage-prompt-price-edit"
               type="number"
               value={editPrompt}
               onChange={(e) => setEditPrompt(e.target.value)}
               placeholder="0.00"
+              min="0"
               step="0.0001"
+              error={editPromptInvalid ? invalidPriceMessage : undefined}
             />
           </div>
           <div className={styles.formField}>
-            <label>{t('usage_stats.model_price_completion')} ($/1M)</label>
+            <label htmlFor="usage-completion-price-edit">
+              {t('usage_stats.model_price_completion')} ($/1M)
+            </label>
             <Input
+              id="usage-completion-price-edit"
               type="number"
               value={editCompletion}
               onChange={(e) => setEditCompletion(e.target.value)}
               placeholder="0.00"
+              min="0"
               step="0.0001"
+              error={editCompletionInvalid ? invalidPriceMessage : undefined}
             />
           </div>
           <div className={styles.formField}>
-            <label>{t('usage_stats.model_price_cache')} ($/1M)</label>
+            <label htmlFor="usage-cache-read-price-edit">
+              {t('usage_stats.model_price_cache')} ($/1M)
+            </label>
             <Input
+              id="usage-cache-read-price-edit"
               type="number"
               value={editCache}
               onChange={(e) => setEditCache(e.target.value)}
               placeholder="0.00"
+              min="0"
               step="0.0001"
+              error={editCacheInvalid ? invalidPriceMessage : undefined}
             />
           </div>
           <div className={styles.formField}>
@@ -300,8 +355,10 @@ export function PriceSettingsCard({
               value={editCacheWrite}
               onChange={(e) => setEditCacheWrite(e.target.value)}
               placeholder={t('usage_stats.model_price_cache_write_auto')}
+              min="0"
               step="0.0001"
               aria-describedby="usage-cache-write-price-edit-hint"
+              error={editCacheWriteInvalid ? invalidPriceMessage : undefined}
             />
             <span id="usage-cache-write-price-edit-hint" className={styles.priceFieldHint}>
               {t('usage_stats.model_price_cache_write_hint')}

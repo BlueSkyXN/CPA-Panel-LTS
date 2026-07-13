@@ -31,6 +31,8 @@ features:
       - src/utils/usageIndex.ts
       - src/utils/usage/
       - src/utils/usage/cacheTokens.test.mjs
+      - src/utils/usage/modelPrices.ts
+      - src/utils/usage/modelPrices.test.mjs
       - src/utils/usage/importPreflight.ts
       - src/utils/usage/importPreflight.test.mjs
       - src/utils/usage/reasoningEffort.ts
@@ -48,6 +50,8 @@ features:
       - collectUsageDetailsForCandidates
       - resolveUsageTotalTokens
       - resolveCacheWriteUnitPrice
+      - uncached_input_tokens
+      - normalizePersistedModelPrices
       - analyzeUsageImport
       - normalizeReasoningEffort
       - service_tier
@@ -56,6 +60,7 @@ features:
       - request_events_filter_effort
     validation:
       - npm run test:usage-cache
+      - npm run test:usage-prices
       - npm run test:usage
       - npm run check:lts
       - npm run check:feature-contract

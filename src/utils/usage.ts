@@ -18,6 +18,7 @@ import {
   resolveUsageTotalTokens,
   type UsageTokenFields,
 } from './usage/cacheTokens';
+import { normalizePersistedModelPrices, type ModelPrice } from './usage/modelPrices';
 import { normalizeReasoningEffort } from './usage/reasoningEffort';
 import { maskApiKey } from './format';
 import { parseTimestampMs } from './timestamp';
@@ -55,15 +56,11 @@ export interface RateStats {
   tokenCount: number;
 }
 
-export interface ModelPrice {
-  prompt: number;
-  completion: number;
-  cache: number;
-  cacheWrite?: number;
-}
+export type { ModelPrice } from './usage/modelPrices';
 
 export interface UsageTokenStats extends UsageTokenFields {
   input_tokens?: number;
+  uncached_input_tokens?: number;
   output_tokens?: number;
   reasoning_tokens?: number;
   cached_tokens?: number;
@@ -845,46 +842,7 @@ export function loadModelPrices(): Record<string, ModelPrice> {
     if (!raw) {
       return {};
     }
-    const parsed: unknown = JSON.parse(raw);
-    if (!isRecord(parsed)) {
-      return {};
-    }
-    const normalized: Record<string, ModelPrice> = {};
-    Object.entries(parsed).forEach(([model, price]: [string, unknown]) => {
-      if (!model) return;
-      const priceRecord = isRecord(price) ? price : null;
-      const promptRaw = Number(priceRecord?.prompt);
-      const completionRaw = Number(priceRecord?.completion);
-      const cacheRaw = Number(priceRecord?.cache);
-      const cacheWriteRaw = Number(priceRecord?.cacheWrite);
-
-      if (
-        !Number.isFinite(promptRaw) &&
-        !Number.isFinite(completionRaw) &&
-        !Number.isFinite(cacheRaw)
-      ) {
-        return;
-      }
-
-      const prompt = Number.isFinite(promptRaw) && promptRaw >= 0 ? promptRaw : 0;
-      const completion = Number.isFinite(completionRaw) && completionRaw >= 0 ? completionRaw : 0;
-      const cache =
-        Number.isFinite(cacheRaw) && cacheRaw >= 0
-          ? cacheRaw
-          : Number.isFinite(promptRaw) && promptRaw >= 0
-            ? promptRaw
-            : prompt;
-
-      normalized[model] = {
-        prompt,
-        completion,
-        cache,
-        ...(Number.isFinite(cacheWriteRaw) && cacheWriteRaw >= 0
-          ? { cacheWrite: cacheWriteRaw }
-          : {}),
-      };
-    });
-    return normalized;
+    return normalizePersistedModelPrices(JSON.parse(raw));
   } catch {
     return {};
   }
@@ -898,7 +856,10 @@ export function saveModelPrices(prices: Record<string, ModelPrice>): void {
     if (typeof localStorage === 'undefined') {
       return;
     }
-    localStorage.setItem(MODEL_PRICE_STORAGE_KEY, JSON.stringify(prices));
+    localStorage.setItem(
+      MODEL_PRICE_STORAGE_KEY,
+      JSON.stringify(normalizePersistedModelPrices(prices))
+    );
   } catch {
     console.warn('保存模型价格失败');
   }
