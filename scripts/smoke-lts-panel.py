@@ -2030,6 +2030,78 @@ def run_remote_cloud_connect_runtime_smoke(page: Any, app_url: str) -> None:
     page.wait_for_function("() => document.querySelectorAll('[role=\"dialog\"]').length === 0")
 
 
+def run_usage_model_price_smoke(page: Any) -> None:
+    card = page.get_by_text("Model Pricing Settings", exact=True).locator("xpath=../..")
+    card.wait_for()
+
+    card.get_by_text("Choose a model", exact=True).click()
+    page.get_by_role("option", name="gpt-5.6-sol", exact=True).click()
+
+    price_inputs = card.locator('input[type="number"]')
+    if price_inputs.count() != 4:
+        raise AssertionError(
+            f"Expected four model price inputs, found {price_inputs.count()}"
+        )
+    price_inputs.nth(0).fill("-1")
+    card.get_by_text(
+        "Enter a valid number greater than or equal to 0.", exact=True
+    ).wait_for()
+    if card.get_by_role("button", name="Save", exact=True).is_enabled():
+        raise AssertionError("Invalid prompt price did not disable the add save action")
+    if price_inputs.nth(0).get_attribute("aria-invalid") != "true":
+        raise AssertionError("Invalid prompt price did not expose aria-invalid=true")
+
+    price_inputs.nth(0).fill("10")
+    price_inputs.nth(1).fill("20")
+    price_inputs.nth(2).fill("1")
+    price_inputs.nth(3).fill("")
+    card.get_by_role("button", name="Save", exact=True).click()
+
+    saved_text = card.inner_text()
+    for expected_text in [
+        "Prompt price: $10.0000/1M",
+        "Completion price: $20.0000/1M",
+        "Cache read price: $1.0000/1M",
+        "Cache write price: $10.0000/1M (Auto)",
+    ]:
+        if expected_text not in saved_text:
+            raise AssertionError(
+                f"Model price smoke missing saved text: {expected_text!r}; card={saved_text!r}"
+            )
+
+    card.get_by_role("button", name="Edit", exact=True).click()
+    dialog = page.get_by_role("dialog", name="gpt-5.6-sol")
+    dialog.wait_for()
+    edit_inputs = dialog.locator('input[type="number"]')
+    edit_inputs.nth(3).fill("-1")
+    dialog.get_by_text(
+        "Enter a valid number greater than or equal to 0.", exact=True
+    ).wait_for()
+    if dialog.get_by_role("button", name="Save", exact=True).is_enabled():
+        raise AssertionError("Invalid cache-write price did not disable the edit save action")
+    if edit_inputs.nth(3).get_attribute("aria-invalid") != "true":
+        raise AssertionError("Invalid cache-write price did not expose aria-invalid=true")
+    described_by = set(
+        (edit_inputs.nth(3).get_attribute("aria-describedby") or "").split()
+    )
+    expected_descriptions = {
+        "usage-cache-write-price-edit-hint",
+        "usage-cache-write-price-edit-error",
+    }
+    if not expected_descriptions.issubset(described_by):
+        raise AssertionError(
+            "Invalid cache-write price did not reference both hint and error: "
+            f"{sorted(described_by)!r}"
+        )
+
+    edit_inputs.nth(3).fill("0")
+    save_button = dialog.get_by_role("button", name="Save", exact=True)
+    if not save_button.is_enabled():
+        raise AssertionError("Explicit zero cache-write price did not enable the save action")
+    save_button.click()
+    card.get_by_text("Cache write price: $0.0000/1M", exact=True).wait_for()
+
+
 def run_usage_service_tier_smoke(page: Any) -> None:
     card = page.get_by_text("Request Events", exact=True).locator("xpath=../..")
     card.wait_for()
@@ -2574,6 +2646,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
                     )
                 page.get_by_text(expected_text, exact=False).first.wait_for()
                 if route == "/usage":
+                    run_usage_model_price_smoke(page)
                     run_usage_service_tier_smoke(page)
                     run_usage_import_review_smoke(page, state)
 
