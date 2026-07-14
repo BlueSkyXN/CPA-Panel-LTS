@@ -6,6 +6,9 @@
   --config-accent-strong: #344b70;
   --config-accent-surface: color-mix(in srgb, var(--bg-primary) 94%, var(--config-accent) 6%);
   --config-accent-border: color-mix(in srgb, var(--border-color) 78%, var(--config-accent) 22%);
+  --config-focus-ring: color-mix(in srgb, var(--config-accent) 18%, transparent);
+  --config-group-surface: color-mix(in srgb, var(--bg-primary) 96%, var(--text-primary) 4%);
+  --config-group-border: color-mix(in srgb, var(--border-color) 88%, transparent);
   --config-gold: #a8792e;
 
   display: flex;
@@ -35,14 +38,14 @@
   :global(.input:focus) {
     background: var(--bg-primary);
     border-color: var(--config-accent);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--config-accent) 17%, transparent);
+    box-shadow: 0 0 0 3px var(--config-focus-ring);
   }
 
   :global(button[aria-haspopup='listbox']:focus-visible),
   :global(button[aria-haspopup='listbox'][aria-expanded='true']) {
     border-color: var(--config-accent);
     outline: none;
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--config-accent) 17%, transparent);
+    box-shadow: 0 0 0 3px var(--config-focus-ring);
   }
 
   :global(textarea.input) {
@@ -203,9 +206,9 @@
   flex-direction: column;
   gap: 12px;
   padding: 14px;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-secondary) 42%, transparent);
+  border: 1px solid var(--config-group-border);
+  border-radius: 10px;
+  background: var(--config-group-surface);
 }
 
 .storeAuthRuleHeader {
@@ -292,7 +295,7 @@
 
 .workspace {
   display: grid;
-  grid-template-columns: 204px minmax(0, 1fr);
+  grid-template-columns: 184px minmax(0, 1fr);
   gap: 18px;
   align-items: start;
   min-width: 0;
@@ -314,11 +317,10 @@
     grid-template-columns: minmax(0, 1fr);
     gap: 10px;
     padding: 11px;
-    border: 1px solid color-mix(in srgb, var(--border-color) 84%, var(--config-accent) 16%);
-    border-radius: 12px;
-    background: color-mix(in srgb, var(--bg-primary) 90%, transparent);
-    box-shadow: 0 8px 24px rgb(45 42 38 / 0.09);
-    backdrop-filter: blur(14px);
+    border: 1px solid var(--config-group-border);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--bg-primary) 96%, transparent);
+    box-shadow: 0 8px 20px rgb(45 42 38 / 0.07);
   }
 
   @media (max-width: 768px) {
@@ -326,7 +328,7 @@
   }
 }
 
-.compactNavigationWithSystem {
+.compactNavigationWithSubsection {
   @media (min-width: 769px) and (max-width: 1180px) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -394,14 +396,14 @@
 .sidebarRail {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   max-height: calc(100dvh - var(--header-height, 64px) - 24px);
   overflow-y: auto;
-  padding: 9px;
-  border: 1px solid color-mix(in srgb, var(--border-color) 88%, var(--config-accent) 12%);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--bg-primary) 86%, transparent);
-  box-shadow: 0 8px 26px rgb(45 42 38 / 0.045);
+  padding: 7px;
+  border: 1px solid var(--config-group-border);
+  border-radius: 10px;
+  background: var(--bg-primary);
+  box-shadow: none;
   scrollbar-width: thin;
 }
 
@@ -443,15 +445,22 @@
   min-width: 0;
 }
 
+.navGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
 .navButton {
   @include button-reset;
   position: relative;
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
   width: 100%;
-  min-height: 58px;
-  padding: 9px 9px 9px 12px;
+  min-height: 44px;
+  padding: 7px 8px 7px 10px;
   border: 0;
   border-radius: 7px;
   background: transparent;
@@ -466,7 +475,10 @@
     background: color-mix(in srgb, var(--text-primary) 5%, transparent);
   }
 
-  &:focus,
+  &:focus:not(:focus-visible) {
+    outline: none;
+  }
+
   &:focus-visible {
     outline: 2px solid var(--config-accent);
     outline-offset: 2px;
@@ -474,12 +486,12 @@
 }
 
 .navButtonActive {
-  background: var(--config-accent-surface);
+  background: var(--config-group-surface);
 
   &::before {
     position: absolute;
-    inset: 8px auto 8px 0;
-    width: 3px;
+    inset: 7px auto 7px 0;
+    width: 2px;
     border-radius: 999px;
     background: var(--config-accent);
     content: '';
@@ -494,8 +506,8 @@
 .navIndex {
   display: inline-flex;
   align-items: center;
-  min-width: 24px;
-  min-height: 22px;
+  min-width: 22px;
+  min-height: 20px;
   color: var(--config-gold);
   font-size: 11px;
   font-weight: 650;
@@ -506,7 +518,7 @@
 .navMain {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0;
   min-width: 0;
   flex: 1;
 }
@@ -523,6 +535,7 @@
   align-items: center;
   gap: 7px;
   min-width: 0;
+  flex: 1;
 }
 
 .navIcon {
@@ -535,20 +548,12 @@
 }
 
 .navLabel {
+  min-width: 0;
   color: var(--text-primary);
   font-size: 13px;
   font-weight: 650;
   line-height: 1.25;
-}
-
-.navDescription {
-  display: -webkit-box;
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-size: 11px;
-  line-height: 1.45;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
 }
 
 .navBadge {
@@ -567,6 +572,84 @@
   flex: 0 0 auto;
 }
 
+.navSubList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 1px 4px 5px 32px;
+  padding-left: 10px;
+  border-left: 1px solid var(--config-group-border);
+}
+
+.navSubButton {
+  @include button-reset;
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  gap: 7px;
+  align-items: center;
+  min-height: 31px;
+  padding: 5px 7px 5px 4px;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  text-align: left;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+
+  &:hover {
+    background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+    color: var(--text-primary);
+  }
+
+  &:focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--config-accent);
+    outline-offset: 1px;
+  }
+}
+
+.navSubButtonActive {
+  background: var(--config-accent-surface);
+  color: var(--config-accent-strong);
+}
+
+.navSubIndicator {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.42;
+}
+
+.navSubButtonActive .navSubIndicator {
+  opacity: 1;
+}
+
+.navSubLabel {
+  min-width: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.navSubBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 5px;
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  font-size: 10px;
+  font-weight: 700;
+}
+
 .sections {
   display: block;
   width: 100%;
@@ -583,29 +666,30 @@
   }
 
   > :not([hidden]) {
-    animation: configPanelEnter 165ms ease-out both;
+    animation: configPanelEnter 165ms ease-out backwards;
   }
 }
 
 .systemWorkspace {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
   min-width: 0;
 }
 
 .systemTabList {
+  position: sticky;
+  top: calc(var(--header-height, 64px) + 10px);
+  z-index: 4;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
-  padding: 4px 4px 10px;
-  border-bottom: 1px solid var(--border-color);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--text-primary) 2%, transparent),
-    transparent 82%
-  );
+  padding: 3px;
+  border: 1px solid var(--config-group-border);
+  border-radius: 9px;
+  background: var(--config-group-surface);
+  box-shadow: 0 9px 18px -16px rgb(45 42 38 / 0.55);
 }
 
 .systemTab {
@@ -615,10 +699,10 @@
   justify-content: center;
   gap: 8px;
   width: 100%;
-  min-height: 42px;
-  padding: 8px 10px;
+  min-height: 36px;
+  padding: 6px 8px;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: 6px;
   color: var(--text-secondary);
   text-align: center;
   transition:
@@ -632,7 +716,10 @@
     color: var(--text-primary);
   }
 
-  &:focus,
+  &:focus:not(:focus-visible) {
+    outline: none;
+  }
+
   &:focus-visible {
     outline: 2px solid var(--config-accent);
     outline-offset: 2px;
@@ -640,18 +727,10 @@
 }
 
 .systemTabActive {
-  border-color: var(--config-accent-border);
-  background: var(--config-accent-surface);
+  border-color: transparent;
+  background: var(--bg-primary);
   color: var(--config-accent-strong);
   box-shadow: inset 0 -2px 0 var(--config-accent);
-}
-
-.systemTabIcon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  flex: 0 0 auto;
 }
 
 .systemTabTitle {
@@ -678,41 +757,7 @@
   flex: 0 0 auto;
 }
 
-.systemPanelIntro {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  min-width: 0;
-}
-
-.systemPanelIntroIcon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--bg-primary) 88%, var(--config-accent) 12%);
-  color: var(--config-accent-strong);
-  flex: 0 0 auto;
-}
-
-.systemPanelIntroCopy {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
-.systemPanelIntroTitle {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: 16px;
-  font-weight: 650;
-  line-height: 1.3;
-}
-
-.systemPanelIntroDescription {
+.systemPanelDescription {
   margin: 0;
   max-width: 76ch;
   color: var(--text-secondary);
@@ -733,16 +778,27 @@
 }
 
 .systemPanel:not([hidden]) {
-  animation: configPanelEnter 165ms ease-out both;
+  animation: configPanelEnter 165ms ease-out backwards;
 }
 
 .sectionGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 14px;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--config-group-border);
+  border-radius: 10px;
+  background: var(--config-group-surface);
+  scroll-margin-top: calc(var(--header-height, 64px) + 18px);
+
+  @media (min-width: 769px) and (max-width: 1180px) {
+    scroll-margin-top: calc(var(--header-height, 64px) + 108px);
+  }
 
   @include mobile {
     grid-template-columns: minmax(0, 1fr);
+    padding: 12px;
+    scroll-margin-top: calc(var(--header-height, 64px) + 176px);
   }
 }
 
@@ -750,19 +806,22 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding: 0;
-  border-top: 1px solid var(--border-color);
-  border-bottom: 1px solid var(--border-color);
+  padding: 0 14px;
+  overflow: hidden;
 
   > .toggleRow:not(:last-child) {
     border-bottom: 1px solid var(--border-color);
+  }
+
+  @include mobile {
+    padding-inline: 12px;
   }
 }
 
 .sectionStack {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
 }
 
 .divider {
@@ -783,9 +842,9 @@
   gap: 14px;
   align-items: stretch;
   padding: 14px;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-secondary) 72%, transparent);
+  border: 1px solid var(--config-group-border);
+  border-radius: 10px;
+  background: var(--config-group-surface);
 
   @include tablet {
     grid-template-columns: minmax(0, 1fr);
@@ -809,10 +868,10 @@
   justify-content: center;
   width: 32px;
   height: 32px;
-  border: 1px solid color-mix(in srgb, var(--success-color) 32%, var(--border-color));
+  border: 1px solid var(--config-accent-border);
   border-radius: 8px;
-  color: var(--success-color);
-  background: color-mix(in srgb, var(--success-color) 9%, transparent);
+  color: var(--config-accent-strong);
+  background: var(--config-accent-surface);
   flex: 0 0 auto;
 }
 
@@ -854,14 +913,14 @@
   min-width: 0;
   min-height: 56px;
   padding: 9px 10px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--config-group-border);
   border-radius: 8px;
   background: var(--bg-primary);
 }
 
 .strategyBadge[data-tone='active'] {
-  border-color: color-mix(in srgb, var(--success-color) 38%, var(--border-color));
-  background: color-mix(in srgb, var(--success-color) 8%, var(--bg-primary));
+  border-color: var(--config-accent-border);
+  background: var(--config-accent-surface);
 }
 
 .strategyBadge[data-tone='warning'] {
@@ -923,15 +982,16 @@
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 14px;
   align-items: center;
-  min-height: 70px;
-  padding: 14px 2px;
+  min-height: 60px;
+  padding: 12px 0;
   border: 0;
   border-radius: 0;
   background: transparent;
 
   @include mobile {
     gap: 10px;
-    padding-block: 13px;
+    min-height: 0;
+    padding-block: 12px;
   }
 }
 
@@ -981,7 +1041,7 @@
 
 .fieldSelectionHint {
   padding: 9px 10px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--config-group-border);
   border-radius: 8px;
   background: color-mix(in srgb, var(--bg-secondary) 68%, transparent);
   color: var(--text-secondary);
@@ -1009,19 +1069,20 @@
 .subsection {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 20px 0 0;
+  gap: 12px;
+  padding: 0;
   border: 0;
-  border-top: 1px solid var(--border-color);
   border-radius: 0;
   background: transparent;
-}
+  scroll-margin-top: calc(var(--header-height, 64px) + 18px);
 
-.sectionStack > .subsection:first-child,
-.systemPanel > .subsection:first-child,
-.systemPanel > .sectionStack > .subsection:first-child {
-  padding-top: 0;
-  border-top: 0;
+  @media (min-width: 769px) and (max-width: 1180px) {
+    scroll-margin-top: calc(var(--header-height, 64px) + 108px);
+  }
+
+  @include mobile {
+    scroll-margin-top: calc(var(--header-height, 64px) + 176px);
+  }
 }
 
 .subsectionHeader {
@@ -1064,9 +1125,9 @@
   flex-direction: column;
   gap: 12px;
   padding: 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-secondary) 64%, transparent);
+  border: 1px solid var(--config-group-border);
+  border-radius: 10px;
+  background: var(--bg-primary);
 }
 
 .ruleCardHeader {
@@ -1097,7 +1158,7 @@
 }
 
 .emptyState {
-  border: 1px dashed var(--border-color);
+  border: 1px dashed var(--config-group-border);
   border-radius: 8px;
   padding: 16px;
   color: var(--text-secondary);
@@ -1228,12 +1289,8 @@
 }
 
 @media (min-width: 1181px) and (max-width: 1320px) {
-  .navButton {
-    min-height: 48px;
-  }
-
-  .navDescription {
-    display: none;
+  .navLabel {
+    font-size: 12px;
   }
 }
 
@@ -1247,12 +1304,6 @@
   }
 
   .subsection {
-    padding-top: 18px;
-  }
-
-  .sectionStack > .subsection:first-child,
-  .systemPanel > .subsection:first-child,
-  .systemPanel > .sectionStack > .subsection:first-child {
     padding-top: 0;
   }
 

@@ -15,8 +15,6 @@ import {
   IconCode,
   IconDiamond,
   IconKey,
-  IconNetwork,
-  IconPlug,
   IconSatellite,
   IconSettings,
   IconShield,
@@ -51,6 +49,26 @@ import styles from './VisualConfigEditor.module.scss';
 
 type VisualSectionId = 'server' | 'auth' | 'system' | 'quota' | 'streaming' | 'payload';
 type SystemSectionId = 'runtime' | 'plugins' | 'headers' | 'network';
+type VisualSubsectionId =
+  | 'server-listener'
+  | 'server-tls'
+  | 'auth-remote'
+  | 'auth-credentials'
+  | 'runtime'
+  | 'plugins'
+  | 'headers'
+  | 'network'
+  | 'payload-defaults'
+  | 'payload-overrides'
+  | 'payload-filters';
+
+type VisualSubsection = {
+  id: VisualSubsectionId;
+  title: string;
+  targetId: string;
+  errorCount: number;
+  systemSectionId?: SystemSectionId;
+};
 
 type VisualSection = {
   id: VisualSectionId;
@@ -58,13 +76,13 @@ type VisualSection = {
   description: string;
   icon: ComponentType<IconProps>;
   errorCount: number;
+  subsections?: VisualSubsection[];
 };
 
 type SystemSection = {
   id: SystemSectionId;
   title: string;
   description: string;
-  icon: ComponentType<IconProps>;
   errorCount: number;
 };
 
@@ -104,8 +122,12 @@ function ToggleRow({ title, description, checked, disabled, onChange }: ToggleRo
   );
 }
 
-function SectionGrid({ children }: { children: ReactNode }) {
-  return <div className={styles.sectionGrid}>{children}</div>;
+function SectionGrid({ children, id }: { children: ReactNode; id?: string }) {
+  return (
+    <div id={id} className={styles.sectionGrid}>
+      {children}
+    </div>
+  );
 }
 
 function SectionStack({ children }: { children: ReactNode }) {
@@ -156,16 +178,18 @@ function StrategyGroup({
 }
 
 function SectionSubsection({
+  id,
   title,
   description,
   children,
 }: {
+  id?: string;
   title: string;
   description?: string;
   children: ReactNode;
 }) {
   return (
-    <div className={styles.subsection}>
+    <div id={id} className={styles.subsection}>
       <div className={styles.subsectionHeader}>
         <h3 className={styles.subsectionTitle}>{title}</h3>
         {description ? <p className={styles.subsectionDescription}>{description}</p> : null}
@@ -285,7 +309,7 @@ export function VisualConfigEditor({
   const { t } = useTranslation();
   const useCompactNavigation = useMediaQuery('(max-width: 1180px)');
   const sectionNavLabelId = useId();
-  const systemSectionNavLabelId = useId();
+  const subsectionNavLabelId = useId();
   const routingStrategyLabelId = useId();
   const routingStrategyHintId = `${routingStrategyLabelId}-hint`;
   const disableImageGenerationLabelId = useId();
@@ -310,6 +334,14 @@ export function VisualConfigEditor({
   const nonstreamKeepaliveErrorId = `${nonstreamKeepaliveInputId}-error`;
   const [activeSectionId, setActiveSectionId] = useState<VisualSectionId>('system');
   const [activeSystemSectionId, setActiveSystemSectionId] = useState<SystemSectionId>('runtime');
+  const [activeSubsections, setActiveSubsections] = useState<
+    Partial<Record<VisualSectionId, VisualSubsectionId>>
+  >({
+    server: 'server-listener',
+    auth: 'auth-remote',
+    system: 'runtime',
+    payload: 'payload-defaults',
+  });
 
   const isKeepaliveDisabled =
     values.streaming.keepaliveSeconds === '' || values.streaming.keepaliveSeconds === '0';
@@ -623,7 +655,6 @@ export function VisualConfigEditor({
         id: 'runtime',
         title: t('config_management.visual.sections.system.runtime_group_title'),
         description: t('config_management.visual.sections.system.runtime_group_desc'),
-        icon: IconSettings,
         errorCount: countErrors([
           'errorLogsMaxFiles',
           'logsMaxTotalSizeMb',
@@ -634,14 +665,12 @@ export function VisualConfigEditor({
         id: 'plugins',
         title: t('config_management.visual.sections.system.plugins_group_title'),
         description: t('config_management.visual.sections.system.plugins_group_desc'),
-        icon: IconPlug,
         errorCount: 0,
       },
       {
         id: 'headers',
         title: t('config_management.visual.sections.system.headers_group_title'),
         description: t('config_management.visual.sections.system.headers_group_desc'),
-        icon: IconCode,
         errorCount: countErrors([
           'codexAbnormalReasoningRetryStreamBufferMaxBytes',
           'codexAbnormalReasoningRetryMaxRetries',
@@ -653,7 +682,6 @@ export function VisualConfigEditor({
         id: 'network',
         title: t('config_management.visual.sections.system.network_group_title'),
         description: t('config_management.visual.sections.system.network_group_desc'),
-        icon: IconNetwork,
         errorCount: countErrors([
           'requestRetry',
           'maxRetryCredentials',
@@ -674,13 +702,41 @@ export function VisualConfigEditor({
         description: t('config_management.visual.sections.server.description'),
         icon: IconSettings,
         errorCount: countErrors(['port']),
+        subsections: [
+          {
+            id: 'server-listener',
+            title: t('config_management.visual.sections.server.listener_group_title'),
+            targetId: 'server-listener',
+            errorCount: countErrors(['port']),
+          },
+          {
+            id: 'server-tls',
+            title: t('config_management.visual.sections.tls.title'),
+            targetId: 'server-tls',
+            errorCount: 0,
+          },
+        ],
       },
       {
         id: 'auth',
-        title: t('config_management.visual.sections.auth.title'),
-        description: t('config_management.visual.sections.auth.description'),
+        title: t('config_management.visual.sections.auth.group_title'),
+        description: t('config_management.visual.sections.auth.group_description'),
         icon: IconKey,
         errorCount: 0,
+        subsections: [
+          {
+            id: 'auth-remote',
+            title: t('config_management.visual.sections.remote.title'),
+            targetId: 'auth-remote',
+            errorCount: 0,
+          },
+          {
+            id: 'auth-credentials',
+            title: t('config_management.visual.sections.auth.credentials_title'),
+            targetId: 'auth-credentials',
+            errorCount: 0,
+          },
+        ],
       },
       {
         id: 'system',
@@ -701,6 +757,13 @@ export function VisualConfigEditor({
           'codexAbnormalReasoningRetryHedgeDelayMs',
           'codexAbnormalReasoningRetryReasoningTokens',
         ]),
+        subsections: systemSections.map((section) => ({
+          id: section.id,
+          title: section.title,
+          targetId: `system-panel-${section.id}`,
+          errorCount: section.errorCount,
+          systemSectionId: section.id,
+        })),
       },
       {
         id: 'quota',
@@ -726,9 +789,29 @@ export function VisualConfigEditor({
         description: t('config_management.visual.sections.payload.description'),
         icon: IconCode,
         errorCount: hasPayloadValidationErrors ? 1 : 0,
+        subsections: [
+          {
+            id: 'payload-defaults',
+            title: t('config_management.visual.sections.payload.default_rules'),
+            targetId: 'payload-defaults',
+            errorCount: 0,
+          },
+          {
+            id: 'payload-overrides',
+            title: t('config_management.visual.sections.payload.override_rules'),
+            targetId: 'payload-overrides',
+            errorCount: 0,
+          },
+          {
+            id: 'payload-filters',
+            title: t('config_management.visual.sections.payload.filter_rules'),
+            targetId: 'payload-filters',
+            errorCount: 0,
+          },
+        ],
       },
     ],
-    [countErrors, hasPayloadValidationErrors, t]
+    [countErrors, hasPayloadValidationErrors, systemSections, t]
   );
 
   const hasValidationIssues =
@@ -736,22 +819,42 @@ export function VisualConfigEditor({
   const activeSection = sections.find((section) => section.id === activeSectionId) ?? sections[0];
   const activeSystemSection =
     systemSections.find((section) => section.id === activeSystemSectionId) ?? systemSections[0];
-  const ActiveSystemIcon = activeSystemSection.icon;
+  const activeSubsectionId =
+    activeSectionId === 'system'
+      ? activeSystemSectionId
+      : (activeSubsections[activeSectionId] ?? activeSection.subsections?.[0]?.id);
 
-  const handleSectionJump = useCallback((sectionId: VisualSectionId) => {
-    setActiveSectionId(sectionId);
+  const handleSectionJump = useCallback(
+    (sectionId: VisualSectionId) => {
+      const firstSubsection = sections.find((section) => section.id === sectionId)
+        ?.subsections?.[0];
 
-    if (typeof window === 'undefined') return;
-    window.requestAnimationFrame(() => {
-      document.getElementById(sectionId)?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start',
+      setActiveSectionId(sectionId);
+      if (firstSubsection) {
+        setActiveSubsections((current) => ({
+          ...current,
+          [sectionId]: firstSubsection.id,
+        }));
+
+        if (firstSubsection.systemSectionId) {
+          setActiveSystemSectionId(firstSubsection.systemSectionId);
+        }
+      }
+
+      if (typeof window === 'undefined') return;
+      window.requestAnimationFrame(() => {
+        document.getElementById(sectionId)?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        });
       });
-    });
-  }, []);
+    },
+    [sections]
+  );
 
   const handleSystemSectionChange = useCallback((sectionId: SystemSectionId) => {
     setActiveSystemSectionId(sectionId);
+    setActiveSubsections((current) => ({ ...current, system: sectionId }));
 
     if (typeof window === 'undefined') return;
     window.requestAnimationFrame(() => {
@@ -761,6 +864,26 @@ export function VisualConfigEditor({
       });
     });
   }, []);
+
+  const handleSubsectionJump = useCallback(
+    (sectionId: VisualSectionId, subsection: VisualSubsection) => {
+      setActiveSectionId(sectionId);
+      setActiveSubsections((current) => ({ ...current, [sectionId]: subsection.id }));
+
+      if (subsection.systemSectionId) {
+        setActiveSystemSectionId(subsection.systemSectionId);
+      }
+
+      if (typeof window === 'undefined') return;
+      window.requestAnimationFrame(() => {
+        document.getElementById(subsection.targetId)?.scrollIntoView({
+          behavior: 'smooth',
+          block: subsection.systemSectionId ? 'nearest' : 'start',
+        });
+      });
+    },
+    []
+  );
 
   const handleSystemTabKeyDown = useCallback(
     (event: KeyboardEvent<HTMLButtonElement>, currentIndex: number) => {
@@ -806,36 +929,64 @@ export function VisualConfigEditor({
     >
       {sections.map((section, index) => {
         const Icon = section.icon;
+        const isActive = activeSectionId === section.id;
 
         return (
-          <button
-            key={section.id}
-            type="button"
-            className={`${styles.navButton} ${
-              activeSectionId === section.id ? styles.navButtonActive : ''
-            }`}
-            aria-controls={section.id}
-            aria-current={activeSectionId === section.id ? 'true' : undefined}
-            onClick={() => handleSectionJump(section.id)}
-          >
-            <span className={styles.navIndex}>{String(index + 1).padStart(2, '0')}</span>
-            <span className={styles.navMain}>
-              <span className={styles.navHeadingRow}>
-                <span className={styles.navLabelWrap}>
-                  <span className={styles.navIcon}>
-                    <Icon size={14} />
+          <div key={section.id} className={styles.navGroup}>
+            <button
+              type="button"
+              className={`${styles.navButton} ${isActive ? styles.navButtonActive : ''}`}
+              aria-controls={section.id}
+              aria-current={isActive ? 'true' : undefined}
+              onClick={() => handleSectionJump(section.id)}
+            >
+              <span className={styles.navIndex}>{String(index + 1).padStart(2, '0')}</span>
+              <span className={styles.navMain}>
+                <span className={styles.navHeadingRow}>
+                  <span className={styles.navLabelWrap}>
+                    <span className={styles.navIcon}>
+                      <Icon size={14} />
+                    </span>
+                    <span className={styles.navLabel}>{section.title}</span>
                   </span>
-                  <span className={styles.navLabel}>{section.title}</span>
+                  {section.errorCount > 0 ? (
+                    <span className={styles.navBadge} aria-hidden="true">
+                      {section.errorCount}
+                    </span>
+                  ) : null}
                 </span>
-                {section.errorCount > 0 ? (
-                  <span className={styles.navBadge} aria-hidden="true">
-                    {section.errorCount}
-                  </span>
-                ) : null}
               </span>
-              <span className={styles.navDescription}>{section.description}</span>
-            </span>
-          </button>
+            </button>
+
+            {isActive && section.subsections?.length ? (
+              <div className={styles.navSubList}>
+                {section.subsections.map((subsection) => {
+                  const isSubsectionActive = activeSubsectionId === subsection.id;
+
+                  return (
+                    <button
+                      key={subsection.id}
+                      type="button"
+                      className={`${styles.navSubButton} ${
+                        isSubsectionActive ? styles.navSubButtonActive : ''
+                      }`}
+                      aria-controls={subsection.targetId}
+                      aria-current={isSubsectionActive ? 'true' : undefined}
+                      onClick={() => handleSubsectionJump(section.id, subsection)}
+                    >
+                      <span className={styles.navSubIndicator} aria-hidden="true" />
+                      <span className={styles.navSubLabel}>{subsection.title}</span>
+                      {subsection.errorCount > 0 ? (
+                        <span className={styles.navSubBadge} aria-hidden="true">
+                          {subsection.errorCount}
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
         );
       })}
     </nav>
@@ -848,7 +999,6 @@ export function VisualConfigEditor({
       aria-label={t('config_management.visual.sections.system.group_navigation_label')}
     >
       {systemSections.map((section, index) => {
-        const Icon = section.icon;
         const isActive = activeSystemSectionId === section.id;
 
         return (
@@ -864,9 +1014,6 @@ export function VisualConfigEditor({
             onClick={() => handleSystemSectionChange(section.id)}
             onKeyDown={(event) => handleSystemTabKeyDown(event, index)}
           >
-            <span className={styles.systemTabIcon} aria-hidden="true">
-              <Icon size={15} />
-            </span>
             <span className={styles.systemTabTitle}>{section.title}</span>
             {section.errorCount > 0 ? (
               <span className={styles.systemTabBadge} aria-hidden="true">
@@ -885,7 +1032,7 @@ export function VisualConfigEditor({
         {useCompactNavigation ? (
           <div
             className={`${styles.compactNavigation} ${
-              activeSectionId === 'system' ? styles.compactNavigationWithSystem : ''
+              activeSection.subsections?.length ? styles.compactNavigationWithSubsection : ''
             }`}
           >
             <div className={styles.compactNavigationField}>
@@ -906,26 +1053,33 @@ export function VisualConfigEditor({
               />
             </div>
 
-            {activeSectionId === 'system' ? (
+            {activeSection.subsections?.length ? (
               <div className={styles.compactNavigationField}>
                 <div className={styles.compactNavigationHeader}>
-                  <span id={systemSectionNavLabelId} className={styles.compactNavigationLabel}>
-                    {t('config_management.visual.sections.system.group_navigation_label')}
+                  <span id={subsectionNavLabelId} className={styles.compactNavigationLabel}>
+                    {t('config_management.visual.subsection_navigation', {
+                      section: activeSection.title,
+                    })}
                   </span>
                   <span className={styles.compactNavigationCurrent}>
-                    {activeSystemSection?.title}
+                    {activeSection.subsections.find(
+                      (subsection) => subsection.id === activeSubsectionId
+                    )?.title ?? activeSection.subsections[0]?.title}
                   </span>
                 </div>
                 <Select
-                  value={activeSystemSectionId}
-                  options={systemSections.map((section) => ({
-                    value: section.id,
-                    label: section.title,
+                  value={activeSubsectionId ?? activeSection.subsections[0]?.id ?? ''}
+                  options={activeSection.subsections.map((subsection) => ({
+                    value: subsection.id,
+                    label: subsection.title,
                   }))}
-                  ariaLabelledBy={systemSectionNavLabelId}
-                  onChange={(nextSectionId) =>
-                    handleSystemSectionChange(nextSectionId as SystemSectionId)
-                  }
+                  ariaLabelledBy={subsectionNavLabelId}
+                  onChange={(nextSubsectionId) => {
+                    const subsection = activeSection.subsections?.find(
+                      (candidate) => candidate.id === nextSubsectionId
+                    );
+                    if (subsection) handleSubsectionJump(activeSection.id, subsection);
+                  }}
                 />
               </div>
             ) : null}
@@ -967,7 +1121,7 @@ export function VisualConfigEditor({
             description={t('config_management.visual.sections.server.description')}
           >
             <SectionStack>
-              <SectionGrid>
+              <SectionGrid id="server-listener">
                 <Input
                   label={t('config_management.visual.sections.server.host')}
                   placeholder="0.0.0.0"
@@ -987,43 +1141,55 @@ export function VisualConfigEditor({
               </SectionGrid>
 
               <SectionSubsection
+                id="server-tls"
                 title={t('config_management.visual.sections.tls.title')}
                 description={t('config_management.visual.sections.tls.description')}
               >
                 <SectionStack>
-                  <ToggleRow
-                    title={t('config_management.visual.sections.tls.enable')}
-                    description={t('config_management.visual.sections.tls.enable_desc')}
-                    checked={values.tlsEnable}
-                    disabled={disabled}
-                    onChange={(tlsEnable) => onChange({ tlsEnable })}
-                  />
+                  <SectionGrid>
+                    <ToggleRow
+                      title={t('config_management.visual.sections.tls.enable')}
+                      description={t('config_management.visual.sections.tls.enable_desc')}
+                      checked={values.tlsEnable}
+                      disabled={disabled}
+                      onChange={(tlsEnable) => onChange({ tlsEnable })}
+                    />
+                  </SectionGrid>
 
                   {values.tlsEnable ? (
-                    <>
-                      <Divider />
-                      <SectionGrid>
-                        <Input
-                          label={t('config_management.visual.sections.tls.cert')}
-                          placeholder="/path/to/cert.pem"
-                          value={values.tlsCert}
-                          onChange={(e) => onChange({ tlsCert: e.target.value })}
-                          disabled={disabled}
-                        />
-                        <Input
-                          label={t('config_management.visual.sections.tls.key')}
-                          placeholder="/path/to/key.pem"
-                          value={values.tlsKey}
-                          onChange={(e) => onChange({ tlsKey: e.target.value })}
-                          disabled={disabled}
-                        />
-                      </SectionGrid>
-                    </>
+                    <SectionGrid>
+                      <Input
+                        label={t('config_management.visual.sections.tls.cert')}
+                        placeholder="/path/to/cert.pem"
+                        value={values.tlsCert}
+                        onChange={(e) => onChange({ tlsCert: e.target.value })}
+                        disabled={disabled}
+                      />
+                      <Input
+                        label={t('config_management.visual.sections.tls.key')}
+                        placeholder="/path/to/key.pem"
+                        value={values.tlsKey}
+                        onChange={(e) => onChange({ tlsKey: e.target.value })}
+                        disabled={disabled}
+                      />
+                    </SectionGrid>
                   ) : null}
                 </SectionStack>
               </SectionSubsection>
+            </SectionStack>
+          </ConfigSection>
 
+          <ConfigSection
+            id="auth"
+            hidden={activeSectionId !== 'auth'}
+            indexLabel="02"
+            icon={<IconKey size={16} />}
+            title={t('config_management.visual.sections.auth.group_title')}
+            description={t('config_management.visual.sections.auth.group_description')}
+          >
+            <SectionStack>
               <SectionSubsection
+                id="auth-remote"
                 title={t('config_management.visual.sections.remote.title')}
                 description={t('config_management.visual.sections.remote.description')}
               >
@@ -1078,33 +1244,32 @@ export function VisualConfigEditor({
                   </SectionGrid>
                 </SectionStack>
               </SectionSubsection>
-            </SectionStack>
-          </ConfigSection>
 
-          <ConfigSection
-            id="auth"
-            hidden={activeSectionId !== 'auth'}
-            indexLabel="02"
-            icon={<IconKey size={16} />}
-            title={t('config_management.visual.sections.auth.title')}
-            description={t('config_management.visual.sections.auth.description')}
-          >
-            <SectionStack>
-              <Input
-                label={t('config_management.visual.sections.auth.auth_dir')}
-                placeholder="~/.cli-proxy-api"
-                value={values.authDir}
-                onChange={(e) => onChange({ authDir: e.target.value })}
-                disabled={disabled}
-                hint={t('config_management.visual.sections.auth.auth_dir_hint')}
-              />
-              <div className={styles.subsection}>
-                <ApiKeysCardEditor
-                  value={values.apiKeysText}
-                  disabled={disabled}
-                  onChange={handleApiKeysTextChange}
-                />
-              </div>
+              <SectionSubsection
+                id="auth-credentials"
+                title={t('config_management.visual.sections.auth.credentials_title')}
+                description={t('config_management.visual.sections.auth.description')}
+              >
+                <SectionStack>
+                  <SectionGrid>
+                    <Input
+                      label={t('config_management.visual.sections.auth.auth_dir')}
+                      placeholder="~/.cli-proxy-api"
+                      value={values.authDir}
+                      onChange={(e) => onChange({ authDir: e.target.value })}
+                      disabled={disabled}
+                      hint={t('config_management.visual.sections.auth.auth_dir_hint')}
+                    />
+                  </SectionGrid>
+                  <div className={styles.subsection}>
+                    <ApiKeysCardEditor
+                      value={values.apiKeysText}
+                      disabled={disabled}
+                      onChange={handleApiKeysTextChange}
+                    />
+                  </div>
+                </SectionStack>
+              </SectionSubsection>
             </SectionStack>
           </ConfigSection>
 
@@ -1119,17 +1284,7 @@ export function VisualConfigEditor({
             <div className={styles.systemWorkspace}>
               {!useCompactNavigation ? systemTabs : null}
 
-              <div className={styles.systemPanelIntro}>
-                <span className={styles.systemPanelIntroIcon} aria-hidden="true">
-                  <ActiveSystemIcon size={18} />
-                </span>
-                <div className={styles.systemPanelIntroCopy}>
-                  <h3 className={styles.systemPanelIntroTitle}>{activeSystemSection.title}</h3>
-                  <p className={styles.systemPanelIntroDescription}>
-                    {activeSystemSection.description}
-                  </p>
-                </div>
-              </div>
+              <p className={styles.systemPanelDescription}>{activeSystemSection.description}</p>
 
               <div className={styles.systemPanels}>
                 <div
@@ -1144,9 +1299,7 @@ export function VisualConfigEditor({
                   <SectionStack>
                     <SectionSubsection
                       title={t('config_management.visual.sections.system.core_controls_title')}
-                      description={t(
-                        'config_management.visual.sections.system.core_controls_desc'
-                      )}
+                      description={t('config_management.visual.sections.system.core_controls_desc')}
                     >
                       <SectionGrid>
                         <ToggleRow
@@ -2307,6 +2460,7 @@ export function VisualConfigEditor({
           >
             <SectionStack>
               <SectionSubsection
+                id="payload-defaults"
                 title={t('config_management.visual.sections.payload.default_rules')}
                 description={t('config_management.visual.sections.payload.default_rules_desc')}
               >
@@ -2330,6 +2484,7 @@ export function VisualConfigEditor({
               </SectionSubsection>
 
               <SectionSubsection
+                id="payload-overrides"
                 title={t('config_management.visual.sections.payload.override_rules')}
                 description={t('config_management.visual.sections.payload.override_rules_desc')}
               >
@@ -2355,6 +2510,7 @@ export function VisualConfigEditor({
               </SectionSubsection>
 
               <SectionSubsection
+                id="payload-filters"
                 title={t('config_management.visual.sections.payload.filter_rules')}
                 description={t('config_management.visual.sections.payload.filter_rules_desc')}
               >

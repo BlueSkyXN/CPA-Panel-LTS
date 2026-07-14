@@ -1281,10 +1281,12 @@
     "visual": {
       "notice": "視覺化模式涵蓋常用欄位，未涵蓋的設定仍需在原始檔模式中查看或編輯。",
       "quick_jump": "快速跳轉",
+      "subsection_navigation": "{{section}}分組",
       "sections": {
         "server": {
           "title": "伺服器設定",
           "description": "基本伺服器設定",
+          "listener_group_title": "監聽位址",
           "host": "主機位址",
           "port": "連接埠"
         },
@@ -1312,6 +1314,9 @@
         "auth": {
           "title": "驗證設定",
           "description": "API 金鑰與驗證檔案目錄設定",
+          "group_title": "存取與驗證",
+          "group_description": "遠端管理、控制面板存取、API 金鑰與驗證檔案",
+          "credentials_title": "驗證檔案與 API 金鑰",
           "auth_dir": "驗證檔案目錄（auth-dir）",
           "auth_dir_hint": "存放驗證檔案的目錄路徑（支援 ~）"
         },
