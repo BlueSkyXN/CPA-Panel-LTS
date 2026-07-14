@@ -2,10 +2,11 @@
 @use '../styles/variables' as *;
 
 .container {
-  --config-accent: #3f7f78;
-  --config-accent-strong: #2f6b65;
-  --config-accent-soft: color-mix(in srgb, var(--config-accent) 12%, transparent);
-  --config-accent-border: color-mix(in srgb, var(--config-accent) 32%, var(--border-color));
+  --config-accent: #526b94;
+  --config-accent-strong: #344b70;
+  --config-accent-hover: #425b86;
+  --config-accent-surface: color-mix(in srgb, var(--bg-primary) 94%, var(--config-accent) 6%);
+  --config-accent-border: color-mix(in srgb, var(--border-color) 78%, var(--config-accent) 22%);
 
   width: min(100%, 1480px);
   min-height: 100%;
@@ -92,7 +93,7 @@
 
 .tabActive {
   color: var(--config-accent-strong);
-  background: var(--config-accent-soft);
+  background: var(--config-accent-surface);
   border-color: var(--config-accent-border);
   box-shadow: inset 0 -2px 0 var(--config-accent);
 }
@@ -302,10 +303,11 @@
 }
 
 .actionBar {
-  --config-accent: #3f7f78;
-  --config-accent-strong: #2f6b65;
-  --config-accent-soft: color-mix(in srgb, var(--config-accent) 12%, transparent);
-  --config-accent-border: color-mix(in srgb, var(--config-accent) 32%, var(--border-color));
+  --config-accent: #526b94;
+  --config-accent-strong: #344b70;
+  --config-accent-hover: #425b86;
+  --config-accent-surface: color-mix(in srgb, var(--bg-primary) 94%, var(--config-accent) 6%);
+  --config-accent-border: color-mix(in srgb, var(--border-color) 78%, var(--config-accent) 22%);
 
   position: fixed;
   left: var(--content-center-x, 50%);
@@ -318,8 +320,7 @@
   width: min(
     1480px,
     calc(
-      200vw - var(--content-center-x, 50vw) - var(--content-center-x, 50vw) -
-        clamp(40px, 6vw, 96px)
+      200vw - var(--content-center-x, 50vw) - var(--content-center-x, 50vw) - clamp(40px, 6vw, 96px)
     )
   );
   max-width: calc(100vw - 24px);
@@ -397,7 +398,7 @@
 
   &:hover:not(:disabled) {
     border-color: var(--config-accent-border);
-    background: var(--config-accent-soft);
+    background: var(--config-accent-surface);
     color: var(--config-accent-strong);
     transform: translateY(-1px);
   }
@@ -420,8 +421,8 @@
   color: #fff;
 
   &:hover:not(:disabled) {
-    border-color: var(--config-accent-strong);
-    background: var(--config-accent-strong);
+    border-color: var(--config-accent-hover);
+    background: var(--config-accent-hover);
     color: #fff;
   }
 }
@@ -467,10 +468,11 @@
 
 :global([data-theme='dark']) .container,
 :global([data-theme='dark']) .actionBar {
-  --config-accent: #69aaa2;
-  --config-accent-strong: #8dc3bd;
-  --config-accent-soft: color-mix(in srgb, var(--config-accent) 14%, transparent);
-  --config-accent-border: color-mix(in srgb, var(--config-accent) 42%, var(--border-color));
+  --config-accent: #58719a;
+  --config-accent-strong: #b6c3dc;
+  --config-accent-hover: #425b86;
+  --config-accent-surface: color-mix(in srgb, var(--bg-primary) 88%, var(--config-accent) 12%);
+  --config-accent-border: color-mix(in srgb, var(--border-color) 62%, var(--config-accent) 38%);
 }
 
 @media (prefers-reduced-motion: reduce) {
