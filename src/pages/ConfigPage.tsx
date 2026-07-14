@@ -1,12 +1,4 @@
-import {
-  Suspense,
-  lazy,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
@@ -472,10 +464,10 @@ export function ConfigPage() {
   };
 
   const getStatusClass = () => {
+    if (disableControls || loading || saving) return '';
     if (error || hasVisualModeError || hasVisualValidationErrors) return styles.error;
     if (isDirty) return styles.modified;
-    if (!loading && !saving) return styles.saved;
-    return '';
+    return styles.saved;
   };
 
   const getActionStatusText = () => {

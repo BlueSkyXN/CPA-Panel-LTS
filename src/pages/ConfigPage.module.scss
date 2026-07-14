@@ -7,17 +7,59 @@
   --config-accent-hover: #425b86;
   --config-accent-surface: color-mix(in srgb, var(--bg-primary) 94%, var(--config-accent) 6%);
   --config-accent-border: color-mix(in srgb, var(--border-color) 78%, var(--config-accent) 22%);
+  --config-focus-ring: color-mix(in srgb, var(--config-accent) 18%, transparent);
+  --config-group-surface: color-mix(in srgb, var(--bg-primary) 96%, var(--text-primary) 4%);
+  --config-group-border: color-mix(in srgb, var(--border-color) 88%, transparent);
 
-  width: min(100%, 1480px);
+  width: min(100%, 1320px);
   min-height: 100%;
   display: flex;
   flex-direction: column;
   gap: clamp(18px, 2.4vw, 28px);
   margin: 0 auto;
-  overflow-y: auto;
   padding-bottom: calc(
     var(--config-action-bar-height, 0px) + 18px + env(safe-area-inset-bottom) + #{$spacing-md}
   );
+}
+
+// Expose the shell scrollport after route animation so nested config navigation can stay sticky.
+:global(.main-content):has(
+  > :global(.page-transition:not(.page-transition--animating))
+    > :global(.page-transition__layer[aria-hidden='false'])
+    .container
+) {
+  overflow-x: clip;
+  overflow-y: visible;
+}
+
+:global(.page-transition:not(.page-transition--animating)):has(
+  > :global(.page-transition__layer[aria-hidden='false']) .container
+) {
+  overflow: visible;
+}
+
+:global(.page-transition:not(.page-transition--animating))
+  > :global(.page-transition__layer[aria-hidden='false']):has(.container) {
+  transform: none;
+}
+
+@include mobile {
+  :global(.app-shell):has(
+    :global(.page-transition:not(.page-transition--animating))
+      > :global(.page-transition__layer[aria-hidden='false'])
+      .container
+  ) {
+    overflow: visible;
+  }
+
+  :global(.content):has(
+    > :global(.main-content)
+      > :global(.page-transition:not(.page-transition--animating))
+      > :global(.page-transition__layer[aria-hidden='false'])
+      .container
+  ) {
+    overflow: visible;
+  }
 }
 
 .pageHeader {
@@ -35,7 +77,7 @@
 }
 
 .pageTitle {
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 700;
   color: var(--text-primary);
   margin: 0;
@@ -46,11 +88,11 @@
   display: inline-grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 3px;
-  width: min(100%, 356px);
+  width: min(100%, 340px);
   padding: 3px;
-  border: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--bg-primary) 66%, transparent);
+  border: 1px solid var(--config-group-border);
+  border-radius: 9px;
+  background: var(--config-group-surface);
 
   @media (max-width: 900px) {
     width: 100%;
@@ -59,9 +101,9 @@
 
 .tabItem {
   @include button-reset;
-  min-height: 38px;
+  min-height: 34px;
   padding: 0 12px;
-  border-radius: 7px;
+  border-radius: 6px;
   border: 1px solid transparent;
   color: var(--text-secondary);
   font-size: 13px;
@@ -84,17 +126,21 @@
     cursor: not-allowed;
   }
 
-  &:focus,
+  &:focus:not(:focus-visible) {
+    outline: none;
+  }
+
   &:focus-visible {
     outline: 2px solid var(--config-accent);
     outline-offset: 2px;
+    box-shadow: 0 0 0 3px var(--config-focus-ring);
   }
 }
 
 .tabActive {
   color: var(--config-accent-strong);
-  background: var(--config-accent-surface);
-  border-color: var(--config-accent-border);
+  background: var(--bg-primary);
+  border-color: transparent;
   box-shadow: inset 0 -2px 0 var(--config-accent);
 }
 
@@ -285,21 +331,21 @@
 }
 
 .modified {
+  --config-status-color: var(--quota-medium-color, #d4a64f);
+
   color: var(--warning-text);
-  background: var(--warning-bg);
-  border-color: var(--warning-border);
 }
 
 .saved {
-  color: var(--success-color);
-  background: color-mix(in srgb, var(--success-color) 10%, transparent);
-  border-color: color-mix(in srgb, var(--success-color) 34%, var(--border-color));
+  --config-status-color: var(--success-color);
+
+  color: var(--text-secondary);
 }
 
 .error {
-  color: var(--warning-text);
-  background: var(--warning-bg);
-  border-color: var(--warning-border);
+  --config-status-color: var(--error-color);
+
+  color: var(--error-color);
 }
 
 .actionBar {
@@ -308,6 +354,8 @@
   --config-accent-hover: #425b86;
   --config-accent-surface: color-mix(in srgb, var(--bg-primary) 94%, var(--config-accent) 6%);
   --config-accent-border: color-mix(in srgb, var(--border-color) 78%, var(--config-accent) 22%);
+  --config-focus-ring: color-mix(in srgb, var(--config-accent) 18%, transparent);
+  --config-group-border: color-mix(in srgb, var(--border-color) 88%, transparent);
 
   position: fixed;
   left: var(--content-center-x, 50%);
@@ -318,19 +366,18 @@
   justify-content: space-between;
   gap: 14px;
   width: min(
-    1480px,
+    1320px,
     calc(
       200vw - var(--content-center-x, 50vw) - var(--content-center-x, 50vw) - clamp(40px, 6vw, 96px)
     )
   );
   max-width: calc(100vw - 24px);
   min-width: 0;
-  padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--border-color) 82%, var(--config-accent) 18%);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--bg-primary) 91%, transparent);
-  box-shadow: 0 10px 28px rgb(45 42 38 / 0.12);
-  backdrop-filter: blur(14px);
+  padding: 8px 10px;
+  border: 1px solid var(--config-group-border);
+  border-radius: 10px;
+  background: var(--bg-primary);
+  box-shadow: 0 10px 24px -12px rgb(45 42 38 / 0.24);
   transform: translateX(-50%);
 }
 
@@ -344,12 +391,13 @@
 .actionStatus {
   display: inline-flex;
   align-items: center;
+  gap: 8px;
   min-width: 0;
-  min-height: 32px;
-  padding: 0 11px;
-  border-radius: 999px;
-  border: 1px solid transparent;
-  color: var(--text-primary);
+  min-height: 28px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 0;
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 650;
   line-height: 1.2;
@@ -357,6 +405,17 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+
+  &::before {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--config-status-color, var(--text-tertiary));
+    box-shadow: 0 0 0 2px
+      color-mix(in srgb, var(--config-status-color, var(--text-tertiary)) 16%, transparent);
+    content: '';
+    flex: 0 0 auto;
+  }
 }
 
 .actionStatusCompact {
@@ -379,12 +438,12 @@
   align-items: center;
   justify-content: center;
   gap: 7px;
-  min-width: 102px;
-  height: 40px;
-  padding: 0 14px;
+  min-width: 94px;
+  height: 36px;
+  padding: 0 13px;
   border: 1px solid var(--border-color);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-secondary) 68%, transparent);
+  border-radius: 7px;
+  background: var(--bg-primary);
   color: var(--text-primary);
   font-size: 13px;
   font-weight: 650;
@@ -393,20 +452,22 @@
     background-color 0.15s ease,
     border-color 0.15s ease,
     color 0.15s ease,
-    transform 0.15s ease,
     opacity 0.15s ease;
 
   &:hover:not(:disabled) {
     border-color: var(--config-accent-border);
     background: var(--config-accent-surface);
     color: var(--config-accent-strong);
-    transform: translateY(-1px);
   }
 
-  &:focus,
+  &:focus:not(:focus-visible) {
+    outline: none;
+  }
+
   &:focus-visible {
     outline: 2px solid var(--config-accent);
     outline-offset: 2px;
+    box-shadow: 0 0 0 3px var(--config-focus-ring);
   }
 
   &:disabled {
@@ -473,22 +534,12 @@
   --config-accent-hover: #425b86;
   --config-accent-surface: color-mix(in srgb, var(--bg-primary) 88%, var(--config-accent) 12%);
   --config-accent-border: color-mix(in srgb, var(--border-color) 62%, var(--config-accent) 38%);
+  --config-focus-ring: color-mix(in srgb, var(--config-accent) 24%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .tabItem,
   .actionButton {
     transition: none;
-  }
-
-  .actionButton:hover:not(:disabled) {
-    transform: none;
-  }
-}
-
-@media (prefers-reduced-transparency: reduce) {
-  .actionBar {
-    background: var(--bg-primary);
-    backdrop-filter: none;
   }
 }

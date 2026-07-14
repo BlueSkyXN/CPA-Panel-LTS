@@ -1255,10 +1255,12 @@
     "visual": {
       "notice": "Visual mode covers common fields. Review or edit unsupported config.yaml entries in source mode.",
       "quick_jump": "Quick Jump",
+      "subsection_navigation": "{{section}} groups",
       "sections": {
         "server": {
           "title": "Server Configuration",
           "description": "Basic server settings",
+          "listener_group_title": "Listener",
           "host": "Host Address",
           "port": "Port"
         },
@@ -1286,6 +1288,9 @@
         "auth": {
           "title": "Authentication Configuration",
           "description": "API keys and authentication directory settings",
+          "group_title": "Access & Authentication",
+          "group_description": "Remote management, control-panel access, API keys, and authentication files",
+          "credentials_title": "Authentication Files & API Keys",
           "auth_dir": "Auth Directory (auth-dir)",
           "auth_dir_hint": "Directory path for authentication files (supports ~)"
         },

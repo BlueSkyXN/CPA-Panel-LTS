@@ -1255,10 +1255,12 @@
     "visual": {
       "notice": "可视化模式覆盖常用字段，未覆盖的配置仍需在源文件模式中查看或编辑。",
       "quick_jump": "快速跳转",
+      "subsection_navigation": "{{section}}分组",
       "sections": {
         "server": {
           "title": "服务器配置",
           "description": "基础服务器设置",
+          "listener_group_title": "监听地址",
           "host": "主机地址",
           "port": "端口"
         },
@@ -1286,6 +1288,9 @@
         "auth": {
           "title": "认证配置",
           "description": "API 密钥与认证文件目录设置",
+          "group_title": "访问与认证",
+          "group_description": "远程管理、控制面板访问、API 密钥与认证文件",
+          "credentials_title": "认证文件与 API 密钥",
           "auth_dir": "认证文件目录 (auth-dir)",
           "auth_dir_hint": "存放认证文件的目录路径（支持 ~）"
         },
