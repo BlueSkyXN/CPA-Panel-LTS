@@ -17,17 +17,17 @@ main = CPA-Panel-LTS product line
      + local downstream panel customizations
 ```
 
-## Audited upstream intake snapshot (2026-07-12)
+## Audited upstream intake snapshot (2026-07-14)
 
-Refs captured before Panel PR #20:
+Refs captured after Panel PR #22:
 
-- `origin/main`: `cb97685678d862890c6d5bd845a4ef596baffb71`
-- `upstream/main`: `79589155875d35a96e47787a61ac15ff050c1149` (`v1.18.2`)
+- `origin/main`: `203fbb79f44bfff37c06c07553dcd130eea6b5ef`
+- `upstream/main`: `d3df9b074ecc8c1161d998d65e09948bcbcaa6ef` (`v1.18.3`)
 - merge-base: `8ed837c3d734c3970a6d6799c557bb6a6753360d`
-- `origin/main..upstream/main`: 241 commits
-- `upstream/main..origin/main`: 130 commits
+- `origin/main..upstream/main`: 242 commits
+- `upstream/main..origin/main`: 138 commits
 
-The raw 241-commit count is not the selective-port backlog. Panel PR #10 and PR #16 already adapted substantial upstream work without making those upstream commits ancestors of `main`. The latest completed intake boundary before this audit was upstream `v1.18.1` / `07562b7`, adapted by Panel PR #16 and released as `v1-tls-0.0.8`.
+The raw 242-commit count is not the selective-port backlog. Panel PR #10, PR #16, and PR #20 already adapted substantial upstream work without making those upstream commits ancestors of `main`. The latest completed intake boundary before this audit was upstream `v1.18.2` / `7958915`, adapted by Panel PR #20.
 
 The upstream diff deletes or replaces protected LTS usage files, including:
 
@@ -49,6 +49,7 @@ Recent upstream intake:
 | `v1.18.0` / `4af4cf4` | `reject` | PR #16 records the controlled npm security subset | Reject Bun CI, `bun.lock`, and package-manager migration. |
 | `v1.18.1` / `07562b7` | `adapt-port` | PR #16 / `v1-tls-0.0.8` | Preserve LTS auth/quota/provider boundaries while adapting official xAI API routing. |
 | `v1.18.2` / `7958915` | `adapt-port` | PR #20 | Add `disable-image-generation: passthrough` through the existing visual-config and browser-smoke architecture; do not copy upstream Bun tests or missing search-index architecture. |
+| `v1.18.3` / `d3df9b0` | `already-equivalent` | `src/lts/codexQuota/` uses `pickCodexClassifiedWindows` | The LTS sidecar already classifies and selects additional quota windows before building display rows; no product-code port is needed. |
 
 ## Maintenance rules
 
