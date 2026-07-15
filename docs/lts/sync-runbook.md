@@ -17,17 +17,21 @@ main = CPA-Panel-LTS product line
      + local downstream panel customizations
 ```
 
-## Audited upstream intake snapshot (2026-07-14)
+## Audited upstream intake snapshot (2026-07-15)
 
-Refs captured after Panel PR #22:
+Refs captured after Panel PR #25 and before this audit change:
 
-- `origin/main`: `203fbb79f44bfff37c06c07553dcd130eea6b5ef`
+- `origin/main`: `165c95e8f85887fa36063b3365e68b3394a1ed5f`
 - `upstream/main`: `d3df9b074ecc8c1161d998d65e09948bcbcaa6ef` (`v1.18.3`)
+- `upstream/dev`: `5d24c6f971e05cc9b5c97ed76ae786efe099de98`
+- `upstream/kimi-provider`: `f860bc81bcc507826bbced5434cf037bf77f8244`
 - merge-base: `8ed837c3d734c3970a6d6799c557bb6a6753360d`
 - `origin/main..upstream/main`: 242 commits
-- `upstream/main..origin/main`: 138 commits
+- `upstream/main..origin/main`: 144 commits
+- `origin/main..upstream/dev`: 243 commits
+- `origin/main..upstream/kimi-provider`: 252 commits
 
-The raw 242-commit count is not the selective-port backlog. Panel PR #10, PR #16, and PR #20 already adapted substantial upstream work without making those upstream commits ancestors of `main`. The latest completed intake boundary before this audit was upstream `v1.18.2` / `7958915`, adapted by Panel PR #20.
+The raw commit counts are not the selective-port backlog. Panel PR #10, PR #16, and PR #20 already adapted substantial upstream work without making those upstream commits ancestors of `main`, while PR #23 recorded the `v1.18.3` result as already equivalent. `upstream/dev` and `upstream/kimi-provider` are review inputs, not accepted release boundaries.
 
 The upstream diff deletes or replaces protected LTS usage files, including:
 
@@ -50,6 +54,10 @@ Recent upstream intake:
 | `v1.18.1` / `07562b7` | `adapt-port` | PR #16 / `v1-tls-0.0.8` | Preserve LTS auth/quota/provider boundaries while adapting official xAI API routing. |
 | `v1.18.2` / `7958915` | `adapt-port` | PR #20 | Add `disable-image-generation: passthrough` through the existing visual-config and browser-smoke architecture; do not copy upstream Bun tests or missing search-index architecture. |
 | `v1.18.3` / `d3df9b0` | `already-equivalent` | `src/lts/codexQuota/` uses `pickCodexClassifiedWindows` | The LTS sidecar already classifies and selects additional quota windows before building display rows; no product-code port is needed. |
+| `upstream/dev` / `5d24c6f` | `defer` | Paired `CPA-Core-LTS origin/main` does not expose `/v0/management/xai-api-key`; that contract first appears in Core upstream `423f3d5` | Do not ship an xAI API-key editor before the paired Core contract lands. After Core intake, manually adapt the provider workbench changes and cover them with the existing npm/LTS smoke workflow instead of copying the upstream Bun test. |
+| `upstream/kimi-provider` functional base / `b2c8490` | `defer` | Current Panel already supports Kimi OAuth, auth files, and quota; the branch has not reached upstream `dev` or `main`, and its name-based detection can silently rewrite a custom `Kimi` gateway to the official Moonshot endpoint on save | Revisit only a config-detected Kimi OpenAI/Claude compatibility grouping after the branch stabilizes and custom base URLs round-trip unchanged. Preserve the LTS rule that branded groups appear from real config and do not become promotional quick-start surfaces. |
+| `upstream/kimi-provider` icon/theme hunks / `7fb5890`, `f860bc8` | `defer` | The commits mix reusable icon/theme work with OAuth reordering and affiliate-link behavior | Reassess stable asset-only hunks after upstream integration; do not cherry-pick the mixed commits as-is. |
+| `upstream/kimi-provider` promotion series / `e2aa494`, `6a8319d`, `339529f`, `bb48387`, `72c13c0`, `36681ce` plus affiliate hunks in `f860bc8` | `reject` | `provider-workbench` contract requires commercial-neutral, config-detected groups without registration links | Do not add recommended-provider placement, quick sign-up controls, or `?aff=cliproxyapi` registration links. |
 
 ## Maintenance rules
 
