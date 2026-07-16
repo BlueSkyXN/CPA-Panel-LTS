@@ -76,6 +76,8 @@ for path in \
   src/pages/AiProvidersPage.tsx \
   src/pages/AiProvidersAmpcodeEditPage.tsx \
   src/assets/icons/claudeapi.png \
+  src/assets/icons/grok.svg \
+  src/assets/icons/grok-dark.svg \
   src/assets/icons/code0.png \
   src/assets/icons/fenno-ai.png \
   src/assets/icons/qiniu-cloud.png \
@@ -91,6 +93,8 @@ for path in \
   src/features/providers/sheets/forms/SponsorProviderForm.tsx \
   src/features/providers/sheets/forms/useConnectivityTest.ts \
   src/features/providers/sheets/forms/useModelDiscovery.ts \
+  src/features/providers/xaiApiKeyProvider.test.mjs \
+  src/services/api/client.test.mjs \
   src/features/plugins/PluginsPage.tsx \
   src/features/plugins/PluginStorePage.tsx \
   src/features/plugins/PluginResourcePage.tsx \
@@ -196,6 +200,7 @@ require_file_contains src/utils/usage.ts "service_tier"
 require_file_contains src/utils/usage.ts "resolveUsageTotalTokens"
 require_file_contains src/utils/usage/cacheTokens.ts "resolveCacheWriteUnitPrice"
 require_file_contains src/utils/usage/cacheTokens.ts "uncached_input_tokens"
+require_file_contains src/utils/usage/cacheTokens.ts "getUsageUncachedInputTokenCount"
 require_file_contains src/utils/usage/cacheTokens.test.mjs "uncached input is authoritative"
 require_file_contains src/utils/usage/modelPrices.ts "normalizePersistedModelPrices"
 require_file_contains src/utils/usage.ts "reasoning_effort"
@@ -212,6 +217,7 @@ require_file_contains src/components/usage/RequestEventsDetailsCard.tsx "service
 require_file_contains src/components/usage/RequestEventsDetailsCard.tsx "request_events_filter_tier"
 require_file_contains src/components/usage/RequestEventsDetailsCard.tsx "reasoning_effort"
 require_file_contains src/components/usage/RequestEventsDetailsCard.tsx "request_events_filter_effort"
+require_file_contains src/components/usage/RequestEventsDetailsCard.tsx "uncached_input_tokens"
 require_file_not_contains src/components/usage/RequestEventsDetailsCard.tsx "thinking_intensity"
 require_file_not_contains src/components/usage/RequestEventsDetailsCard.tsx "thinking_mode"
 require_file_not_contains src/components/usage/RequestEventsDetailsCard.tsx "thinking_level"
@@ -254,6 +260,25 @@ require_file_contains src/router/MainRoutes.tsx "path: '/ai-providers/workbench'
 require_file_contains src/router/MainRoutes.tsx "ProvidersWorkbenchPage"
 require_file_contains src/services/api/providers.ts "mutateLatestProviderList"
 require_file_contains src/services/api/providers.ts "replaceLatestProviderRecord"
+require_file_contains src/services/api/providers.ts "createXAIConfig"
+require_file_contains src/services/api/providers.ts "updateXAIConfig"
+require_file_contains src/services/api/providers.ts "deleteXAIConfig"
+require_file_contains src/services/api/providers.ts "'xai-api-key'"
+require_file_contains src/services/api/transformers.ts "xaiApiKeys"
+require_file_contains src/features/providers/descriptors.ts "id: 'xai'"
+require_file_contains src/features/providers/adapters.ts "xaiToResource"
+require_file_contains src/features/providers/useProviderWorkbench.ts "case 'xai'"
+require_file_contains src/features/providers/sheets/forms/BaseProviderForm.tsx "XAI_API_BASE_URL"
+require_file_contains src/features/providers/sheets/forms/useModelDiscovery.ts "'xai'"
+require_file_contains src/features/providers/sheets/forms/useConnectivityTest.ts "brand !== 'xai'"
+require_file_contains src/features/providers/xaiApiKeyProvider.test.mjs "preserves unknown fields"
+require_file_contains scripts/smoke-lts-panel.py "xAI provider payload wrote response-only auth-index"
+require_file_contains scripts/smoke-lts-panel.py "created xAI resource using the Core contract"
+require_file_contains scripts/smoke-lts-panel-core.py "BROWSER provider workbench xAI create"
+require_file_contains src/i18n/locales/en.json '"xai": "xAI"'
+require_file_contains src/i18n/locales/zh-CN.json '"xai": "xAI"'
+require_file_contains src/i18n/locales/zh-TW.json '"xai": "xAI"'
+require_file_contains src/i18n/locales/ru.json '"xai": "xAI"'
 require_file_contains src/types/provider.ts "displayName?: string"
 require_file_contains src/features/providers/types.ts "displayName?: string"
 require_file_contains src/services/api/transformers.ts "item['display-name']"
@@ -310,6 +335,8 @@ require_file_contains src/stores/useAuthStore.ts "delete nextState.pluginSupport
 require_file_contains src/services/api/client.ts "connectionGeneration"
 require_file_contains src/services/api/client.ts "isCurrentConnection"
 require_file_contains src/services/api/client.ts "clearConfig"
+require_file_contains src/services/api/client.ts "synchronous: true"
+require_file_contains src/services/api/client.test.mjs "binds connection details when the request is created"
 require_file_contains src/router/MainRoutes.tsx "PluginRuntimeUnavailable"
 require_file_contains scripts/smoke-lts-panel.py "run_plugin_runtime_mismatch_smoke"
 require_file_contains scripts/smoke-lts-panel.py "arm_delayed_config_response"
@@ -774,9 +801,15 @@ require_file_contains package.json "\"test:usage-cache\""
 require_file_contains package.json '"test:usage-prices"'
 require_file_contains package.json '"test:usage-import"'
 require_file_contains package.json '"test:usage-effort"'
+require_file_contains package.json '"test:provider-xai"'
+require_file_contains package.json '"test:api-client"'
 require_file_contains package.json '"test:usage"'
 require_file_contains package.json '"validate:lts": "npm run test:usage'
+require_file_contains package.json 'npm run test:provider-xai'
+require_file_contains package.json 'npm run test:api-client'
 require_file_contains .github/workflows/lts-panel-contract.yml "npm run test:usage"
+require_file_contains .github/workflows/lts-panel-contract.yml "npm run test:provider-xai"
+require_file_contains .github/workflows/lts-panel-contract.yml "npm run test:api-client"
 require_file_contains scripts/smoke-lts-panel.py "run_usage_import_review_smoke"
 require_file_contains scripts/smoke-lts-panel.py "selected raw effort"
 require_file_not_contains scripts/smoke-lts-panel.py "Max / Ultra wire"

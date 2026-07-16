@@ -505,6 +505,13 @@ export const normalizeConfigResponse = (raw: unknown): Config => {
       .filter(Boolean) as ProviderKeyConfig[];
   }
 
+  const xaiList = raw['xai-api-key'] ?? raw.xaiApiKey ?? raw.xaiApiKeys;
+  if (Array.isArray(xaiList)) {
+    config.xaiApiKeys = xaiList
+      .map((item) => normalizeProviderKeyConfig(item))
+      .filter(Boolean) as ProviderKeyConfig[];
+  }
+
   const claudeList = raw['claude-api-key'] ?? raw.claudeApiKey ?? raw.claudeApiKeys;
   if (Array.isArray(claudeList)) {
     config.claudeApiKeys = claudeList

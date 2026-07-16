@@ -26,6 +26,9 @@ jobs:
       - name: Test usage compatibility semantics
         run: npm run test:usage
 
+      - name: Test provider and connection contracts
+        run: npm run test:provider-xai && npm run test:api-client
+
       - name: Check LTS panel contract
         run: npm run check:lts
 

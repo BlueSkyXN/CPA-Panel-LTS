@@ -162,6 +162,13 @@ def build_core_config(port: int, temp_dir: Path) -> str:
             models:
               - name: "gpt-5"
                 display-name: "GPT-5 Smoke"
+        xai-api-key:
+          - api-key: "xai-smoke-key"
+            base-url: "https://api.x.ai/v1"
+            websockets: true
+            models:
+              - name: "grok-4.5"
+                display-name: "Grok 4.5 Smoke"
         claude-api-key:
           - api-key: "claude-smoke-key"
             base-url: "https://api.anthropic.com"
@@ -633,6 +640,71 @@ def run_write_smoke(api_url: str) -> list[str]:
     ):
         raise AssertionError(f"Codex delete smoke did not remove written key: {codex_after_delete!r}")
 
+    xai_payload = [
+        {
+            "api-key": "xai-real-write-key",
+            "base-url": "https://api.x.ai/v1",
+            "websockets": True,
+            "models": [
+                {
+                    "name": "grok-4.5",
+                    "alias": "grok-real-write",
+                    "display-name": "Grok Real Write",
+                }
+            ],
+        }
+    ]
+    seen.append("PUT /v0/management/xai-api-key")
+    assert_mapping(
+        request_json(api_url, "/v0/management/xai-api-key", method="PUT", payload=xai_payload),
+        "/v0/management/xai-api-key",
+    )
+    xai_items = provider_items(
+        request_json(api_url, "/v0/management/xai-api-key"),
+        "xai-api-key",
+        "/v0/management/xai-api-key",
+    )
+    seen.append("GET /v0/management/xai-api-key after write")
+    if not any(
+        isinstance(item, dict)
+        and item.get("api-key") == "xai-real-write-key"
+        and item.get("websockets") is True
+        and any(
+            isinstance(model, dict)
+            and model.get("display-name") == "Grok Real Write"
+            for model in item.get("models", [])
+        )
+        for item in xai_items
+    ):
+        raise AssertionError(f"xAI write smoke did not round-trip websockets: {xai_items!r}")
+
+    xai_delete_query = urlencode(
+        {
+            "api-key": "xai-real-write-key",
+            "base-url": "https://api.x.ai/v1",
+        }
+    )
+    seen.append("DELETE /v0/management/xai-api-key")
+    assert_mapping(
+        request_json(
+            api_url,
+            f"/v0/management/xai-api-key?{xai_delete_query}",
+            method="DELETE",
+        ),
+        "/v0/management/xai-api-key",
+    )
+    xai_after_delete = provider_items(
+        request_json(api_url, "/v0/management/xai-api-key"),
+        "xai-api-key",
+        "/v0/management/xai-api-key",
+    )
+    seen.append("GET /v0/management/xai-api-key after delete")
+    if any(
+        isinstance(item, dict) and item.get("api-key") == "xai-real-write-key"
+        for item in xai_after_delete
+    ):
+        raise AssertionError(f"xAI delete smoke did not remove written key: {xai_after_delete!r}")
+
     openai_payload = [
         {
             "name": "Smoke OpenAI Compatible",
@@ -968,6 +1040,7 @@ def run_endpoint_smoke(api_url: str, include_plugin_store: bool, include_write_s
     for provider_path, key in [
         ("/v0/management/gemini-api-key", "gemini-api-key"),
         ("/v0/management/codex-api-key", "codex-api-key"),
+        ("/v0/management/xai-api-key", "xai-api-key"),
         ("/v0/management/claude-api-key", "claude-api-key"),
         ("/v0/management/vertex-api-key", "vertex-api-key"),
         ("/v0/management/openai-compatibility", "openai-compatibility"),
@@ -1460,6 +1533,98 @@ def run_browser_provider_workbench_smoke(page: Any, app_url: str, api_url: str) 
     )
     if any(isinstance(item, dict) and item.get("api-key") == "codex-browser-new" for item in codex_after_delete):
         raise AssertionError(f"Codex browser delete did not remove the created key: {codex_after_delete!r}")
+
+    page.get_by_role("button", name=re.compile(r"^xAI(?:\s|$)", re.I)).click()
+    page.get_by_role("heading", name="xAI", exact=True).wait_for()
+    page.get_by_role("button", name=re.compile(r"^New$", re.I)).first.click()
+    sheet = page.get_by_role("dialog").last
+    sheet.get_by_text(re.compile(r"^(?:New|Create) · xAI$"), exact=True).wait_for()
+    xai_base_url = sheet.get_by_label("Base URL")
+    if xai_base_url.input_value() != "https://api.x.ai/v1":
+        raise AssertionError(
+            f"xAI browser form used the wrong default base URL: {xai_base_url.input_value()!r}"
+        )
+    sheet.get_by_role("textbox", name="API key").fill("xai-browser-new")
+    sheet.get_by_label("Enable WebSockets").check()
+    sheet.get_by_text("Custom models", exact=True).click()
+    sheet.get_by_label("Upstream model name").fill("grok-4.5")
+    sheet.get_by_label("Routing alias (optional)").fill("grok-browser")
+    sheet.get_by_label("Display name (optional)").fill("Grok Browser Model")
+    with page.expect_response(
+        lambda response: response.request.method == "PUT"
+        and response.url.endswith("/v0/management/xai-api-key")
+    ):
+        sheet.get_by_role("button", name="Create").click()
+    wait_for_no_dialog(page)
+    seen.append("BROWSER provider workbench xAI create PUT /v0/management/xai-api-key")
+    xai_after_create = provider_items(
+        request_json(api_url, "/v0/management/xai-api-key"),
+        "xai-api-key",
+        "/v0/management/xai-api-key",
+    )
+    if not any(
+        isinstance(item, dict)
+        and item.get("api-key") == "xai-browser-new"
+        and item.get("base-url") == "https://api.x.ai/v1"
+        and item.get("websockets") is True
+        and any(
+            isinstance(model, dict)
+            and model.get("name") == "grok-4.5"
+            and model.get("alias") == "grok-browser"
+            and model.get("display-name") == "Grok Browser Model"
+            for model in item.get("models", [])
+        )
+        for item in xai_after_create
+    ):
+        raise AssertionError(f"xAI browser create did not round-trip: {xai_after_create!r}")
+
+    page.get_by_role("button", name="Edit").first.click()
+    sheet = page.get_by_role("dialog").last
+    sheet.get_by_label("Base URL").fill("https://xai.browser-updated.example/v1")
+    sheet.get_by_text("Custom models", exact=True).click()
+    sheet.get_by_label("Display name (optional)").fill("Grok Browser Model Updated")
+    with page.expect_response(
+        lambda response: response.request.method == "PUT"
+        and response.url.endswith("/v0/management/xai-api-key")
+    ):
+        sheet.get_by_role("button", name="Save").click()
+    wait_for_no_dialog(page)
+    seen.append("BROWSER provider workbench xAI update PUT /v0/management/xai-api-key")
+    xai_after_update = provider_items(
+        request_json(api_url, "/v0/management/xai-api-key"),
+        "xai-api-key",
+        "/v0/management/xai-api-key",
+    )
+    if not any(
+        isinstance(item, dict)
+        and item.get("api-key") == "xai-browser-new"
+        and item.get("base-url") == "https://xai.browser-updated.example/v1"
+        and any(
+            isinstance(model, dict)
+            and model.get("display-name") == "Grok Browser Model Updated"
+            for model in item.get("models", [])
+        )
+        for item in xai_after_update
+    ):
+        raise AssertionError(f"xAI browser update did not round-trip: {xai_after_update!r}")
+
+    page.get_by_role("button", name="Delete").first.click()
+    confirm = page.get_by_role("dialog", name="Delete resource")
+    confirm.get_by_text("This action cannot be undone", exact=False).first.wait_for()
+    with page.expect_response(
+        lambda response: response.request.method == "DELETE"
+        and "/v0/management/xai-api-key" in response.url
+    ):
+        confirm.get_by_role("button", name="Delete").click()
+    wait_for_no_dialog(page)
+    seen.append("BROWSER provider workbench xAI delete DELETE /v0/management/xai-api-key")
+    xai_after_delete = provider_items(
+        request_json(api_url, "/v0/management/xai-api-key"),
+        "xai-api-key",
+        "/v0/management/xai-api-key",
+    )
+    if any(isinstance(item, dict) and item.get("api-key") == "xai-browser-new" for item in xai_after_delete):
+        raise AssertionError(f"xAI browser delete did not remove the created key: {xai_after_delete!r}")
 
     seen.extend(
         run_browser_provider_key_crud_smoke(

@@ -51,6 +51,7 @@ features:
       - resolveUsageTotalTokens
       - resolveCacheWriteUnitPrice
       - uncached_input_tokens
+      - getUsageUncachedInputTokenCount
       - normalizePersistedModelPrices
       - analyzeUsageImport
       - normalizeReasoningEffort
@@ -62,6 +63,7 @@ features:
       - npm run test:usage-cache
       - npm run test:usage-prices
       - npm run test:usage
+      - npm run smoke:lts
       - npm run check:lts
       - npm run check:feature-contract
       - npm run type-check
@@ -128,7 +130,7 @@ features:
 
   - id: provider-workbench
     status: coexist
-    reason: Upstream workbench is useful for resource management and recent health, but must not replace the stable LTS provider page; it must preserve and edit Core model mapping fields including canonical display-name from Core v7.2.70 or later, while branded groups remain config-detected only and must not add promotional quick-start routes or registration links.
+    reason: Upstream workbench is useful for resource management and recent health, but must not replace the stable LTS provider page; it must preserve and edit Core model mapping fields including canonical display-name from Core v7.2.70 or later. The accepted xAI API-key adapt-port targets the current CPA-Core-LTS xai-api-key management contract, preserves unknown config fields, and uses api-key plus base-url selectors. Branded groups remain config-detected only and must not add promotional quick-start routes or registration links.
     routes:
       - /ai-providers/workbench
     panel_files:
@@ -136,6 +138,7 @@ features:
       - src/features/providers/ProvidersWorkbenchPage.tsx
       - src/features/providers/useProviderWorkbench.ts
       - src/features/providers/descriptors.ts
+      - src/features/providers/xaiApiKeyProvider.test.mjs
       - src/features/providers/code0.ts
       - src/features/providers/fennoAI.ts
       - src/features/providers/qiniuCloud.ts
@@ -162,6 +165,7 @@ features:
       - /v0/management/api-key-usage
       - /v0/management/gemini-api-key
       - /v0/management/codex-api-key
+      - /v0/management/xai-api-key
       - /v0/management/claude-api-key
       - /v0/management/vertex-api-key
       - /v0/management/openai-compatibility
@@ -171,6 +175,10 @@ features:
       - CONFIG_DETECTED_BRANDS
       - runOpenAIAllKeys
       - runCodex
+      - createXAIConfig
+      - updateXAIConfig
+      - deleteXAIConfig
+      - xai-api-key
       - CODE0_PROVIDER_NAME
       - FENNO_AI_PROVIDER_NAME
       - QINIU_CLOUD_PROVIDER_NAME
@@ -207,6 +215,7 @@ features:
       - cleared model display-name without dropping unknown fields
       - updated sponsor model display-name
     validation:
+      - npm run test:provider-xai
       - npm run smoke:lts
       - npm run smoke:lts:core
 
@@ -264,6 +273,7 @@ features:
       - src/components/layout/MainLayout.tsx
       - src/stores/useAuthStore.ts
       - src/services/api/client.ts
+      - src/services/api/client.test.mjs
       - src/i18n/locales/
       - scripts/smoke-lts-panel.py
       - scripts/smoke-lts-panel-core.py
@@ -291,6 +301,8 @@ features:
       - pluginSupportSource
       - probePluginSupport
       - connectionGeneration
+      - "synchronous: true"
+      - binds connection details when the request is created
       - PluginRuntimeUnavailable
       - runtime_unavailable_title
       - run_plugin_runtime_mismatch_smoke
@@ -304,6 +316,9 @@ features:
       - delete configPatch.enabled
       - run_plugin_config_patch_smoke
       - plugin_id = "lts-smoke-plugin"
+    validation:
+      - npm run test:api-client
+      - npm run smoke:lts
 
   - id: recent-requests
     status: coexist

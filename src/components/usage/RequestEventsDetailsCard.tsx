@@ -18,7 +18,10 @@ import {
   LATENCY_SOURCE_FIELD,
   normalizeAuthIndex,
 } from '@/utils/usage';
-import { getUsageCacheTokenCounts } from '@/utils/usage/cacheTokens';
+import {
+  getUsageCacheTokenCounts,
+  getUsageUncachedInputTokenCount,
+} from '@/utils/usage/cacheTokens';
 import { normalizeReasoningEffort } from '@/utils/usage/reasoningEffort';
 import { downloadBlob } from '@/utils/download';
 import styles from '@/pages/UsagePage.module.scss';
@@ -55,6 +58,7 @@ type RequestEventRow = {
   failed: boolean;
   latencyMs: number | null;
   inputTokens: number;
+  uncachedInputTokens: number | null;
   outputTokens: number;
   reasoningTokens: number;
   cacheReadTokens: number;
@@ -203,6 +207,7 @@ export function RequestEventsDetailsCard({
       const reasoningEffortLabel =
         reasoningEffort ?? t('usage_stats.request_events_effort_legacy_unknown');
       const inputTokens = Math.max(toNumber(detail.tokens?.input_tokens), 0);
+      const uncachedInputTokens = getUsageUncachedInputTokenCount(detail.tokens);
       const outputTokens = Math.max(toNumber(detail.tokens?.output_tokens), 0);
       const reasoningTokens = Math.max(toNumber(detail.tokens?.reasoning_tokens), 0);
       const { cacheReadTokens, cacheWriteTokens } = getUsageCacheTokenCounts(detail.tokens);
@@ -233,6 +238,7 @@ export function RequestEventsDetailsCard({
         failed: detail.failed === true,
         latencyMs,
         inputTokens,
+        uncachedInputTokens,
         outputTokens,
         reasoningTokens,
         cacheReadTokens,
@@ -455,6 +461,7 @@ export function RequestEventsDetailsCard({
       'result',
       ...(hasLatencyData ? ['latency_ms'] : []),
       'input_tokens',
+      'uncached_input_tokens',
       'output_tokens',
       'reasoning_tokens',
       'cached_tokens',
@@ -475,6 +482,7 @@ export function RequestEventsDetailsCard({
         row.failed ? 'failed' : 'success',
         ...(hasLatencyData ? [row.latencyMs ?? ''] : []),
         row.inputTokens,
+        row.uncachedInputTokens ?? '',
         row.outputTokens,
         row.reasoningTokens,
         row.cacheReadTokens,
@@ -509,6 +517,9 @@ export function RequestEventsDetailsCard({
       ...(hasLatencyData && row.latencyMs !== null ? { latency_ms: row.latencyMs } : {}),
       tokens: {
         input_tokens: row.inputTokens,
+        ...(row.uncachedInputTokens !== null
+          ? { uncached_input_tokens: row.uncachedInputTokens }
+          : {}),
         output_tokens: row.outputTokens,
         reasoning_tokens: row.reasoningTokens,
         cached_tokens: row.cacheReadTokens,

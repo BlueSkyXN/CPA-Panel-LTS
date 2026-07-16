@@ -149,7 +149,10 @@ class ApiClient {
 
         return config;
       },
-      (error) => Promise.reject(this.handleError(error))
+      (error) => {
+        throw this.handleError(error);
+      },
+      { synchronous: true }
     );
 
     // 响应拦截器
