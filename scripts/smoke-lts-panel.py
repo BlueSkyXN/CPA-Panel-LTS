@@ -229,6 +229,22 @@ def build_config_payload(
                 "models": [{"name": "gpt-5"}],
             }
         ],
+        "xai-api-key": [
+            {
+                "api-key": "xai-key-1",
+                "base-url": "https://api.x.ai/v1",
+                "websockets": True,
+                "models": [
+                    {
+                        "name": "grok-4.5",
+                        "display-name": "Grok 4.5",
+                        "x-lts-model-note": "keep-xai-model",
+                    }
+                ],
+                "x-lts-xai-note": "keep-xai-entry",
+                "auth-index": "xai-response-only",
+            }
+        ],
         "claude-api-key": claude_api_keys,
         "vertex-api-key": [
             {
@@ -284,6 +300,7 @@ def build_usage_payload() -> dict[str, Any]:
             "latency": 110,
             "tokens": {
                 "input_tokens": 12,
+                "uncached_input_tokens": 8,
                 "output_tokens": 8,
                 "reasoning_tokens": 2,
                 "cached_tokens": 1,
@@ -302,6 +319,7 @@ def build_usage_payload() -> dict[str, Any]:
             "latency": 120,
             "tokens": {
                 "input_tokens": 10,
+                "uncached_input_tokens": 0,
                 "output_tokens": 6,
                 "reasoning_tokens": 0,
                 "cached_tokens": 0,
@@ -836,6 +854,9 @@ class MockCoreHandler(BaseHTTPRequestHandler):
             "/v0/management/openai-compatibility": {
                 "openai-compatibility": config_payload["openai-compatibility"]
             },
+            "/v0/management/xai-api-key": {
+                "xai-api-key": config_payload["xai-api-key"]
+            },
             "/v0/management/ampcode/upstream-api-keys": {
                 "upstream-api-keys": config_payload["ampcode"]["upstream-api-keys"]
             },
@@ -1361,6 +1382,48 @@ def assert_provider_mutation_payloads(state: MockCoreState) -> None:
         "updated Codex resource keeping the original key via edit fallback",
     )
     assert_request_seen(state, "DELETE", "/v0/management/codex-api-key")
+    assert_request_count_at_least(state, "PUT", "/v0/management/xai-api-key", 2)
+    assert_payload_match(
+        state,
+        "PUT",
+        "/v0/management/xai-api-key",
+        lambda payload: any(
+            item.get("api-key") == "xai-smoke-new"
+            and item.get("base-url") == "https://api.x.ai/v1"
+            and item.get("websockets") is True
+            and any(
+                isinstance(model, dict)
+                and model.get("name") == "grok-4.5"
+                and model.get("display-name") == "Grok Browser Model"
+                for model in item.get("models", [])
+            )
+            for item in payload
+            if isinstance(item, dict)
+        ),
+        "created xAI resource using the Core contract",
+    )
+    assert_payload_match(
+        state,
+        "PUT",
+        "/v0/management/xai-api-key",
+        lambda payload: any(
+            item.get("api-key") == "xai-key-1"
+            and item.get("base-url") == "https://xai.updated.example/v1"
+            and item.get("x-lts-xai-note") == "keep-xai-entry"
+            and any(
+                isinstance(model, dict)
+                and model.get("x-lts-model-note") == "keep-xai-model"
+                for model in item.get("models", [])
+            )
+            for item in payload
+            if isinstance(item, dict)
+        ),
+        "updated xAI resource while preserving unknown fields",
+    )
+    assert_request_seen(state, "DELETE", "/v0/management/xai-api-key")
+    for payload in parse_json_bodies(state, "PUT", "/v0/management/xai-api-key"):
+        if json_contains_key(payload, "auth-index") or json_contains_key(payload, "authIndex"):
+            raise AssertionError("xAI provider payload wrote response-only auth-index")
     assert_payload_match(
         state,
         "PUT",
@@ -2172,6 +2235,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         )
     priority_csv = priority_csv_rows[0]
     expected_priority_csv_tokens = {
+        "uncached_input_tokens": "8",
         "cached_tokens": "1",
         "cache_read_tokens": "1",
         "cache_creation_tokens": "4",
@@ -2184,6 +2248,12 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         raise AssertionError(
             "Request-event CSV lost combined service-tier/cache token values: "
             f"{actual_priority_csv_tokens!r}"
+        )
+    standard_csv_rows = [row for row in csv_rows if row.get("service_tier") == "default"]
+    if len(standard_csv_rows) != 1 or standard_csv_rows[0].get("uncached_input_tokens") != "0":
+        raise AssertionError(
+            "Request-event CSV lost explicit zero uncached input: "
+            f"{standard_csv_rows!r}"
         )
 
     with page.expect_download() as json_download:
@@ -2216,6 +2286,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     priority_json_tokens = priority_json_rows[0].get("tokens", {})
     expected_priority_json_tokens = {
         "input_tokens": 12,
+        "uncached_input_tokens": 8,
         "output_tokens": 8,
         "reasoning_tokens": 2,
         "cached_tokens": 1,
@@ -2227,6 +2298,13 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         raise AssertionError(
             "Request-event JSON lost combined service-tier/cache token values: "
             f"{priority_json_tokens!r}"
+        )
+    standard_json_rows = [row for row in json_rows if row.get("service_tier") == "default"]
+    standard_json_tokens = standard_json_rows[0].get("tokens", {}) if len(standard_json_rows) == 1 else {}
+    if standard_json_tokens.get("uncached_input_tokens") != 0:
+        raise AssertionError(
+            "Request-event JSON lost explicit zero uncached input: "
+            f"{standard_json_rows!r}"
         )
 
     tier_select = card.get_by_label("Tier", exact=True)
@@ -2664,6 +2742,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             page.goto(f"{app_url}?route=dashboard#/", wait_until="domcontentloaded")
             page.wait_for_function("() => window.location.hash.endsWith('/')")
             page.get_by_text("A:1", exact=False).first.wait_for()
+            page.get_by_text("X:1", exact=False).first.wait_for()
 
             page.goto(f"{app_url}?route=workbench-toggle#/ai-providers/workbench", wait_until="domcontentloaded")
             page.wait_for_function("() => window.location.hash.endsWith('/ai-providers/workbench')")
@@ -2705,6 +2784,48 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             with page.expect_response(
                 lambda response: response.request.method == "DELETE"
                 and "/v0/management/codex-api-key" in response.url
+            ):
+                confirm.get_by_role("button", name="Delete").click()
+            wait_for_no_dialog()
+
+            page.get_by_role("button", name=re.compile(r"^xAI(?:\s|$)", re.I)).click()
+            page.get_by_role("heading", name="xAI", exact=True).wait_for()
+            page.get_by_role("button", name=re.compile(r"^New$", re.I)).first.click()
+            sheet = page.get_by_role("dialog").last
+            sheet.get_by_text(re.compile(r"^(?:New|Create) · xAI$"), exact=True).wait_for()
+            xai_base_url = sheet.get_by_label("Base URL")
+            if xai_base_url.input_value() != "https://api.x.ai/v1":
+                raise AssertionError(
+                    f"xAI create form used the wrong default base URL: {xai_base_url.input_value()!r}"
+                )
+            sheet.get_by_role("textbox", name="API key").fill("xai-smoke-new")
+            sheet.get_by_label("Enable WebSockets").check()
+            sheet.get_by_text("Custom models", exact=True).click()
+            sheet.get_by_label("Upstream model name").fill("grok-4.5")
+            sheet.get_by_label("Display name (optional)").fill("Grok Browser Model")
+            with page.expect_response(
+                lambda response: response.request.method == "PUT"
+                and response.url.endswith("/v0/management/xai-api-key")
+            ):
+                sheet.get_by_role("button", name="Create").click()
+            wait_for_no_dialog()
+
+            page.get_by_role("button", name="Edit").first.click()
+            sheet = page.get_by_role("dialog").last
+            sheet.get_by_label("Base URL").fill("https://xai.updated.example/v1")
+            with page.expect_response(
+                lambda response: response.request.method == "PUT"
+                and response.url.endswith("/v0/management/xai-api-key")
+            ):
+                sheet.get_by_role("button", name="Save").click()
+            wait_for_no_dialog()
+
+            page.get_by_role("button", name="Delete").first.click()
+            confirm = page.get_by_role("dialog", name="Delete resource")
+            confirm.get_by_text("This action cannot be undone", exact=False).first.wait_for()
+            with page.expect_response(
+                lambda response: response.request.method == "DELETE"
+                and "/v0/management/xai-api-key" in response.url
             ):
                 confirm.get_by_role("button", name="Delete").click()
             wait_for_no_dialog()
@@ -2915,6 +3036,8 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
         ("PUT", "/v0/management/gemini-api-key"),
         ("PUT", "/v0/management/codex-api-key"),
         ("DELETE", "/v0/management/codex-api-key"),
+        ("PUT", "/v0/management/xai-api-key"),
+        ("DELETE", "/v0/management/xai-api-key"),
         ("PUT", "/v0/management/openai-compatibility"),
         ("PUT", "/v0/management/config.yaml"),
     ]:
@@ -2929,6 +3052,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
     for provider_path in [
         "/v0/management/gemini-api-key",
         "/v0/management/codex-api-key",
+        "/v0/management/xai-api-key",
         "/v0/management/openai-compatibility",
     ]:
         assert_each_request_immediately_preceded_by(
@@ -2951,6 +3075,26 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
         "/v0/management/codex-api-key",
         "GET",
         "/v0/management/config",
+    )
+    assert_request_seen_after(
+        state,
+        "PUT",
+        "/v0/management/xai-api-key",
+        "GET",
+        "/v0/management/config",
+    )
+    assert_request_seen_after(
+        state,
+        "DELETE",
+        "/v0/management/xai-api-key",
+        "GET",
+        "/v0/management/config",
+    )
+    assert_request_query_contains(
+        state,
+        "DELETE",
+        "/v0/management/xai-api-key",
+        "base-url=https%3A%2F%2Fapi.x.ai%2Fv1",
     )
     assert_request_seen_after(
         state,

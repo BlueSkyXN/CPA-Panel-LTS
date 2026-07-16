@@ -60,6 +60,11 @@ const toExplicitUncachedInputCount = (
   return uncachedInputTokens;
 };
 
+export function getUsageUncachedInputTokenCount(tokens: unknown): number | null {
+  const record = isRecord(tokens) ? tokens : {};
+  return toExplicitUncachedInputCount(record.uncached_input_tokens, record.input_tokens);
+}
+
 export const toTokenCount = (value: unknown): number => toOptionalTokenCount(value) ?? 0;
 
 export function getUsageCacheTokenCounts(tokens: unknown): UsageCacheTokenCounts {
@@ -92,10 +97,7 @@ export function splitUsageTokensForCost(
   const inputTokens = toTokenCount(tokens.input_tokens);
   const outputTokens = toTokenCount(tokens.output_tokens);
   const { cacheReadTokens, cacheWriteTokens } = getUsageCacheTokenCounts(tokens);
-  const explicitUncachedInputTokens = toExplicitUncachedInputCount(
-    tokens.uncached_input_tokens,
-    tokens.input_tokens
-  );
+  const explicitUncachedInputTokens = getUsageUncachedInputTokenCount(tokens);
   const promptDiscountTokens =
     cacheReadTokens + (isGpt56CacheWriteModel(modelName) ? cacheWriteTokens : 0);
 
@@ -116,10 +118,7 @@ export function calculateFallbackUsageTotalTokens(
   const outputTokens = toTokenCount(tokens.output_tokens);
   const reasoningTokens = toTokenCount(tokens.reasoning_tokens);
   const { cacheReadTokens, cacheWriteTokens } = getUsageCacheTokenCounts(tokens);
-  const explicitUncachedInputTokens = toExplicitUncachedInputCount(
-    tokens.uncached_input_tokens,
-    tokens.input_tokens
-  );
+  const explicitUncachedInputTokens = getUsageUncachedInputTokenCount(tokens);
   if (explicitUncachedInputTokens !== null) {
     return (
       explicitUncachedInputTokens +

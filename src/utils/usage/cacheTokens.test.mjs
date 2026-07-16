@@ -14,6 +14,7 @@ const {
   calculateFallbackUsageTotalTokens,
   calculateUsageCost,
   getUsageCacheTokenCounts,
+  getUsageUncachedInputTokenCount,
   isGpt56CacheWriteModel,
   resolveUsageTotalTokens,
   resolveCacheWriteUnitPrice,
@@ -170,6 +171,29 @@ test('known zero uncached input is accepted instead of falling back to model heu
   );
 
   assert.equal(split.promptTokens, 0);
+  assert.equal(
+    getUsageUncachedInputTokenCount({
+      input_tokens: COST_FIXTURE.input_tokens,
+      uncached_input_tokens: 0,
+    }),
+    0
+  );
+});
+
+test('uncached input export helper preserves valid counts and rejects non-authoritative values', () => {
+  assert.equal(
+    getUsageUncachedInputTokenCount({ input_tokens: 100, uncached_input_tokens: 40 }),
+    40
+  );
+  assert.equal(
+    getUsageUncachedInputTokenCount({ input_tokens: 100, uncached_input_tokens: 101 }),
+    null
+  );
+  assert.equal(
+    getUsageUncachedInputTokenCount({ input_tokens: 100, uncached_input_tokens: '40' }),
+    null
+  );
+  assert.equal(getUsageUncachedInputTokenCount({ input_tokens: 100 }), null);
 });
 
 test('invalid uncached input values preserve the explicit legacy GPT-5.6 fallback', () => {
