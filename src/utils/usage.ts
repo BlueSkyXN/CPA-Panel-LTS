@@ -20,6 +20,7 @@ import {
 } from './usage/cacheTokens';
 import { normalizePersistedModelPrices, type ModelPrice } from './usage/modelPrices';
 import { normalizeReasoningEffort } from './usage/reasoningEffort';
+import { normalizeServiceTier } from './usage/serviceTier';
 import { maskApiKey } from './format';
 import { parseTimestampMs } from './timestamp';
 
@@ -57,6 +58,12 @@ export interface RateStats {
 }
 
 export type { ModelPrice } from './usage/modelPrices';
+export type {
+  DisplayServiceTier,
+  ResolvedServiceTier,
+  ServiceTierEvidence,
+} from './usage/serviceTier';
+export { normalizeServiceTier, resolveServiceTier } from './usage/serviceTier';
 
 export interface UsageTokenStats extends UsageTokenFields {
   input_tokens?: number;
@@ -76,6 +83,9 @@ export interface UsageDetail {
   source: string;
   auth_index: string | number | null;
   service_tier?: string | null;
+  request_service_tier?: string | null;
+  response_service_tier?: string | null;
+  effective_service_tier?: string | null;
   reasoning_effort?: string | null;
   latency_ms?: number;
   tokens: UsageTokenStats;
@@ -283,18 +293,42 @@ export const normalizeAuthIndex = (value: unknown) => {
   return null;
 };
 
-export const normalizeServiceTier = (value: unknown): string | null => {
-  if (typeof value !== 'string') {
-    return null;
-  }
-  const trimmed = value.trim();
-  return trimmed || null;
-};
+const extractNamedServiceTier = (
+  detail: Record<string, unknown>,
+  snakeCaseKey: string,
+  camelCaseKey: string,
+  pascalCaseKey: string
+): string | null =>
+  normalizeServiceTier(detail[snakeCaseKey]) ??
+  normalizeServiceTier(detail[camelCaseKey]) ??
+  normalizeServiceTier(detail[pascalCaseKey]);
 
 const extractServiceTier = (detail: Record<string, unknown>): string | null =>
-  normalizeServiceTier(detail.service_tier) ??
-  normalizeServiceTier(detail.serviceTier) ??
-  normalizeServiceTier(detail.ServiceTier);
+  extractNamedServiceTier(detail, 'service_tier', 'serviceTier', 'ServiceTier');
+
+const extractRequestServiceTier = (detail: Record<string, unknown>): string | null =>
+  extractNamedServiceTier(
+    detail,
+    'request_service_tier',
+    'requestServiceTier',
+    'RequestServiceTier'
+  );
+
+const extractResponseServiceTier = (detail: Record<string, unknown>): string | null =>
+  extractNamedServiceTier(
+    detail,
+    'response_service_tier',
+    'responseServiceTier',
+    'ResponseServiceTier'
+  );
+
+const extractEffectiveServiceTier = (detail: Record<string, unknown>): string | null =>
+  extractNamedServiceTier(
+    detail,
+    'effective_service_tier',
+    'effectiveServiceTier',
+    'EffectiveServiceTier'
+  );
 
 const extractReasoningEffort = (detail: Record<string, unknown>): string | null =>
   normalizeReasoningEffort(detail.reasoning_effort) ??
@@ -596,6 +630,9 @@ export function collectUsageDetails(usageData: unknown): UsageDetail[] {
             detailRaw?.AuthIndex ??
             null) as UsageDetail['auth_index'],
           service_tier: extractServiceTier(detailRaw),
+          request_service_tier: extractRequestServiceTier(detailRaw),
+          response_service_tier: extractResponseServiceTier(detailRaw),
+          effective_service_tier: extractEffectiveServiceTier(detailRaw),
           reasoning_effort: extractReasoningEffort(detailRaw),
           latency_ms: latencyMs ?? undefined,
           tokens: normalizeUsageDetailTokens(tokensRaw),
@@ -674,6 +711,9 @@ export function collectUsageDetailsWithEndpoint(usageData: unknown): UsageDetail
             detailRaw?.AuthIndex ??
             null) as UsageDetail['auth_index'],
           service_tier: extractServiceTier(detailRaw),
+          request_service_tier: extractRequestServiceTier(detailRaw),
+          response_service_tier: extractResponseServiceTier(detailRaw),
+          effective_service_tier: extractEffectiveServiceTier(detailRaw),
           reasoning_effort: extractReasoningEffort(detailRaw),
           latency_ms: latencyMs ?? undefined,
           tokens: normalizeUsageDetailTokens(tokensRaw),
