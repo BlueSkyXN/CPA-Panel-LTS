@@ -509,7 +509,9 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
         id: brand,
         resources,
       };
-    }).filter((group) => group.resources.length > 0 || !CONFIG_DETECTED_BRANDS.has(group.id));
+    }).filter(
+      (group) => group.resources.length > 0 || !CONFIG_DETECTED_BRANDS.has(group.id)
+    );
     return {
       fetchedAt,
       groups,

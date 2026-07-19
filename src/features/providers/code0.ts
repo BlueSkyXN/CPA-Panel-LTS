@@ -20,7 +20,12 @@ export const CODE0_BASE_URL_OPTIONS = [
   },
 ] as const;
 
-export const CODE0_PROTOCOL_LABELS = ['openai', 'anthropic', 'gemini', 'codexResponses'] as const;
+export const CODE0_PROTOCOL_LABELS = [
+  'openai',
+  'anthropic',
+  'gemini',
+  'codexResponses',
+] as const;
 
 const normalizeText = (value: string | undefined | null): string =>
   String(value ?? '')
@@ -80,7 +85,9 @@ const matchesCode0GeminiBaseUrl = (value: string | undefined | null): boolean =>
   );
 };
 
-export const isCode0OpenAIProvider = (config: OpenAIProviderConfig | undefined | null): boolean => {
+export const isCode0OpenAIProvider = (
+  config: OpenAIProviderConfig | undefined | null
+): boolean => {
   if (!config) return false;
   return matchesCode0OpenAIBaseUrl(config.baseUrl);
 };

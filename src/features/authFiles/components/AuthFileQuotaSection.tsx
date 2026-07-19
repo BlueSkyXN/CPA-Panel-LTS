@@ -179,14 +179,13 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
   const canRefreshQuota = !disableControls && !file.disabled && !resettingQuota;
   const canUseResetQuota = canRefreshQuota && quotaStatus !== 'loading';
   const showResetQuotaAction = quota !== undefined && Boolean(config.canResetQuota?.(quota));
-  const resetQuotaAction =
-    config.resetQuota && showResetQuotaAction
-      ? {
-          disabled: !canUseResetQuota,
-          loading: resettingQuota,
-          onClick: () => resetQuotaForFile(),
-        }
-      : undefined;
+  const resetQuotaAction = config.resetQuota && showResetQuotaAction ? (
+    {
+      disabled: !canUseResetQuota,
+      loading: resettingQuota,
+      onClick: () => resetQuotaForFile(),
+    }
+  ) : undefined;
   const quotaErrorMessage = resolveQuotaErrorMessage(
     t,
     quota?.errorStatus,
