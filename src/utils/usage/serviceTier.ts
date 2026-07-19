@@ -47,6 +47,19 @@ export function resolveServiceTier(values: ServiceTierValues): ResolvedServiceTi
     };
   }
 
+  // A present but unrecognized effective tier is the highest-authority
+  // evidence available. Do not let lower-priority response or request values
+  // turn a future/unknown tier into a Fast estimate.
+  if (rawEffective) {
+    return {
+      tier: 'std',
+      evidence: 'assumed',
+      rawRequest,
+      rawResponse,
+      rawEffective,
+    };
+  }
+
   const responseTier = classifyServiceTier(rawResponse);
   if (responseTier) {
     return {
