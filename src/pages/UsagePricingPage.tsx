@@ -235,7 +235,11 @@ const buildDraftProfile = (
 };
 
 const hasAnomaly = (summary: PricingModelSummary): boolean =>
-  summary.pricingCoverage.unsupportedRequests > 0 || summary.warnings.includes('fallbackStandard');
+  summary.pricingCoverage.unsupportedRequests > 0 ||
+  summary.warnings.includes('fallbackStandard') ||
+  (summary.resolvedPrice.modelMatch !== 'none' &&
+    (summary.pricingCoverage.pricedRequests < summary.pricingCoverage.totalRequests ||
+      summary.pricingCoverage.pricedTokens < summary.pricingCoverage.totalTokens));
 
 const getPricingStatus = (summary: PricingModelSummary, profile: PriceProfileV3): PricingStatus => {
   const key = normalizeModelKey(summary.modelName);

@@ -29,11 +29,7 @@ import {
   type PricingCoverageInput,
   type ResolvedPrice,
 } from './usage/pricing';
-import {
-  estimateUsageDetailCost,
-  pricedAmountOrZero,
-  summarizeUsageDetailCosts,
-} from './usage/pricing/usagePricing';
+import { estimateUsageDetailCost, pricedAmountOrZero } from './usage/pricing/usagePricing';
 import { normalizeReasoningEffort } from './usage/reasoningEffort';
 import { normalizeServiceTier } from './usage/serviceTier';
 import { maskApiKey } from './format';
@@ -221,6 +217,112 @@ const getApisRecord = (usageData: unknown): Record<string, unknown> | null => {
   const usageRecord = isRecord(usageData) ? usageData : null;
   const apisRaw = usageRecord ? usageRecord.apis : null;
   return isRecord(apisRaw) ? apisRaw : null;
+};
+
+interface PricingUsageAggregate {
+  requests: number;
+  tokens: number;
+}
+
+const toAggregateCount = (value: unknown): number => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0;
+};
+
+const pricingRatio = (part: number, total: number): number => (total > 0 ? part / total : 0);
+
+const reconcilePricingCoverage = (
+  coverage: PricingCoverage,
+  aggregateRequests: unknown,
+  aggregateTokens: unknown,
+  totalModels: number = coverage.totalModels,
+  pricedModels: number = coverage.pricedModels
+): PricingCoverage => {
+  const totalRequests = Math.max(coverage.totalRequests, toAggregateCount(aggregateRequests));
+  const totalTokens = Math.max(coverage.totalTokens, toAggregateCount(aggregateTokens));
+  const missingRequests = Math.max(totalRequests - coverage.totalRequests, 0);
+  const hasAggregateGap =
+    totalRequests > coverage.totalRequests || totalTokens > coverage.totalTokens;
+  const reconciledPricedModels =
+    hasAggregateGap && totalModels > 0 && pricedModels >= totalModels
+      ? totalModels - 1
+      : pricedModels;
+
+  return {
+    ...coverage,
+    totalRequests,
+    unmatchedRequests: coverage.unmatchedRequests + missingRequests,
+    totalTokens,
+    totalModels,
+    pricedModels: reconciledPricedModels,
+    assumedTierRequests: coverage.assumedTierRequests + missingRequests,
+    pricedRequestRatio: pricingRatio(coverage.pricedRequests, totalRequests),
+    pricedTokenRatio: pricingRatio(coverage.pricedTokens, totalTokens),
+    pricedModelRatio: pricingRatio(reconciledPricedModels, totalModels),
+  };
+};
+
+const reconcileModelPricingCoverage = (
+  coverage: PricingCoverage,
+  aggregateRequests: unknown,
+  aggregateTokens: unknown
+): PricingCoverage => {
+  const totalRequests = Math.max(coverage.totalRequests, toAggregateCount(aggregateRequests));
+  const totalTokens = Math.max(coverage.totalTokens, toAggregateCount(aggregateTokens));
+  const hasUsage = totalRequests > 0 || totalTokens > 0 || coverage.totalModels > 0;
+  const pricedModels =
+    hasUsage &&
+    totalRequests > 0 &&
+    coverage.pricedRequests === totalRequests &&
+    coverage.pricedTokens === totalTokens
+      ? 1
+      : 0;
+  return reconcilePricingCoverage(
+    coverage,
+    totalRequests,
+    totalTokens,
+    hasUsage ? 1 : 0,
+    pricedModels
+  );
+};
+
+const combinePricingCoverages = (coverages: Iterable<PricingCoverage>): PricingCoverage => {
+  const combined = createEmptyPricingCoverage();
+  for (const coverage of coverages) {
+    combined.totalRequests += coverage.totalRequests;
+    combined.pricedRequests += coverage.pricedRequests;
+    combined.unmatchedRequests += coverage.unmatchedRequests;
+    combined.unsupportedRequests += coverage.unsupportedRequests;
+    combined.totalTokens += coverage.totalTokens;
+    combined.pricedTokens += coverage.pricedTokens;
+    combined.totalModels += coverage.totalModels;
+    combined.pricedModels += coverage.pricedModels;
+    combined.estimatedAmount += coverage.estimatedAmount;
+    combined.assumedTierRequests += coverage.assumedTierRequests;
+  }
+  combined.pricedRequestRatio = pricingRatio(combined.pricedRequests, combined.totalRequests);
+  combined.pricedTokenRatio = pricingRatio(combined.pricedTokens, combined.totalTokens);
+  combined.pricedModelRatio = pricingRatio(combined.pricedModels, combined.totalModels);
+  return combined;
+};
+
+const collectUsageModelAggregates = (usageData: unknown): Map<string, PricingUsageAggregate> => {
+  const aggregates = new Map<string, PricingUsageAggregate>();
+  const apis = getApisRecord(usageData);
+  if (!apis) return aggregates;
+
+  Object.values(apis).forEach((apiEntry) => {
+    if (!isRecord(apiEntry) || !isRecord(apiEntry.models)) return;
+    Object.entries(apiEntry.models).forEach(([modelName, modelEntry]) => {
+      if (!modelName || !isRecord(modelEntry)) return;
+      const aggregate = aggregates.get(modelName) ?? { requests: 0, tokens: 0 };
+      aggregate.requests += toAggregateCount(modelEntry.total_requests);
+      aggregate.tokens += toAggregateCount(modelEntry.total_tokens);
+      aggregates.set(modelName, aggregate);
+    });
+  });
+
+  return aggregates;
 };
 
 const normalizeUsageDetailTokens = (tokensRaw: Record<string, unknown>): UsageTokenStats => {
@@ -939,7 +1041,15 @@ export function calculatePricingCoverage(
   usageData: unknown,
   priceProfile: PriceProfileV3 = createDefaultPriceProfileV3()
 ): PricingCoverage {
-  return summarizeUsageDetailCosts(collectUsageDetails(usageData), priceProfile);
+  const modelCoverage = combinePricingCoverages(
+    getPricingModelSummaries(usageData, priceProfile).map((summary) => summary.pricingCoverage)
+  );
+  const usageRecord = isRecord(usageData) ? usageData : {};
+  return reconcilePricingCoverage(
+    modelCoverage,
+    usageRecord.total_requests,
+    usageRecord.total_tokens
+  );
 }
 
 export function calculateTotalCost(
@@ -1010,7 +1120,7 @@ export function getApiStats(
     > = {};
     let derivedSuccessCount = 0;
     let derivedFailureCount = 0;
-    const pricingInputs: PricingCoverageInput[] = [];
+    const pricingCoverages: PricingCoverage[] = [];
 
     const modelsData = isRecord(apiData.models) ? apiData.models : {};
     Object.entries(modelsData).forEach(([modelName, modelData]) => {
@@ -1026,18 +1136,23 @@ export function getApiStats(
         failureCount += Number(modelData.failure_count) || 0;
       }
 
-      if (details.length > 0) {
-        details.forEach((detail) => {
-          if (!hasExplicitCounts) {
-            if (detail.failed === true) {
-              failureCount += 1;
-            } else {
-              successCount += 1;
-            }
+      const modelPricingInputs = details.map((detail) => {
+        if (!hasExplicitCounts) {
+          if (detail.failed === true) {
+            failureCount += 1;
+          } else {
+            successCount += 1;
           }
-          pricingInputs.push(estimateUsageDetailCost(detail, priceProfile));
-        });
-      }
+        }
+        return estimateUsageDetailCost(detail, priceProfile);
+      });
+      pricingCoverages.push(
+        reconcileModelPricingCoverage(
+          aggregateCostEstimateCoverage(modelPricingInputs),
+          modelData.total_requests,
+          modelData.total_tokens
+        )
+      );
 
       models[modelName] = {
         requests: Number(modelData.total_requests) || 0,
@@ -1057,7 +1172,11 @@ export function getApiStats(
     const failureCount = hasApiExplicitCounts
       ? Number(apiData.failure_count) || 0
       : derivedFailureCount;
-    const pricingCoverage = aggregateCostEstimateCoverage(pricingInputs);
+    const pricingCoverage = reconcilePricingCoverage(
+      combinePricingCoverages(pricingCoverages),
+      apiData.total_requests,
+      apiData.total_tokens
+    );
 
     result.push({
       endpoint: maskUsageSensitiveValue(endpoint) || endpoint,
@@ -1153,7 +1272,11 @@ export function getModelStats(
   return Array.from(modelMap.entries())
     .map(([model, stats]) => {
       const latencyStats = finalizeLatencyStats(stats.latency);
-      const pricingCoverage = aggregateCostEstimateCoverage(stats.pricingInputs);
+      const pricingCoverage = reconcileModelPricingCoverage(
+        aggregateCostEstimateCoverage(stats.pricingInputs),
+        stats.requests,
+        stats.tokens
+      );
       return {
         model,
         requests: stats.requests,
@@ -1200,9 +1323,26 @@ export function getPricingModelSummaries(
     groups.set(modelName, group);
   });
 
-  return Array.from(groups.entries())
-    .map(([modelName, group]) => {
-      const pricingCoverage = aggregateCostEstimateCoverage(group.pricingInputs);
+  const aggregates = collectUsageModelAggregates(usageData);
+  const modelNames = new Set(groups.keys());
+  aggregates.forEach((aggregate, modelName) => {
+    if (aggregate.requests > 0 || aggregate.tokens > 0) modelNames.add(modelName);
+  });
+
+  return Array.from(modelNames)
+    .map((modelName) => {
+      const group = groups.get(modelName) ?? {
+        pricingInputs: [],
+        fastRequestCount: 0,
+        longContextRequestCount: 0,
+        warnings: new Set<CostEstimateWarning>(),
+      };
+      const aggregate = aggregates.get(modelName);
+      const pricingCoverage = reconcileModelPricingCoverage(
+        aggregateCostEstimateCoverage(group.pricingInputs),
+        aggregate?.requests,
+        aggregate?.tokens
+      );
       return {
         modelName,
         resolvedPrice: resolvePriceProfile(modelName, priceProfile),
