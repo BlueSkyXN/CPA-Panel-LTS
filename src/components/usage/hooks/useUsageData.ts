@@ -3,7 +3,14 @@ import { useTranslation } from 'react-i18next';
 import { USAGE_STATS_STALE_TIME_MS, useNotificationStore, useUsageStatsStore } from '@/stores';
 import { usageApi } from '@/services/api/usage';
 import { downloadBlob } from '@/utils/download';
-import { loadModelPrices, saveModelPrices, type ModelPrice } from '@/utils/usage';
+import {
+  createDefaultPriceProfileV3,
+  loadPriceProfileV3,
+  normalizePriceProfileV3,
+  savePriceProfileV3,
+  type PriceProfileLoadSource,
+  type PriceProfileV3,
+} from '@/utils/usage';
 import { analyzeUsageImport } from '@/utils/usage/importPreflight';
 
 export interface UsagePayload {
@@ -20,8 +27,10 @@ export interface UseUsageDataReturn {
   loading: boolean;
   error: string;
   lastRefreshedAt: Date | null;
-  modelPrices: Record<string, ModelPrice>;
-  setModelPrices: (prices: Record<string, ModelPrice>) => void;
+  priceProfile: PriceProfileV3;
+  priceProfileSource: PriceProfileLoadSource;
+  priceProfileWarnings: string[];
+  setPriceProfile: (profile: PriceProfileV3) => boolean;
   loadUsage: () => Promise<void>;
   handleExport: () => Promise<void>;
   handleImport: () => void;
@@ -40,7 +49,11 @@ export function useUsageData(): UseUsageDataReturn {
   const lastRefreshedAtTs = useUsageStatsStore((state) => state.lastRefreshedAt);
   const loadUsageStats = useUsageStatsStore((state) => state.loadUsageStats);
 
-  const [modelPrices, setModelPrices] = useState<Record<string, ModelPrice>>({});
+  const [priceProfile, setPriceProfileState] = useState<PriceProfileV3>(
+    createDefaultPriceProfileV3
+  );
+  const [priceProfileSource, setPriceProfileSource] = useState<PriceProfileLoadSource>('default');
+  const [priceProfileWarnings, setPriceProfileWarnings] = useState<string[]>([]);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
@@ -51,7 +64,10 @@ export function useUsageData(): UseUsageDataReturn {
 
   useEffect(() => {
     void loadUsageStats({ staleTimeMs: USAGE_STATS_STALE_TIME_MS }).catch(() => {});
-    setModelPrices(loadModelPrices());
+    const loaded = loadPriceProfileV3();
+    setPriceProfileState(loaded.profile);
+    setPriceProfileSource(loaded.source);
+    setPriceProfileWarnings(loaded.warnings);
   }, [loadUsageStats]);
 
   const handleExport = async () => {
@@ -199,10 +215,20 @@ export function useUsageData(): UseUsageDataReturn {
     });
   };
 
-  const handleSetModelPrices = useCallback((prices: Record<string, ModelPrice>) => {
-    setModelPrices(prices);
-    saveModelPrices(prices);
-  }, []);
+  const handleSetPriceProfile = useCallback(
+    (profile: PriceProfileV3) => {
+      const normalized = normalizePriceProfileV3(profile);
+      if (!savePriceProfileV3(normalized.profile)) {
+        showNotification(t('usage_stats.pricing_profile_save_failed'), 'error');
+        return false;
+      }
+      setPriceProfileState(normalized.profile);
+      setPriceProfileSource('v3');
+      setPriceProfileWarnings(normalized.warnings);
+      return true;
+    },
+    [showNotification, t]
+  );
 
   const usage = usageSnapshot as UsagePayload | null;
   const error = storeError || '';
@@ -213,8 +239,10 @@ export function useUsageData(): UseUsageDataReturn {
     loading,
     error,
     lastRefreshedAt,
-    modelPrices,
-    setModelPrices: handleSetModelPrices,
+    priceProfile,
+    priceProfileSource,
+    priceProfileWarnings,
+    setPriceProfile: handleSetPriceProfile,
     loadUsage,
     handleExport,
     handleImport,

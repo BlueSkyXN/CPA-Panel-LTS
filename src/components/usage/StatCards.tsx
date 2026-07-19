@@ -11,14 +11,13 @@ import {
 import {
   LATENCY_SOURCE_FIELD,
   calculateLatencyStatsFromDetails,
-  calculateCost,
   formatCompactNumber,
   formatDurationMs,
   formatPerMinuteValue,
   formatUsd,
   collectUsageDetails,
   extractTotalTokens,
-  type ModelPrice,
+  type PricingCoverage,
 } from '@/utils/usage';
 import { sparklineOptions } from '@/utils/usage/chartConfig';
 import type { UsagePayload } from './hooks/useUsageData';
@@ -41,7 +40,8 @@ interface StatCardData {
 export interface StatCardsProps {
   usage: UsagePayload | null;
   loading: boolean;
-  modelPrices: Record<string, ModelPrice>;
+  pricingCoverage: PricingCoverage;
+  onOpenPricing: () => void;
   nowMs: number;
   sparklines: {
     requests: SparklineBundle | null;
@@ -52,20 +52,29 @@ export interface StatCardsProps {
   };
 }
 
-export function StatCards({ usage, loading, modelPrices, nowMs, sparklines }: StatCardsProps) {
+export function StatCards({
+  usage,
+  loading,
+  pricingCoverage,
+  onOpenPricing,
+  nowMs,
+  sparklines,
+}: StatCardsProps) {
   const { t } = useTranslation();
   const latencyHint = t('usage_stats.latency_unit_hint', {
     field: LATENCY_SOURCE_FIELD,
     unit: t('usage_stats.duration_unit_ms'),
   });
 
-  const hasPrices = Object.keys(modelPrices).length > 0;
+  const hasPricedRequests = pricingCoverage.pricedRequests > 0;
+  const pricingComplete =
+    pricingCoverage.totalRequests > 0 &&
+    pricingCoverage.pricedRequests === pricingCoverage.totalRequests;
 
-  const { tokenBreakdown, rateStats, totalCost, latencyStats } = useMemo(() => {
+  const { tokenBreakdown, rateStats, latencyStats } = useMemo(() => {
     const empty = {
       tokenBreakdown: { cacheReadTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0 },
       rateStats: { rpm: 0, tpm: 0, windowMinutes: 30, requestCount: 0, tokenCount: 0 },
-      totalCost: 0,
       latencyStats: {
         averageMs: null as number | null,
         totalMs: null as number | null,
@@ -82,7 +91,6 @@ export function StatCards({ usage, loading, modelPrices, nowMs, sparklines }: St
     let cacheReadTokens = 0;
     let cacheWriteTokens = 0;
     let reasoningTokens = 0;
-    let totalCost = 0;
 
     const now = nowMs;
     const windowMinutes = 30;
@@ -110,10 +118,6 @@ export function StatCards({ usage, loading, modelPrices, nowMs, sparklines }: St
         requestCount += 1;
         tokenCount += extractTotalTokens(detail);
       }
-
-      if (hasPrices) {
-        totalCost += calculateCost(detail, modelPrices);
-      }
     });
 
     const denominator = windowMinutes > 0 ? windowMinutes : 1;
@@ -126,10 +130,9 @@ export function StatCards({ usage, loading, modelPrices, nowMs, sparklines }: St
         requestCount,
         tokenCount,
       },
-      totalCost,
       latencyStats,
     };
-  }, [hasPrices, modelPrices, nowMs, usage]);
+  }, [nowMs, usage]);
 
   const statsCards: StatCardData[] = [
     {
@@ -225,21 +228,24 @@ export function StatCards({ usage, loading, modelPrices, nowMs, sparklines }: St
       accent: '#f59e0b',
       accentSoft: 'rgba(245, 158, 11, 0.18)',
       accentBorder: 'rgba(245, 158, 11, 0.32)',
-      value: loading ? '-' : hasPrices ? formatUsd(totalCost) : '--',
+      value: loading ? '-' : hasPricedRequests ? formatUsd(pricingCoverage.estimatedAmount) : '--',
       meta: (
         <>
           <span className={styles.statMetaItem}>
-            {t('usage_stats.total_tokens')}:{' '}
-            {loading ? '-' : formatCompactNumber(usage?.total_tokens ?? 0)}
+            {t('usage_stats.pricing_request_coverage')}:{' '}
+            {loading ? '-' : `${(pricingCoverage.pricedRequestRatio * 100).toFixed(1)}%`}
           </span>
-          {!hasPrices && (
+          {!pricingComplete && pricingCoverage.totalRequests > 0 && (
             <span className={`${styles.statMetaItem} ${styles.statSubtle}`}>
-              {t('usage_stats.cost_need_price')}
+              {t('usage_stats.pricing_cost_incomplete')}
             </span>
           )}
+          <button type="button" className={styles.statInlineAction} onClick={onOpenPricing}>
+            {t('usage_stats.pricing_open')}
+          </button>
         </>
       ),
-      trend: hasPrices ? sparklines.cost : null,
+      trend: hasPricedRequests ? sparklines.cost : null,
     },
   ];
 

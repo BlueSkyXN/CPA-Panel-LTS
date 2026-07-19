@@ -66,8 +66,11 @@ for path in \
   src/utils/dashboard.ts \
   src/pages/UsagePage.tsx \
   src/pages/UsagePage.module.scss \
+  src/pages/UsagePricingPage.tsx \
+  src/pages/UsagePricingPage.module.scss \
   src/components/usage \
   src/components/usage/AGENTS.md \
+  src/components/usage/PricingEntryCard.tsx \
   src/components/providers \
   src/components/providers/AmpcodeSection \
   src/components/providers/ProviderStatusBar.tsx \
@@ -160,6 +163,13 @@ for path in \
   src/utils/usage/importPreflight.test.mjs \
   src/utils/usage/reasoningEffort.ts \
   src/utils/usage/reasoningEffort.test.mjs \
+  src/utils/usage/pricing/index.ts \
+  src/utils/usage/pricing/index.test.mjs \
+  src/utils/usage/pricing/storage.ts \
+  src/utils/usage/pricing/storage.test.mjs \
+  src/utils/usage/pricing/usagePricing.ts \
+  src/utils/usage/pricing/usagePricing.test.mjs \
+  src/utils/usage/pricing/usageAggregation.test.mjs \
   src/utils/recentRequests.ts \
   src/utils/quota \
   src/utils/constants.ts \
@@ -182,6 +192,7 @@ done
 
 # Hard LTS contract.
 require_file_contains src/router/MainRoutes.tsx "path: '/usage'"
+require_file_contains src/router/MainRoutes.tsx "path: '/usage/pricing'"
 require_file_contains src/router/MainRoutes.tsx "path: '/lts/usage'"
 require_file_contains src/router/MainRoutes.tsx "path: '/lts/providers'"
 require_file_contains src/router/MainRoutes.tsx "path: '/lts/ampcode'"
@@ -216,6 +227,25 @@ require_file_contains src/utils/usage/reasoningEffort.ts "normalizeReasoningEffo
 require_file_contains src/utils/usage/serviceTier.ts "resolveServiceTier"
 require_file_contains src/utils/usage/serviceTier.ts "ServiceTierEvidence"
 require_file_contains src/utils/usage/serviceTier.test.mjs "unknown response blocks fallback"
+require_file_contains src/utils/usage/pricing/index.ts "OPENAI_PRICE_CATALOG"
+require_file_contains src/utils/usage/pricing/index.ts "aggregateCostEstimateCoverage"
+require_file_contains src/utils/usage/pricing/storage.ts "PRICE_PROFILE_STORAGE_KEY"
+require_file_contains src/utils/usage/pricing/storage.ts "cli-proxy-model-prices-v3"
+require_file_contains src/utils/usage/pricing/usagePricing.ts "estimateUsageDetailCost"
+require_file_contains src/utils/usage.ts "calculatePricingCoverage"
+require_file_contains src/utils/usage/pricing/usageAggregation.test.mjs "hourly, and daily pricing share one amount"
+require_file_contains src/pages/UsagePage.tsx "PricingEntryCard"
+require_file_contains src/pages/UsagePricingPage.tsx "usage-pricing-page"
+require_file_contains src/pages/UsagePricingPage.tsx "pricing-model-row"
+require_file_contains package.json "test:usage-pricing-v3"
+require_file_contains package.json "test:usage-pricing-storage"
+require_file_contains package.json "test:usage-pricing-integration"
+require_file_contains scripts/smoke-lts-panel.py "run_usage_pricing_smoke"
+require_file_contains scripts/smoke-lts-panel.py "cli-proxy-model-prices-v3"
+require_file_contains scripts/smoke-lts-panel.py "Fast long context unsupported"
+require_file_contains scripts/smoke-lts-panel-core.py "build_service_tier_usage_snapshot"
+require_file_contains scripts/smoke-lts-panel-core.py "effective_service_tier"
+require_file_contains scripts/smoke-lts-panel-core.py '"/usage/pricing"'
 require_file_not_contains src/utils/usage/reasoningEffort.ts "GPT56_ULTRA_WIRE_MODELS"
 require_file_not_contains src/utils/usage/reasoningEffort.ts "isGPT56UltraWireModel"
 require_file_not_contains src/utils/usage/reasoningEffort.ts "max-ultra-wire"
@@ -237,6 +267,14 @@ require_file_contains src/i18n/locales/en.json "request_events_filter_tier"
 require_file_contains src/i18n/locales/zh-CN.json "request_events_filter_tier"
 require_file_contains src/i18n/locales/zh-TW.json "request_events_filter_tier"
 require_file_contains src/i18n/locales/ru.json "request_events_filter_tier"
+require_file_contains src/i18n/locales/en.json "pricing_browser_notice"
+require_file_contains src/i18n/locales/zh-CN.json "pricing_browser_notice"
+require_file_contains src/i18n/locales/zh-TW.json "pricing_browser_notice"
+require_file_contains src/i18n/locales/ru.json "pricing_browser_notice"
+require_file_contains src/i18n/locales/en.json "pricing_cost_incomplete"
+require_file_contains src/i18n/locales/zh-CN.json "pricing_cost_incomplete"
+require_file_contains src/i18n/locales/zh-TW.json "pricing_cost_incomplete"
+require_file_contains src/i18n/locales/ru.json "pricing_cost_incomplete"
 require_file_contains src/i18n/locales/en.json "request_events_filter_effort"
 require_file_contains src/i18n/locales/zh-CN.json "request_events_filter_effort"
 require_file_contains src/i18n/locales/zh-TW.json "request_events_filter_effort"

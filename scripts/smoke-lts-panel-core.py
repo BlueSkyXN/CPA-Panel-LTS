@@ -25,6 +25,7 @@ import textwrap
 import threading
 import time
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -418,6 +419,72 @@ def contains_key(value: Any, key: str) -> bool:
     if isinstance(value, list):
         return any(contains_key(item, key) for item in value)
     return False
+
+
+def build_service_tier_usage_snapshot() -> dict[str, Any]:
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    day_key = now.strftime("%Y-%m-%d")
+    hour_key = now.strftime("%H")
+    details = [
+        {
+            "timestamp": (now - timedelta(minutes=1)).isoformat().replace("+00:00", "Z"),
+            "source": "auths/core-tier-smoke.json",
+            "auth_index": "1",
+            "service_tier": "priority",
+            "request_service_tier": "priority",
+            "response_service_tier": "standard",
+            "effective_service_tier": "standard",
+            "tokens": {"input_tokens": 5, "output_tokens": 7, "total_tokens": 12},
+            "failed": False,
+        },
+        {
+            "timestamp": (now - timedelta(minutes=2)).isoformat().replace("+00:00", "Z"),
+            "source": "auths/core-tier-smoke.json",
+            "auth_index": "1",
+            "service_tier": "auto",
+            "request_service_tier": "auto",
+            "effective_service_tier": "priority",
+            "tokens": {"input_tokens": 8, "output_tokens": 4, "total_tokens": 12},
+            "failed": False,
+        },
+        {
+            "timestamp": (now - timedelta(minutes=3)).isoformat().replace("+00:00", "Z"),
+            "source": "auths/core-tier-smoke.json",
+            "auth_index": "1",
+            "service_tier": "priority",
+            "request_service_tier": "priority",
+            "response_service_tier": "future-tier",
+            "tokens": {"input_tokens": 6, "output_tokens": 3, "total_tokens": 9},
+            "failed": False,
+        },
+    ]
+    return {
+        "version": 1,
+        "exported_at": now.isoformat().replace("+00:00", "Z"),
+        "usage": {
+            "total_requests": 3,
+            "success_count": 3,
+            "failure_count": 0,
+            "total_tokens": 33,
+            "apis": {
+                "panel-core-tier-smoke": {
+                    "total_requests": 3,
+                    "total_tokens": 33,
+                    "models": {
+                        "gpt-5.4": {
+                            "total_requests": 3,
+                            "total_tokens": 33,
+                            "details": details,
+                        }
+                    },
+                }
+            },
+            "requests_by_day": {day_key: 3},
+            "requests_by_hour": {hour_key: 3},
+            "tokens_by_day": {day_key: 33},
+            "tokens_by_hour": {hour_key: 33},
+        },
+    }
 
 
 def replace_one(text: str, pattern: str, replacement: str, label: str) -> str:
@@ -1025,6 +1092,86 @@ def run_endpoint_smoke(api_url: str, include_plugin_store: bool, include_write_s
     )
     if "total_requests" not in import_result:
         raise AssertionError(f"Invalid usage import result: {import_result!r}")
+
+    tier_snapshot = build_service_tier_usage_snapshot()
+    seen.append("POST /v0/management/usage/import service-tier fixture")
+    tier_import_result = assert_mapping(
+        request_json(
+            api_url,
+            "/v0/management/usage/import",
+            method="POST",
+            payload=tier_snapshot,
+        ),
+        "/v0/management/usage/import service-tier fixture",
+    )
+    if tier_import_result.get("total_requests") != 3:
+        raise AssertionError(
+            f"Service-tier usage fixture was not imported: {tier_import_result!r}"
+        )
+
+    tier_export = assert_mapping(
+        get("/v0/management/usage/export"),
+        "/v0/management/usage/export after service-tier import",
+    )
+    tier_usage = assert_mapping(tier_export.get("usage"), "usage export usage")
+    tier_apis = assert_mapping(tier_usage.get("apis"), "usage export apis")
+    tier_api = assert_mapping(tier_apis.get("panel-core-tier-smoke"), "service-tier API")
+    tier_models = assert_mapping(tier_api.get("models"), "service-tier models")
+    tier_model = assert_mapping(tier_models.get("gpt-5.4"), "service-tier model")
+    tier_details = assert_list(tier_model.get("details"), "service-tier details")
+    if len(tier_details) != 3:
+        raise AssertionError(f"Service-tier export lost request details: {tier_details!r}")
+    standard_detail = next(
+        (
+            item
+            for item in tier_details
+            if isinstance(item, dict) and item.get("response_service_tier") == "standard"
+        ),
+        None,
+    )
+    if (
+        not isinstance(standard_detail, dict)
+        or standard_detail.get("request_service_tier") != "priority"
+        or standard_detail.get("effective_service_tier") != "standard"
+    ):
+        raise AssertionError(
+            "Core import/export lost request/response/effective tier precedence: "
+            f"{standard_detail!r}"
+        )
+    outbound_detail = next(
+        (
+            item
+            for item in tier_details
+            if isinstance(item, dict) and item.get("request_service_tier") == "auto"
+        ),
+        None,
+    )
+    if (
+        not isinstance(outbound_detail, dict)
+        or outbound_detail.get("response_service_tier") not in {None, ""}
+        or outbound_detail.get("effective_service_tier") != "priority"
+    ):
+        raise AssertionError(
+            "Core import/export lost outbound-derived effective priority: "
+            f"{outbound_detail!r}"
+        )
+    unknown_detail = next(
+        (
+            item
+            for item in tier_details
+            if isinstance(item, dict) and item.get("response_service_tier") == "future-tier"
+        ),
+        None,
+    )
+    if not isinstance(unknown_detail, dict) or unknown_detail.get("effective_service_tier") not in {
+        None,
+        "",
+    }:
+        raise AssertionError(
+            "Unknown response tier must not fabricate effective_service_tier: "
+            f"{unknown_detail!r}"
+        )
+    seen.append("Core usage v1 round-tripped inconsistent request/response/effective tiers")
 
     assert_mapping(get("/v0/management/api-key-usage"), "/v0/management/api-key-usage")
     assert_mapping(get("/v0/management/ampcode"), "/v0/management/ampcode")
@@ -1838,6 +1985,7 @@ def run_browser_smoke(
         ("/oauth", "OAuth Login", None),
         ("/quota", "Quota Management", None),
         ("/usage", "Usage Statistics", None),
+        ("/usage/pricing", "Pricing workspace", None),
         ("/lts/usage", "Usage Statistics", "/usage"),
         ("/ai-providers", "AI Providers Configuration", None),
         ("/ai-providers/workbench", "AI Providers", None),
@@ -1892,6 +2040,45 @@ def run_browser_smoke(
                         arg=route,
                     )
                 page.get_by_text(expected_text, exact=False).first.wait_for()
+                if route == "/usage":
+                    events_card = page.get_by_text("Request Events", exact=True).locator(
+                        "xpath=../.."
+                    )
+                    events_card.wait_for()
+                    rows = events_card.locator("tbody tr")
+                    for _ in range(50):
+                        if rows.count() == 3:
+                            break
+                        page.wait_for_timeout(100)
+                    if rows.count() != 3:
+                        raise AssertionError(
+                            f"Real Core service-tier fixture rendered {rows.count()} rows"
+                        )
+                    if events_card.get_by_text("Fast", exact=True).count() != 1:
+                        raise AssertionError("Real Core effective priority did not render as Fast")
+                    if events_card.get_by_text("Std", exact=True).count() != 2:
+                        raise AssertionError(
+                            "Real Core response standard/unknown tiers did not render as Std"
+                        )
+                    events_card.get_by_label(
+                        "Historical or unknown tier; estimated as Std.", exact=True
+                    ).wait_for()
+                    tier_select = events_card.get_by_label("Tier", exact=True)
+                    tier_select.click()
+                    page.get_by_role("option", name="Fast", exact=True).wait_for()
+                    page.get_by_role("option", name="Std", exact=True).wait_for()
+                    if page.get_by_role("option", name=re.compile("Priority|Other|Unknown", re.I)).count():
+                        raise AssertionError("Real Core tier filter exposed more than Fast and Std")
+                    page.keyboard.press("Escape")
+                    seen.append("BROWSER real Core usage tiers render only Fast/Std with assumed evidence")
+                elif route == "/usage/pricing":
+                    pricing_summary = page.locator('[aria-label="Pricing coverage summary"]')
+                    pricing_summary.wait_for()
+                    page.locator(
+                        '[data-testid="pricing-model-row"][data-model="gpt-5.4"]'
+                    ).wait_for()
+                    pricing_summary.get_by_text("1 / 1", exact=True).wait_for()
+                    seen.append("BROWSER real Core pricing route uses preset coverage")
         except PlaywrightError as exc:
             with contextlib.suppress(Exception):
                 body_text = page.locator("body").inner_text(timeout=1000)

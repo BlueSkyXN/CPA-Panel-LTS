@@ -8,7 +8,8 @@ import {
   buildHourlyCostSeries,
   buildDailyCostSeries,
   formatUsd,
-  type ModelPrice
+  type PriceProfileV3,
+  type PricingCoverage,
 } from '@/utils/usage';
 import { buildChartOptions, getHourChartMinWidth } from '@/utils/usage/chartConfig';
 import type { UsagePayload } from './hooks/useUsageData';
@@ -19,7 +20,8 @@ export interface CostTrendChartProps {
   loading: boolean;
   isDark: boolean;
   isMobile: boolean;
-  modelPrices: Record<string, ModelPrice>;
+  priceProfile: PriceProfileV3;
+  onOpenPricing: () => void;
   hourWindowHours?: number;
 }
 
@@ -42,22 +44,26 @@ export function CostTrendChart({
   loading,
   isDark,
   isMobile,
-  modelPrices,
-  hourWindowHours
+  priceProfile,
+  onOpenPricing,
+  hourWindowHours,
 }: CostTrendChartProps) {
   const { t } = useTranslation();
   const [period, setPeriod] = useState<'hour' | 'day'>('hour');
-  const hasPrices = Object.keys(modelPrices).length > 0;
-
-  const { chartData, chartOptions, hasData } = useMemo(() => {
-    if (!hasPrices || !usage) {
-      return { chartData: { labels: [], datasets: [] }, chartOptions: {}, hasData: false };
+  const { chartData, chartOptions, hasData, pricingCoverage } = useMemo(() => {
+    if (!usage) {
+      return {
+        chartData: { labels: [], datasets: [] },
+        chartOptions: {},
+        hasData: false,
+        pricingCoverage: null as PricingCoverage | null,
+      };
     }
 
     const series =
       period === 'hour'
-        ? buildHourlyCostSeries(usage, modelPrices, hourWindowHours)
-        : buildDailyCostSeries(usage, modelPrices);
+        ? buildHourlyCostSeries(usage, priceProfile, hourWindowHours)
+        : buildDailyCostSeries(usage, priceProfile);
 
     const data = {
       labels: series.labels,
@@ -70,9 +76,9 @@ export function CostTrendChart({
           pointBackgroundColor: COST_COLOR,
           pointBorderColor: COST_COLOR,
           fill: true,
-          tension: 0.35
-        }
-      ]
+          tension: 0.35,
+        },
+      ],
     };
 
     const baseOptions = buildChartOptions({ period, labels: series.labels, isDark, isMobile });
@@ -83,61 +89,92 @@ export function CostTrendChart({
         y: {
           ...baseOptions.scales?.y,
           ticks: {
-            ...(baseOptions.scales?.y && 'ticks' in baseOptions.scales.y ? baseOptions.scales.y.ticks : {}),
-            callback: (value: string | number) => formatUsd(Number(value))
-          }
-        }
-      }
+            ...(baseOptions.scales?.y && 'ticks' in baseOptions.scales.y
+              ? baseOptions.scales.y.ticks
+              : {}),
+            callback: (value: string | number) => formatUsd(Number(value)),
+          },
+        },
+      },
     };
 
-    return { chartData: data, chartOptions: options, hasData: series.hasData };
-  }, [usage, period, isDark, isMobile, modelPrices, hasPrices, hourWindowHours, t]);
+    return {
+      chartData: data,
+      chartOptions: options,
+      hasData: series.hasData,
+      pricingCoverage: series.pricingCoverage,
+    };
+  }, [usage, period, isDark, isMobile, priceProfile, hourWindowHours, t]);
+
+  const pricingComplete =
+    pricingCoverage !== null &&
+    pricingCoverage.totalRequests > 0 &&
+    pricingCoverage.pricedRequests === pricingCoverage.totalRequests;
+  const hasUnpricedUsage =
+    pricingCoverage !== null &&
+    pricingCoverage.totalRequests > 0 &&
+    pricingCoverage.pricedRequests === 0;
 
   return (
     <Card
       title={t('usage_stats.cost_trend')}
       extra={
-        <div className={styles.periodButtons}>
-          <Button
-            variant={period === 'hour' ? 'primary' : 'secondary'}
-            size="sm"
-            onClick={() => setPeriod('hour')}
-          >
-            {t('usage_stats.by_hour')}
-          </Button>
-          <Button
-            variant={period === 'day' ? 'primary' : 'secondary'}
-            size="sm"
-            onClick={() => setPeriod('day')}
-          >
-            {t('usage_stats.by_day')}
+        <div className={styles.costTrendActions}>
+          <div className={styles.periodButtons}>
+            <Button
+              variant={period === 'hour' ? 'primary' : 'secondary'}
+              size="sm"
+              onClick={() => setPeriod('hour')}
+            >
+              {t('usage_stats.by_hour')}
+            </Button>
+            <Button
+              variant={period === 'day' ? 'primary' : 'secondary'}
+              size="sm"
+              onClick={() => setPeriod('day')}
+            >
+              {t('usage_stats.by_day')}
+            </Button>
+          </div>
+          <Button variant="secondary" size="sm" onClick={onOpenPricing}>
+            {t('usage_stats.pricing_open')}
           </Button>
         </div>
       }
     >
       {loading ? (
         <div className={styles.hint}>{t('common.loading')}</div>
-      ) : !hasPrices ? (
-        <div className={styles.hint}>{t('usage_stats.cost_need_price')}</div>
       ) : !hasData ? (
-        <div className={styles.hint}>{t('usage_stats.cost_no_data')}</div>
+        <div className={styles.hint}>
+          {t(hasUnpricedUsage ? 'usage_stats.pricing_cost_incomplete' : 'usage_stats.cost_no_data')}
+        </div>
       ) : (
-        <div className={styles.chartWrapper}>
-          <div className={styles.chartArea}>
-            <div className={styles.chartScroller}>
-              <div
-                className={styles.chartCanvas}
-                style={
-                  period === 'hour'
-                    ? { minWidth: getHourChartMinWidth(chartData.labels.length, isMobile) }
-                    : undefined
-                }
-              >
-                <Line data={chartData} options={chartOptions} />
+        <>
+          {pricingCoverage && !pricingComplete && (
+            <div className={styles.costCoverageNote}>
+              {t('usage_stats.pricing_partial_coverage', {
+                request: (pricingCoverage.pricedRequestRatio * 100).toFixed(1),
+                token: (pricingCoverage.pricedTokenRatio * 100).toFixed(1),
+              })}
+            </div>
+          )}
+          <div className={styles.chartWrapper}>
+            <div className={styles.chartArea}>
+              <div className={styles.chartScroller}>
+                <div
+                  className={styles.chartCanvas}
+                  style={
+                    period === 'hour'
+                      ? { minWidth: getHourChartMinWidth(chartData.labels.length, isMobile) }
+                      : undefined
+                  }
+                >
+                  <Line data={chartData} options={chartOptions} />
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </>
       )}
     </Card>
   );

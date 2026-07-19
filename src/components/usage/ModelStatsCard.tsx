@@ -15,23 +15,17 @@ export type ModelStat = ModelStatsSummary;
 export interface ModelStatsCardProps {
   modelStats: ModelStat[];
   loading: boolean;
-  hasPrices: boolean;
+  showPricing: boolean;
 }
 
-type SortKey =
-  | 'model'
-  | 'requests'
-  | 'tokens'
-  | 'cost'
-  | 'successRate'
-  | 'averageLatencyMs';
+type SortKey = 'model' | 'requests' | 'tokens' | 'cost' | 'successRate' | 'averageLatencyMs';
 type SortDir = 'asc' | 'desc';
 
 interface ModelStatWithRate extends ModelStat {
   successRate: number;
 }
 
-export function ModelStatsCard({ modelStats, loading, hasPrices }: ModelStatsCardProps) {
+export function ModelStatsCard({ modelStats, loading, showPricing }: ModelStatsCardProps) {
   const { t } = useTranslation();
   const [sortKey, setSortKey] = useState<SortKey>('requests');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
@@ -138,7 +132,7 @@ export function ModelStatsCard({ modelStats, loading, hasPrices }: ModelStatsCar
                         {arrow('successRate')}
                       </button>
                     </th>
-                    {hasPrices && (
+                    {showPricing && (
                       <th className={styles.sortableHeader} aria-sort={ariaSort('cost')}>
                         <button
                           type="button"
@@ -188,7 +182,17 @@ export function ModelStatsCard({ modelStats, loading, hasPrices }: ModelStatsCar
                           {stat.successRate.toFixed(1)}%
                         </span>
                       </td>
-                      {hasPrices && <td>{stat.cost > 0 ? formatUsd(stat.cost) : '--'}</td>}
+                      {showPricing && (
+                        <td
+                          title={
+                            stat.pricingCoverage.pricedRequests < stat.pricingCoverage.totalRequests
+                              ? t('usage_stats.pricing_cost_incomplete')
+                              : undefined
+                          }
+                        >
+                          {stat.pricingCoverage.pricedRequests > 0 ? formatUsd(stat.cost) : '--'}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

@@ -389,18 +389,64 @@ def build_usage_payload() -> dict[str, Any]:
         },
     ]
 
+    gpt54_details = [
+        {
+            "timestamp": timestamp(6),
+            "source": "codex-key-1",
+            "auth_index": "codex-smoke-auth",
+            "effective_service_tier": "priority",
+            "response_service_tier": "priority",
+            "request_service_tier": "priority",
+            "tokens": {
+                "input_tokens": 271_999,
+                "output_tokens": 0,
+                "total_tokens": 271_999,
+            },
+            "failed": False,
+        },
+        {
+            "timestamp": timestamp(7),
+            "source": "codex-key-1",
+            "auth_index": "codex-smoke-auth",
+            "effective_service_tier": "priority",
+            "response_service_tier": "priority",
+            "request_service_tier": "priority",
+            "tokens": {
+                "input_tokens": 272_000,
+                "output_tokens": 0,
+                "total_tokens": 272_000,
+            },
+            "failed": False,
+        },
+    ]
+
+    unmatched_details = [
+        {
+            "timestamp": timestamp(8),
+            "source": "codex-key-1",
+            "auth_index": "codex-smoke-auth",
+            "effective_service_tier": "standard",
+            "tokens": {
+                "input_tokens": 100,
+                "output_tokens": 10,
+                "total_tokens": 110,
+            },
+            "failed": False,
+        }
+    ]
+
     return {
         "usage": {
-            "total_requests": 5,
-            "success_count": 4,
+            "total_requests": 8,
+            "success_count": 7,
             "failure_count": 1,
-            "total_tokens": 102,
+            "total_tokens": 544_211,
             "apis": {
                 "POST /v1/responses": {
-                    "total_requests": 5,
-                    "success_count": 4,
+                    "total_requests": 8,
+                    "success_count": 7,
                     "failure_count": 1,
-                    "total_tokens": 102,
+                    "total_tokens": 544_211,
                     "models": {
                         "gpt-5.6-sol": {
                             "total_requests": 5,
@@ -408,7 +454,21 @@ def build_usage_payload() -> dict[str, Any]:
                             "failure_count": 1,
                             "total_tokens": 102,
                             "details": details,
-                        }
+                        },
+                        "gpt-5.4": {
+                            "total_requests": 2,
+                            "success_count": 2,
+                            "failure_count": 0,
+                            "total_tokens": 543_999,
+                            "details": gpt54_details,
+                        },
+                        "vendor/unmatched-model": {
+                            "total_requests": 1,
+                            "success_count": 1,
+                            "failure_count": 0,
+                            "total_tokens": 110,
+                            "details": unmatched_details,
+                        },
                     },
                 }
             },
@@ -2180,76 +2240,178 @@ def run_remote_cloud_connect_runtime_smoke(page: Any, app_url: str) -> None:
     page.wait_for_function("() => document.querySelectorAll('[role=\"dialog\"]').length === 0")
 
 
-def run_usage_model_price_smoke(page: Any) -> None:
-    card = page.get_by_text("Model Pricing Settings", exact=True).locator("xpath=../..")
-    card.wait_for()
-
-    card.get_by_text("Choose a model", exact=True).click()
-    page.get_by_role("option", name="gpt-5.6-sol", exact=True).click()
-
-    price_inputs = card.locator('input[type="number"]')
-    if price_inputs.count() != 4:
+def run_usage_pricing_entry_smoke(page: Any) -> None:
+    page.get_by_text("Cost estimate coverage", exact=True).wait_for()
+    page.get_by_text("Partial estimate:", exact=False).first.wait_for()
+    pricing_buttons = page.get_by_role("button", name="Configure pricing", exact=True)
+    if pricing_buttons.count() < 2:
         raise AssertionError(
-            f"Expected four model price inputs, found {price_inputs.count()}"
+            "Usage page must expose pricing from the cost summary and trend/entry surfaces"
         )
-    price_inputs.nth(0).fill("-1")
-    card.get_by_text(
-        "Enter a valid number greater than or equal to 0.", exact=True
-    ).wait_for()
-    if card.get_by_role("button", name="Save", exact=True).is_enabled():
-        raise AssertionError("Invalid prompt price did not disable the add save action")
-    if price_inputs.nth(0).get_attribute("aria-invalid") != "true":
-        raise AssertionError("Invalid prompt price did not expose aria-invalid=true")
 
-    price_inputs.nth(0).fill("10")
-    price_inputs.nth(1).fill("20")
-    price_inputs.nth(2).fill("1")
-    price_inputs.nth(3).fill("")
-    card.get_by_role("button", name="Save", exact=True).click()
 
-    saved_text = card.inner_text()
-    for expected_text in [
-        "Prompt price: $10.0000/1M",
-        "Completion price: $20.0000/1M",
-        "Cache read price: $1.0000/1M",
-        "Cache write price: $10.0000/1M (Auto)",
-    ]:
-        if expected_text not in saved_text:
+def run_usage_pricing_smoke(page: Any) -> None:
+    page.get_by_role("heading", name="Pricing workspace", exact=True).wait_for()
+    page.get_by_text("Legacy v2 prices were migrated in memory.", exact=False).wait_for()
+    page.get_by_text("Estimates are not provider invoices.", exact=True).wait_for()
+    page.get_by_text("The profile is stored only in this browser", exact=False).wait_for()
+
+    summary = page.locator('[aria-label="Pricing coverage summary"]')
+    summary.wait_for()
+    summary_text = summary.inner_text()
+    for expected in ["1 / 3", "75.0%", "2"]:
+        if expected not in summary_text:
             raise AssertionError(
-                f"Model price smoke missing saved text: {expected_text!r}; card={saved_text!r}"
+                f"Pricing summary missing {expected!r}: {summary_text!r}"
             )
 
-    card.get_by_role("button", name="Edit", exact=True).click()
-    dialog = page.get_by_role("dialog", name="gpt-5.6-sol")
-    dialog.wait_for()
-    edit_inputs = dialog.locator('input[type="number"]')
-    edit_inputs.nth(3).fill("-1")
-    dialog.get_by_text(
-        "Enter a valid number greater than or equal to 0.", exact=True
-    ).wait_for()
-    if dialog.get_by_role("button", name="Save", exact=True).is_enabled():
-        raise AssertionError("Invalid cache-write price did not disable the edit save action")
-    if edit_inputs.nth(3).get_attribute("aria-invalid") != "true":
-        raise AssertionError("Invalid cache-write price did not expose aria-invalid=true")
-    described_by = set(
-        (edit_inputs.nth(3).get_attribute("aria-describedby") or "").split()
-    )
-    expected_descriptions = {
-        "usage-cache-write-price-edit-hint",
-        "usage-cache-write-price-edit-error",
-    }
-    if not expected_descriptions.issubset(described_by):
-        raise AssertionError(
-            "Invalid cache-write price did not reference both hint and error: "
-            f"{sorted(described_by)!r}"
-        )
+    rows = page.locator('[data-testid="pricing-model-row"]')
 
-    edit_inputs.nth(3).fill("0")
-    save_button = dialog.get_by_role("button", name="Save", exact=True)
-    if not save_button.is_enabled():
-        raise AssertionError("Explicit zero cache-write price did not enable the save action")
-    save_button.click()
-    card.get_by_text("Cache write price: $0.0000/1M", exact=True).wait_for()
+    def wait_for_model_rows(expected: int) -> None:
+        for _ in range(50):
+            if rows.count() == expected:
+                return
+            page.wait_for_timeout(100)
+        raise AssertionError(f"Expected {expected} pricing model row(s), found {rows.count()}")
+
+    wait_for_model_rows(3)
+    for model_name in ["gpt-5.6-sol", "gpt-5.4", "vendor/unmatched-model"]:
+        page.locator(f'[data-testid="pricing-model-row"][data-model="{model_name}"]').wait_for()
+
+    gpt54_row = page.locator('[data-testid="pricing-model-row"][data-model="gpt-5.4"]')
+    gpt54_text = gpt54_row.inner_text()
+    for expected in ["Needs review", "Fast long context unsupported"]:
+        if expected not in gpt54_text:
+            raise AssertionError(
+                f"Long-context pricing anomaly is not visible in the model row: {gpt54_text!r}"
+            )
+
+    filter_select = page.get_by_label("Pricing status filter", exact=True)
+    filter_select.click()
+    page.get_by_role("option", name="Unmatched", exact=True).click()
+    wait_for_model_rows(1)
+    if "vendor/unmatched-model" not in rows.first.inner_text():
+        raise AssertionError("Unmatched pricing filter returned the wrong model set")
+    filter_select.click()
+    page.get_by_role("option", name="All", exact=True).click()
+    wait_for_model_rows(3)
+
+    search = page.get_by_label("Search actual usage models", exact=True)
+    search.fill("vendor")
+    wait_for_model_rows(1)
+    if "vendor/unmatched-model" not in rows.first.inner_text():
+        raise AssertionError("Pricing model search returned the wrong model set")
+    search.fill("")
+    wait_for_model_rows(3)
+
+    gpt56_row = page.locator('[data-testid="pricing-model-row"][data-model="gpt-5.6-sol"]')
+    gpt56_row.click()
+    editor = page.locator('[data-testid="pricing-editor"]')
+    editor.wait_for()
+    editor.get_by_text("Custom", exact=True).first.wait_for()
+    editor.get_by_role("button", name="Restore preset", exact=True).click()
+    page.get_by_text("Preset restored", exact=True).last.wait_for()
+
+    storage_after_restore = page.evaluate(
+        """() => ({
+          v2: localStorage.getItem('cli-proxy-model-prices-v2'),
+          v3: JSON.parse(localStorage.getItem('cli-proxy-model-prices-v3')),
+        })"""
+    )
+    if not storage_after_restore["v2"]:
+        raise AssertionError("Restoring a preset deleted the v2 rollback copy")
+    if storage_after_restore["v3"]["overrides"]:
+        raise AssertionError("Restoring a preset did not clear the migrated override")
+
+    fast_mode = editor.get_by_label("Fast rates · USD / 1M", exact=True)
+    fast_mode.click()
+    page.get_by_role("option", name="Standard × multiplier", exact=True).click()
+    editor.get_by_label("Fast multiplier", exact=True).fill("3")
+    editor.get_by_role("button", name="Save", exact=True).click()
+    page.get_by_text("Pricing profile saved", exact=True).last.wait_for()
+
+    stored_multiplier = page.evaluate(
+        """() => JSON.parse(localStorage.getItem('cli-proxy-model-prices-v3'))
+          .overrides['gpt-5.6-sol'].fast.multiplier"""
+    )
+    if stored_multiplier != 3:
+        raise AssertionError(f"Fast multiplier was not persisted: {stored_multiplier!r}")
+
+    with page.expect_download() as profile_download:
+        page.get_by_role("button", name="Export profile", exact=True).click()
+    profile_path = profile_download.value.path()
+    if not profile_path:
+        raise AssertionError("Pricing profile export did not create a download")
+    exported_profile = json.loads(Path(profile_path).read_text(encoding="utf-8"))
+    if exported_profile.get("schemaVersion") != 3:
+        raise AssertionError(f"Pricing profile export lost schema v3: {exported_profile!r}")
+    if exported_profile.get("overrides", {}).get("gpt-5.6-sol", {}).get("fast", {}).get(
+        "multiplier"
+    ) != 3:
+        raise AssertionError("Pricing profile export lost the Fast multiplier")
+
+    unmatched_row = page.locator(
+        '[data-testid="pricing-model-row"][data-model="vendor/unmatched-model"]'
+    )
+    unmatched_row.click()
+    editor = page.locator('[data-testid="pricing-editor"]')
+    editor.get_by_label("Exact alias target", exact=True).fill("gpt-5.4")
+    editor.get_by_role("button", name="Save", exact=True).click()
+    page.get_by_text("Pricing profile saved", exact=True).last.wait_for()
+    unmatched_text = unmatched_row.inner_text()
+    for expected in ["Custom", "Alias"]:
+        if expected not in unmatched_text:
+            raise AssertionError(
+                f"Saved pricing alias is not visible in the model row: {unmatched_text!r}"
+            )
+    summary.get_by_text("2 / 3", exact=True).wait_for()
+    summary.get_by_text("87.5%", exact=True).first.wait_for()
+
+    editor.get_by_role("button", name="Delete configuration", exact=True).click()
+    page.get_by_text("Custom pricing removed", exact=True).last.wait_for()
+    if "Unmatched" not in unmatched_row.inner_text():
+        raise AssertionError("Deleting the alias did not return the model to unmatched")
+
+    imported_profile = json.loads(json.dumps(exported_profile))
+    imported_profile.setdefault("aliases", {})["vendor/unmatched-model"] = "gpt-5.4"
+    page.locator('input[type="file"][accept*="json"]').set_input_files(
+        {
+            "name": "pricing-profile-v3.json",
+            "mimeType": "application/json",
+            "buffer": json.dumps(imported_profile).encode("utf-8"),
+        }
+    )
+    import_dialog = page.get_by_role("dialog", name="Import pricing profile")
+    import_dialog.wait_for()
+    import_dialog.get_by_role("button", name="Import profile", exact=True).click()
+    page.get_by_text("Pricing profile imported", exact=True).last.wait_for()
+    if "Alias" not in unmatched_row.inner_text():
+        raise AssertionError("Imported pricing alias was not applied")
+
+    page.get_by_role("button", name="Restore all defaults", exact=True).click()
+    reset_dialog = page.get_by_role("dialog", name="Restore all preset prices")
+    reset_dialog.wait_for()
+    reset_dialog.get_by_role("button", name="Restore all defaults", exact=True).click()
+    page.get_by_text("Preset pricing restored", exact=True).last.wait_for()
+    storage_after_reset = page.evaluate(
+        """() => ({
+          v2: localStorage.getItem('cli-proxy-model-prices-v2'),
+          v3: JSON.parse(localStorage.getItem('cli-proxy-model-prices-v3')),
+        })"""
+    )
+    if not storage_after_reset["v2"]:
+        raise AssertionError("Resetting pricing deleted the v2 rollback copy")
+    if storage_after_reset["v3"]["overrides"] or storage_after_reset["v3"]["aliases"]:
+        raise AssertionError("Resetting pricing did not clear v3 overrides and aliases")
+
+    page.set_viewport_size({"width": 390, "height": 844})
+    gpt54_row.click()
+    mobile_dialog = page.get_by_role("dialog", name="gpt-5.4")
+    mobile_dialog.wait_for()
+    mobile_dialog.get_by_text("Fast rates · USD / 1M", exact=True).wait_for()
+    page.keyboard.press("Escape")
+    page.wait_for_function("() => document.querySelectorAll('[role=\"dialog\"]').length === 0")
+    page.set_viewport_size({"width": 1280, "height": 720})
 
 
 def run_usage_service_tier_smoke(page: Any) -> None:
@@ -2273,6 +2435,9 @@ def run_usage_service_tier_smoke(page: Any) -> None:
             f"Expected {expected} request event row(s), found {rows.count()}"
         )
 
+    model_select = card.get_by_label("Model", exact=True)
+    model_select.click()
+    page.get_by_role("option", name="gpt-5.6-sol", exact=True).click()
     wait_for_row_count(5)
     for expected_label in ["Fast", "Std", "max", "high", "low"]:
         card.get_by_text(expected_label, exact=True).first.wait_for()
@@ -2420,7 +2585,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
             )
 
     card.get_by_role("button", name="Clear Filters", exact=True).click()
-    wait_for_row_count(5)
+    wait_for_row_count(8)
 
     effort_select = card.get_by_label("Effort", exact=True)
     effort_select.click()
@@ -2431,7 +2596,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
             raise AssertionError("Effort filter returned a row without the selected raw effort")
 
     card.get_by_role("button", name="Clear Filters", exact=True).click()
-    wait_for_row_count(5)
+    wait_for_row_count(8)
 
     page.set_viewport_size({"width": 390, "height": 844})
     tier_select.wait_for()
@@ -2757,6 +2922,16 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
               'cli-proxy-language',
               JSON.stringify({ state: { language: 'en' }, version: 0 })
             );
+            localStorage.setItem(
+              'cli-proxy-model-prices-v2',
+              JSON.stringify({
+                'gpt-5.6-sol': {
+                  prompt: 4,
+                  completion: 20,
+                  cache: 0.4
+                }
+              })
+            );
             window.__ltsSmokeClipboard = [];
             Object.defineProperty(navigator, 'clipboard', {
               configurable: true,
@@ -2795,6 +2970,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
                 ("/oauth", "OAuth Login", None),
                 ("/quota", "Quota Management", None),
                 ("/usage", "Usage Statistics", None),
+                ("/usage/pricing", "Pricing workspace", None),
                 ("/lts/usage", "Usage Statistics", "/usage"),
                 ("/ai-providers", "AI Providers Configuration", None),
                 ("/ai-providers/workbench", "AI Providers", None),
@@ -2820,9 +2996,11 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
                     )
                 page.get_by_text(expected_text, exact=False).first.wait_for()
                 if route == "/usage":
-                    run_usage_model_price_smoke(page)
+                    run_usage_pricing_entry_smoke(page)
                     run_usage_service_tier_smoke(page)
                     run_usage_import_review_smoke(page, state)
+                elif route == "/usage/pricing":
+                    run_usage_pricing_smoke(page)
 
             page.goto(f"{app_url}?route=plugin-store-auth#/plugin-store", wait_until="domcontentloaded")
             page.wait_for_function("() => window.location.hash.endsWith('/plugin-store')")

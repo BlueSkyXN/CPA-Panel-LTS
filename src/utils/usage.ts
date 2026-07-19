@@ -13,12 +13,23 @@ import {
   finalizeLatencyStats,
 } from './usage/latency';
 import {
-  calculateUsageCost,
   getUsageCacheTokenCounts,
   resolveUsageTotalTokens,
   type UsageTokenFields,
 } from './usage/cacheTokens';
 import { normalizePersistedModelPrices, type ModelPrice } from './usage/modelPrices';
+import {
+  aggregateCostEstimateCoverage,
+  createDefaultPriceProfileV3,
+  resolvePriceProfile,
+  type CostEstimate,
+  type CostEstimateWarning,
+  type PriceProfileV3,
+  type PricingCoverage,
+  type PricingCoverageInput,
+  type ResolvedPrice,
+} from './usage/pricing';
+import { estimateUsageDetailCost, pricedAmountOrZero } from './usage/pricing/usagePricing';
 import { normalizeReasoningEffort } from './usage/reasoningEffort';
 import { normalizeServiceTier } from './usage/serviceTier';
 import { maskApiKey } from './format';
@@ -58,6 +69,54 @@ export interface RateStats {
 }
 
 export type { ModelPrice } from './usage/modelPrices';
+export type {
+  ContextBand,
+  CostEstimate,
+  CostEstimateStatus,
+  CostEstimateWarning,
+  FastOverride,
+  LongContextPricing,
+  ModelMatch,
+  PriceCatalogEntry,
+  PriceOverride,
+  PriceProfileV3,
+  PricingCoverage,
+  ResolvedPrice,
+  StandardPricing,
+  TokenRates,
+} from './usage/pricing';
+export {
+  OPENAI_CATALOG_AS_OF,
+  OPENAI_CATALOG_VERSION,
+  OPENAI_PRICE_CATALOG,
+  OPENAI_PRICING_SOURCE_URL,
+  PRICE_PROFILE_SCHEMA_VERSION,
+  aggregateCostEstimateCoverage,
+  createDefaultPriceProfileV3,
+  estimateUsageCost,
+  exportPriceProfileV3,
+  findCatalogEntry,
+  importPriceProfileV3,
+  materializePriceProfiles,
+  migrateModelPricesV2ToV3,
+  normalizePriceProfileV3,
+  preflightPriceProfileImportV3,
+  resolvePriceProfile,
+  serializePriceProfileV3,
+} from './usage/pricing';
+export {
+  LEGACY_MODEL_PRICE_STORAGE_KEY,
+  PRICE_PROFILE_STORAGE_KEY,
+  loadPriceProfileV3,
+  resetPriceProfileV3,
+  savePriceProfileV3,
+} from './usage/pricing/storage';
+export type { PriceProfileLoadResult, PriceProfileLoadSource } from './usage/pricing/storage';
+export {
+  estimateUsageDetailCost,
+  resolveUsageDetailServiceTier,
+  summarizeUsageDetailCosts,
+} from './usage/pricing/usagePricing';
 export type {
   DisplayServiceTier,
   ResolvedServiceTier,
@@ -108,6 +167,7 @@ export interface ApiStats {
   failureCount: number;
   totalTokens: number;
   totalCost: number;
+  pricingCoverage: PricingCoverage;
   models: Record<
     string,
     { requests: number; successCount: number; failureCount: number; tokens: number }
@@ -121,8 +181,21 @@ export interface ModelStatsSummary {
   failureCount: number;
   tokens: number;
   cost: number;
+  pricingCoverage: PricingCoverage;
   averageLatencyMs: number | null;
   latencySampleCount: number;
+}
+
+export interface PricingModelSummary {
+  modelName: string;
+  resolvedPrice: ResolvedPrice;
+  pricingCoverage: PricingCoverage;
+  requestCount: number;
+  tokenCount: number;
+  estimatedAmount: number;
+  fastRequestCount: number;
+  longContextRequestCount: number;
+  warnings: CostEstimateWarning[];
 }
 
 export type UsageTimeRange = '7h' | '24h' | '7d' | 'all';
@@ -138,10 +211,118 @@ const USAGE_TIME_RANGE_MS: Record<Exclude<UsageTimeRange, 'all'>, number> = {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 
+export const createEmptyPricingCoverage = (): PricingCoverage => aggregateCostEstimateCoverage([]);
+
 const getApisRecord = (usageData: unknown): Record<string, unknown> | null => {
   const usageRecord = isRecord(usageData) ? usageData : null;
   const apisRaw = usageRecord ? usageRecord.apis : null;
   return isRecord(apisRaw) ? apisRaw : null;
+};
+
+interface PricingUsageAggregate {
+  requests: number;
+  tokens: number;
+}
+
+const toAggregateCount = (value: unknown): number => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0;
+};
+
+const pricingRatio = (part: number, total: number): number => (total > 0 ? part / total : 0);
+
+const reconcilePricingCoverage = (
+  coverage: PricingCoverage,
+  aggregateRequests: unknown,
+  aggregateTokens: unknown,
+  totalModels: number = coverage.totalModels,
+  pricedModels: number = coverage.pricedModels
+): PricingCoverage => {
+  const totalRequests = Math.max(coverage.totalRequests, toAggregateCount(aggregateRequests));
+  const totalTokens = Math.max(coverage.totalTokens, toAggregateCount(aggregateTokens));
+  const missingRequests = Math.max(totalRequests - coverage.totalRequests, 0);
+  const hasAggregateGap =
+    totalRequests > coverage.totalRequests || totalTokens > coverage.totalTokens;
+  const reconciledPricedModels =
+    hasAggregateGap && totalModels > 0 && pricedModels >= totalModels
+      ? totalModels - 1
+      : pricedModels;
+
+  return {
+    ...coverage,
+    totalRequests,
+    unmatchedRequests: coverage.unmatchedRequests + missingRequests,
+    totalTokens,
+    totalModels,
+    pricedModels: reconciledPricedModels,
+    assumedTierRequests: coverage.assumedTierRequests + missingRequests,
+    pricedRequestRatio: pricingRatio(coverage.pricedRequests, totalRequests),
+    pricedTokenRatio: pricingRatio(coverage.pricedTokens, totalTokens),
+    pricedModelRatio: pricingRatio(reconciledPricedModels, totalModels),
+  };
+};
+
+const reconcileModelPricingCoverage = (
+  coverage: PricingCoverage,
+  aggregateRequests: unknown,
+  aggregateTokens: unknown
+): PricingCoverage => {
+  const totalRequests = Math.max(coverage.totalRequests, toAggregateCount(aggregateRequests));
+  const totalTokens = Math.max(coverage.totalTokens, toAggregateCount(aggregateTokens));
+  const hasUsage = totalRequests > 0 || totalTokens > 0 || coverage.totalModels > 0;
+  const pricedModels =
+    hasUsage &&
+    totalRequests > 0 &&
+    coverage.pricedRequests === totalRequests &&
+    coverage.pricedTokens === totalTokens
+      ? 1
+      : 0;
+  return reconcilePricingCoverage(
+    coverage,
+    totalRequests,
+    totalTokens,
+    hasUsage ? 1 : 0,
+    pricedModels
+  );
+};
+
+const combinePricingCoverages = (coverages: Iterable<PricingCoverage>): PricingCoverage => {
+  const combined = createEmptyPricingCoverage();
+  for (const coverage of coverages) {
+    combined.totalRequests += coverage.totalRequests;
+    combined.pricedRequests += coverage.pricedRequests;
+    combined.unmatchedRequests += coverage.unmatchedRequests;
+    combined.unsupportedRequests += coverage.unsupportedRequests;
+    combined.totalTokens += coverage.totalTokens;
+    combined.pricedTokens += coverage.pricedTokens;
+    combined.totalModels += coverage.totalModels;
+    combined.pricedModels += coverage.pricedModels;
+    combined.estimatedAmount += coverage.estimatedAmount;
+    combined.assumedTierRequests += coverage.assumedTierRequests;
+  }
+  combined.pricedRequestRatio = pricingRatio(combined.pricedRequests, combined.totalRequests);
+  combined.pricedTokenRatio = pricingRatio(combined.pricedTokens, combined.totalTokens);
+  combined.pricedModelRatio = pricingRatio(combined.pricedModels, combined.totalModels);
+  return combined;
+};
+
+const collectUsageModelAggregates = (usageData: unknown): Map<string, PricingUsageAggregate> => {
+  const aggregates = new Map<string, PricingUsageAggregate>();
+  const apis = getApisRecord(usageData);
+  if (!apis) return aggregates;
+
+  Object.values(apis).forEach((apiEntry) => {
+    if (!isRecord(apiEntry) || !isRecord(apiEntry.models)) return;
+    Object.entries(apiEntry.models).forEach(([modelName, modelEntry]) => {
+      if (!modelName || !isRecord(modelEntry)) return;
+      const aggregate = aggregates.get(modelName) ?? { requests: 0, tokens: 0 };
+      aggregate.requests += toAggregateCount(modelEntry.total_requests);
+      aggregate.tokens += toAggregateCount(modelEntry.total_tokens);
+      aggregates.set(modelName, aggregate);
+    });
+  });
+
+  return aggregates;
 };
 
 const normalizeUsageDetailTokens = (tokensRaw: Record<string, unknown>): UsageTokenStats => {
@@ -841,33 +1022,41 @@ export function getModelNamesFromUsage(usageData: unknown): string[] {
   return Array.from(names).sort((a, b) => a.localeCompare(b));
 }
 
-/**
- * 计算成本数据
- */
-export function calculateCost(
+export function calculateCostEstimate(
   detail: UsageDetail,
-  modelPrices: Record<string, ModelPrice>
-): number {
-  const modelName = detail.__modelName || '';
-  const price = modelPrices[modelName];
-  if (!price) {
-    return 0;
-  }
-  return calculateUsageCost(detail.tokens, modelName, price);
+  priceProfile: PriceProfileV3 = createDefaultPriceProfileV3()
+): CostEstimate {
+  return estimateUsageDetailCost(detail, priceProfile).estimate;
 }
 
-/**
- * 计算总成本
- */
+/** Numeric compatibility wrapper. Coverage-aware UI should use calculateCostEstimate. */
+export function calculateCost(
+  detail: UsageDetail,
+  priceProfile: PriceProfileV3 = createDefaultPriceProfileV3()
+): number {
+  return pricedAmountOrZero(calculateCostEstimate(detail, priceProfile));
+}
+
+export function calculatePricingCoverage(
+  usageData: unknown,
+  priceProfile: PriceProfileV3 = createDefaultPriceProfileV3()
+): PricingCoverage {
+  const modelCoverage = combinePricingCoverages(
+    getPricingModelSummaries(usageData, priceProfile).map((summary) => summary.pricingCoverage)
+  );
+  const usageRecord = isRecord(usageData) ? usageData : {};
+  return reconcilePricingCoverage(
+    modelCoverage,
+    usageRecord.total_requests,
+    usageRecord.total_tokens
+  );
+}
+
 export function calculateTotalCost(
   usageData: unknown,
-  modelPrices: Record<string, ModelPrice>
+  priceProfile: PriceProfileV3 = createDefaultPriceProfileV3()
 ): number {
-  const details = collectUsageDetails(usageData);
-  if (!details.length || !Object.keys(modelPrices).length) {
-    return 0;
-  }
-  return details.reduce((sum, detail) => sum + calculateCost(detail, modelPrices), 0);
+  return calculatePricingCoverage(usageData, priceProfile).estimatedAmount;
 }
 
 /**
@@ -910,11 +1099,18 @@ export function saveModelPrices(prices: Record<string, ModelPrice>): void {
  */
 export function getApiStats(
   usageData: unknown,
-  modelPrices: Record<string, ModelPrice>
+  priceProfile: PriceProfileV3 = createDefaultPriceProfileV3()
 ): ApiStats[] {
   const apis = getApisRecord(usageData);
   if (!apis) return [];
   const result: ApiStats[] = [];
+  const detailsByEndpointAndModel = new Map<string, UsageDetailWithEndpoint[]>();
+  collectUsageDetailsWithEndpoint(usageData).forEach((detail) => {
+    const key = `${detail.__endpoint}\u0000${detail.__modelName ?? ''}`;
+    const bucket = detailsByEndpointAndModel.get(key);
+    if (bucket) bucket.push(detail);
+    else detailsByEndpointAndModel.set(key, [detail]);
+  });
 
   Object.entries(apis).forEach(([endpoint, apiData]) => {
     if (!isRecord(apiData)) return;
@@ -924,12 +1120,12 @@ export function getApiStats(
     > = {};
     let derivedSuccessCount = 0;
     let derivedFailureCount = 0;
-    let totalCost = 0;
+    const pricingCoverages: PricingCoverage[] = [];
 
     const modelsData = isRecord(apiData.models) ? apiData.models : {};
     Object.entries(modelsData).forEach(([modelName, modelData]) => {
       if (!isRecord(modelData)) return;
-      const details = Array.isArray(modelData.details) ? modelData.details : [];
+      const details = detailsByEndpointAndModel.get(`${endpoint}\u0000${modelName}`) ?? [];
       const hasExplicitCounts =
         typeof modelData.success_count === 'number' || typeof modelData.failure_count === 'number';
 
@@ -940,26 +1136,23 @@ export function getApiStats(
         failureCount += Number(modelData.failure_count) || 0;
       }
 
-      const price = modelPrices[modelName];
-      if (details.length > 0 && (!hasExplicitCounts || price)) {
-        details.forEach((detail) => {
-          const detailRecord = isRecord(detail) ? detail : null;
-          if (!hasExplicitCounts) {
-            if (detailRecord?.failed === true) {
-              failureCount += 1;
-            } else {
-              successCount += 1;
-            }
+      const modelPricingInputs = details.map((detail) => {
+        if (!hasExplicitCounts) {
+          if (detail.failed === true) {
+            failureCount += 1;
+          } else {
+            successCount += 1;
           }
-
-          if (price && detailRecord) {
-            totalCost += calculateCost(
-              { ...(detailRecord as unknown as UsageDetail), __modelName: modelName },
-              modelPrices
-            );
-          }
-        });
-      }
+        }
+        return estimateUsageDetailCost(detail, priceProfile);
+      });
+      pricingCoverages.push(
+        reconcileModelPricingCoverage(
+          aggregateCostEstimateCoverage(modelPricingInputs),
+          modelData.total_requests,
+          modelData.total_tokens
+        )
+      );
 
       models[modelName] = {
         requests: Number(modelData.total_requests) || 0,
@@ -979,6 +1172,11 @@ export function getApiStats(
     const failureCount = hasApiExplicitCounts
       ? Number(apiData.failure_count) || 0
       : derivedFailureCount;
+    const pricingCoverage = reconcilePricingCoverage(
+      combinePricingCoverages(pricingCoverages),
+      apiData.total_requests,
+      apiData.total_tokens
+    );
 
     result.push({
       endpoint: maskUsageSensitiveValue(endpoint) || endpoint,
@@ -986,7 +1184,8 @@ export function getApiStats(
       successCount,
       failureCount,
       totalTokens: Number(apiData.total_tokens) || 0,
-      totalCost,
+      totalCost: pricingCoverage.estimatedAmount,
+      pricingCoverage,
       models,
     });
   });
@@ -999,10 +1198,17 @@ export function getApiStats(
  */
 export function getModelStats(
   usageData: unknown,
-  modelPrices: Record<string, ModelPrice>
+  priceProfile: PriceProfileV3 = createDefaultPriceProfileV3()
 ): ModelStatsSummary[] {
   const apis = getApisRecord(usageData);
   if (!apis) return [];
+  const detailsByEndpointAndModel = new Map<string, UsageDetailWithEndpoint[]>();
+  collectUsageDetailsWithEndpoint(usageData).forEach((detail) => {
+    const key = `${detail.__endpoint}\u0000${detail.__modelName ?? ''}`;
+    const bucket = detailsByEndpointAndModel.get(key);
+    if (bucket) bucket.push(detail);
+    else detailsByEndpointAndModel.set(key, [detail]);
+  });
 
   const modelMap = new Map<
     string,
@@ -1011,12 +1217,12 @@ export function getModelStats(
       successCount: number;
       failureCount: number;
       tokens: number;
-      cost: number;
+      pricingInputs: PricingCoverageInput[];
       latency: LatencyAccumulator;
     }
   >();
 
-  Object.values(apis).forEach((apiData) => {
+  Object.entries(apis).forEach(([endpoint, apiData]) => {
     if (!isRecord(apiData)) return;
     const modelsRaw = apiData.models;
     const models = isRecord(modelsRaw) ? modelsRaw : null;
@@ -1029,15 +1235,13 @@ export function getModelStats(
         successCount: 0,
         failureCount: 0,
         tokens: 0,
-        cost: 0,
+        pricingInputs: [],
         latency: createLatencyAccumulator(),
       };
       existing.requests += Number(modelData.total_requests) || 0;
       existing.tokens += Number(modelData.total_tokens) || 0;
 
-      const details = Array.isArray(modelData.details) ? modelData.details : [];
-
-      const price = modelPrices[modelName];
+      const details = detailsByEndpointAndModel.get(`${endpoint}\u0000${modelName}`) ?? [];
 
       const hasExplicitCounts =
         typeof modelData.success_count === 'number' || typeof modelData.failure_count === 'number';
@@ -1048,10 +1252,9 @@ export function getModelStats(
 
       if (details.length > 0) {
         details.forEach((detail) => {
-          const detailRecord = isRecord(detail) ? detail : null;
-          const latencyMs = extractLatencyMs(detailRecord);
+          const latencyMs = extractLatencyMs(detail);
           if (!hasExplicitCounts) {
-            if (detailRecord?.failed === true) {
+            if (detail.failed === true) {
               existing.failureCount += 1;
             } else {
               existing.successCount += 1;
@@ -1059,13 +1262,7 @@ export function getModelStats(
           }
 
           addLatencySample(existing.latency, latencyMs);
-
-          if (price && detailRecord) {
-            existing.cost += calculateCost(
-              { ...(detailRecord as unknown as UsageDetail), __modelName: modelName },
-              modelPrices
-            );
-          }
+          existing.pricingInputs.push(estimateUsageDetailCost(detail, priceProfile));
         });
       }
       modelMap.set(modelName, existing);
@@ -1075,18 +1272,93 @@ export function getModelStats(
   return Array.from(modelMap.entries())
     .map(([model, stats]) => {
       const latencyStats = finalizeLatencyStats(stats.latency);
+      const pricingCoverage = reconcileModelPricingCoverage(
+        aggregateCostEstimateCoverage(stats.pricingInputs),
+        stats.requests,
+        stats.tokens
+      );
       return {
         model,
         requests: stats.requests,
         successCount: stats.successCount,
         failureCount: stats.failureCount,
         tokens: stats.tokens,
-        cost: stats.cost,
+        cost: pricingCoverage.estimatedAmount,
+        pricingCoverage,
         averageLatencyMs: latencyStats.averageMs,
         latencySampleCount: latencyStats.sampleCount,
       };
     })
     .sort((a, b) => b.requests - a.requests);
+}
+
+export function getPricingModelSummaries(
+  usageData: unknown,
+  priceProfile: PriceProfileV3 = createDefaultPriceProfileV3()
+): PricingModelSummary[] {
+  const groups = new Map<
+    string,
+    {
+      pricingInputs: PricingCoverageInput[];
+      fastRequestCount: number;
+      longContextRequestCount: number;
+      warnings: Set<CostEstimateWarning>;
+    }
+  >();
+
+  collectUsageDetails(usageData).forEach((detail) => {
+    const modelName = detail.__modelName?.trim();
+    if (!modelName) return;
+    const pricingInput = estimateUsageDetailCost(detail, priceProfile);
+    const group = groups.get(modelName) ?? {
+      pricingInputs: [],
+      fastRequestCount: 0,
+      longContextRequestCount: 0,
+      warnings: new Set<CostEstimateWarning>(),
+    };
+    group.pricingInputs.push(pricingInput);
+    if (pricingInput.estimate.tier.tier === 'fast') group.fastRequestCount += 1;
+    if (pricingInput.estimate.contextBand === 'long') group.longContextRequestCount += 1;
+    pricingInput.estimate.warnings.forEach((warning) => group.warnings.add(warning));
+    groups.set(modelName, group);
+  });
+
+  const aggregates = collectUsageModelAggregates(usageData);
+  const modelNames = new Set(groups.keys());
+  aggregates.forEach((aggregate, modelName) => {
+    if (aggregate.requests > 0 || aggregate.tokens > 0) modelNames.add(modelName);
+  });
+
+  return Array.from(modelNames)
+    .map((modelName) => {
+      const group = groups.get(modelName) ?? {
+        pricingInputs: [],
+        fastRequestCount: 0,
+        longContextRequestCount: 0,
+        warnings: new Set<CostEstimateWarning>(),
+      };
+      const aggregate = aggregates.get(modelName);
+      const pricingCoverage = reconcileModelPricingCoverage(
+        aggregateCostEstimateCoverage(group.pricingInputs),
+        aggregate?.requests,
+        aggregate?.tokens
+      );
+      return {
+        modelName,
+        resolvedPrice: resolvePriceProfile(modelName, priceProfile),
+        pricingCoverage,
+        requestCount: pricingCoverage.totalRequests,
+        tokenCount: pricingCoverage.totalTokens,
+        estimatedAmount: pricingCoverage.estimatedAmount,
+        fastRequestCount: group.fastRequestCount,
+        longContextRequestCount: group.longContextRequestCount,
+        warnings: Array.from(group.warnings),
+      };
+    })
+    .sort(
+      (left, right) =>
+        right.requestCount - left.requestCount || left.modelName.localeCompare(right.modelName)
+    );
 }
 
 /**
@@ -1842,6 +2114,7 @@ export interface CostSeries {
   labels: string[];
   data: number[];
   hasData: boolean;
+  pricingCoverage: PricingCoverage;
 }
 
 /**
@@ -1849,7 +2122,7 @@ export interface CostSeries {
  */
 export function buildHourlyCostSeries(
   usageData: unknown,
-  modelPrices: Record<string, ModelPrice>,
+  priceProfile: PriceProfileV3 = createDefaultPriceProfileV3(),
   hourWindow: number = 24
 ): CostSeries {
   const hourMs = 60 * 60 * 1000;
@@ -1872,7 +2145,7 @@ export function buildHourlyCostSeries(
 
   const data = new Array(labels.length).fill(0);
   const details = collectUsageDetails(usageData);
-  let hasData = false;
+  const pricingInputs: PricingCoverageInput[] = [];
 
   details.forEach((detail) => {
     const timestamp =
@@ -1888,14 +2161,13 @@ export function buildHourlyCostSeries(
     const bucketIndex = Math.floor((bucketStart - earliestTime) / hourMs);
     if (bucketIndex < 0 || bucketIndex >= labels.length) return;
 
-    const cost = calculateCost(detail, modelPrices);
-    if (cost > 0) {
-      data[bucketIndex] += cost;
-      hasData = true;
-    }
+    const pricingInput = estimateUsageDetailCost(detail, priceProfile);
+    pricingInputs.push(pricingInput);
+    data[bucketIndex] += pricedAmountOrZero(pricingInput.estimate);
   });
 
-  return { labels, data, hasData };
+  const pricingCoverage = aggregateCostEstimateCoverage(pricingInputs);
+  return { labels, data, hasData: pricingCoverage.pricedRequests > 0, pricingCoverage };
 }
 
 /**
@@ -1903,11 +2175,11 @@ export function buildHourlyCostSeries(
  */
 export function buildDailyCostSeries(
   usageData: unknown,
-  modelPrices: Record<string, ModelPrice>
+  priceProfile: PriceProfileV3 = createDefaultPriceProfileV3()
 ): CostSeries {
   const details = collectUsageDetails(usageData);
   const dayMap: Record<string, number> = {};
-  let hasData = false;
+  const pricingInputs: PricingCoverageInput[] = [];
 
   details.forEach((detail) => {
     const timestamp =
@@ -1918,15 +2190,14 @@ export function buildDailyCostSeries(
     const dayLabel = formatDayLabel(new Date(timestamp));
     if (!dayLabel) return;
 
-    const cost = calculateCost(detail, modelPrices);
-    if (cost > 0) {
-      dayMap[dayLabel] = (dayMap[dayLabel] || 0) + cost;
-      hasData = true;
-    }
+    const pricingInput = estimateUsageDetailCost(detail, priceProfile);
+    pricingInputs.push(pricingInput);
+    dayMap[dayLabel] = (dayMap[dayLabel] || 0) + pricedAmountOrZero(pricingInput.estimate);
   });
 
   const labels = Object.keys(dayMap).sort();
   const data = labels.map((l) => dayMap[l]);
 
-  return { labels, data, hasData };
+  const pricingCoverage = aggregateCostEstimateCoverage(pricingInputs);
+  return { labels, data, hasData: pricingCoverage.pricedRequests > 0, pricingCoverage };
 }

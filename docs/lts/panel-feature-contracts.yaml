@@ -15,12 +15,16 @@ features:
     reason: Complete usage statistics are the primary CPA-Panel-LTS protected delta.
     routes:
       - /usage
+      - /usage/pricing
       - /lts/usage
     panel_files:
       - src/router/MainRoutes.tsx
       - src/pages/UsagePage.tsx
       - src/pages/UsagePage.module.scss
+      - src/pages/UsagePricingPage.tsx
+      - src/pages/UsagePricingPage.module.scss
       - src/components/usage/
+      - src/components/usage/PricingEntryCard.tsx
       - src/components/providers/ProviderStatusBar.tsx
       - src/components/providers/hooks/useProviderStats.ts
       - src/services/api/usage.ts
@@ -39,6 +43,13 @@ features:
       - src/utils/usage/reasoningEffort.test.mjs
       - src/utils/usage/serviceTier.ts
       - src/utils/usage/serviceTier.test.mjs
+      - src/utils/usage/pricing/index.ts
+      - src/utils/usage/pricing/index.test.mjs
+      - src/utils/usage/pricing/storage.ts
+      - src/utils/usage/pricing/storage.test.mjs
+      - src/utils/usage/pricing/usagePricing.ts
+      - src/utils/usage/pricing/usagePricing.test.mjs
+      - src/utils/usage/pricing/usageAggregation.test.mjs
     core_endpoints:
       - /v0/management/usage
       - /v0/management/usage/export
@@ -64,11 +75,24 @@ features:
       - resolveServiceTier
       - ServiceTierEvidence
       - request_events_filter_tier
+      - /usage/pricing
+      - OPENAI_PRICE_CATALOG
+      - PRICE_PROFILE_STORAGE_KEY
+      - cli-proxy-model-prices-v3
+      - estimateUsageDetailCost
+      - aggregateCostEstimateCoverage
+      - calculatePricingCoverage
+      - PricingEntryCard
+      - pricing_browser_notice
+      - pricing_cost_incomplete
       - reasoning_effort
       - request_events_filter_effort
     validation:
       - npm run test:usage-cache
       - npm run test:usage-prices
+      - npm run test:usage-pricing-v3
+      - npm run test:usage-pricing-storage
+      - npm run test:usage-pricing-integration
       - npm run test:usage
       - npm run smoke:lts
       - npm run check:lts
@@ -105,7 +129,7 @@ features:
       - config.ampcode
       - modelsApi.fetchModels
       - getDashboardModelsStatValue
-      - "A:{{ampcode}}"
+      - 'A:{{ampcode}}'
 
   - id: provider-stable-lts-page
     status: protected
@@ -314,7 +338,7 @@ features:
       - pluginSupportSource
       - probePluginSupport
       - connectionGeneration
-      - "synchronous: true"
+      - 'synchronous: true'
       - binds connection details when the request is created
       - PluginRuntimeUnavailable
       - runtime_unavailable_title
@@ -371,7 +395,7 @@ features:
       - /v0/management/request-error-logs/:name
       - /v0/management/request-log-by-id/:id
     required_markers:
-      - "cursor?: string"
+      - 'cursor?: string'
       - latestAfter
       - nextCursor
       - cursorReset
@@ -420,7 +444,7 @@ features:
       - disableImageGeneration
       - disable-image-generation
       - disable_image_generation_passthrough
-      - "disable-image-generation: passthrough"
+      - 'disable-image-generation: passthrough'
       - latestServerYaml
       - dirtyFields.has('host')
       - integer_range_1_3600
