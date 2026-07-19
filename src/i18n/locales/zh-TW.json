@@ -1435,7 +1435,7 @@
           "codex_abnormal_reasoning_retry_stream_buffer": "快取串流回應",
           "codex_abnormal_reasoning_retry_stream_buffer_desc": "在回應完成前暫存串流片段，命中異常時可避免提前交付異常內容",
           "codex_abnormal_reasoning_retry_stream_buffer_max_bytes_label": "串流快取上限位元組數",
-          "codex_abnormal_reasoning_retry_stream_buffer_max_bytes_hint": "填 0 表示不限制；填正數表示超出後清空已快取內容，並讓目前串流回應直接透傳",
+          "codex_abnormal_reasoning_retry_stream_buffer_max_bytes_hint": "預設 16 MiB（16777216）；填 0 也使用安全預設值。超出後目前串流回應會以 502 失敗關閉，不會透傳部分內容",
           "codex_abnormal_reasoning_retry_hedged_retry_enabled": "啟用對沖重試",
           "codex_abnormal_reasoning_retry_hedged_retry_enabled_desc": "首個異常回應被丟棄後，延遲啟動第二路請求以降低尾端延遲",
           "codex_abnormal_reasoning_retry_hedged_retry_mode_label": "對沖重試模式",

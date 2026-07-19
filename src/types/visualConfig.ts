@@ -255,7 +255,7 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   codexAbnormalReasoningRetryAuthKinds: ['oauth'],
   codexAbnormalReasoningRetryAuthIds: [],
   codexAbnormalReasoningRetryStreamBuffer: true,
-  codexAbnormalReasoningRetryStreamBufferMaxBytes: '0',
+  codexAbnormalReasoningRetryStreamBufferMaxBytes: '16777216',
   codexAbnormalReasoningRetryMaxRetries: '2',
   codexAbnormalReasoningRetryExhaustedBehavior: 'error',
   codexAbnormalReasoningRetryClientUsageAggregation: 'delivered-only',

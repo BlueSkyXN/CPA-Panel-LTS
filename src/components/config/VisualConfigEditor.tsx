@@ -1777,7 +1777,7 @@ export function VisualConfigEditor({
                                 'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_stream_buffer_max_bytes_label'
                               )}
                               type="number"
-                              placeholder="0"
+                              placeholder="16777216"
                               value={values.codexAbnormalReasoningRetryStreamBufferMaxBytes}
                               onChange={(e) =>
                                 onChange({
