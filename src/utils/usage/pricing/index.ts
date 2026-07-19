@@ -678,8 +678,7 @@ const ratio = (part: number, total: number): number => (total === 0 ? 0 : part /
 export function aggregateCostEstimateCoverage(
   inputs: Iterable<PricingCoverageInput>
 ): PricingCoverage {
-  const totalModels = new Set<string>();
-  const pricedModels = new Set<string>();
+  const modelCoverage = new Map<string, { total: number; priced: number }>();
   const result: Omit<
     PricingCoverage,
     'totalModels' | 'pricedModels' | 'pricedRequestRatio' | 'pricedTokenRatio' | 'pricedModelRatio'
@@ -696,7 +695,11 @@ export function aggregateCostEstimateCoverage(
   for (const { modelName, tokenCount, estimate } of inputs) {
     result.totalRequests += 1;
     const modelKey = normalizeModelKey(modelName);
-    if (modelKey) totalModels.add(modelKey);
+    if (modelKey) {
+      const current = modelCoverage.get(modelKey) ?? { total: 0, priced: 0 };
+      current.total += 1;
+      modelCoverage.set(modelKey, current);
+    }
     const tokens = toTokenCount(tokenCount);
     result.totalTokens += tokens;
     if (estimate.tier.evidence === 'assumed') result.assumedTierRequests += 1;
@@ -704,16 +707,23 @@ export function aggregateCostEstimateCoverage(
       result.pricedRequests += 1;
       result.pricedTokens += tokens;
       result.estimatedAmount += estimate.amount;
-      if (modelKey) pricedModels.add(modelKey);
+      if (modelKey) {
+        const current = modelCoverage.get(modelKey);
+        if (current) current.priced += 1;
+      }
     } else if (estimate.status === 'unsupported') result.unsupportedRequests += 1;
     else result.unmatchedRequests += 1;
   }
+  const totalModels = modelCoverage.size;
+  const pricedModels = Array.from(modelCoverage.values()).filter(
+    ({ total, priced }) => total > 0 && priced === total
+  ).length;
   return {
     ...result,
-    totalModels: totalModels.size,
-    pricedModels: pricedModels.size,
+    totalModels,
+    pricedModels,
     pricedRequestRatio: ratio(result.pricedRequests, result.totalRequests),
     pricedTokenRatio: ratio(result.pricedTokens, result.totalTokens),
-    pricedModelRatio: ratio(pricedModels.size, totalModels.size),
+    pricedModelRatio: ratio(pricedModels, totalModels),
   };
 }

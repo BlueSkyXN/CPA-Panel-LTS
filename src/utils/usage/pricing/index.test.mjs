@@ -264,3 +264,22 @@ test('coverage reports request, token, model, amount, and assumed-tier completen
     }
   );
 });
+
+test('a model is covered only when every request for that model is priced', () => {
+  const priced = pricing.estimateUsageCost('gpt-5.4', { input_tokens: 1_000 }, undefined, tier());
+  const unsupported = pricing.estimateUsageCost(
+    'gpt-5.4',
+    { input_tokens: 272_000 },
+    undefined,
+    tier('fast')
+  );
+  const coverage = pricing.aggregateCostEstimateCoverage([
+    { modelName: 'gpt-5.4', tokenCount: 1_000, estimate: priced },
+    { modelName: 'gpt-5.4', tokenCount: 272_000, estimate: unsupported },
+  ]);
+  assert.equal(coverage.totalModels, 1);
+  assert.equal(coverage.pricedModels, 0);
+  assert.equal(coverage.pricedModelRatio, 0);
+  assert.equal(coverage.pricedRequests, 1);
+  assert.equal(coverage.unsupportedRequests, 1);
+});

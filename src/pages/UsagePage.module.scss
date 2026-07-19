@@ -613,140 +613,6 @@
   white-space: nowrap;
 }
 
-// Pricing Section (80%比例)
-.pricingSection {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.priceForm {
-  padding: 10px;
-  background-color: var(--bg-secondary);
-  border-radius: $radius-sm;
-  border: 1px solid var(--border-color);
-}
-
-.formRow {
-  display: flex;
-  gap: 10px;
-  align-items: flex-end;
-  flex-wrap: wrap;
-
-  @include mobile {
-    flex-direction: column;
-    align-items: stretch;
-  }
-}
-
-.formField {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  flex: 1;
-  min-width: 120px;
-
-  label {
-    font-size: 10px;
-    color: var(--text-secondary);
-    font-weight: 500;
-  }
-
-  // 确保 Input 组件的 form-group 包装器不影响布局
-  :global(.form-group) {
-    margin: 0;
-
-    > label {
-      display: none; // 隐藏 Input 自带的 label，使用外层的
-    }
-  }
-
-  :global(.input) {
-    height: 40px;
-    box-sizing: border-box;
-  }
-}
-
-.priceFieldHint {
-  color: var(--text-tertiary);
-  font-size: 10px;
-  line-height: 1.35;
-}
-
-.pricesList {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.pricesTitle {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0;
-}
-
-.pricesGrid {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.priceItem {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px;
-  background-color: var(--bg-secondary);
-  border-radius: $radius-sm;
-  border: 1px solid var(--border-color);
-  gap: 10px;
-
-  @include mobile {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-}
-
-.priceInfo {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-  flex: 1;
-}
-
-.priceModel {
-  font-weight: 600;
-  color: var(--text-primary);
-  font-size: 11px;
-  word-break: break-all;
-}
-
-.priceMeta {
-  display: flex;
-  gap: 10px;
-  font-size: 10px;
-  color: var(--text-secondary);
-
-  @include mobile {
-    flex-direction: column;
-    gap: 3px;
-  }
-}
-
-.priceActions {
-  display: flex;
-  gap: 3px;
-  flex-shrink: 0;
-}
-
-.editModalBody {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
 // Chart Section (80%比例)
 .chartSection {
   display: flex;
@@ -1333,6 +1199,127 @@
   border-radius: 2px;
 }
 
+.statInlineAction {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--amber-text);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  &:focus-visible {
+    border-radius: 3px;
+    outline: 2px solid var(--amber-color);
+    outline-offset: 2px;
+  }
+}
+
+.costTrendActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.costCoverageNote {
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--amber-30);
+  border-radius: 8px;
+  background: var(--amber-10);
+  color: var(--amber-text);
+  font-size: 11px;
+}
+
+.pricingEntryCard {
+  overflow: hidden;
+  border-color: var(--amber-30);
+  background: linear-gradient(105deg, var(--amber-10), transparent 46%), var(--bg-primary);
+}
+
+.pricingEntryMain {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 14px;
+}
+
+.pricingEntryIcon {
+  display: inline-flex;
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--amber-30);
+  border-radius: 12px;
+  background: var(--amber-10);
+  color: var(--amber-text);
+}
+
+.pricingEntryCopy {
+  display: grid;
+  gap: 3px;
+}
+
+.pricingEntryTitle {
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.pricingEntryDescription {
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.pricingEntryAmount {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+
+  span {
+    color: var(--text-tertiary);
+    font-size: 10px;
+  }
+
+  strong {
+    color: var(--amber-text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 18px;
+  }
+}
+
+.pricingCoverageRail {
+  height: 4px;
+  overflow: hidden;
+  margin-top: 14px;
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+
+  span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--amber-color);
+    transition: width 0.25s ease;
+  }
+}
+
+.pricingEntryMeta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-top: 8px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+
 @include mobile {
   .healthCard {
     padding: 14px;
@@ -1358,5 +1345,23 @@
   .healthLegendBlock {
     width: 8px;
     height: 8px;
+  }
+
+  .costTrendActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .pricingEntryMain {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .pricingEntryAmount {
+    justify-items: start;
+  }
+
+  .pricingEntryMain :global(.btn) {
+    grid-column: 1 / -1;
+    width: 100%;
   }
 }

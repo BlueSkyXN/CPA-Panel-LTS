@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import {
   Chart as ChartJS,
   BarElement,
@@ -26,7 +27,7 @@ import {
   ChartLineSelector,
   ApiDetailsCard,
   ModelStatsCard,
-  PriceSettingsCard,
+  PricingEntryCard,
   CredentialStatsCard,
   RequestEventsDetailsCard,
   TokenBreakdownChart,
@@ -37,9 +38,10 @@ import {
   useChartData,
 } from '@/components/usage';
 import {
-  getModelNamesFromUsage,
   getApiStats,
+  getModelNamesFromUsage,
   getModelStats,
+  calculatePricingCoverage,
   filterUsageByTimeRange,
   type UsageTimeRange,
 } from '@/utils/usage';
@@ -121,6 +123,7 @@ const loadTimeRange = (): UsageTimeRange => {
 
 export function UsagePage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const isMobile = useMediaQuery('(max-width: 768px)');
   const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
   const isDark = resolvedTheme === 'dark';
@@ -137,8 +140,7 @@ export function UsagePage() {
     loading,
     error,
     lastRefreshedAt,
-    modelPrices,
-    setModelPrices,
+    priceProfile,
     loadUsage,
     handleExport,
     handleImport,
@@ -225,7 +227,7 @@ export function UsagePage() {
 
   // Sparklines hook
   const { requestsSparkline, tokensSparkline, rpmSparkline, tpmSparkline, costSparkline } =
-    useSparklines({ usage: filteredUsage, loading, nowMs });
+    useSparklines({ usage: filteredUsage, loading, nowMs, priceProfile });
 
   // Chart data hook
   const {
@@ -242,14 +244,19 @@ export function UsagePage() {
   // Derived data
   const modelNames = useMemo(() => getModelNamesFromUsage(usage), [usage]);
   const apiStats = useMemo(
-    () => getApiStats(filteredUsage, modelPrices),
-    [filteredUsage, modelPrices]
+    () => getApiStats(filteredUsage, priceProfile),
+    [filteredUsage, priceProfile]
   );
   const modelStats = useMemo(
-    () => getModelStats(filteredUsage, modelPrices),
-    [filteredUsage, modelPrices]
+    () => getModelStats(filteredUsage, priceProfile),
+    [filteredUsage, priceProfile]
   );
-  const hasPrices = Object.keys(modelPrices).length > 0;
+  const pricingCoverage = useMemo(
+    () => calculatePricingCoverage(filteredUsage, priceProfile),
+    [filteredUsage, priceProfile]
+  );
+  const showPricing = pricingCoverage.pricedRequests > 0;
+  const openPricing = useCallback(() => navigate('/usage/pricing'), [navigate]);
 
   return (
     <div className={styles.container}>
@@ -323,7 +330,8 @@ export function UsagePage() {
       <StatCards
         usage={filteredUsage}
         loading={loading}
-        modelPrices={modelPrices}
+        pricingCoverage={pricingCoverage}
+        onOpenPricing={openPricing}
         nowMs={nowMs}
         sparklines={{
           requests: requestsSparkline,
@@ -384,14 +392,15 @@ export function UsagePage() {
         loading={loading}
         isDark={isDark}
         isMobile={isMobile}
-        modelPrices={modelPrices}
+        priceProfile={priceProfile}
+        onOpenPricing={openPricing}
         hourWindowHours={hourWindowHours}
       />
 
       {/* Details Grid */}
       <div className={styles.detailsGrid}>
-        <ApiDetailsCard apiStats={apiStats} loading={loading} hasPrices={hasPrices} />
-        <ModelStatsCard modelStats={modelStats} loading={loading} hasPrices={hasPrices} />
+        <ApiDetailsCard apiStats={apiStats} loading={loading} showPricing={showPricing} />
+        <ModelStatsCard modelStats={modelStats} loading={loading} showPricing={showPricing} />
       </div>
 
       <RequestEventsDetailsCard
@@ -415,12 +424,7 @@ export function UsagePage() {
         openaiProviders={openaiProvidersForUsage}
       />
 
-      {/* Price Settings */}
-      <PriceSettingsCard
-        modelNames={modelNames}
-        modelPrices={modelPrices}
-        onPricesChange={setModelPrices}
-      />
+      <PricingEntryCard coverage={pricingCoverage} onOpen={openPricing} />
     </div>
   );
 }
