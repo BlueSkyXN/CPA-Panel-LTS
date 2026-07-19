@@ -1667,7 +1667,7 @@ def run_browser_provider_workbench_smoke(page: Any, app_url: str, api_url: str) 
             for item in openai_before_edit
             if isinstance(item, dict) and item.get("name") == "Smoke OpenAI Compatible"
             for model in item.get("models", [])
-            if isinstance(model, dict) and model.get("name") == "openai-real-write-model"
+            if isinstance(model, dict) and model.get("display-name")
         ),
         None,
     )
