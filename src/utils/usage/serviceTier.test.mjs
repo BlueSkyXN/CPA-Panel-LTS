@@ -51,6 +51,25 @@ test('recognized response wins over request intent', () => {
   assert.equal(resolved.evidence, 'response');
 });
 
+test('unknown effective tier blocks fallback to response or request Fast evidence', () => {
+  const withResponse = resolveServiceTier({
+    effectiveServiceTier: 'future-tier',
+    responseServiceTier: 'priority',
+    requestServiceTier: 'standard',
+  });
+  assert.equal(withResponse.tier, 'std');
+  assert.equal(withResponse.evidence, 'assumed');
+  assert.equal(withResponse.rawEffective, 'future-tier');
+
+  const withRequest = resolveServiceTier({
+    effectiveServiceTier: 'auto',
+    requestServiceTier: 'priority',
+  });
+  assert.equal(withRequest.tier, 'std');
+  assert.equal(withRequest.evidence, 'assumed');
+  assert.equal(withRequest.rawEffective, 'auto');
+});
+
 test('unknown response blocks fallback to a Fast request', () => {
   const resolved = resolveServiceTier({
     requestServiceTier: 'priority',
