@@ -139,6 +139,7 @@ features:
       - src/features/providers/useProviderWorkbench.ts
       - src/features/providers/descriptors.ts
       - src/features/providers/xaiApiKeyProvider.test.mjs
+      - src/features/providers/providerIntegrity.test.mjs
       - src/features/providers/code0.ts
       - src/features/providers/fennoAI.ts
       - src/features/providers/qiniuCloud.ts
@@ -152,6 +153,7 @@ features:
       - src/features/providers/sheets/forms/useConnectivityTest.ts
       - src/features/providers/adapters.ts
       - src/components/providers/hooks/useProviderRecentRequests.ts
+      - src/components/providers/hooks/providerRecentRequests.test.mjs
       - src/services/api/config.ts
       - src/services/api/providers.ts
       - src/services/api/transformers.ts
@@ -204,7 +206,11 @@ features:
       - mutateLatestProviderList
       - replaceLatestProviderRecord
       - getSponsorAggregationConflict
+      - getSponsorOpenAIDeleteIndices
       - runSponsorMutationWithRecovery
+      - sourceIndex
+      - getOpenAIProviderMutationIndex
+      - createProviderRecentRequestsCacheController
       - assert_each_request_immediately_preceded_by
       - display-name
       - item.alias || item.display_name || item.displayName
@@ -215,7 +221,7 @@ features:
       - cleared model display-name without dropping unknown fields
       - updated sponsor model display-name
     validation:
-      - npm run test:provider-xai
+      - npm run test:providers
       - npm run smoke:lts
       - npm run smoke:lts:core
 
@@ -326,6 +332,7 @@ features:
     panel_files:
       - src/components/providers/utils.ts
       - src/components/providers/hooks/useProviderRecentRequests.ts
+      - src/components/providers/hooks/providerRecentRequests.test.mjs
       - src/services/api/apiKeyUsage.ts
       - src/utils/recentRequests.ts
       - src/features/providers/ProvidersWorkbenchPage.tsx
@@ -333,8 +340,11 @@ features:
       - /v0/management/api-key-usage
     required_markers:
       - useProviderRecentRequests
+      - createProviderRecentRequestsCacheController
       - getProviderRecentStatusData
       - getOpenAIProviderRecentStatusData
+    validation:
+      - npm run test:provider-recent
 
   - id: logs-runtime
     status: shared
@@ -551,6 +561,7 @@ features:
       - src/pages/OAuthPage.tsx
       - src/components/modelAlias/
       - src/features/authFiles/
+      - src/features/authFiles/oauthConfigLoadGuard.test.mjs
       - src/hooks/useUnsavedChangesGuard.ts
       - src/services/api/authFiles.ts
       - src/services/api/oauth.ts
@@ -593,6 +604,12 @@ features:
       - getEffectiveOAuthExcludedRules
       - useUnsavedChangesGuard
       - run_oauth_editor_smoke
+      - OAuthConfigLoadError
+      - canWriteOAuthConfig
+      - run_oauth_load_failure_smoke
+    validation:
+      - npm run test:auth-files
+      - npm run smoke:lts
 
   - id: quota-management
     status: shared
@@ -649,3 +666,5 @@ features:
       - reset_credits_details_button
       - Est weekly 0.31 USD
       - credits_unit
+    validation:
+      - npm run smoke:lts

@@ -775,6 +775,26 @@ require_file_contains src/features/providers/claudeApi.ts "CLAUDE_API_BASE_URL"
 require_file_contains src/features/providers/code0.ts "CODE0_PROVIDER_NAME"
 require_file_contains src/features/providers/fennoAI.ts "FENNO_AI_PROVIDER_NAME"
 require_file_contains src/features/providers/qiniuCloud.ts "QINIU_CLOUD_PROVIDER_NAME"
+require_file_contains src/types/provider.ts "sourceIndex?: number"
+require_file_contains src/services/api/transformers.ts "normalizeOpenAIProvider(item, index)"
+require_file_contains src/services/api/providers.ts "getOpenAIProviderMutationIndex"
+require_file_contains src/pages/AiProvidersPage.tsx "getOpenAIProviderMutationIndex"
+require_file_contains src/features/providers/adapters.ts "config.sourceIndex ?? index"
+require_file_contains src/features/providers/sponsorDefinitions.ts "getSponsorOpenAIDeleteIndices"
+require_file_contains src/features/providers/useProviderWorkbench.ts "getSponsorOpenAIDeleteIndices(raw)"
+require_file_contains src/features/providers/providerIntegrity.test.mjs "custom branded endpoints"
+require_file_contains src/components/providers/hooks/useProviderRecentRequests.ts "createProviderRecentRequestsCacheController"
+require_file_contains src/components/providers/hooks/useProviderRecentRequests.ts "state.managementKey"
+require_file_contains src/components/providers/hooks/providerRecentRequests.test.mjs "late writes to an old connection"
+require_file_contains src/features/authFiles/components/AuthFileQuotaSection.tsx "captureQuotaCacheGeneration"
+require_file_contains src/features/authFiles/components/AuthFileQuotaSection.tsx "commitIfQuotaCacheCurrent"
+require_file_contains src/features/authFiles/constants.ts "OAuthConfigLoadError"
+require_file_contains src/features/authFiles/constants.ts "canWriteOAuthConfig"
+require_file_contains src/features/authFiles/hooks/useAuthFilesOauth.tsx "excludedReadyRef"
+require_file_contains src/features/authFiles/hooks/useAuthFilesOauth.tsx "modelAliasReadyRef"
+require_file_contains src/features/authFiles/oauthConfigLoadGuard.test.mjs "successfully loaded baseline"
+require_file_contains scripts/smoke-lts-panel.py "run_oauth_load_failure_smoke"
+require_file_contains scripts/smoke-lts-panel.py "OAuth load-failure smoke emitted a write request"
 
 # Behavior-oriented OpenAI Compatibility preservation checks.
 require_file_contains scripts/smoke-lts-panel.py "assert_provider_mutation_payloads"
@@ -802,13 +822,19 @@ require_file_contains package.json '"test:usage-prices"'
 require_file_contains package.json '"test:usage-import"'
 require_file_contains package.json '"test:usage-effort"'
 require_file_contains package.json '"test:provider-xai"'
+require_file_contains package.json '"test:provider-integrity"'
+require_file_contains package.json '"test:provider-recent"'
+require_file_contains package.json '"test:providers"'
+require_file_contains package.json '"test:auth-files"'
 require_file_contains package.json '"test:api-client"'
 require_file_contains package.json '"test:usage"'
 require_file_contains package.json '"validate:lts": "npm run test:usage'
-require_file_contains package.json 'npm run test:provider-xai'
+require_file_contains package.json 'npm run test:providers'
+require_file_contains package.json 'npm run test:auth-files'
 require_file_contains package.json 'npm run test:api-client'
 require_file_contains .github/workflows/lts-panel-contract.yml "npm run test:usage"
-require_file_contains .github/workflows/lts-panel-contract.yml "npm run test:provider-xai"
+require_file_contains .github/workflows/lts-panel-contract.yml "npm run test:providers"
+require_file_contains .github/workflows/lts-panel-contract.yml "npm run test:auth-files"
 require_file_contains .github/workflows/lts-panel-contract.yml "npm run test:api-client"
 require_file_contains scripts/smoke-lts-panel.py "run_usage_import_review_smoke"
 require_file_contains scripts/smoke-lts-panel.py "selected raw effort"

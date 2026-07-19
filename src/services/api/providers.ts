@@ -102,6 +102,11 @@ const providerKeyIdentity = (record: Record<string, unknown>) => {
 const openAIProviderIdentity = (record: Record<string, unknown>) =>
   getStringField(record, ['name']);
 
+export const getOpenAIProviderMutationIndex = (
+  provider: OpenAIProviderConfig,
+  fallbackIndex: number
+) => provider.sourceIndex ?? fallbackIndex;
+
 const modelIdentity = (record: Record<string, unknown>) => getStringField(record, ['name']);
 
 const apiKeyEntryIdentity = (record: Record<string, unknown>) =>
@@ -686,7 +691,7 @@ export const providersApi = {
     const data = await apiClient.get('/openai-compatibility');
     const list = extractArrayPayload(data, 'openai-compatibility');
     return list
-      .map((item) => normalizeOpenAIProvider(item))
+      .map((item, index) => normalizeOpenAIProvider(item, index))
       .filter(Boolean) as OpenAIProviderConfig[];
   },
 
@@ -726,7 +731,4 @@ export const providersApi = {
 
   deleteOpenAIProvider: (index: number) =>
     apiClient.delete(`/openai-compatibility?index=${encodeURIComponent(String(index))}`),
-
-  deleteOpenAIProvidersByName: (name: string) =>
-    apiClient.delete(`/openai-compatibility?name=${encodeURIComponent(name)}`),
 };

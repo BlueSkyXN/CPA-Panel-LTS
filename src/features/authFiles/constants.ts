@@ -26,6 +26,13 @@ export type AuthFileModelItem = {
 export type AuthFileIconAsset = string | { light: string; dark: string };
 
 export type QuotaProviderType = 'antigravity' | 'claude' | 'codex' | 'gemini-cli' | 'kimi' | 'xai';
+export type OAuthConfigLoadError = 'loading' | 'unsupported' | 'load' | null;
+
+export const canWriteOAuthConfig = (options: {
+  baselineReady: boolean;
+  loadError: string | null;
+  unsupported: boolean;
+}): boolean => options.baselineReady && options.loadError === null && !options.unsupported;
 
 export const QUOTA_PROVIDER_TYPES = new Set<QuotaProviderType>([
   'antigravity',

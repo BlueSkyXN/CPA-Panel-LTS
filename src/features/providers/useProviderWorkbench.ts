@@ -39,12 +39,7 @@ import {
   isCode0GeminiProvider,
   isCode0OpenAIProvider,
 } from './code0';
-import {
-  buildFennoAIRaw,
-  isFennoAIClaudeProvider,
-  isFennoAICodexProvider,
-  isFennoAIOpenAIProvider,
-} from './fennoAI';
+import { buildFennoAIRaw, isFennoAIClaudeProvider, isFennoAICodexProvider } from './fennoAI';
 import {
   buildQiniuCloudRaw,
   isQiniuCloudClaudeProvider,
@@ -52,7 +47,11 @@ import {
   isQiniuCloudGeminiProvider,
   isQiniuCloudOpenAIProvider,
 } from './qiniuCloud';
-import { getSponsorProviderDefinition, type SponsorProtocolUrls } from './sponsorDefinitions';
+import {
+  getSponsorOpenAIDeleteIndices,
+  getSponsorProviderDefinition,
+  type SponsorProtocolUrls,
+} from './sponsorDefinitions';
 import { runSponsorMutationWithRecovery } from './sponsorMutationRecovery';
 
 const CONFIG_DETECTED_BRANDS: ReadonlySet<ProviderBrand> = new Set([
@@ -482,11 +481,7 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
         case 'openaiCompatibility':
           resources = (config.openaiCompatibility ?? []).reduce<ProviderResource[]>(
             (out, item, index) => {
-              if (
-                !isCode0OpenAIProvider(item) &&
-                !isFennoAIOpenAIProvider(item) &&
-                !isQiniuCloudOpenAIProvider(item)
-              ) {
+              if (!isCode0OpenAIProvider(item) && !isQiniuCloudOpenAIProvider(item)) {
                 out.push(openaiToResource(item, index));
               }
               return out;
@@ -624,7 +619,7 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           await providersApi.createOpenAIProvider(next);
         }
       } else if (currentOpenAI) {
-        await providersApi.deleteOpenAIProvidersByName(currentOpenAI.config.name);
+        await providersApi.deleteOpenAIProvider(currentOpenAI.index);
       }
     },
     [config]
@@ -764,9 +759,8 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
             for (const item of raw.claude) {
               await providersApi.deleteClaudeConfig(item.config.apiKey, item.config.baseUrl);
             }
-            const openAINames = new Set(raw.openai.map((item) => item.config.name));
-            for (const name of openAINames) {
-              await providersApi.deleteOpenAIProvidersByName(name);
+            for (const index of getSponsorOpenAIDeleteIndices(raw)) {
+              await providersApi.deleteOpenAIProvider(index);
             }
           }, refetch);
         }

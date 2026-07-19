@@ -17,21 +17,21 @@ main = CPA-Panel-LTS product line
      + local downstream panel customizations
 ```
 
-## Audited upstream intake snapshot (2026-07-15)
+## Audited upstream intake snapshot (2026-07-19)
 
-Refs captured after Panel PR #25 and before this audit change:
+Refs captured after Panel PR #28 and before publishing the 2026-07-19 intake branch:
 
-- `origin/main`: `165c95e8f85887fa36063b3365e68b3394a1ed5f`
-- `upstream/main`: `d3df9b074ecc8c1161d998d65e09948bcbcaa6ef` (`v1.18.3`)
-- `upstream/dev`: `5d24c6f971e05cc9b5c97ed76ae786efe099de98`
+- `origin/main`: `cf76c124eeb614b58b5391a4824916cc22561c10`
+- `upstream/main`: `6a6a22af85ce8763e8898c0d8641de3137f3ffd9` (`v1.18.5`)
+- `upstream/dev`: `6a6a22af85ce8763e8898c0d8641de3137f3ffd9`
 - `upstream/kimi-provider`: `f860bc81bcc507826bbced5434cf037bf77f8244`
 - merge-base: `8ed837c3d734c3970a6d6799c557bb6a6753360d`
-- `origin/main..upstream/main`: 242 commits
-- `upstream/main..origin/main`: 144 commits
-- `origin/main..upstream/dev`: 243 commits
+- `origin/main..upstream/main`: 259 commits
+- `upstream/main..origin/main`: 150 commits
+- `origin/main..upstream/dev`: 259 commits
 - `origin/main..upstream/kimi-provider`: 252 commits
 
-The raw commit counts are not the selective-port backlog. Panel PR #10, PR #16, and PR #20 already adapted substantial upstream work without making those upstream commits ancestors of `main`, while PR #23 recorded the `v1.18.3` result as already equivalent. `upstream/dev` and `upstream/kimi-provider` are review inputs, not accepted release boundaries.
+The raw commit counts are not the selective-port backlog. Panel PR #10, PR #16, PR #20, and PR #27 already adapted substantial upstream work without making those upstream commits ancestors of `main`, while PR #23 recorded the `v1.18.3` result as already equivalent. `upstream/dev` currently matches `upstream/main`; `upstream/kimi-provider` remains a historical review ref rather than an accepted release boundary.
 
 The upstream diff deletes or replaces protected LTS usage files, including:
 
@@ -54,10 +54,14 @@ Recent upstream intake:
 | `v1.18.1` / `07562b7` | `adapt-port` | PR #16 / `v1-tls-0.0.8` | Preserve LTS auth/quota/provider boundaries while adapting official xAI API routing. |
 | `v1.18.2` / `7958915` | `adapt-port` | PR #20 | Add `disable-image-generation: passthrough` through the existing visual-config and browser-smoke architecture; do not copy upstream Bun tests or missing search-index architecture. |
 | `v1.18.3` / `d3df9b0` | `already-equivalent` | `src/lts/codexQuota/` uses `pickCodexClassifiedWindows` | The LTS sidecar already classifies and selects additional quota windows before building display rows; no product-code port is needed. |
-| `upstream/dev` / `5d24c6f` | `adapt-port` | Paired `CPA-Core-LTS main` `f7d321b` includes Core xAI contract commit `423f3d5` and exposes `GET`/`PUT`/`PATCH`/`DELETE /v0/management/xai-api-key`; Panel uses the workbench's xAI category and `test:provider-xai` regression | Manually adapt the xAI API-key workbench surface, preserving unknown fields and selecting mutations by `api-key` plus `base-url`; retain npm/package-lock and do not copy the upstream Bun test. |
-| `upstream/kimi-provider` functional base / `b2c8490` | `defer` | Current Panel already supports Kimi OAuth, auth files, and quota; the branch has not reached upstream `dev` or `main`, and its name-based detection can silently rewrite a custom `Kimi` gateway to the official Moonshot endpoint on save | Revisit only a config-detected Kimi OpenAI/Claude compatibility grouping after the branch stabilizes and custom base URLs round-trip unchanged. Preserve the LTS rule that branded groups appear from real config and do not become promotional quick-start surfaces. |
-| `upstream/kimi-provider` icon/theme hunks / `7fb5890`, `f860bc8` | `defer` | The commits mix reusable icon/theme work with OAuth reordering and affiliate-link behavior | Reassess stable asset-only hunks after upstream integration; do not cherry-pick the mixed commits as-is. |
-| `upstream/kimi-provider` promotion series / `e2aa494`, `6a8319d`, `339529f`, `bb48387`, `72c13c0`, `36681ce` plus affiliate hunks in `f860bc8` | `reject` | `provider-workbench` contract requires commercial-neutral, config-detected groups without registration links | Do not add recommended-provider placement, quick sign-up controls, or `?aff=cliproxyapi` registration links. |
+| xAI / `5d24c6f` | `adapt-port` | Panel PR #27 and `test:provider-xai` cover the current Core xAI contract while preserving unknown fields and selecting mutations by `api-key` plus `base-url` | Keep the existing LTS adaptation; do not copy the upstream Bun test or weaken npm/package-lock. |
+| `v1.18.4` provider integrity / `5b62fa1`, `4e0af8c` | `adapt-port` | Panel commits `2519786` and `4b3e309` preserve backend OpenAI source indices across the Workbench and stable Provider page, keep custom branded endpoints in the generic group, stop FennoAI from claiming unsupported OpenAI configs, and delete sponsor OpenAI entries by descending index | Accepted as a manual LTS adaptation; retain unknown-field preservation and config-detected branded groups. |
+| `v1.18.4` recent-request isolation / `291f15c` | `direct-port` | Panel commit `2519786` scopes the recent-request cache by `apiBase` plus `managementKey` and adds a late-response regression test | Accepted; this hardens the coexist recent-health view without touching full usage statistics. |
+| `v1.18.4` auth safety / `e3fa19b`, `abcd70f` | `adapt-port` | Panel commit `ef24b2c` guards inline quota commits with the existing LTS cache generation and blocks OAuth writes until a baseline load succeeds; mock browser smoke covers 5xx load failures and verifies no write request is emitted | Accepted as a shared auth/quota safety fix with no Management API schema change. |
+| Kimi versioned OpenAI URL / `f324135` | `defer` | The technical `/v1` correction belongs to the still-unaccepted Kimi workbench surface; current Panel already supports Kimi quota/auth files but has no Kimi branded workbench group | Reassess only as part of a commercial-neutral, config-detected Kimi workbench design; do not introduce the upstream affiliate constants to absorb one URL hunk. |
+| Kimi functional/theme base / `b2c8490`, `7fb5890`, `f860bc8` | `defer` | The feature reached upstream main, and `5b62fa1` fixed custom sponsor endpoint preservation, but the accepted Panel surface still does not include a Kimi workbench group and the implementation remains coupled to promotional/affiliate code | Revisit as a separate feature decision; custom endpoints must round-trip unchanged and unconfigured Kimi must stay hidden. |
+| Kimi domestic/overseas mapping / `6a6a22a` (`v1.18.5`) | `defer` | Adds `moonshot.cn`/`moonshot.ai` protocol mappings and changes the default region inside the unaccepted Kimi workbench surface | Do not port as an isolated endpoint patch. Region defaults and the new provider surface require an explicit product decision and commercial-neutral implementation. |
+| Kimi promotion series / `e2aa494`, `6a8319d`, `339529f`, `bb48387`, `72c13c0`, `36681ce` plus affiliate hunks in `f860bc8` | `reject` | `provider-workbench` contract requires commercial-neutral, config-detected groups without registration links | Do not add recommended-provider placement, quick sign-up controls, or `?aff=cliproxyapi` registration links. |
 
 ## Maintenance rules
 

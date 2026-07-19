@@ -78,6 +78,8 @@ class MockCoreState:
         self.plugins_config_enabled = True
         self.include_branded_providers = True
         self.plugin_enabled = True
+        self.oauth_excluded_status = 200
+        self.oauth_model_alias_status = 200
         self.usage_payload = build_usage_payload()
         self.delay_next_config_response = False
         self.delayed_config_status = 200
@@ -178,6 +180,12 @@ def build_config_payload(
                 "models": [{"name": "claude-sonnet-4"}],
             }
         )
+        claude_api_keys.append(
+            {
+                "api-key": "fenno-smoke-key",
+                "base-url": "https://api.fenno.ai",
+            }
+        )
         openai_compatibility.extend(
             [
                 {
@@ -192,11 +200,6 @@ def build_config_payload(
                             "x-lts-model-note": "keep-code0-model",
                         }
                     ],
-                },
-                {
-                    "name": "fennoAI",
-                    "base-url": "https://api.fenno.ai/v1",
-                    "api-key-entries": [{"api-key": "fenno-smoke-key"}],
                 },
                 {
                     "name": "qiniuCloud",
@@ -836,6 +839,26 @@ class MockCoreHandler(BaseHTTPRequestHandler):
 
         if path == "/v0/management/plugins" and not self.state.plugin_endpoint_available:
             self._send_json({"error": "plugin endpoint unavailable"}, status=404)
+            return
+
+        if (
+            path == "/v0/management/oauth-excluded-models"
+            and self.state.oauth_excluded_status != 200
+        ):
+            self._send_json(
+                {"error": "oauth excluded models unavailable"},
+                status=self.state.oauth_excluded_status,
+            )
+            return
+
+        if (
+            path == "/v0/management/oauth-model-alias"
+            and self.state.oauth_model_alias_status != 200
+        ):
+            self._send_json(
+                {"error": "oauth model aliases unavailable"},
+                status=self.state.oauth_model_alias_status,
+            )
             return
 
         routes: dict[str, Any] = {
@@ -1621,7 +1644,6 @@ def assert_provider_mutation_payloads(state: MockCoreState) -> None:
             )
         for provider_name, base_url, api_key in [
             ("code0", "https://code0.ai/v1", "code0-smoke-key"),
-            ("fennoAI", "https://api.fenno.ai/v1", "fenno-smoke-key"),
             ("qiniuCloud", "https://api.qnaigc.com/v1", "qiniu-smoke-key"),
         ]:
             branded_provider = next(
@@ -1817,6 +1839,62 @@ def run_oauth_editor_smoke(page: Any, app_url: str) -> None:
     ):
         page.get_by_role("button", name="Save/Update", exact=True).click()
     page.get_by_text("Model disablement updated", exact=False).first.wait_for()
+
+
+def run_oauth_load_failure_smoke(
+    page: Any, app_url: str, state: MockCoreState
+) -> None:
+    write_paths = (
+        "/v0/management/oauth-excluded-models",
+        "/v0/management/oauth-model-alias",
+    )
+    writes_before = sum(
+        1
+        for request in state.requests
+        if request.startswith(("PATCH ", "PUT ", "DELETE "))
+        and any(path in request for path in write_paths)
+    )
+
+    state.oauth_excluded_status = 500
+    state.oauth_model_alias_status = 500
+    try:
+        page.goto(f"{app_url}?route=oauth-load-failure#/auth-files", wait_until="domcontentloaded")
+        page.wait_for_function("() => window.location.hash.endsWith('/auth-files')")
+        page.get_by_text("Refresh failed", exact=True).first.wait_for()
+        if not page.get_by_role("button", name="Add Disablement", exact=True).is_disabled():
+            raise AssertionError("OAuth excluded-model writes stayed enabled after a load failure")
+        if not page.get_by_role("button", name="Add Alias", exact=True).is_disabled():
+            raise AssertionError("OAuth model-alias writes stayed enabled after a load failure")
+        if page.get_by_role("button", name="Refresh", exact=True).count() < 2:
+            raise AssertionError("OAuth load failures did not expose retry actions")
+
+        page.goto(
+            f"{app_url}?route=oauth-excluded-load-failure#/auth-files/oauth-excluded",
+            wait_until="domcontentloaded",
+        )
+        page.get_by_text("Refresh failed", exact=True).first.wait_for()
+        if not page.get_by_role("button", name="Save/Update", exact=True).is_disabled():
+            raise AssertionError("OAuth excluded editor allowed saving without a loaded baseline")
+
+        page.goto(
+            f"{app_url}?route=oauth-alias-load-failure#/auth-files/oauth-model-alias",
+            wait_until="domcontentloaded",
+        )
+        page.get_by_text("Refresh failed", exact=True).first.wait_for()
+        if not page.get_by_role("button", name="Save/Update", exact=True).is_disabled():
+            raise AssertionError("OAuth alias editor allowed saving without a loaded baseline")
+    finally:
+        state.oauth_excluded_status = 200
+        state.oauth_model_alias_status = 200
+
+    writes_after = sum(
+        1
+        for request in state.requests
+        if request.startswith(("PATCH ", "PUT ", "DELETE "))
+        and any(path in request for path in write_paths)
+    )
+    if writes_after != writes_before:
+        raise AssertionError("OAuth load-failure smoke emitted a write request")
 
 
 def run_auth_file_using_api_smoke(page: Any, app_url: str) -> None:
@@ -2737,6 +2815,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
 
             run_plugin_config_patch_smoke(page, app_url)
             run_oauth_editor_smoke(page, app_url)
+            run_oauth_load_failure_smoke(page, app_url, state)
             run_auth_file_using_api_smoke(page, app_url)
 
             page.goto(f"{app_url}?route=dashboard#/", wait_until="domcontentloaded")
@@ -2832,7 +2911,10 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
 
             page.get_by_role("button", name=re.compile(r"OpenAI Compatible", re.I)).click()
             page.get_by_role("heading", name="OpenAI Compatible").wait_for()
-            page.get_by_role("button", name="Edit").first.click()
+            openrouter_row = page.get_by_text("OpenRouter", exact=True).locator(
+                "xpath=ancestor::tr[1]"
+            )
+            openrouter_row.get_by_role("button", name="Edit", exact=True).click()
             sheet = page.get_by_role("dialog").last
 
             sheet.get_by_text("API key entries", exact=True).click()
