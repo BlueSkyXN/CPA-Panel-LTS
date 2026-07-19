@@ -11,14 +11,16 @@ const vite = await createServer({
   server: { middlewareMode: true },
 });
 
-const [transformers, adapters, code0, fennoAI, qiniuCloud, sponsorDefinitions] = await Promise.all([
-  vite.ssrLoadModule('/src/services/api/transformers.ts'),
-  vite.ssrLoadModule('/src/features/providers/adapters.ts'),
-  vite.ssrLoadModule('/src/features/providers/code0.ts'),
-  vite.ssrLoadModule('/src/features/providers/fennoAI.ts'),
-  vite.ssrLoadModule('/src/features/providers/qiniuCloud.ts'),
-  vite.ssrLoadModule('/src/features/providers/sponsorDefinitions.ts'),
-]);
+const [transformers, providers, adapters, code0, fennoAI, qiniuCloud, sponsorDefinitions] =
+  await Promise.all([
+    vite.ssrLoadModule('/src/services/api/transformers.ts'),
+    vite.ssrLoadModule('/src/services/api/providers.ts'),
+    vite.ssrLoadModule('/src/features/providers/adapters.ts'),
+    vite.ssrLoadModule('/src/features/providers/code0.ts'),
+    vite.ssrLoadModule('/src/features/providers/fennoAI.ts'),
+    vite.ssrLoadModule('/src/features/providers/qiniuCloud.ts'),
+    vite.ssrLoadModule('/src/features/providers/sponsorDefinitions.ts'),
+  ]);
 
 test.after(async () => {
   await vite.close();
@@ -60,6 +62,7 @@ test('preserves backend indices and keeps custom branded endpoints in the generi
     config.openaiCompatibility.map((item) => item.sourceIndex),
     [1, 2, 3, 4]
   );
+  assert.equal(providers.getOpenAIProviderMutationIndex(config.openaiCompatibility[0], 0), 1);
 
   const code0Raw = code0.buildCode0Raw(config);
   assert.deepEqual(

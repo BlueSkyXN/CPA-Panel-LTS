@@ -209,6 +209,7 @@ features:
       - getSponsorOpenAIDeleteIndices
       - runSponsorMutationWithRecovery
       - sourceIndex
+      - getOpenAIProviderMutationIndex
       - createProviderRecentRequestsCacheController
       - assert_each_request_immediately_preceded_by
       - display-name

@@ -102,6 +102,11 @@ const providerKeyIdentity = (record: Record<string, unknown>) => {
 const openAIProviderIdentity = (record: Record<string, unknown>) =>
   getStringField(record, ['name']);
 
+export const getOpenAIProviderMutationIndex = (
+  provider: OpenAIProviderConfig,
+  fallbackIndex: number
+) => provider.sourceIndex ?? fallbackIndex;
+
 const modelIdentity = (record: Record<string, unknown>) => getStringField(record, ['name']);
 
 const apiKeyEntryIdentity = (record: Record<string, unknown>) =>

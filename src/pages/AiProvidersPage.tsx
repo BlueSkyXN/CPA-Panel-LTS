@@ -17,7 +17,7 @@ import {
 } from '@/components/providers/utils';
 import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer';
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
-import { ampcodeApi, providersApi } from '@/services/api';
+import { ampcodeApi, getOpenAIProviderMutationIndex, providersApi } from '@/services/api';
 import { useAuthStore, useConfigStore, useNotificationStore, useThemeStore } from '@/stores';
 import type { GeminiKeyConfig, OpenAIProviderConfig, ProviderKeyConfig } from '@/types';
 import { indexUsageDetailsByAuthIndex, indexUsageDetailsBySource } from '@/utils/usageIndex';
@@ -299,6 +299,7 @@ export function AiProvidersPage() {
   const setOpenAIProviderEnabled = async (index: number, enabled: boolean) => {
     const current = openaiProviders[index];
     if (!current) return;
+    const mutationIndex = getOpenAIProviderMutationIndex(current, index);
 
     const switchingKey = `openai:${current.name}:${index}`;
     setConfigSwitchingKey(switchingKey);
@@ -312,7 +313,7 @@ export function AiProvidersPage() {
     clearCache('openai-compatibility');
 
     try {
-      await providersApi.updateOpenAIProviderDisabled(index, !enabled);
+      await providersApi.updateOpenAIProviderDisabled(mutationIndex, !enabled);
       showNotification(
         enabled ? t('notification.config_enabled') : t('notification.config_disabled'),
         'success'
@@ -389,6 +390,7 @@ export function AiProvidersPage() {
   const deleteOpenai = async (index: number) => {
     const entry = openaiProviders[index];
     if (!entry) return;
+    const mutationIndex = getOpenAIProviderMutationIndex(entry, index);
     showConfirmation({
       title: t('ai_providers.openai_delete_title', { defaultValue: 'Delete OpenAI Provider' }),
       message: t('ai_providers.openai_delete_confirm'),
@@ -396,7 +398,7 @@ export function AiProvidersPage() {
       confirmText: t('common.confirm'),
       onConfirm: async () => {
         try {
-          await providersApi.deleteOpenAIProvider(index);
+          await providersApi.deleteOpenAIProvider(mutationIndex);
           const next = openaiProviders.filter((_, idx) => idx !== index);
           setOpenaiProviders(next);
           updateConfigValue('openai-compatibility', next);
