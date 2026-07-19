@@ -299,6 +299,9 @@ def build_usage_payload() -> dict[str, Any]:
             "source": "codex-key-1",
             "auth_index": "codex-smoke-auth",
             "service_tier": " priority ",
+            "request_service_tier": " priority ",
+            "response_service_tier": " priority ",
+            "effective_service_tier": " priority ",
             "reasoning_effort": " max ",
             "latency": 110,
             "tokens": {
@@ -317,7 +320,10 @@ def build_usage_payload() -> dict[str, Any]:
             "timestamp": timestamp(2),
             "source": "codex-key-1",
             "authIndex": "codex-smoke-auth",
-            "serviceTier": " default ",
+            "serviceTier": " priority ",
+            "requestServiceTier": " priority ",
+            "responseServiceTier": " default ",
+            "effectiveServiceTier": " standard ",
             "reasoningEffort": " high ",
             "latency": 120,
             "tokens": {
@@ -349,6 +355,8 @@ def build_usage_payload() -> dict[str, Any]:
             "source": "codex-key-1",
             "auth_index": "codex-smoke-auth",
             "ServiceTier": " flex ",
+            "RequestServiceTier": " priority ",
+            "ResponseServiceTier": " flex ",
             "ReasoningEffort": " low ",
             "latency": 140,
             "tokens": {
@@ -365,6 +373,7 @@ def build_usage_payload() -> dict[str, Any]:
             "source": "codex-key-1",
             "auth_index": "codex-smoke-auth",
             "service_tier": " cache-import ",
+            "request_service_tier": " fast ",
             "reasoning_effort": "max",
             "latency": 150,
             "tokens": {
@@ -2265,24 +2274,16 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         )
 
     wait_for_row_count(5)
-    for expected_label in [
-        "Fast / Priority",
-        "Standard",
-        "Legacy / Unknown",
-        "Other: flex",
-        "Other: cache-import",
-        "max",
-        "high",
-        "low",
-    ]:
+    for expected_label in ["Fast", "Std", "max", "high", "low"]:
         card.get_by_text(expected_label, exact=True).first.wait_for()
 
-    priority_rows = rows.filter(has_text="Fast / Priority")
-    if priority_rows.count() != 1:
+    fast_rows = rows.filter(has_text="Fast")
+    if fast_rows.count() != 2:
         raise AssertionError(
-            f"Expected one combined service-tier/cache row, found {priority_rows.count()}"
+            f"Expected two Fast rows, found {fast_rows.count()}"
         )
-    priority_cells = [text.strip() for text in priority_rows.first.locator("td").all_inner_texts()]
+    priority_row = rows.filter(has_text="12").filter(has_text="Fast").first
+    priority_cells = [text.strip() for text in priority_row.locator("td").all_inner_texts()]
     if priority_cells[-6:] != ["12", "8", "2", "1", "4", "23"]:
         raise AssertionError(
             "Combined service-tier/cache row rendered the wrong token values: "
@@ -2299,14 +2300,26 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     if any(column.startswith("thinking_") for column in csv_rows[0]):
         raise AssertionError("Request-event CSV must not export legacy thinking fields")
     csv_tiers = sorted(row.get("service_tier", "") for row in csv_rows)
-    if csv_tiers != ["", "cache-import", "default", "flex", "priority"]:
+    if csv_tiers != ["", "cache-import", "flex", "priority", "priority"]:
         raise AssertionError(f"Request-event CSV lost raw service_tier values: {csv_tiers!r}")
+    resolved_csv_tiers = sorted(row.get("resolved_service_tier", "") for row in csv_rows)
+    if resolved_csv_tiers != ["fast", "fast", "std", "std", "std"]:
+        raise AssertionError(
+            f"Request-event CSV resolved tiers incorrectly: {resolved_csv_tiers!r}"
+        )
+    csv_evidence = sorted(row.get("service_tier_evidence", "") for row in csv_rows)
+    if csv_evidence != ["assumed", "assumed", "effective", "effective", "request"]:
+        raise AssertionError(
+            f"Request-event CSV lost tier evidence: {csv_evidence!r}"
+        )
     csv_efforts = sorted(row.get("reasoning_effort", "") for row in csv_rows)
     if csv_efforts != ["", "high", "low", "max", "max"]:
         raise AssertionError(
             f"Request-event CSV lost raw reasoning_effort values: {csv_efforts!r}"
         )
-    priority_csv_rows = [row for row in csv_rows if row.get("service_tier") == "priority"]
+    priority_csv_rows = [
+        row for row in csv_rows if row.get("effective_service_tier") == "priority"
+    ]
     if len(priority_csv_rows) != 1:
         raise AssertionError(
             f"Request-event CSV lost the combined priority row: {priority_csv_rows!r}"
@@ -2327,7 +2340,9 @@ def run_usage_service_tier_smoke(page: Any) -> None:
             "Request-event CSV lost combined service-tier/cache token values: "
             f"{actual_priority_csv_tokens!r}"
         )
-    standard_csv_rows = [row for row in csv_rows if row.get("service_tier") == "default"]
+    standard_csv_rows = [
+        row for row in csv_rows if row.get("effective_service_tier") == "standard"
+    ]
     if len(standard_csv_rows) != 1 or standard_csv_rows[0].get("uncached_input_tokens") != "0":
         raise AssertionError(
             "Request-event CSV lost explicit zero uncached input: "
@@ -2346,8 +2361,13 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         "<null>" if row.get("service_tier") is None else str(row.get("service_tier"))
         for row in json_rows
     )
-    if json_tiers != ["<null>", "cache-import", "default", "flex", "priority"]:
+    if json_tiers != ["<null>", "cache-import", "flex", "priority", "priority"]:
         raise AssertionError(f"Request-event JSON lost raw service_tier values: {json_tiers!r}")
+    resolved_json_tiers = sorted(str(row.get("resolved_service_tier")) for row in json_rows)
+    if resolved_json_tiers != ["fast", "fast", "std", "std", "std"]:
+        raise AssertionError(
+            f"Request-event JSON resolved tiers incorrectly: {resolved_json_tiers!r}"
+        )
     json_efforts = sorted(
         "<null>" if row.get("reasoning_effort") is None else str(row.get("reasoning_effort"))
         for row in json_rows
@@ -2356,7 +2376,9 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         raise AssertionError(
             f"Request-event JSON lost raw reasoning_effort values: {json_efforts!r}"
         )
-    priority_json_rows = [row for row in json_rows if row.get("service_tier") == "priority"]
+    priority_json_rows = [
+        row for row in json_rows if row.get("effective_service_tier") == "priority"
+    ]
     if len(priority_json_rows) != 1:
         raise AssertionError(
             f"Request-event JSON lost the combined priority row: {priority_json_rows!r}"
@@ -2377,7 +2399,9 @@ def run_usage_service_tier_smoke(page: Any) -> None:
             "Request-event JSON lost combined service-tier/cache token values: "
             f"{priority_json_tokens!r}"
         )
-    standard_json_rows = [row for row in json_rows if row.get("service_tier") == "default"]
+    standard_json_rows = [
+        row for row in json_rows if row.get("effective_service_tier") == "standard"
+    ]
     standard_json_tokens = standard_json_rows[0].get("tokens", {}) if len(standard_json_rows) == 1 else {}
     if standard_json_tokens.get("uncached_input_tokens") != 0:
         raise AssertionError(
@@ -2386,17 +2410,11 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         )
 
     tier_select = card.get_by_label("Tier", exact=True)
-    for option_label in [
-        "Fast / Priority",
-        "Standard",
-        "Legacy / Unknown",
-        "Other: flex",
-        "Other: cache-import",
-    ]:
+    for option_label, expected_rows in [("Fast", 2), ("Std", 3)]:
         tier_select.click()
         page.get_by_role("option", name=option_label, exact=True).click()
-        wait_for_row_count(1)
-        if option_label not in rows.first.inner_text():
+        wait_for_row_count(expected_rows)
+        if any(option_label not in rows.nth(index).inner_text() for index in range(expected_rows)):
             raise AssertionError(
                 f"Tier filter {option_label!r} returned the wrong request event row"
             )

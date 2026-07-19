@@ -17,6 +17,8 @@ import {
   formatDurationMs,
   LATENCY_SOURCE_FIELD,
   normalizeAuthIndex,
+  resolveServiceTier,
+  type ResolvedServiceTier,
 } from '@/utils/usage';
 import {
   getUsageCacheTokenCounts,
@@ -27,15 +29,11 @@ import { downloadBlob } from '@/utils/download';
 import styles from '@/pages/UsagePage.module.scss';
 
 const ALL_FILTER = '__all__';
-const SERVICE_TIER_PRIORITY_FILTER = '__service_tier_priority__';
-const SERVICE_TIER_STANDARD_FILTER = '__service_tier_standard__';
-const SERVICE_TIER_LEGACY_UNKNOWN_FILTER = '__service_tier_legacy_unknown__';
-const SERVICE_TIER_OTHER_FILTER_PREFIX = '__service_tier_other__:';
+const SERVICE_TIER_FAST_FILTER = '__service_tier_fast__';
+const SERVICE_TIER_STD_FILTER = '__service_tier_std__';
 const REASONING_EFFORT_LEGACY_UNKNOWN_FILTER = '__reasoning_effort_legacy_unknown__';
 const REASONING_EFFORT_RAW_FILTER_PREFIX = '__reasoning_effort_raw__:';
 const MAX_RENDERED_EVENTS = 500;
-
-type ServiceTierKind = 'priority' | 'standard' | 'legacy-unknown' | 'other';
 
 type RequestEventRow = {
   id: string;
@@ -49,9 +47,13 @@ type RequestEventRow = {
   sourceType: string;
   authIndex: string;
   serviceTier: string | null;
-  serviceTierKind: ServiceTierKind;
+  requestServiceTier: string | null;
+  responseServiceTier: string | null;
+  effectiveServiceTier: string | null;
+  resolvedServiceTier: ResolvedServiceTier;
   serviceTierFilterValue: string;
   serviceTierLabel: string;
+  serviceTierTitle: string;
   reasoningEffort: string | null;
   reasoningEffortFilterValue: string;
   reasoningEffortLabel: string;
@@ -80,21 +82,6 @@ const toNumber = (value: unknown): number => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return 0;
   return parsed;
-};
-
-const getServiceTierKind = (serviceTier: string | null): ServiceTierKind => {
-  if (!serviceTier) return 'legacy-unknown';
-  const normalized = serviceTier.toLowerCase();
-  if (normalized === 'priority' || normalized === 'fast') return 'priority';
-  if (normalized === 'default' || normalized === 'standard') return 'standard';
-  return 'other';
-};
-
-const getServiceTierFilterValue = (serviceTier: string | null, kind: ServiceTierKind): string => {
-  if (kind === 'priority') return SERVICE_TIER_PRIORITY_FILTER;
-  if (kind === 'standard') return SERVICE_TIER_STANDARD_FILTER;
-  if (kind === 'legacy-unknown') return SERVICE_TIER_LEGACY_UNKNOWN_FILTER;
-  return `${SERVICE_TIER_OTHER_FILTER_PREFIX}${encodeURIComponent(serviceTier ?? '')}`;
 };
 
 const getReasoningEffortFilterValue = (reasoningEffort: string | null): string => {
@@ -192,16 +179,25 @@ export function RequestEventsDetailsCard({
       const sourceType = sourceInfo.type;
       const model = String(detail.__modelName ?? '').trim() || '-';
       const serviceTier = detail.service_tier ?? null;
-      const serviceTierKind = getServiceTierKind(serviceTier);
-      const serviceTierFilterValue = getServiceTierFilterValue(serviceTier, serviceTierKind);
+      const requestServiceTier = detail.request_service_tier ?? null;
+      const responseServiceTier = detail.response_service_tier ?? null;
+      const effectiveServiceTier = detail.effective_service_tier ?? null;
+      const resolvedServiceTier = resolveServiceTier({
+        serviceTier,
+        requestServiceTier,
+        responseServiceTier,
+        effectiveServiceTier,
+      });
+      const serviceTierFilterValue =
+        resolvedServiceTier.tier === 'fast' ? SERVICE_TIER_FAST_FILTER : SERVICE_TIER_STD_FILTER;
       const serviceTierLabel =
-        serviceTierKind === 'priority'
+        resolvedServiceTier.tier === 'fast'
           ? t('usage_stats.request_events_tier_fast')
-          : serviceTierKind === 'standard'
-            ? t('usage_stats.request_events_tier_standard')
-            : serviceTierKind === 'legacy-unknown'
-              ? t('usage_stats.request_events_tier_legacy_unknown')
-              : t('usage_stats.request_events_tier_other', { tier: serviceTier });
+          : t('usage_stats.request_events_tier_standard');
+      const serviceTierTitle = t(
+        `usage_stats.request_events_tier_tooltip_${resolvedServiceTier.evidence}`,
+        { tier: serviceTierLabel }
+      );
       const reasoningEffort = normalizeReasoningEffort(detail.reasoning_effort);
       const reasoningEffortFilterValue = getReasoningEffortFilterValue(reasoningEffort);
       const reasoningEffortLabel =
@@ -229,9 +225,13 @@ export function RequestEventsDetailsCard({
         sourceType,
         authIndex,
         serviceTier,
-        serviceTierKind,
+        requestServiceTier,
+        responseServiceTier,
+        effectiveServiceTier,
+        resolvedServiceTier,
         serviceTierFilterValue,
         serviceTierLabel,
+        serviceTierTitle,
         reasoningEffort,
         reasoningEffortFilterValue,
         reasoningEffortLabel,
@@ -324,29 +324,14 @@ export function RequestEventsDetailsCard({
     [rows, t]
   );
 
-  const serviceTierOptions = useMemo(() => {
-    const otherOptions = new Map<string, string>();
-    rows.forEach((row) => {
-      if (row.serviceTierKind !== 'other' || otherOptions.has(row.serviceTierFilterValue)) return;
-      otherOptions.set(row.serviceTierFilterValue, row.serviceTierLabel);
-    });
-
-    return [
+  const serviceTierOptions = useMemo(
+    () => [
       { value: ALL_FILTER, label: t('usage_stats.filter_all') },
-      { value: SERVICE_TIER_PRIORITY_FILTER, label: t('usage_stats.request_events_tier_fast') },
-      {
-        value: SERVICE_TIER_STANDARD_FILTER,
-        label: t('usage_stats.request_events_tier_standard'),
-      },
-      {
-        value: SERVICE_TIER_LEGACY_UNKNOWN_FILTER,
-        label: t('usage_stats.request_events_tier_legacy_unknown'),
-      },
-      ...Array.from(otherOptions.entries())
-        .sort(([, left], [, right]) => left.localeCompare(right, i18n.language))
-        .map(([value, label]) => ({ value, label })),
-    ];
-  }, [i18n.language, rows, t]);
+      { value: SERVICE_TIER_FAST_FILTER, label: t('usage_stats.request_events_tier_fast') },
+      { value: SERVICE_TIER_STD_FILTER, label: t('usage_stats.request_events_tier_standard') },
+    ],
+    [t]
+  );
 
   const reasoningEffortOptions = useMemo(() => {
     const optionMap = new Map<string, string>();
@@ -457,6 +442,11 @@ export function RequestEventsDetailsCard({
       'source_raw',
       'auth_index',
       'service_tier',
+      'request_service_tier',
+      'response_service_tier',
+      'effective_service_tier',
+      'resolved_service_tier',
+      'service_tier_evidence',
       'reasoning_effort',
       'result',
       ...(hasLatencyData ? ['latency_ms'] : []),
@@ -478,6 +468,11 @@ export function RequestEventsDetailsCard({
         row.sourceRaw,
         row.authIndex,
         row.serviceTier ?? '',
+        row.requestServiceTier ?? '',
+        row.responseServiceTier ?? '',
+        row.effectiveServiceTier ?? '',
+        row.resolvedServiceTier.tier,
+        row.resolvedServiceTier.evidence,
         row.reasoningEffort ?? '',
         row.failed ? 'failed' : 'success',
         ...(hasLatencyData ? [row.latencyMs ?? ''] : []),
@@ -512,6 +507,11 @@ export function RequestEventsDetailsCard({
       source_raw: row.sourceRaw,
       auth_index: row.authIndex,
       service_tier: row.serviceTier,
+      request_service_tier: row.requestServiceTier,
+      response_service_tier: row.responseServiceTier,
+      effective_service_tier: row.effectiveServiceTier,
+      resolved_service_tier: row.resolvedServiceTier.tier,
+      service_tier_evidence: row.resolvedServiceTier.evidence,
       reasoning_effort: row.reasoningEffort,
       failed: row.failed,
       ...(hasLatencyData && row.latencyMs !== null ? { latency_ms: row.latencyMs } : {}),
@@ -703,15 +703,12 @@ export function RequestEventsDetailsCard({
                     <td>
                       <span
                         className={`${styles.requestEventsTierBadge} ${
-                          row.serviceTierKind === 'priority'
-                            ? styles.requestEventsTierPriority
-                            : row.serviceTierKind === 'standard'
-                              ? styles.requestEventsTierStandard
-                              : row.serviceTierKind === 'legacy-unknown'
-                                ? styles.requestEventsTierLegacyUnknown
-                                : styles.requestEventsTierOther
+                          row.resolvedServiceTier.tier === 'fast'
+                            ? styles.requestEventsTierFast
+                            : styles.requestEventsTierStd
                         }`}
-                        title={row.serviceTier ?? row.serviceTierLabel}
+                        title={row.serviceTierTitle}
+                        aria-label={row.serviceTierTitle}
                       >
                         {row.serviceTierLabel}
                       </span>

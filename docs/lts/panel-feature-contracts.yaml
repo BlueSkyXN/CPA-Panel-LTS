@@ -37,6 +37,8 @@ features:
       - src/utils/usage/importPreflight.test.mjs
       - src/utils/usage/reasoningEffort.ts
       - src/utils/usage/reasoningEffort.test.mjs
+      - src/utils/usage/serviceTier.ts
+      - src/utils/usage/serviceTier.test.mjs
     core_endpoints:
       - /v0/management/usage
       - /v0/management/usage/export
@@ -56,6 +58,11 @@ features:
       - analyzeUsageImport
       - normalizeReasoningEffort
       - service_tier
+      - request_service_tier
+      - response_service_tier
+      - effective_service_tier
+      - resolveServiceTier
+      - ServiceTierEvidence
       - request_events_filter_tier
       - reasoning_effort
       - request_events_filter_effort
