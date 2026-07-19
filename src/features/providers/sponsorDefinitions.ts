@@ -120,6 +120,13 @@ export const getSponsorAggregationConflict = (
   return openAIKeyCount > 1 ? 'multiple-openai-keys' : null;
 };
 
+export const getSponsorOpenAIDeleteIndices = (
+  raw: SponsorProviderRaw | null | undefined
+): number[] =>
+  Array.from(new Set((raw?.openai ?? []).map((item) => item.index))).sort(
+    (left, right) => right - left
+  );
+
 export const getSponsorProviderDefinition = (
   brand: SponsorProviderBrand
 ): SponsorProviderDefinition => SPONSOR_DEFINITIONS[brand];
