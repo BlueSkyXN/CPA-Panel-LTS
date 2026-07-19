@@ -13,7 +13,8 @@ const vite = await createServer({
   server: { middlewareMode: true },
 });
 
-await vite.ssrLoadModule('/src/i18n/index.ts');
+const { default: i18n } = await vite.ssrLoadModule('/src/i18n/index.ts');
+await i18n.changeLanguage('en');
 const [{ OAuthExcludedCard }, { OAuthModelAliasCard }, { canWriteOAuthConfig }] = await Promise.all(
   [
     vite.ssrLoadModule('/src/features/authFiles/components/OAuthExcludedCard.tsx'),
