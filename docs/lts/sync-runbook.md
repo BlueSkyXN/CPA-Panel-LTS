@@ -19,15 +19,15 @@ main = CPA-Panel-LTS product line
 
 ## Audited upstream intake snapshot (2026-07-19)
 
-Refs captured after Panel PR #27 and before the 2026-07-19 intake branch:
+Refs captured after Panel PR #28 and before publishing the 2026-07-19 intake branch:
 
-- `origin/main`: `2daaaea61d666ed44383890db75a5a765c443309`
+- `origin/main`: `cf76c124eeb614b58b5391a4824916cc22561c10`
 - `upstream/main`: `6a6a22af85ce8763e8898c0d8641de3137f3ffd9` (`v1.18.5`)
 - `upstream/dev`: `6a6a22af85ce8763e8898c0d8641de3137f3ffd9`
 - `upstream/kimi-provider`: `f860bc81bcc507826bbced5434cf037bf77f8244`
 - merge-base: `8ed837c3d734c3970a6d6799c557bb6a6753360d`
 - `origin/main..upstream/main`: 259 commits
-- `upstream/main..origin/main`: 148 commits
+- `upstream/main..origin/main`: 150 commits
 - `origin/main..upstream/dev`: 259 commits
 - `origin/main..upstream/kimi-provider`: 252 commits
 
