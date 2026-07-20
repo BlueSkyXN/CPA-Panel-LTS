@@ -990,8 +990,7 @@ export function UsagePricingPage() {
                           : '--'}
                       </strong>
                       <small>
-                        {summary.longContextRequestCount > 0 &&
-                        summary.resolvedPrice.fast?.longSupported === false
+                        {summary.pricingCoverage.unsupportedRequests > 0
                           ? t('usage_stats.pricing_long_unsupported')
                           : summary.longContextRequestCount > 0
                             ? t('usage_stats.pricing_long_requests', {

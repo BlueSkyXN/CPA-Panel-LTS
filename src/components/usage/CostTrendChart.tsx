@@ -8,6 +8,7 @@ import {
   buildHourlyCostSeries,
   buildDailyCostSeries,
   formatUsd,
+  isApiUsdEstimateComplete,
   type PriceProfileV3,
   type PricingCoverage,
 } from '@/utils/usage';
@@ -106,10 +107,7 @@ export function CostTrendChart({
     };
   }, [usage, period, isDark, isMobile, priceProfile, hourWindowHours, t]);
 
-  const pricingComplete =
-    pricingCoverage !== null &&
-    pricingCoverage.apiTokenUsdRequests > 0 &&
-    pricingCoverage.pricedRequests === pricingCoverage.apiTokenUsdRequests;
+  const pricingComplete = pricingCoverage !== null && isApiUsdEstimateComplete(pricingCoverage);
   const hasUnpricedUsage =
     pricingCoverage !== null &&
     pricingCoverage.apiTokenUsdRequests > 0 &&

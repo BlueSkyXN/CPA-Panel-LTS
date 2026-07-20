@@ -311,6 +311,7 @@ test('mixed billing domains keep API USD, ChatGPT credit rates, and unknown usag
   assert.equal(coverage.creditRatedRequestRatio, 1);
   assert.equal(coverage.unknownBillingRequests, 1);
   assert.equal(coverage.unmatchedRequests, 0);
+  assert.equal(usage.isApiUsdEstimateComplete(coverage), false);
   assert.equal(coverage.estimatedAmount, 10);
   assert.equal(usage.calculateTotalCost(mixedFixture), 10);
 

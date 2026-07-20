@@ -74,7 +74,32 @@ test('coverage includes failed token-bearing requests and keeps gaps incomplete'
   assert.equal(coverage.totalTokens, 1_000_050);
 });
 
-test('ChatGPT credits and unknown billing never become API USD amounts', () => {
+test('missing and explicit unknown billing_basis both fail closed without an API USD amount', () => {
+  const missing = pricing.estimateUsageDetailCost(
+    {
+      __modelName: 'gpt-5.4-mini',
+      tokens: { input_tokens: 1_000_000 },
+    },
+    profile
+  );
+  assert.equal(missing.estimate.billingBasis, 'unknown');
+  assert.equal(missing.estimate.status, 'billing-unknown');
+  assert.equal(missing.estimate.amount, null);
+
+  const explicitUnknown = pricing.estimateUsageDetailCost(
+    {
+      __modelName: 'gpt-5.4-mini',
+      billing_basis: 'unknown',
+      tokens: { input_tokens: 1_000_000 },
+    },
+    profile
+  );
+  assert.equal(explicitUnknown.estimate.billingBasis, 'unknown');
+  assert.equal(explicitUnknown.estimate.status, 'billing-unknown');
+  assert.equal(explicitUnknown.estimate.amount, null);
+});
+
+test('ChatGPT credits and explicit unknown billing never become API USD amounts', () => {
   const creditFast = pricing.estimateUsageDetailCost(
     {
       __modelName: 'gpt-5.6-sol',
@@ -91,6 +116,7 @@ test('ChatGPT credits and unknown billing never become API USD amounts', () => {
   const unknown = pricing.estimateUsageDetailCost(
     {
       __modelName: 'gpt-5.6-sol',
+      billing_basis: 'unknown',
       tokens: { input_tokens: 1_000_000 },
     },
     profile
@@ -106,7 +132,11 @@ test('ChatGPT credits and unknown billing never become API USD amounts', () => {
         effective_service_tier: 'priority',
         tokens: { input_tokens: 1_000_000 },
       },
-      { __modelName: 'gpt-5.6-sol', tokens: { input_tokens: 2_000_000 } },
+      {
+        __modelName: 'gpt-5.6-sol',
+        billing_basis: 'unknown',
+        tokens: { input_tokens: 2_000_000 },
+      },
     ],
     profile
   );
@@ -119,6 +149,52 @@ test('ChatGPT credits and unknown billing never become API USD amounts', () => {
   assert.equal(coverage.unmatchedRequests, 0);
   assert.equal(coverage.creditRatedRequestRatio, 1);
   assert.equal(coverage.apiPricedRequestRatio, 0);
+});
+
+test('only actual Fast long-context usage is unsupported', () => {
+  const standardLong = pricing.estimateUsageDetailCost(
+    {
+      __modelName: 'gpt-5.4',
+      billing_basis: 'api-token-usd',
+      effective_service_tier: 'standard',
+      tokens: { input_tokens: 272_000 },
+    },
+    profile
+  );
+  assert.equal(standardLong.estimate.contextBand, 'long');
+  assert.equal(standardLong.estimate.status, 'priced');
+
+  const fastLong = pricing.estimateUsageDetailCost(
+    {
+      __modelName: 'gpt-5.4',
+      billing_basis: 'api-token-usd',
+      effective_service_tier: 'priority',
+      tokens: { input_tokens: 272_000 },
+    },
+    profile
+  );
+  assert.equal(fastLong.estimate.contextBand, 'long');
+  assert.equal(fastLong.estimate.status, 'unsupported');
+
+  const coverage = pricing.summarizeUsageDetailCosts(
+    [
+      {
+        __modelName: 'gpt-5.4',
+        billing_basis: 'api-token-usd',
+        effective_service_tier: 'standard',
+        tokens: { input_tokens: 272_000 },
+      },
+      {
+        __modelName: 'gpt-5.4',
+        billing_basis: 'api-token-usd',
+        effective_service_tier: 'priority',
+        tokens: { input_tokens: 272_000 },
+      },
+    ],
+    profile
+  );
+  assert.equal(coverage.pricedRequests, 1);
+  assert.equal(coverage.unsupportedRequests, 1);
 });
 
 test('browser-local API aliases cannot grant an official ChatGPT credit rate', () => {
