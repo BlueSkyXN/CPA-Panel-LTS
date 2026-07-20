@@ -2586,8 +2586,10 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     card.locator("th", has_text="Uncached Input Tokens").wait_for()
     card.get_by_role("columnheader", name="Total Output Tokens", exact=True).wait_for()
     card.locator("th", has_text="Explicit Output Tokens").wait_for()
+    card.get_by_role("columnheader", name="Reasoning Tokens", exact=True).wait_for()
     card.locator("th", has_text="Cache Read Tokens").wait_for()
     card.get_by_role("columnheader", name="Cache Write Tokens", exact=True).wait_for()
+    card.get_by_role("columnheader", name="Total Tokens", exact=True).wait_for()
 
     card.get_by_role("button", name="Column Settings", exact=True).click()
     column_dialog = card.get_by_role("dialog", name="Column Settings", exact=True)
@@ -2610,20 +2612,39 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         raise AssertionError("Restoring request-event columns did not hide Auth Index")
     stored_column_state = page.evaluate(
         """() => ({
-          legacy: localStorage.getItem('cli-proxy-usage-request-event-columns-v1'),
+          legacyV1: localStorage.getItem('cli-proxy-usage-request-event-columns-v1'),
+          legacyV2: localStorage.getItem('cli-proxy-usage-request-event-columns-v2'),
           current: JSON.parse(
-            localStorage.getItem('cli-proxy-usage-request-event-columns-v2')
+            localStorage.getItem('cli-proxy-usage-request-event-columns-v3')
           ),
         })"""
     )
     stored_columns = stored_column_state["current"]
-    if stored_column_state["legacy"] is not None:
-        raise AssertionError("The obsolete request-event column defaults were not removed")
     if (
-        stored_columns.get("source") is not False
-        or stored_columns.get("authIndex") is not False
-        or stored_columns.get("billing") is not True
+        stored_column_state["legacyV1"] is not None
+        or stored_column_state["legacyV2"] is not None
     ):
+        raise AssertionError("The obsolete request-event column defaults were not removed")
+    expected_column_defaults = {
+        "timestamp": True,
+        "model": True,
+        "source": False,
+        "authIndex": False,
+        "tier": True,
+        "billing": True,
+        "result": True,
+        "latency": True,
+        "effort": True,
+        "totalInputTokens": True,
+        "displayedUncachedInputTokens": True,
+        "totalOutputTokens": True,
+        "displayedOutputTokens": True,
+        "reasoningTokens": True,
+        "cacheReadTokens": True,
+        "cacheWriteTokens": True,
+        "totalTokens": True,
+    }
+    if stored_columns != expected_column_defaults:
         raise AssertionError(
             f"Request-event default columns were not persisted: {stored_columns!r}"
         )
@@ -2996,7 +3017,21 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     card.get_by_role("button", name="Clear Filters", exact=True).click()
     wait_for_row_count(8)
 
-    numeric_metric_select = card.get_by_label("Token metric", exact=True)
+    numeric_filter_trigger = card.get_by_role(
+        "button", name="Token value range", exact=True
+    )
+    numeric_filter_trigger.click()
+    numeric_dialog = card.get_by_role("dialog", name="Token value range", exact=True)
+    numeric_dialog.wait_for()
+    numeric_minimum = numeric_dialog.get_by_label("Minimum", exact=True)
+    page.wait_for_function(
+        "input => document.activeElement === input",
+        arg=numeric_minimum.element_handle(),
+    )
+    numeric_metric_select = numeric_dialog.get_by_label("Token metric", exact=True)
+    apply_range = numeric_dialog.get_by_role("button", name="Apply range", exact=True)
+    if not apply_range.is_disabled():
+        raise AssertionError("Token range can be applied without a numeric bound")
     numeric_metric_select.click()
     for metric_name in [
         "Total Input Tokens",
@@ -3009,30 +3044,107 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         "Total Tokens",
     ]:
         page.get_by_role("option", name=metric_name, exact=True).wait_for()
+    page.keyboard.press("Escape")
+    numeric_dialog.wait_for()
+    if numeric_metric_select.get_attribute("aria-expanded") != "false":
+        raise AssertionError("Escape did not close the Token metric listbox first")
+    numeric_metric_select.click()
     page.get_by_role("option", name="Cache Read Tokens", exact=True).click()
-    numeric_minimum = card.get_by_label("Minimum", exact=True)
-    numeric_maximum = card.get_by_label("Maximum", exact=True)
+    numeric_minimum = numeric_dialog.get_by_label("Minimum", exact=True)
+    numeric_maximum = numeric_dialog.get_by_label("Maximum", exact=True)
     numeric_minimum.fill("1")
-    wait_for_row_count(3)
+    wait_for_row_count(8)
     numeric_maximum.fill("1")
+    wait_for_row_count(8)
+    numeric_dialog.get_by_text("Cache Read Tokens · 1–1", exact=True).wait_for()
+    apply_range.click()
     wait_for_row_count(1)
     if rows.first.locator('td[data-cache-token-count="1"]').count() != 1:
         raise AssertionError("Inclusive Token range did not retain the exact boundary value")
 
+    active_numeric_filter_trigger = card.get_by_role(
+        "button", name="Token range: Cache Read Tokens · 1–1", exact=True
+    )
+    active_numeric_filter_trigger.click()
+    numeric_dialog = card.get_by_role("dialog", name="Token value range", exact=True)
+    numeric_minimum = numeric_dialog.get_by_label("Minimum", exact=True)
     numeric_minimum.fill("8")
-    card.get_by_text(
+    numeric_dialog.get_by_text(
         "Minimum cannot be greater than maximum.", exact=True
     ).wait_for()
-    wait_for_row_count(8)
+    if not numeric_dialog.get_by_role("button", name="Apply range", exact=True).is_disabled():
+        raise AssertionError("Invalid Token range left the Apply action enabled")
+    wait_for_row_count(1)
+    numeric_dialog.get_by_label("Maximum", exact=True).fill("")
+    numeric_minimum.fill("1.5")
+    numeric_dialog.get_by_text(
+        "Enter non-negative whole-number bounds.", exact=True
+    ).wait_for()
+    if not numeric_dialog.get_by_role("button", name="Apply range", exact=True).is_disabled():
+        raise AssertionError("Fractional Token range left the Apply action enabled")
+    numeric_dialog.get_by_role("button", name="Cancel", exact=True).click()
+    wait_for_row_count(1)
+    page.wait_for_function(
+        "trigger => document.activeElement === trigger",
+        arg=active_numeric_filter_trigger.element_handle(),
+    )
+
+    active_numeric_filter_trigger.click()
+    numeric_dialog = card.get_by_role("dialog", name="Token value range", exact=True)
+    numeric_dialog.get_by_label("Minimum", exact=True).fill("0")
+    numeric_dialog.get_by_label("Maximum", exact=True).fill("2")
+    result_select.click()
+    numeric_dialog.wait_for(state="detached")
+    wait_for_row_count(1)
+    card.get_by_role(
+        "button", name="Token range: Cache Read Tokens · 1–1", exact=True
+    ).wait_for()
+    if not result_select.evaluate("trigger => document.activeElement === trigger"):
+        raise AssertionError("Outside-click dismissal stole focus from the clicked filter")
+    page.keyboard.press("Escape")
+
+    active_numeric_filter_trigger.click()
+    numeric_dialog = card.get_by_role("dialog", name="Token value range", exact=True)
+    numeric_dialog.get_by_label("Minimum", exact=True).fill("0")
+    numeric_dialog.get_by_label("Maximum", exact=True).fill("2")
+    page.keyboard.press("Escape")
+    numeric_dialog.wait_for(state="detached")
+    wait_for_row_count(1)
+    page.wait_for_function(
+        "trigger => document.activeElement === trigger",
+        arg=active_numeric_filter_trigger.element_handle(),
+    )
 
     card.get_by_role("button", name="Clear Filters", exact=True).click()
     wait_for_row_count(8)
-    if numeric_metric_select.inner_text().strip() != "Select metric":
-        raise AssertionError("Clearing filters did not reset the Token metric")
-    if not numeric_minimum.is_disabled() or not numeric_maximum.is_disabled():
-        raise AssertionError("Numeric bounds remained enabled without a selected Token metric")
-    if numeric_minimum.input_value() or numeric_maximum.input_value():
-        raise AssertionError("Clearing filters did not clear the numeric bounds")
+    numeric_filter_trigger = card.get_by_role(
+        "button", name="Token value range", exact=True
+    )
+    numeric_filter_trigger.click()
+    numeric_dialog = card.get_by_role("dialog", name="Token value range", exact=True)
+    if numeric_dialog.get_by_label("Token metric", exact=True).inner_text().strip() != "Total Tokens":
+        raise AssertionError("A new Token range did not start with the Total Tokens metric")
+    if (
+        numeric_dialog.get_by_label("Minimum", exact=True).input_value()
+        or numeric_dialog.get_by_label("Maximum", exact=True).input_value()
+    ):
+        raise AssertionError("Clearing filters did not clear the applied numeric bounds")
+    numeric_dialog.get_by_label("Token metric", exact=True).click()
+    page.get_by_role("option", name="Cache Read Tokens", exact=True).click()
+    numeric_dialog.get_by_label("Minimum", exact=True).fill("1")
+    numeric_dialog.get_by_role("button", name="Apply range", exact=True).click()
+    wait_for_row_count(3)
+    active_numeric_filter_trigger = card.get_by_role(
+        "button", name="Token range: Cache Read Tokens · ≥ 1", exact=True
+    )
+    active_numeric_filter_trigger.click()
+    numeric_dialog = card.get_by_role("dialog", name="Token value range", exact=True)
+    numeric_dialog.get_by_role("button", name="Clear range", exact=True).click()
+    wait_for_row_count(8)
+    page.wait_for_function(
+        "trigger => document.activeElement === trigger",
+        arg=numeric_filter_trigger.element_handle(),
+    )
 
     time_range_select = card.get_by_label("Time Range", exact=True)
     if "Follow Page (Last 24 Hours)" not in time_range_select.inner_text():
@@ -3052,8 +3164,159 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     card.get_by_role("button", name="Clear Filters", exact=True).click()
     wait_for_row_count(8)
 
+    page.set_viewport_size({"width": 1024, "height": 480})
+    desktop_numeric_trigger = card.get_by_role(
+        "button", name="Token value range", exact=True
+    )
+    desktop_numeric_trigger.click()
+    desktop_numeric_dialog = card.get_by_role(
+        "dialog", name="Token value range", exact=True
+    )
+    desktop_numeric_dialog.wait_for()
+    desktop_numeric_dialog.get_by_role("button", name="Cancel", exact=True).scroll_into_view_if_needed()
+    desktop_numeric_metrics = desktop_numeric_dialog.evaluate(
+        """dialog => {
+          const bounds = dialog.getBoundingClientRect();
+          const cancel = Array.from(dialog.querySelectorAll('button')).find(
+            (button) => button.textContent?.trim() === 'Cancel'
+          )?.getBoundingClientRect();
+          return {
+            position: getComputedStyle(dialog).position,
+            overflowY: getComputedStyle(dialog).overflowY,
+            left: bounds.left,
+            top: bounds.top,
+            right: bounds.right,
+            bottom: bounds.bottom,
+            viewportWidth: window.innerWidth,
+            viewportHeight: window.innerHeight,
+            cancelTop: cancel?.top,
+            cancelBottom: cancel?.bottom,
+          };
+        }"""
+    )
+    if (
+        desktop_numeric_metrics["position"] != "fixed"
+        or desktop_numeric_metrics["overflowY"] not in {"auto", "scroll"}
+        or desktop_numeric_metrics["left"] < -1
+        or desktop_numeric_metrics["top"] < -1
+        or desktop_numeric_metrics["right"] > desktop_numeric_metrics["viewportWidth"] + 1
+        or desktop_numeric_metrics["bottom"]
+        > desktop_numeric_metrics["viewportHeight"] + 1
+        or desktop_numeric_metrics["cancelTop"] is None
+        or desktop_numeric_metrics["cancelTop"] < desktop_numeric_metrics["top"] - 1
+        or desktop_numeric_metrics["cancelBottom"]
+        > desktop_numeric_metrics["bottom"] + 1
+    ):
+        raise AssertionError(
+            f"Token-range popover is clipped at 1024x480: {desktop_numeric_metrics!r}"
+        )
+    desktop_numeric_dialog.get_by_role("button", name="Cancel", exact=True).click()
+    desktop_numeric_trigger.click()
+    desktop_numeric_dialog = card.get_by_role(
+        "dialog", name="Token value range", exact=True
+    )
+    desktop_numeric_dialog.wait_for()
+    desktop_trigger_handle = desktop_numeric_trigger.element_handle()
     page.set_viewport_size({"width": 390, "height": 844})
+    desktop_numeric_dialog.wait_for(state="detached")
+    page.wait_for_function(
+        "trigger => document.activeElement === trigger",
+        arg=desktop_trigger_handle,
+    )
     tier_select.wait_for()
+    mobile_numeric_trigger = card.get_by_role(
+        "button", name="Token value range", exact=True
+    )
+    mobile_numeric_trigger.click()
+    mobile_numeric_dialog = page.get_by_role(
+        "dialog", name="Token value range", exact=True
+    )
+    mobile_numeric_dialog.wait_for()
+    mobile_metric_select = mobile_numeric_dialog.get_by_label("Token metric", exact=True)
+    mobile_metric_select.click()
+    page.get_by_role("option", name="Cache Read Tokens", exact=True).wait_for()
+    page.keyboard.press("Escape")
+    mobile_numeric_dialog.wait_for()
+    if mobile_metric_select.get_attribute("aria-expanded") != "false":
+        raise AssertionError("Escape did not close the mobile Token metric listbox first")
+    mobile_numeric_metrics = mobile_numeric_dialog.evaluate(
+        """dialog => {
+          const bounds = dialog.getBoundingClientRect();
+          const buttons = Array.from(dialog.querySelectorAll('button')).map((button) => {
+            const rect = button.getBoundingClientRect();
+            return { text: button.textContent?.trim(), left: rect.left, right: rect.right };
+          });
+          return {
+            ariaModal: dialog.getAttribute('aria-modal'),
+            overlayPosition: getComputedStyle(dialog.parentElement).position,
+            bodyPosition: document.body.style.position,
+            left: bounds.left,
+            right: bounds.right,
+            bottom: bounds.bottom,
+            viewportWidth: window.innerWidth,
+            viewportHeight: window.innerHeight,
+            buttons,
+          };
+        }"""
+    )
+    if (
+        mobile_numeric_metrics["ariaModal"] != "true"
+        or mobile_numeric_metrics["overlayPosition"] != "fixed"
+        or mobile_numeric_metrics["bodyPosition"] != "fixed"
+        or mobile_numeric_metrics["left"] < -1
+        or mobile_numeric_metrics["right"] > mobile_numeric_metrics["viewportWidth"] + 1
+        or mobile_numeric_metrics["bottom"]
+        > mobile_numeric_metrics["viewportHeight"] + 1
+        or any(
+            button["left"] < mobile_numeric_metrics["left"] - 1
+            or button["right"] > mobile_numeric_metrics["right"] + 1
+            for button in mobile_numeric_metrics["buttons"]
+        )
+    ):
+        raise AssertionError(
+            f"Token-range sheet overflows at 390px: {mobile_numeric_metrics!r}"
+        )
+    mobile_metric_select.click()
+    page.get_by_role("option", name="Cache Read Tokens", exact=True).click()
+    page.wait_for_function(
+        "select => document.activeElement === select",
+        arg=mobile_metric_select.element_handle(),
+    )
+    mobile_close = mobile_numeric_dialog.get_by_role("button", name="Close", exact=True)
+    mobile_cancel = mobile_numeric_dialog.get_by_role("button", name="Cancel", exact=True)
+    page.keyboard.press("Shift+Tab")
+    if not mobile_close.evaluate("button => document.activeElement === button"):
+        raise AssertionError("Mobile Token sheet did not move backward to its first control")
+    page.keyboard.press("Shift+Tab")
+    if not mobile_cancel.evaluate("button => document.activeElement === button"):
+        raise AssertionError("Mobile Token sheet focus escaped before its last enabled control")
+    page.keyboard.press("Tab")
+    if not mobile_close.evaluate("button => document.activeElement === button"):
+        raise AssertionError("Mobile Token sheet did not wrap focus to its first control")
+    mobile_numeric_dialog.get_by_label("Minimum", exact=True).fill("1")
+    mobile_trigger_handle = mobile_numeric_trigger.element_handle()
+    mobile_numeric_dialog.get_by_role("button", name="Apply range", exact=True).click()
+    mobile_numeric_dialog.wait_for(state="detached")
+    wait_for_row_count(3)
+    page.wait_for_function(
+        "trigger => document.activeElement === trigger",
+        arg=mobile_trigger_handle,
+    )
+    active_mobile_numeric_trigger = card.get_by_role(
+        "button", name="Token range: Cache Read Tokens · ≥ 1", exact=True
+    )
+    active_mobile_numeric_trigger.click()
+    mobile_numeric_dialog = page.get_by_role(
+        "dialog", name="Token value range", exact=True
+    )
+    active_mobile_trigger_handle = active_mobile_numeric_trigger.element_handle()
+    mobile_numeric_dialog.get_by_role("button", name="Clear range", exact=True).click()
+    mobile_numeric_dialog.wait_for(state="detached")
+    wait_for_row_count(8)
+    page.wait_for_function(
+        "trigger => document.activeElement === trigger",
+        arg=active_mobile_trigger_handle,
+    )
     table_metrics = card.locator("table").evaluate(
         """(table) => ({
           wrapperOverflowX: getComputedStyle(table.parentElement).overflowX,
@@ -3109,14 +3372,53 @@ def run_usage_request_event_clock_smoke(context: Any, app_url: str) -> None:
 def run_usage_request_event_column_storage_smoke(context: Any, app_url: str) -> None:
     storage_page = context.new_page()
     storage_page.set_default_timeout(15_000)
-    storage_key = "cli-proxy-usage-request-event-columns-v2"
+    storage_key = "cli-proxy-usage-request-event-columns-v3"
+    legacy_keys = [
+        "cli-proxy-usage-request-event-columns-v1",
+        "cli-proxy-usage-request-event-columns-v2",
+    ]
     try:
         storage_page.goto(
             f"{app_url}?route=request-events-columns#/usage",
             wait_until="domcontentloaded",
         )
+        storage_page.evaluate(
+            """({ current, legacy }) => {
+              localStorage.removeItem(current);
+              localStorage.setItem(legacy[0], JSON.stringify({ source: true }));
+              localStorage.setItem(legacy[1], JSON.stringify({
+                timestamp: false,
+                model: false,
+                source: true,
+                authIndex: true,
+                totalTokens: false,
+              }));
+            }""",
+            {"current": storage_key, "legacy": legacy_keys},
+        )
+        storage_page.reload(wait_until="domcontentloaded")
         card = storage_page.get_by_text("Request Events", exact=True).locator("xpath=../..")
         card.wait_for()
+        if card.get_by_role("columnheader", name="Source", exact=True).count() != 0:
+            raise AssertionError("The formal v3 defaults inherited obsolete v2 Source visibility")
+        if card.get_by_role("columnheader", name="Auth Index", exact=True).count() != 0:
+            raise AssertionError("The formal v3 defaults inherited obsolete v2 Auth Index visibility")
+        card.get_by_role("columnheader", name="Total Tokens", exact=True).wait_for()
+        storage_page.wait_for_function(
+            """({ current, legacy }) => {
+              const stored = JSON.parse(localStorage.getItem(current) || '{}');
+              return legacy.every((key) => localStorage.getItem(key) === null) &&
+                stored.source === false && stored.authIndex === false &&
+                stored.totalInputTokens === true &&
+                stored.displayedUncachedInputTokens === true &&
+                stored.totalOutputTokens === true &&
+                stored.displayedOutputTokens === true &&
+                stored.reasoningTokens === true && stored.cacheReadTokens === true &&
+                stored.cacheWriteTokens === true && stored.totalTokens === true;
+            }""",
+            arg={"current": storage_key, "legacy": legacy_keys},
+        )
+
         card.get_by_role("button", name="Column Settings", exact=True).click()
         settings = card.get_by_role("dialog", name="Column Settings", exact=True)
         settings.get_by_role("checkbox", name="Source", exact=True).check()
@@ -3161,8 +3463,43 @@ def run_usage_request_event_column_storage_smoke(context: Any, app_url: str) -> 
             }""",
             arg=storage_key,
         )
+
+        storage_page.add_init_script(
+            f"""(() => {{
+              const currentKey = {json.dumps(storage_key)};
+              const originalSetItem = Storage.prototype.setItem;
+              Storage.prototype.setItem = function(key, value) {{
+                if (key === currentKey) throw new Error('mock v3 storage failure');
+                return originalSetItem.call(this, key, value);
+              }};
+            }})()"""
+        )
+        storage_page.evaluate(
+            """({ current, legacy }) => {
+              localStorage.removeItem(current);
+              localStorage.setItem(legacy, JSON.stringify({ source: true }));
+            }""",
+            {"current": storage_key, "legacy": legacy_keys[1]},
+        )
+        storage_page.reload(wait_until="domcontentloaded")
+        card = storage_page.get_by_text("Request Events", exact=True).locator("xpath=../..")
+        card.wait_for()
+        failed_write_state = storage_page.evaluate(
+            """({ current, legacy }) => ({
+              current: localStorage.getItem(current),
+              legacy: localStorage.getItem(legacy),
+            })""",
+            {"current": storage_key, "legacy": legacy_keys[1]},
+        )
+        if failed_write_state["current"] is not None or failed_write_state["legacy"] is None:
+            raise AssertionError(
+                "Request-event column cleanup removed legacy state before v3 write verification"
+            )
     finally:
-        storage_page.evaluate("key => localStorage.removeItem(key)", storage_key)
+        storage_page.evaluate(
+            "keys => keys.forEach((key) => localStorage.removeItem(key))",
+            [storage_key, *legacy_keys],
+        )
         storage_page.close()
 
 

@@ -3,10 +3,12 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { IconSettings } from '@/components/ui/icons';
+import { IconSettings, IconSlidersHorizontal } from '@/components/ui/icons';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
+import { Sheet } from '@/components/ui/Sheet';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { authFilesApi } from '@/services/api/authFiles';
 import type { GeminiKeyConfig, ProviderKeyConfig, OpenAIProviderConfig } from '@/types';
 import type { AuthFileItem } from '@/types/authFile';
@@ -46,8 +48,11 @@ const RESULT_FAILED_FILTER = '__result_failed__';
 const CACHE_PRESENT_FILTER = '__cache_present__';
 const CACHE_ABSENT_FILTER = '__cache_absent__';
 const MAX_RENDERED_EVENTS = 500;
-const LEGACY_COLUMN_VISIBILITY_STORAGE_KEY = 'cli-proxy-usage-request-event-columns-v1';
-const COLUMN_VISIBILITY_STORAGE_KEY = 'cli-proxy-usage-request-event-columns-v2';
+const LEGACY_COLUMN_VISIBILITY_STORAGE_KEYS = [
+  'cli-proxy-usage-request-event-columns-v1',
+  'cli-proxy-usage-request-event-columns-v2',
+] as const;
+const COLUMN_VISIBILITY_STORAGE_KEY = 'cli-proxy-usage-request-event-columns-v3';
 const CACHE_COLOR_MIN_WEIGHT = 42;
 const CACHE_COLOR_MAX_WEIGHT = 90;
 const CACHE_COLOR_REFERENCE_TOKENS = 1_000_000;
@@ -219,8 +224,45 @@ const getRequestEventNumericValue = (
 const parseNumericFilterBound = (value: string): number | null => {
   if (!value.trim()) return null;
   const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
 };
+
+const resolveNumericFilterPopoverStyle = (trigger: HTMLElement): CSSProperties => {
+  const viewportMargin = 16;
+  const popoverOffset = 8;
+  const popoverWidth = Math.min(420, Math.max(0, window.innerWidth - viewportMargin * 2));
+  const triggerBounds = trigger.getBoundingClientRect();
+  const left = Math.min(
+    Math.max(triggerBounds.left, viewportMargin),
+    Math.max(viewportMargin, window.innerWidth - popoverWidth - viewportMargin)
+  );
+  const spaceBelow = window.innerHeight - triggerBounds.bottom - viewportMargin - popoverOffset;
+  const spaceAbove = triggerBounds.top - viewportMargin - popoverOffset;
+  const openBelow = spaceBelow >= 420 || spaceBelow >= spaceAbove;
+  const availableHeight = Math.max(0, openBelow ? spaceBelow : spaceAbove);
+  const verticalPosition = openBelow
+    ? { top: triggerBounds.bottom + popoverOffset }
+    : { bottom: window.innerHeight - triggerBounds.top + popoverOffset };
+
+  return {
+    position: 'fixed',
+    left,
+    width: popoverWidth,
+    maxHeight: Math.min(620, availableHeight),
+    ...verticalPosition,
+  };
+};
+
+const numericFilterPopoverStylesEqual = (
+  current: CSSProperties | null,
+  next: CSSProperties
+): boolean =>
+  current?.position === next.position &&
+  current?.top === next.top &&
+  current?.bottom === next.bottom &&
+  current?.left === next.left &&
+  current?.width === next.width &&
+  current?.maxHeight === next.maxHeight;
 
 export interface RequestEventsDetailsCardProps {
   usage: unknown;
@@ -392,6 +434,7 @@ export function RequestEventsDetailsCard({
   openaiProviders,
 }: RequestEventsDetailsCardProps) {
   const { t, i18n } = useTranslation();
+  const useNumericFilterSheet = useMediaQuery('(max-width: 768px)');
   const latencyHint = t('usage_stats.latency_unit_hint', {
     field: LATENCY_SOURCE_FIELD,
     unit: t('usage_stats.duration_unit_ms'),
@@ -403,6 +446,13 @@ export function RequestEventsDetailsCard({
       new Intl.NumberFormat(i18n.language, {
         style: 'percent',
         maximumFractionDigits: 1,
+      }),
+    [i18n.language]
+  );
+  const numericBoundFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat(i18n.language, {
+        maximumFractionDigits: 20,
       }),
     [i18n.language]
   );
@@ -419,6 +469,17 @@ export function RequestEventsDetailsCard({
   const [numericMetricFilter, setNumericMetricFilter] = useState(ALL_FILTER);
   const [numericMinimumFilter, setNumericMinimumFilter] = useState('');
   const [numericMaximumFilter, setNumericMaximumFilter] = useState('');
+  const [numericFilterOpen, setNumericFilterOpen] = useState(false);
+  const [numericFilterPresentation, setNumericFilterPresentation] = useState<
+    'popover' | 'sheet' | null
+  >(null);
+  const [numericFilterPopoverStyle, setNumericFilterPopoverStyle] = useState<CSSProperties | null>(
+    null
+  );
+  const [draftNumericMetricFilter, setDraftNumericMetricFilter] =
+    useState<RequestEventNumericMetricId>('totalTokens');
+  const [draftNumericMinimumFilter, setDraftNumericMinimumFilter] = useState('');
+  const [draftNumericMaximumFilter, setDraftNumericMaximumFilter] = useState('');
   const [authFileMap, setAuthFileMap] = useState<Map<string, CredentialInfo>>(new Map());
   const [columnSettingsOpen, setColumnSettingsOpen] = useState(false);
   const [storedColumnVisibility, setStoredColumnVisibility] = useLocalStorage<unknown>(
@@ -430,23 +491,52 @@ export function RequestEventsDetailsCard({
     [storedColumnVisibility]
   );
   const columnSettingsId = useId();
+  const numericFilterId = useId();
+  const numericMetricSelectId = useId();
   const numericFilterErrorId = useId();
   const columnSettingsRef = useRef<HTMLDivElement | null>(null);
   const columnSettingsPanelRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (needsColumnVisibilityNormalization(storedColumnVisibility, columnVisibility)) {
-      setStoredColumnVisibility(columnVisibility);
-    }
-  }, [columnVisibility, setStoredColumnVisibility, storedColumnVisibility]);
+  const numericFilterRef = useRef<HTMLDivElement | null>(null);
+  const numericFilterPanelRef = useRef<HTMLDivElement | null>(null);
+  const numericFilterPopoverRafRef = useRef<number | null>(null);
 
   useEffect(() => {
     try {
-      window.localStorage.removeItem(LEGACY_COLUMN_VISIBILITY_STORAGE_KEY);
+      const currentValue = window.localStorage.getItem(COLUMN_VISIBILITY_STORAGE_KEY);
+      let shouldPersistCurrent = currentValue === null;
+      if (currentValue !== null) {
+        try {
+          const parsedCurrent = JSON.parse(currentValue) as unknown;
+          shouldPersistCurrent = needsColumnVisibilityNormalization(
+            parsedCurrent,
+            columnVisibility
+          );
+        } catch {
+          shouldPersistCurrent = true;
+        }
+      }
+      const shouldNormalizeState = needsColumnVisibilityNormalization(
+        storedColumnVisibility,
+        columnVisibility
+      );
+      if (shouldPersistCurrent || shouldNormalizeState) {
+        const canonicalValue = JSON.stringify(columnVisibility);
+        window.localStorage.setItem(COLUMN_VISIBILITY_STORAGE_KEY, canonicalValue);
+        if (window.localStorage.getItem(COLUMN_VISIBILITY_STORAGE_KEY) !== canonicalValue) {
+          return;
+        }
+        setStoredColumnVisibility(columnVisibility);
+      }
+
+      // v1/v2 were development-era defaults. v3 intentionally starts from the
+      // formal Source/Auth-hidden and eight-Token-visible default set.
+      LEGACY_COLUMN_VISIBILITY_STORAGE_KEYS.forEach((key) => {
+        window.localStorage.removeItem(key);
+      });
     } catch {
-      // A storage policy may block cleanup; the v2 key still keeps the new defaults authoritative.
+      // Preserve legacy keys when the canonical v3 value cannot be written and verified.
     }
-  }, []);
+  }, [columnVisibility, setStoredColumnVisibility, storedColumnVisibility]);
 
   useEffect(() => {
     if (!columnSettingsOpen) return;
@@ -476,6 +566,92 @@ export function RequestEventsDetailsCard({
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [columnSettingsOpen]);
+
+  useEffect(() => {
+    if (!numericFilterOpen || numericFilterPresentation !== 'popover') return;
+
+    numericFilterPanelRef.current?.querySelector<HTMLInputElement>('input')?.focus();
+    const updatePopoverPosition = () => {
+      const trigger = numericFilterRef.current?.querySelector<HTMLElement>(
+        '[data-numeric-filter-trigger]'
+      );
+      if (!trigger) return;
+      const nextStyle = resolveNumericFilterPopoverStyle(trigger);
+      setNumericFilterPopoverStyle((currentStyle) =>
+        numericFilterPopoverStylesEqual(currentStyle, nextStyle) ? currentStyle : nextStyle
+      );
+    };
+    const schedulePopoverPositionUpdate = () => {
+      if (numericFilterPopoverRafRef.current !== null) return;
+      numericFilterPopoverRafRef.current = window.requestAnimationFrame(() => {
+        numericFilterPopoverRafRef.current = null;
+        updatePopoverPosition();
+      });
+    };
+    updatePopoverPosition();
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      const metricListbox = document.getElementById(`${numericMetricSelectId}-listbox`);
+      if (numericFilterRef.current?.contains(target) || metricListbox?.contains(target)) return;
+      setNumericFilterOpen(false);
+      setNumericFilterPresentation(null);
+    };
+    const handleScroll = (event: Event) => {
+      const target = event.target;
+      const metricListbox = document.getElementById(`${numericMetricSelectId}-listbox`);
+      if (
+        target instanceof Node &&
+        (numericFilterPanelRef.current?.contains(target) || metricListbox?.contains(target))
+      ) {
+        return;
+      }
+      schedulePopoverPositionUpdate();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      event.preventDefault();
+      setNumericFilterOpen(false);
+      setNumericFilterPresentation(null);
+      numericFilterRef.current
+        ?.querySelector<HTMLButtonElement>('[data-numeric-filter-trigger]')
+        ?.focus();
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('resize', schedulePopoverPositionUpdate);
+    window.addEventListener('scroll', handleScroll, true);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('resize', schedulePopoverPositionUpdate);
+      window.removeEventListener('scroll', handleScroll, true);
+      if (numericFilterPopoverRafRef.current !== null) {
+        window.cancelAnimationFrame(numericFilterPopoverRafRef.current);
+        numericFilterPopoverRafRef.current = null;
+      }
+    };
+  }, [numericFilterOpen, numericFilterPresentation, numericMetricSelectId]);
+
+  useEffect(() => {
+    if (!numericFilterOpen || numericFilterPresentation === null) return;
+    const expectedPresentation = useNumericFilterSheet ? 'sheet' : 'popover';
+    if (numericFilterPresentation === expectedPresentation) return;
+
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setNumericFilterOpen(false);
+      setNumericFilterPresentation(null);
+      numericFilterRef.current
+        ?.querySelector<HTMLButtonElement>('[data-numeric-filter-trigger]')
+        ?.focus();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [numericFilterOpen, numericFilterPresentation, useNumericFilterSheet]);
 
   useEffect(() => {
     let cancelled = false;
@@ -791,7 +967,6 @@ export function RequestEventsDetailsCard({
 
   const numericMetricOptions = useMemo(
     () => [
-      { value: ALL_FILTER, label: t('usage_stats.request_events_numeric_any') },
       {
         value: 'totalInputTokens',
         label: t('usage_stats.request_events_total_input_tokens'),
@@ -895,20 +1070,53 @@ export function RequestEventsDetailsCard({
     : ALL_FILTER;
   const numericMinimumValue = parseNumericFilterBound(numericMinimumFilter);
   const numericMaximumValue = parseNumericFilterBound(numericMaximumFilter);
-  const numericMinimumInvalid = numericMinimumFilter.trim() !== '' && numericMinimumValue === null;
-  const numericMaximumInvalid = numericMaximumFilter.trim() !== '' && numericMaximumValue === null;
-  const numericRangeInvalid =
-    numericMinimumValue !== null &&
-    numericMaximumValue !== null &&
-    numericMinimumValue > numericMaximumValue;
-  const numericFilterInvalid =
-    numericMinimumInvalid || numericMaximumInvalid || numericRangeInvalid;
-  const numericFilterError =
-    numericMinimumInvalid || numericMaximumInvalid
+  const hasAppliedNumericFilter =
+    isRequestEventNumericMetricId(effectiveNumericMetricFilter) &&
+    (numericMinimumValue !== null || numericMaximumValue !== null);
+  const draftNumericMinimumValue = parseNumericFilterBound(draftNumericMinimumFilter);
+  const draftNumericMaximumValue = parseNumericFilterBound(draftNumericMaximumFilter);
+  const draftNumericMinimumInvalid =
+    draftNumericMinimumFilter.trim() !== '' && draftNumericMinimumValue === null;
+  const draftNumericMaximumInvalid =
+    draftNumericMaximumFilter.trim() !== '' && draftNumericMaximumValue === null;
+  const draftNumericRangeInvalid =
+    draftNumericMinimumValue !== null &&
+    draftNumericMaximumValue !== null &&
+    draftNumericMinimumValue > draftNumericMaximumValue;
+  const draftNumericFilterInvalid =
+    draftNumericMinimumInvalid || draftNumericMaximumInvalid || draftNumericRangeInvalid;
+  const draftNumericFilterHasBounds =
+    draftNumericMinimumValue !== null || draftNumericMaximumValue !== null;
+  const draftNumericFilterError =
+    draftNumericMinimumInvalid || draftNumericMaximumInvalid
       ? t('usage_stats.request_events_numeric_invalid')
-      : numericRangeInvalid
+      : draftNumericRangeInvalid
         ? t('usage_stats.request_events_numeric_range_invalid')
         : '';
+  const formatNumericRange = (minimum: number | null, maximum: number | null): string => {
+    if (minimum !== null && maximum !== null) {
+      return `${numericBoundFormatter.format(minimum)}–${numericBoundFormatter.format(maximum)}`;
+    }
+    if (minimum !== null) return `≥ ${numericBoundFormatter.format(minimum)}`;
+    if (maximum !== null) return `≤ ${numericBoundFormatter.format(maximum)}`;
+    return '';
+  };
+  const getNumericMetricLabel = (metric: string): string =>
+    numericMetricOptions.find((option) => option.value === metric)?.label ??
+    t('usage_stats.request_events_numeric_filter');
+  const numericAppliedSummary = hasAppliedNumericFilter
+    ? `${getNumericMetricLabel(effectiveNumericMetricFilter)} · ${formatNumericRange(
+        numericMinimumValue,
+        numericMaximumValue
+      )}`
+    : '';
+  const numericDraftSummary =
+    !draftNumericFilterInvalid && draftNumericFilterHasBounds
+      ? `${getNumericMetricLabel(draftNumericMetricFilter)} · ${formatNumericRange(
+          draftNumericMinimumValue,
+          draftNumericMaximumValue
+        )}`
+      : '';
 
   useEffect(() => {
     if (!shouldTrackTime) return;
@@ -947,7 +1155,6 @@ export function RequestEventsDetailsCard({
         const numericValue = numericMetric ? getRequestEventNumericValue(row, numericMetric) : null;
         const numericMatched =
           numericMetric === null ||
-          numericFilterInvalid ||
           ((numericMinimumValue === null || numericValue! >= numericMinimumValue) &&
             (numericMaximumValue === null || numericValue! <= numericMaximumValue));
         return (
@@ -969,7 +1176,6 @@ export function RequestEventsDetailsCard({
       effectiveServiceTierFilter,
       effectiveSourceFilter,
       effectiveNumericMetricFilter,
-      numericFilterInvalid,
       numericMaximumValue,
       numericMinimumValue,
       resultFilter,
@@ -988,9 +1194,55 @@ export function RequestEventsDetailsCard({
     resultFilter !== ALL_FILTER ||
     effectiveTimeRangeFilter !== 'page' ||
     cacheFilter !== ALL_FILTER ||
-    effectiveNumericMetricFilter !== ALL_FILTER ||
-    numericMinimumFilter.trim() !== '' ||
-    numericMaximumFilter.trim() !== '';
+    hasAppliedNumericFilter;
+
+  const openNumericFilter = () => {
+    setDraftNumericMetricFilter(
+      isRequestEventNumericMetricId(effectiveNumericMetricFilter)
+        ? effectiveNumericMetricFilter
+        : 'totalTokens'
+    );
+    setDraftNumericMinimumFilter(numericMinimumFilter);
+    setDraftNumericMaximumFilter(numericMaximumFilter);
+    const nextPresentation = useNumericFilterSheet ? 'sheet' : 'popover';
+    setNumericFilterPresentation(nextPresentation);
+    if (nextPresentation === 'popover') {
+      const trigger = numericFilterRef.current?.querySelector<HTMLElement>(
+        '[data-numeric-filter-trigger]'
+      );
+      if (trigger) setNumericFilterPopoverStyle(resolveNumericFilterPopoverStyle(trigger));
+    }
+    setNumericFilterOpen(true);
+  };
+
+  const closeNumericFilter = () => {
+    const shouldRestoreFocusImmediately = numericFilterPresentation !== 'sheet';
+    setNumericFilterOpen(false);
+    setNumericFilterPresentation(null);
+    if (shouldRestoreFocusImmediately) {
+      numericFilterRef.current
+        ?.querySelector<HTMLButtonElement>('[data-numeric-filter-trigger]')
+        ?.focus();
+    }
+  };
+
+  const handleApplyNumericFilter = () => {
+    if (draftNumericFilterInvalid || !draftNumericFilterHasBounds) return;
+    setNumericMetricFilter(draftNumericMetricFilter);
+    setNumericMinimumFilter(draftNumericMinimumFilter.trim());
+    setNumericMaximumFilter(draftNumericMaximumFilter.trim());
+    closeNumericFilter();
+  };
+
+  const handleClearNumericFilter = () => {
+    setNumericMetricFilter(ALL_FILTER);
+    setNumericMinimumFilter('');
+    setNumericMaximumFilter('');
+    setDraftNumericMetricFilter('totalTokens');
+    setDraftNumericMinimumFilter('');
+    setDraftNumericMaximumFilter('');
+    closeNumericFilter();
+  };
 
   const handleClearFilters = () => {
     setModelFilter(ALL_FILTER);
@@ -1004,6 +1256,11 @@ export function RequestEventsDetailsCard({
     setNumericMetricFilter(ALL_FILTER);
     setNumericMinimumFilter('');
     setNumericMaximumFilter('');
+    setDraftNumericMetricFilter('totalTokens');
+    setDraftNumericMinimumFilter('');
+    setDraftNumericMaximumFilter('');
+    setNumericFilterOpen(false);
+    setNumericFilterPresentation(null);
   };
 
   const stableVisibleColumnCount = REQUEST_EVENT_COLUMN_IDS.reduce(
@@ -1129,6 +1386,108 @@ export function RequestEventsDetailsCard({
       blob: new Blob([content], { type: 'application/json;charset=utf-8' }),
     });
   };
+
+  const numericFilterEditor = (
+    <>
+      <div className={styles.requestEventsNumericFilterFields}>
+        <div className={styles.requestEventsNumericMetricField}>
+          <span
+            id={`${numericFilterId}-metric-label`}
+            className={styles.requestEventsNumericFieldLabel}
+          >
+            {t('usage_stats.request_events_numeric_metric')}
+          </span>
+          <Select
+            id={numericMetricSelectId}
+            value={draftNumericMetricFilter}
+            options={numericMetricOptions}
+            onChange={(value) => {
+              if (isRequestEventNumericMetricId(value)) {
+                setDraftNumericMetricFilter(value);
+                window.requestAnimationFrame(() => {
+                  document.getElementById(numericMetricSelectId)?.focus();
+                });
+              }
+            }}
+            className={styles.requestEventsNumericMetric}
+            ariaLabelledBy={`${numericFilterId}-metric-label`}
+            fullWidth
+          />
+        </div>
+        <div className={styles.requestEventsNumericBounds}>
+          <Input
+            type="number"
+            min={0}
+            step={1}
+            inputMode="numeric"
+            value={draftNumericMinimumFilter}
+            onChange={(event) => setDraftNumericMinimumFilter(event.target.value)}
+            label={t('usage_stats.request_events_numeric_min')}
+            placeholder="0"
+            aria-describedby={draftNumericFilterError ? numericFilterErrorId : undefined}
+            aria-invalid={draftNumericMinimumInvalid || draftNumericRangeInvalid}
+            className={styles.requestEventsNumericInput}
+          />
+          <Input
+            type="number"
+            min={0}
+            step={1}
+            inputMode="numeric"
+            value={draftNumericMaximumFilter}
+            onChange={(event) => setDraftNumericMaximumFilter(event.target.value)}
+            label={t('usage_stats.request_events_numeric_max')}
+            placeholder="∞"
+            aria-describedby={draftNumericFilterError ? numericFilterErrorId : undefined}
+            aria-invalid={draftNumericMaximumInvalid || draftNumericRangeInvalid}
+            className={styles.requestEventsNumericInput}
+          />
+        </div>
+      </div>
+      {numericDraftSummary && (
+        <div className={styles.requestEventsNumericPreview} aria-live="polite" data-valid="true">
+          <span>{t('usage_stats.request_events_numeric_preview')}</span>
+          <strong>{numericDraftSummary}</strong>
+        </div>
+      )}
+      {draftNumericFilterError && (
+        <span id={numericFilterErrorId} className={styles.requestEventsNumericError} role="alert">
+          {draftNumericFilterError}
+        </span>
+      )}
+    </>
+  );
+
+  const numericFilterActions = (
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={handleClearNumericFilter}
+        disabled={
+          !hasAppliedNumericFilter &&
+          !draftNumericMinimumFilter.trim() &&
+          !draftNumericMaximumFilter.trim() &&
+          draftNumericMetricFilter === 'totalTokens'
+        }
+      >
+        {t('usage_stats.request_events_numeric_clear')}
+      </Button>
+      <div className={styles.requestEventsNumericFilterFooterActions}>
+        <Button type="button" variant="secondary" size="sm" onClick={closeNumericFilter}>
+          {t('common.cancel')}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          onClick={handleApplyNumericFilter}
+          disabled={draftNumericFilterInvalid || !draftNumericFilterHasBounds}
+        >
+          {t('usage_stats.request_events_numeric_apply')}
+        </Button>
+      </div>
+    </>
+  );
 
   return (
     <Card
@@ -1353,69 +1712,100 @@ export function RequestEventsDetailsCard({
           />
         </div>
         <div
+          ref={numericFilterRef}
           className={`${styles.requestEventsFilterItem} ${styles.requestEventsNumericFilterItem}`}
         >
           <span className={styles.requestEventsFilterLabel}>
             {t('usage_stats.request_events_numeric_filter')}
           </span>
-          <div className={styles.requestEventsNumericControls}>
-            <Select
-              value={effectiveNumericMetricFilter}
-              options={numericMetricOptions}
-              onChange={(value) => {
-                setNumericMetricFilter(value);
-                if (value === ALL_FILTER) {
-                  setNumericMinimumFilter('');
-                  setNumericMaximumFilter('');
-                }
-              }}
-              className={styles.requestEventsNumericMetric}
-              ariaLabel={t('usage_stats.request_events_numeric_metric')}
-              fullWidth={false}
-            />
-            <Input
-              type="number"
-              min={0}
-              step={1}
-              inputMode="numeric"
-              value={numericMinimumFilter}
-              onChange={(event) => setNumericMinimumFilter(event.target.value)}
-              placeholder={t('usage_stats.request_events_numeric_min')}
-              aria-label={t('usage_stats.request_events_numeric_min')}
-              aria-describedby={numericFilterError ? numericFilterErrorId : undefined}
-              aria-invalid={numericMinimumInvalid || numericRangeInvalid}
-              disabled={effectiveNumericMetricFilter === ALL_FILTER}
-              className={styles.requestEventsNumericInput}
-            />
-            <span className={styles.requestEventsNumericSeparator} aria-hidden="true">
-              –
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            fullWidth
+            data-numeric-filter-trigger
+            className={`${styles.requestEventsNumericFilterTrigger} ${
+              hasAppliedNumericFilter ? styles.requestEventsNumericFilterTriggerActive : ''
+            }`}
+            aria-haspopup="dialog"
+            aria-expanded={numericFilterOpen}
+            aria-controls={useNumericFilterSheet ? undefined : numericFilterId}
+            aria-label={
+              numericAppliedSummary
+                ? t('usage_stats.request_events_numeric_active_label', {
+                    filter: numericAppliedSummary,
+                  })
+                : t('usage_stats.request_events_numeric_filter')
+            }
+            title={numericAppliedSummary || t('usage_stats.request_events_numeric_filter')}
+            onClick={() => {
+              if (numericFilterOpen) {
+                closeNumericFilter();
+              } else {
+                openNumericFilter();
+              }
+            }}
+          >
+            <span className={styles.requestEventsNumericFilterTriggerContent}>
+              <IconSlidersHorizontal size={15} aria-hidden="true" />
+              <span className={styles.requestEventsNumericFilterTriggerText}>
+                {numericAppliedSummary || t('usage_stats.request_events_numeric_filter')}
+              </span>
+              {hasAppliedNumericFilter && (
+                <span className={styles.requestEventsNumericFilterActiveDot} aria-hidden="true" />
+              )}
             </span>
-            <Input
-              type="number"
-              min={0}
-              step={1}
-              inputMode="numeric"
-              value={numericMaximumFilter}
-              onChange={(event) => setNumericMaximumFilter(event.target.value)}
-              placeholder={t('usage_stats.request_events_numeric_max')}
-              aria-label={t('usage_stats.request_events_numeric_max')}
-              aria-describedby={numericFilterError ? numericFilterErrorId : undefined}
-              aria-invalid={numericMaximumInvalid || numericRangeInvalid}
-              disabled={effectiveNumericMetricFilter === ALL_FILTER}
-              className={styles.requestEventsNumericInput}
-            />
-          </div>
-          {numericFilterError && (
-            <span
-              id={numericFilterErrorId}
-              className={styles.requestEventsNumericError}
-              role="alert"
+          </Button>
+          {numericFilterOpen && numericFilterPresentation === 'popover' && (
+            <div
+              ref={numericFilterPanelRef}
+              id={numericFilterId}
+              role="dialog"
+              aria-modal="false"
+              aria-labelledby={`${numericFilterId}-title`}
+              aria-describedby={`${numericFilterId}-description`}
+              className={styles.requestEventsNumericFilterPopover}
+              style={numericFilterPopoverStyle ?? undefined}
             >
-              {numericFilterError}
-            </span>
+              <div
+                id={`${numericFilterId}-title`}
+                className={styles.requestEventsNumericFilterTitle}
+              >
+                {t('usage_stats.request_events_numeric_filter')}
+              </div>
+              <p
+                id={`${numericFilterId}-description`}
+                className={styles.requestEventsNumericFilterDescription}
+              >
+                {t('usage_stats.request_events_numeric_help')}
+              </p>
+              {numericFilterEditor}
+              <div className={styles.requestEventsNumericFilterFooter}>{numericFilterActions}</div>
+            </div>
           )}
         </div>
       </div>
+
+      {useNumericFilterSheet && (
+        <Sheet
+          open={numericFilterOpen && numericFilterPresentation === 'sheet'}
+          onClose={() => {
+            setNumericFilterOpen(false);
+            setNumericFilterPresentation(null);
+          }}
+          size="md"
+          className={styles.requestEventsNumericFilterSheet}
+          title={t('usage_stats.request_events_numeric_filter')}
+          description={t('usage_stats.request_events_numeric_help')}
+          footer={
+            <div className={styles.requestEventsNumericFilterSheetFooter}>
+              {numericFilterActions}
+            </div>
+          }
+        >
+          {numericFilterEditor}
+        </Sheet>
+      )}
 
       {loading && timeScopedRows.length === 0 ? (
         <div className={styles.hint}>{t('common.loading')}</div>

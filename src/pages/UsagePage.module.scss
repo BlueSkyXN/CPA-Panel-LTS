@@ -786,6 +786,10 @@
   transform: none !important;
 }
 
+:global(.page-transition__layer):has(.requestEventsNumericFilterPopover) {
+  transform: none !important;
+}
+
 .requestEventsColumnSettingsTitle {
   margin-bottom: $spacing-xs;
   color: var(--text-primary);
@@ -874,38 +878,208 @@
 }
 
 .requestEventsNumericFilterItem {
-  grid-column: span 2;
+  position: relative;
 }
 
-.requestEventsNumericControls {
-  display: grid;
-  grid-template-columns: minmax(160px, 1.35fr) minmax(92px, 0.7fr) auto minmax(92px, 0.7fr);
-  align-items: center;
-  gap: 6px;
+.requestEventsNumericFilterTrigger:global(.btn.btn-sm) {
+  width: 100%;
+  height: 40px;
   min-width: 0;
+  padding: 0 12px;
+  justify-content: flex-start;
+  background: var(--bg-primary);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+}
+
+.requestEventsNumericFilterTrigger:global(.btn.btn-sm) > :global(span) {
+  width: 100%;
+  min-width: 0;
+}
+
+.requestEventsNumericFilterTrigger:global(.btn.btn-sm):focus-visible,
+.requestEventsNumericFilterTrigger:global(.btn.btn-sm)[aria-expanded='true'] {
+  border-color: var(--primary-color);
+  outline: none;
+  box-shadow:
+    var(--shadow),
+    0 0 0 3px rgba($primary-color, 0.18);
+}
+
+.requestEventsNumericFilterTriggerActive:global(.btn.btn-sm) {
+  border-color: color-mix(in srgb, var(--primary-color) 58%, var(--border-color));
+  background: color-mix(in srgb, var(--primary-color) 8%, var(--bg-primary));
+  color: var(--primary-color);
+  font-weight: 650;
+}
+
+.requestEventsNumericFilterTriggerContent {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.requestEventsNumericFilterTriggerText {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.requestEventsNumericFilterActiveDot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 16%, transparent);
+}
+
+.requestEventsNumericFilterPopover {
+  position: fixed;
+  z-index: 40;
+  overflow-y: auto;
+  padding: $spacing-md;
+  border: 1px solid var(--border-color);
+  border-radius: $radius-md;
+  background: var(--bg-primary);
+  box-shadow: var(--shadow-lg);
+}
+
+.requestEventsNumericFilterTitle {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.requestEventsNumericFilterDescription {
+  margin: 4px 0 $spacing-sm;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.requestEventsNumericFilterFields {
+  display: grid;
+  gap: $spacing-sm;
+}
+
+.requestEventsNumericMetricField {
+  display: grid;
+  gap: 4px;
+}
+
+.requestEventsNumericFieldLabel {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.requestEventsNumericBounds {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: $spacing-sm;
 
   :global(.form-group) {
     min-width: 0;
     margin: 0;
+    gap: 4px;
+  }
+
+  :global(.form-group > label) {
+    font-size: 12px;
+    font-weight: 650;
   }
 }
 
 .requestEventsNumericMetric,
 .requestEventsNumericInput {
+  width: 100%;
   min-width: 0;
 }
 
-.requestEventsNumericSeparator {
-  color: var(--text-tertiary);
+.requestEventsNumericPreview {
+  display: grid;
+  gap: 2px;
+  margin-top: $spacing-sm;
+  padding: 9px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: $radius-sm;
+  background: var(--bg-secondary);
   font-variant-numeric: tabular-nums;
-  text-align: center;
+
+  span {
+    color: var(--text-tertiary);
+    font-size: 11px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  strong {
+    min-width: 0;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 650;
+    overflow-wrap: anywhere;
+  }
+
+  &[data-valid='true'] {
+    border-color: color-mix(in srgb, var(--primary-color) 30%, var(--border-color));
+    background: color-mix(in srgb, var(--primary-color) 6%, var(--bg-secondary));
+
+    strong {
+      color: var(--text-primary);
+    }
+  }
 }
 
 .requestEventsNumericError {
+  display: block;
+  margin-top: 6px;
   color: var(--failure-badge-text);
   font-size: 11px;
   font-weight: 650;
   line-height: 1.35;
+}
+
+.requestEventsNumericFilterFooter {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-sm;
+  margin-top: $spacing-sm;
+  padding-top: $spacing-sm;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  box-shadow: 0 -10px 16px -18px rgba(0, 0, 0, 0.55);
+}
+
+.requestEventsNumericFilterFooterActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: $spacing-xs;
+}
+
+.requestEventsNumericFilterSheet {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.requestEventsNumericFilterSheetFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-sm;
+  width: 100%;
 }
 
 .requestEventsMeta {
@@ -1289,20 +1463,34 @@
     gap: $spacing-xs;
   }
 
-  .requestEventsNumericFilterItem {
-    grid-column: 1 / -1;
+  .requestEventsNumericFilterFooter {
+    align-items: stretch;
+    flex-direction: column;
   }
 
-  .requestEventsNumericControls {
+  .requestEventsNumericFilterFooter > :global(.btn) {
+    align-self: flex-start;
+  }
+
+  .requestEventsNumericFilterFooterActions {
+    display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+
+    :global(.btn) {
+      width: 100%;
+      min-width: 0;
+      white-space: normal;
+    }
   }
 
-  .requestEventsNumericMetric {
-    grid-column: 1 / -1;
+  .requestEventsNumericFilterSheetFooter {
+    align-items: stretch;
+    flex-direction: column;
   }
 
-  .requestEventsNumericSeparator {
-    display: none;
+  .requestEventsNumericFilterSheetFooter > :global(.btn) {
+    align-self: flex-start;
   }
 
   .requestEventsTableWrapper {
@@ -1312,6 +1500,10 @@
 
 @media (max-width: 360px) {
   .requestEventsToolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .requestEventsNumericBounds {
     grid-template-columns: minmax(0, 1fr);
   }
 }
