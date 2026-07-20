@@ -31,10 +31,12 @@ import {
   findChatGptCreditPolicy,
   formatCompactNumber,
   formatUsd,
+  getApiCoverageDisplay,
   getApiFastPolicyDisplay,
   hasPricingAnomaly,
   importPriceProfileV3,
   preflightPriceProfileImportV3,
+  restorePresetEquivalentOverrides,
   serializePriceProfileV3,
   type FastOverride,
   type PriceOverride,
@@ -276,6 +278,11 @@ export function UsagePricingPage() {
     [priceProfile, usage]
   );
   const { coverage, modelSummaries } = pricingAnalysis;
+  const apiCoverageDisplay = getApiCoverageDisplay(coverage);
+  const presetOverrideRecovery = useMemo(
+    () => restorePresetEquivalentOverrides(priceProfile),
+    [priceProfile]
+  );
 
   const filteredSummaries = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -466,6 +473,22 @@ export function UsagePricingPage() {
     });
   };
 
+  const restoreMatchingPresets = () => {
+    const count = presetOverrideRecovery.restoredModels.length;
+    if (count === 0) return;
+    showConfirmation({
+      title: t('usage_stats.pricing_matching_presets_title'),
+      message: t('usage_stats.pricing_matching_presets_confirm', { count }),
+      confirmText: t('usage_stats.pricing_matching_presets_action'),
+      variant: 'primary',
+      onConfirm: () => {
+        if (setPriceProfile(presetOverrideRecovery.profile)) {
+          showNotification(t('usage_stats.pricing_matching_presets_success', { count }), 'success');
+        }
+      },
+    });
+  };
+
   const renderEditor = () => {
     if (!selectedSummary || !draft) return null;
     const modelIsCanonicalPreset =
@@ -475,9 +498,10 @@ export function UsagePricingPage() {
     const currentCost = selectedSummary.estimatedAmount;
     const nextCost = draftSummary?.estimatedAmount ?? currentCost;
     const costDelta = nextCost - currentCost;
-    const currentCoverage = coverage.apiPricedRequestRatio * 100;
-    const nextCoverage =
-      (draftCoverage?.apiPricedRequestRatio ?? coverage.apiPricedRequestRatio) * 100;
+    const currentCoverage = getApiCoverageDisplay(coverage).requestPercent;
+    const nextCoverage = draftCoverage
+      ? getApiCoverageDisplay(draftCoverage).requestPercent
+      : currentCoverage;
     const clearLabel = modelIsCanonicalPreset
       ? t('usage_stats.pricing_restore_preset')
       : t('usage_stats.pricing_delete_config');
@@ -694,7 +718,8 @@ export function UsagePricingPage() {
           <div>
             <span>{t('usage_stats.pricing_preview_coverage')}</span>
             <strong>
-              {currentCoverage.toFixed(1)}% → {nextCoverage.toFixed(1)}%
+              {currentCoverage === null ? '--' : `${currentCoverage.toFixed(1)}%`} →{' '}
+              {nextCoverage === null ? '--' : `${nextCoverage.toFixed(1)}%`}
             </strong>
           </div>
           <div>
@@ -787,6 +812,22 @@ export function UsagePricingPage() {
         </div>
       )}
 
+      {presetOverrideRecovery.restoredModels.length > 0 && (
+        <div
+          className={`${styles.migrationNotice} ${styles.presetRecoveryNotice}`}
+          data-testid="pricing-preset-recovery"
+        >
+          <span>
+            {t('usage_stats.pricing_matching_presets_notice', {
+              count: presetOverrideRecovery.restoredModels.length,
+            })}
+          </span>
+          <Button variant="secondary" size="sm" onClick={restoreMatchingPresets}>
+            {t('usage_stats.pricing_matching_presets_action')}
+          </Button>
+        </div>
+      )}
+
       <PresetPricingCatalog />
 
       <section className={styles.summaryGrid} aria-label={t('usage_stats.pricing_summary')}>
@@ -802,11 +843,21 @@ export function UsagePricingPage() {
         </div>
         <div className={styles.summaryCard}>
           <span>{t('usage_stats.pricing_api_request_coverage')}</span>
-          <strong>{(coverage.apiPricedRequestRatio * 100).toFixed(1)}%</strong>
+          <strong>
+            {apiCoverageDisplay.requestPercent === null
+              ? '--'
+              : `${apiCoverageDisplay.requestPercent.toFixed(1)}%`}
+          </strong>
           <small>
-            {t('usage_stats.pricing_api_token_coverage', {
-              percent: (coverage.apiPricedTokenRatio * 100).toFixed(1),
-            })}
+            {apiCoverageDisplay.tokenPercent === null
+              ? t(
+                  coverage.apiTokenUsdRequests === 0
+                    ? 'usage_stats.pricing_no_api_requests'
+                    : 'usage_stats.pricing_no_api_tokens'
+                )
+              : t('usage_stats.pricing_api_token_coverage', {
+                  percent: apiCoverageDisplay.tokenPercent.toFixed(1),
+                })}
           </small>
         </div>
         <div className={styles.summaryCard}>

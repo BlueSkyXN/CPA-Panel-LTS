@@ -5,6 +5,7 @@ import { IconDollarSign, IconSettings } from '@/components/ui/icons';
 import {
   formatCompactNumber,
   formatUsd,
+  getApiCoverageDisplay,
   hasUnknownBillingUsage,
   isApiUsdEstimateComplete,
   type PricingCoverage,
@@ -18,7 +19,8 @@ export interface PricingEntryCardProps {
 
 export function PricingEntryCard({ coverage, onOpen }: PricingEntryCardProps) {
   const { t } = useTranslation();
-  const requestPercent = coverage.apiPricedRequestRatio * 100;
+  const apiCoverageDisplay = getApiCoverageDisplay(coverage);
+  const requestPercent = apiCoverageDisplay.requestPercent ?? 0;
   const hasUnknownBilling = hasUnknownBillingUsage(coverage);
   const pricingComplete = isApiUsdEstimateComplete(coverage);
 
@@ -56,11 +58,13 @@ export function PricingEntryCard({ coverage, onOpen }: PricingEntryCardProps) {
           })}
         </span>
         <span>
-          {t('usage_stats.pricing_api_requests_covered', {
-            priced: coverage.pricedRequests,
-            total: coverage.apiTokenUsdRequests,
-            percent: requestPercent.toFixed(1),
-          })}
+          {apiCoverageDisplay.requestPercent === null
+            ? t('usage_stats.pricing_no_api_requests')
+            : t('usage_stats.pricing_api_requests_covered', {
+                priced: coverage.pricedRequests,
+                total: coverage.apiTokenUsdRequests,
+                percent: apiCoverageDisplay.requestPercent.toFixed(1),
+              })}
         </span>
         <span>
           {t('usage_stats.pricing_credit_requests', {
