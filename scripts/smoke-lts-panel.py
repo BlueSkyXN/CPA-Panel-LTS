@@ -488,6 +488,48 @@ def build_usage_payload() -> dict[str, Any]:
     }
 
 
+def build_usage_request_event_clock_payload() -> dict[str, Any]:
+    payload = build_usage_payload()
+    now = datetime.now(timezone.utc)
+    usage = payload["usage"]
+    api = usage["apis"]["POST /v1/responses"]
+    models = api["models"]
+
+    boundary_events = {
+        "follow-page-boundary-model": now - timedelta(hours=23, minutes=59),
+        "outside-page-range-model": now - timedelta(hours=25),
+        "future-event-model": now + timedelta(minutes=5),
+    }
+    for model_name, timestamp in boundary_events.items():
+        models[model_name] = {
+            "total_requests": 1,
+            "success_count": 1,
+            "failure_count": 0,
+            "total_tokens": 1,
+            "details": [
+                {
+                    "timestamp": timestamp.isoformat().replace("+00:00", "Z"),
+                    "source": "request-events-clock",
+                    "auth_index": "request-events-clock-auth",
+                    "effective_service_tier": "standard",
+                    "billing_basis": "api-token-usd",
+                    "tokens": {
+                        "input_tokens": 1,
+                        "output_tokens": 0,
+                        "total_tokens": 1,
+                    },
+                    "failed": False,
+                }
+            ],
+        }
+        for aggregate in (usage, api):
+            aggregate["total_requests"] += 1
+            aggregate["success_count"] += 1
+            aggregate["total_tokens"] += 1
+
+    return payload
+
+
 def build_api_key_usage_payload() -> dict[str, Any]:
     buckets = build_recent_buckets()
     return {
@@ -3341,6 +3383,15 @@ def run_usage_request_event_clock_smoke(context: Any, app_url: str) -> None:
     try:
         # Install before navigation so React never mixes native and fake timers.
         clock_page.clock.install()
+        clock_usage_payload = build_usage_request_event_clock_payload()
+        clock_page.route(
+            "**/v0/management/usage",
+            lambda route: route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps(clock_usage_payload),
+            ),
+        )
         clock_page.goto(
             f"{app_url}?route=request-events-clock#/usage",
             wait_until="domcontentloaded",
@@ -3360,11 +3411,45 @@ def run_usage_request_event_clock_smoke(context: Any, app_url: str) -> None:
             )
 
         time_range_select = card.get_by_label("Time Range", exact=True)
+        wait_for_clock_row_count(9)
+        card.get_by_text("follow-page-boundary-model", exact=True).wait_for()
+        if card.get_by_text("outside-page-range-model", exact=True).count() != 0:
+            raise AssertionError("Follow Page retained an event outside its page range")
+        if card.get_by_text("future-event-model", exact=True).count() != 0:
+            raise AssertionError("Follow Page accepted a future request event")
         time_range_select.click()
         clock_page.get_by_role("option", name="Last 1 Hour", exact=True).click()
         wait_for_clock_row_count(8)
         clock_page.clock.fast_forward("03:00")
         wait_for_clock_row_count(7)
+
+        time_range_select.click()
+        clock_page.get_by_role(
+            "option", name="Follow Page (Last 24 Hours)", exact=True
+        ).click()
+        wait_for_clock_row_count(9)
+        card.get_by_text("follow-page-boundary-model", exact=True).wait_for()
+        if card.get_by_text("outside-page-range-model", exact=True).count() != 0:
+            raise AssertionError("Follow Page drifted beyond its stable page range")
+        if card.get_by_text("future-event-model", exact=True).count() != 0:
+            raise AssertionError("Follow Page drifted forward to a future event")
+
+        time_range_select.click()
+        clock_page.get_by_role("option", name="All Time", exact=True).click()
+        wait_for_clock_row_count(11)
+        card.get_by_text("follow-page-boundary-model", exact=True).wait_for()
+        card.get_by_text("outside-page-range-model", exact=True).wait_for()
+        card.get_by_text("future-event-model", exact=True).wait_for()
+
+        time_range_select.click()
+        clock_page.get_by_role("option", name="Last 24 Hours", exact=True).click()
+        wait_for_clock_row_count(8)
+        if card.get_by_text("follow-page-boundary-model", exact=True).count() != 0:
+            raise AssertionError("Last 24 Hours did not advance with the browser clock")
+        if card.get_by_text("outside-page-range-model", exact=True).count() != 0:
+            raise AssertionError("Last 24 Hours retained an event outside the page range")
+        if card.get_by_text("future-event-model", exact=True).count() != 0:
+            raise AssertionError("Last 24 Hours accepted a future request event")
     finally:
         clock_context.close()
 
