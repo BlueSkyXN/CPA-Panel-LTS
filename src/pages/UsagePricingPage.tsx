@@ -17,15 +17,13 @@ import {
   IconSearch,
   IconSettings,
 } from '@/components/ui/icons';
-import { useUsageData } from '@/components/usage';
+import { PresetPricingCatalog, useUsageData } from '@/components/usage';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useNotificationStore } from '@/stores';
 import { downloadBlob } from '@/utils/download';
 import {
   CHATGPT_FAST_SOURCE_URL,
-  OPENAI_CATALOG_AS_OF,
   OPENAI_CATALOG_VERSION,
-  OPENAI_PRICE_CATALOG,
   OPENAI_PRICING_SOURCE_URL,
   analyzeUsagePricing,
   createDefaultPriceProfileV3,
@@ -760,7 +758,7 @@ export function UsagePricingPage() {
           </div>
         </div>
         <div className={styles.catalogStamp}>
-          <span>{t('usage_stats.pricing_catalog')}</span>
+          <span>{t('usage_stats.pricing_catalog_version')}</span>
           <strong>{OPENAI_CATALOG_VERSION}</strong>
           <a href={OPENAI_PRICING_SOURCE_URL} target="_blank" rel="noreferrer">
             {t('usage_stats.pricing_api_source')} <IconExternalLink size={13} />
@@ -788,6 +786,8 @@ export function UsagePricingPage() {
             : t('usage_stats.pricing_profile_warning')}
         </div>
       )}
+
+      <PresetPricingCatalog />
 
       <section className={styles.summaryGrid} aria-label={t('usage_stats.pricing_summary')}>
         <div className={styles.summaryCard}>
@@ -1051,13 +1051,6 @@ export function UsagePricingPage() {
           )}
         </div>
       )}
-
-      <footer className={styles.footerNote}>
-        {t('usage_stats.pricing_catalog_footer', {
-          count: OPENAI_PRICE_CATALOG.length,
-          asOf: OPENAI_CATALOG_AS_OF,
-        })}
-      </footer>
 
       <Modal
         open={isEditorModal && mobileEditorOpen}

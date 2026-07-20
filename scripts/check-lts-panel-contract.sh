@@ -71,6 +71,10 @@ for path in \
   src/components/usage \
   src/components/usage/AGENTS.md \
   src/components/usage/PricingEntryCard.tsx \
+  src/components/usage/PresetPricingCatalog.tsx \
+  src/components/usage/PresetPricingCatalog.module.scss \
+  src/components/usage/presetPricingCatalogUtils.ts \
+  src/components/usage/PresetPricingCatalog.test.mjs \
   src/components/providers \
   src/components/providers/AmpcodeSection \
   src/components/providers/ProviderStatusBar.tsx \
@@ -246,10 +250,17 @@ require_file_contains src/utils/usage/pricing/usageAggregation.test.mjs "hourly,
 require_file_contains src/pages/UsagePage.tsx "PricingEntryCard"
 require_file_contains src/pages/UsagePricingPage.tsx "usage-pricing-page"
 require_file_contains src/pages/UsagePricingPage.tsx "pricing-model-row"
+require_file_contains src/pages/UsagePricingPage.tsx "PresetPricingCatalog"
+require_file_contains src/components/usage/PresetPricingCatalog.tsx "OPENAI_PRICE_CATALOG"
+require_file_contains src/components/usage/PresetPricingCatalog.tsx "preset-pricing-catalog"
+require_file_contains src/components/usage/presetPricingCatalogUtils.ts "getCatalogExplicitFastRates"
+require_file_contains src/components/usage/PresetPricingCatalog.test.mjs "explicit Fast catalog cards expose every rate"
 require_file_contains package.json "test:usage-pricing-v3"
+require_file_contains package.json "test:usage-pricing-catalog"
 require_file_contains package.json "test:usage-pricing-storage"
 require_file_contains package.json "test:usage-pricing-integration"
 require_file_contains scripts/smoke-lts-panel.py "run_usage_pricing_smoke"
+require_file_contains scripts/smoke-lts-panel.py "run_usage_pricing_empty_catalog_smoke"
 require_file_contains scripts/smoke-lts-panel.py '"billing_basis": "chatgpt-credits"'
 require_file_contains scripts/smoke-lts-panel.py "cli-proxy-model-prices-v3"
 require_file_contains scripts/smoke-lts-panel.py "Fast long context unsupported"
@@ -290,6 +301,14 @@ require_file_contains src/i18n/locales/en.json "pricing_credit_notice"
 require_file_contains src/i18n/locales/zh-CN.json "pricing_credit_notice"
 require_file_contains src/i18n/locales/zh-TW.json "pricing_credit_notice"
 require_file_contains src/i18n/locales/ru.json "pricing_credit_notice"
+require_file_contains src/i18n/locales/en.json "pricing_catalog_table_label"
+require_file_contains src/i18n/locales/zh-CN.json "pricing_catalog_table_label"
+require_file_contains src/i18n/locales/zh-TW.json "pricing_catalog_table_label"
+require_file_contains src/i18n/locales/ru.json "pricing_catalog_table_label"
+require_file_contains src/i18n/locales/en.json "pricing_catalog_fast_explicit_summary"
+require_file_contains src/i18n/locales/zh-CN.json "pricing_catalog_fast_explicit_summary"
+require_file_contains src/i18n/locales/zh-TW.json "pricing_catalog_fast_explicit_summary"
+require_file_contains src/i18n/locales/ru.json "pricing_catalog_fast_explicit_summary"
 require_file_contains src/i18n/locales/en.json "request_events_filter_effort"
 require_file_contains src/i18n/locales/zh-CN.json "request_events_filter_effort"
 require_file_contains src/i18n/locales/zh-TW.json "request_events_filter_effort"
