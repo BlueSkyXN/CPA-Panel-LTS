@@ -67,9 +67,9 @@ export function Sheet({
 
   const getFocusableElements = useCallback(() => {
     if (!sheetRef.current) return [] as HTMLElement[];
-    return Array.from(
-      sheetRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
-    ).filter((el) => !el.hasAttribute('disabled') && el.tabIndex !== -1);
+    return Array.from(sheetRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+      (el) => !el.hasAttribute('disabled') && el.tabIndex !== -1
+    );
   }, []);
 
   const startClose = useCallback(
@@ -161,6 +161,7 @@ export function Sheet({
   useEffect(() => {
     if (!open) return;
     const handleKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
       if (event.key === 'Escape') {
         if (closeDisabled) return;
         event.preventDefault();

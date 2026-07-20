@@ -27,15 +27,26 @@ const approx = (actual, expected) =>
 
 test('catalog is versioned, self-describing, exact, and keeps Priority long context unsupported', () => {
   const sol = pricing.findCatalogEntry('gpt-5.6-sol');
-  assert.equal(pricing.OPENAI_CATALOG_AS_OF, '2026-07-19');
+  assert.equal(pricing.OPENAI_CATALOG_AS_OF, '2026-07-20');
   assert.equal(sol.currency, 'USD');
-  assert.deepEqual(sol.aliases, []);
+  assert.deepEqual(sol.aliases, ['gpt-5.6']);
   assert.equal(sol.sourceUrl, 'https://developers.openai.com/api/docs/pricing');
+  assert.equal(sol.pricingNotesUrl, 'https://developers.openai.com/api/docs/models/gpt-5.6-sol');
   assert.equal(sol.standard.long.basis, 'inputTokens');
   assert.equal(sol.standard.long.appliesTo, 'entireRequest');
+  assert.equal(sol.fast.multiplier, 2);
   assert.equal(sol.fast.longSupported, false);
+  const gpt55 = pricing.findCatalogEntry('gpt-5.5');
+  assert.equal(gpt55.standard.long.basis, 'inputTokens');
+  assert.equal(gpt55.standard.long.appliesTo, 'entireRequest');
+  assert.equal(gpt55.fast.multiplier, 2.5);
+  assert.equal(pricing.findChatGptCreditPolicy('gpt-5.6-sol').fastMultiplier, 2.5);
+  assert.equal(pricing.findChatGptCreditPolicy('gpt-5.6').fastMultiplier, 2.5);
+  assert.equal(pricing.findChatGptCreditPolicy('gpt-5.4').fastMultiplier, 2);
+  assert.equal(pricing.findChatGptCreditPolicy('gpt-5.4-mini'), null);
   assert.equal(pricing.findCatalogEntry('gpt-5.6-sol-preview'), null);
   assert.equal(pricing.findCatalogEntry('tenant/gpt-5.6-sol'), null);
+  assert.equal(pricing.findCatalogEntry('gpt-5.6').canonicalModel, 'gpt-5.6-sol');
 });
 
 test('matches direct custom, canonical preset, explicit alias, and unmatched without fuzzy matching', () => {
@@ -70,7 +81,7 @@ test('v2 migration preserves Auto cache-write, explicit zero, and old string val
   });
 });
 
-test('Fast preset uses explicit rates, custom multiplier scales the current context band, and legacy custom falls back', () => {
+test('Fast preset and custom profiles derive rates from the selected Standard context band', () => {
   const preset = pricing.estimateUsageCost(
     'gpt-5.4-mini',
     { input_tokens: 1_000_000, output_tokens: 100_000 },
@@ -109,14 +120,14 @@ test('Fast preset uses explicit rates, custom multiplier scales the current cont
   assert.deepEqual(fallback.warnings, ['fallbackStandard']);
 });
 
-test('the full input_tokens count switches the entire request at 271999, 272000, and 272001', () => {
+test('the full input_tokens count switches GPT-5.5 at 271999, 272000, and 272001', () => {
   for (const [inputTokens, expectedBand, expectedInputRate] of [
-    [271_999, 'short', 2.5],
-    [272_000, 'long', 5],
-    [272_001, 'long', 5],
+    [271_999, 'short', 5],
+    [272_000, 'long', 10],
+    [272_001, 'long', 10],
   ]) {
     const estimate = pricing.estimateUsageCost(
-      'gpt-5.6-terra',
+      'gpt-5.5',
       { input_tokens: inputTokens, output_tokens: 1 },
       undefined,
       tier()
@@ -124,6 +135,15 @@ test('the full input_tokens count switches the entire request at 271999, 272000,
     assert.equal(estimate.contextBand, expectedBand);
     assert.equal(estimate.rates.input, expectedInputRate);
   }
+
+  const gpt56 = pricing.estimateUsageCost(
+    'gpt-5.6-terra',
+    { input_tokens: 300_000, output_tokens: 1 },
+    undefined,
+    tier()
+  );
+  assert.equal(gpt56.contextBand, 'long');
+  assert.equal(gpt56.rates.input, 5);
 });
 
 test('Fast long context remains unsupported and evidence warnings stay explicit', () => {
@@ -249,18 +269,37 @@ test('coverage reports request, token, model, amount, and assumed-tier completen
     ]),
     {
       totalRequests: 3,
+      apiTokenUsdRequests: 3,
+      chatGptCreditRequests: 0,
       pricedRequests: 1,
+      creditRatedRequests: 0,
+      creditFastRequests: 0,
+      unknownBillingRequests: 0,
       unmatchedRequests: 1,
       unsupportedRequests: 1,
       totalTokens: 1_272_020,
+      apiTokenUsdTokens: 1_272_020,
+      chatGptCreditTokens: 0,
       pricedTokens: 1_000_000,
+      creditRatedTokens: 0,
+      unknownBillingTokens: 0,
       totalModels: 3,
       pricedModels: 1,
+      apiTokenUsdModels: 3,
+      apiPricedModels: 1,
+      chatGptCreditModels: 0,
+      creditRatedModels: 0,
+      unknownBillingModels: 0,
       estimatedAmount: 0.75,
-      assumedTierRequests: 1,
+      assumedTierRequests: 0,
       pricedRequestRatio: 1 / 3,
       pricedTokenRatio: 1_000_000 / 1_272_020,
       pricedModelRatio: 1 / 3,
+      apiPricedRequestRatio: 1 / 3,
+      apiPricedTokenRatio: 1_000_000 / 1_272_020,
+      apiPricedModelRatio: 1 / 3,
+      creditRatedRequestRatio: 0,
+      creditRatedTokenRatio: 0,
     }
   );
 });
@@ -282,4 +321,69 @@ test('a model is covered only when every request for that model is priced', () =
   assert.equal(coverage.pricedModelRatio, 0);
   assert.equal(coverage.pricedRequests, 1);
   assert.equal(coverage.unsupportedRequests, 1);
+});
+
+test('token-only unknown usage makes the API USD estimate incomplete without changing API-domain ratios', () => {
+  const priced = pricing.estimateUsageCost(
+    'gpt-5.4-mini',
+    { input_tokens: 1_000_000 },
+    undefined,
+    tier()
+  );
+  const complete = pricing.aggregateCostEstimateCoverage([
+    { modelName: 'gpt-5.4-mini', tokenCount: 1_000_000, estimate: priced },
+  ]);
+  const tokenGap = {
+    ...complete,
+    totalTokens: 2_000_000,
+    unknownBillingTokens: 1_000_000,
+    unknownBillingModels: 1,
+    pricedModels: 0,
+    pricedModelRatio: 0,
+  };
+
+  assert.equal(tokenGap.apiPricedRequestRatio, 1);
+  assert.equal(tokenGap.apiPricedTokenRatio, 1);
+  assert.equal(pricing.hasUnknownBillingUsage(tokenGap), true);
+  assert.equal(pricing.isApiUsdEstimateComplete(tokenGap), false);
+  assert.equal(pricing.hasPricingAnomaly(tokenGap), true);
+});
+
+test('Fast policy display distinguishes official and custom multipliers from explicit rates', () => {
+  const defaults = pricing.createDefaultPriceProfileV3();
+  assert.deepEqual(
+    pricing.getApiFastPolicyDisplay(pricing.resolvePriceProfile('gpt-5.6-sol', defaults)),
+    { kind: 'official-multiplier', multiplier: 2 }
+  );
+
+  const customMultiplier = {
+    ...defaults,
+    overrides: {
+      local: {
+        standard: { short: { input: 2, cachedInput: 0.2, output: 4 } },
+        fast: { multiplier: 3, longSupported: true },
+      },
+    },
+  };
+  assert.deepEqual(
+    pricing.getApiFastPolicyDisplay(pricing.resolvePriceProfile('local', customMultiplier)),
+    { kind: 'custom-multiplier', multiplier: 3 }
+  );
+
+  const explicitRates = {
+    ...defaults,
+    overrides: {
+      local: {
+        standard: { short: { input: 2, cachedInput: 0.2, output: 4 } },
+        fast: {
+          short: { input: 6, cachedInput: 0.4, output: 10 },
+          longSupported: true,
+        },
+      },
+    },
+  };
+  assert.deepEqual(
+    pricing.getApiFastPolicyDisplay(pricing.resolvePriceProfile('local', explicitRates)),
+    { kind: 'explicit-rates', multiplier: null }
+  );
 });

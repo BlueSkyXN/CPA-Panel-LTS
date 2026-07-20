@@ -3,11 +3,18 @@ import { resolveServiceTier, type ResolvedServiceTier } from '../serviceTier';
 import {
   aggregateCostEstimateCoverage,
   estimateUsageCost,
+  findChatGptCreditPolicy,
   type CostEstimate,
   type PriceProfileV3,
   type PricingCoverage,
   type PricingCoverageInput,
 } from './index';
+import {
+  BILLING_BASIS_API_TOKEN_USD,
+  BILLING_BASIS_CHATGPT_CREDITS,
+  normalizeBillingBasis,
+  type BillingBasis,
+} from './billing';
 
 export interface PriceableUsageDetail {
   __modelName?: string;
@@ -16,6 +23,7 @@ export interface PriceableUsageDetail {
   request_service_tier?: unknown;
   response_service_tier?: unknown;
   effective_service_tier?: unknown;
+  billing_basis?: unknown;
 }
 
 export interface UsageDetailCostEstimate extends PricingCoverageInput {
@@ -31,13 +39,48 @@ export function resolveUsageDetailServiceTier(detail: PriceableUsageDetail): Res
   });
 }
 
+export function resolveUsageDetailBillingBasis(detail: PriceableUsageDetail): BillingBasis {
+  return normalizeBillingBasis(detail.billing_basis);
+}
+
 export function estimateUsageDetailCost(
   detail: PriceableUsageDetail,
   profile: PriceProfileV3
 ): UsageDetailCostEstimate {
   const modelName = detail.__modelName?.trim() ?? '';
   const tier = resolveUsageDetailServiceTier(detail);
-  const estimate = estimateUsageCost(modelName, detail.tokens, profile, tier);
+  const billingBasis = resolveUsageDetailBillingBasis(detail);
+  const apiEstimate = estimateUsageCost(modelName, detail.tokens, profile, tier);
+  let estimate: CostEstimate;
+
+  if (billingBasis === BILLING_BASIS_API_TOKEN_USD) {
+    estimate = apiEstimate;
+  } else if (billingBasis === BILLING_BASIS_CHATGPT_CREDITS) {
+    // Browser-local API aliases must never authenticate a model for ChatGPT credits.
+    // Credit policies match only the observed model or aliases owned by the official catalog.
+    const creditPolicy = findChatGptCreditPolicy(modelName);
+    estimate = {
+      ...apiEstimate,
+      amount: null,
+      status: creditPolicy ? 'credit-rated' : 'unmatched',
+      billingBasis,
+      creditMultiplier: creditPolicy
+        ? tier.tier === 'fast'
+          ? creditPolicy.fastMultiplier
+          : creditPolicy.standardMultiplier
+        : null,
+      rates: null,
+    };
+  } else {
+    estimate = {
+      ...apiEstimate,
+      amount: null,
+      status: 'billing-unknown',
+      billingBasis,
+      creditMultiplier: null,
+      rates: null,
+    };
+  }
   return {
     modelName,
     tokenCount: resolveUsageTotalTokens(detail.tokens, modelName),

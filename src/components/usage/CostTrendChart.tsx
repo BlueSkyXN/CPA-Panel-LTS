@@ -8,6 +8,7 @@ import {
   buildHourlyCostSeries,
   buildDailyCostSeries,
   formatUsd,
+  isApiUsdEstimateComplete,
   type PriceProfileV3,
   type PricingCoverage,
 } from '@/utils/usage';
@@ -69,7 +70,7 @@ export function CostTrendChart({
       labels: series.labels,
       datasets: [
         {
-          label: t('usage_stats.total_cost'),
+          label: t('usage_stats.pricing_api_usd_estimate'),
           data: series.data,
           borderColor: COST_COLOR,
           backgroundColor: buildGradient,
@@ -106,18 +107,19 @@ export function CostTrendChart({
     };
   }, [usage, period, isDark, isMobile, priceProfile, hourWindowHours, t]);
 
-  const pricingComplete =
-    pricingCoverage !== null &&
-    pricingCoverage.totalRequests > 0 &&
-    pricingCoverage.pricedRequests === pricingCoverage.totalRequests;
+  const pricingComplete = pricingCoverage !== null && isApiUsdEstimateComplete(pricingCoverage);
   const hasUnpricedUsage =
     pricingCoverage !== null &&
-    pricingCoverage.totalRequests > 0 &&
+    pricingCoverage.apiTokenUsdRequests > 0 &&
     pricingCoverage.pricedRequests === 0;
+  const hasOnlyNonApiUsage =
+    pricingCoverage !== null &&
+    pricingCoverage.totalRequests > 0 &&
+    pricingCoverage.apiTokenUsdRequests === 0;
 
   return (
     <Card
-      title={t('usage_stats.cost_trend')}
+      title={t('usage_stats.pricing_api_usd_trend')}
       extra={
         <div className={styles.costTrendActions}>
           <div className={styles.periodButtons}>
@@ -146,15 +148,21 @@ export function CostTrendChart({
         <div className={styles.hint}>{t('common.loading')}</div>
       ) : !hasData ? (
         <div className={styles.hint}>
-          {t(hasUnpricedUsage ? 'usage_stats.pricing_cost_incomplete' : 'usage_stats.cost_no_data')}
+          {t(
+            hasUnpricedUsage
+              ? 'usage_stats.pricing_cost_incomplete'
+              : hasOnlyNonApiUsage
+                ? 'usage_stats.pricing_no_api_usage'
+                : 'usage_stats.cost_no_data'
+          )}
         </div>
       ) : (
         <>
           {pricingCoverage && !pricingComplete && (
             <div className={styles.costCoverageNote}>
               {t('usage_stats.pricing_partial_coverage', {
-                request: (pricingCoverage.pricedRequestRatio * 100).toFixed(1),
-                token: (pricingCoverage.pricedTokenRatio * 100).toFixed(1),
+                request: (pricingCoverage.apiPricedRequestRatio * 100).toFixed(1),
+                token: (pricingCoverage.apiPricedTokenRatio * 100).toFixed(1),
               })}
             </div>
           )}

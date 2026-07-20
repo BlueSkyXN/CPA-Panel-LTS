@@ -6,15 +6,51 @@ import {
 } from '../cacheTokens';
 import { normalizePersistedModelPrices } from '../modelPrices';
 import type { ResolvedServiceTier } from '../serviceTier';
+import {
+  BILLING_BASIS_API_TOKEN_USD,
+  BILLING_BASIS_CHATGPT_CREDITS,
+  type BillingBasis,
+} from './billing';
+export {
+  BILLING_BASIS_API_TOKEN_USD,
+  BILLING_BASIS_CHATGPT_CREDITS,
+  BILLING_BASIS_UNKNOWN,
+  normalizeBillingBasis,
+} from './billing';
+export type { BillingBasis } from './billing';
+import {
+  OPENAI_PRICE_CATALOG,
+  PRICE_CURRENCY,
+  type FastPricing,
+  type LongContextPricing,
+  type PriceCatalogEntry,
+  type StandardPricing,
+  type TokenRates,
+} from './catalog';
+
+export {
+  CHATGPT_CREDIT_CATALOG,
+  CHATGPT_FAST_SOURCE_URL,
+  LONG_CONTEXT_INPUT_TOKEN_THRESHOLD,
+  OPENAI_CATALOG_AS_OF,
+  OPENAI_CATALOG_VERSION,
+  OPENAI_PRICE_CATALOG,
+  OPENAI_PRICING_SOURCE_URL,
+  PRICE_CURRENCY,
+  findChatGptCreditPolicy,
+} from './catalog';
+export type {
+  ChatGptCreditPolicy,
+  FastPricing,
+  LongContextPricing,
+  PriceCatalogEntry,
+  StandardPricing,
+  TokenRates,
+} from './catalog';
 
 /** Pure, storage-free pricing v3 contract. All rates are USD per one million tokens. */
 export const PRICE_PROFILE_SCHEMA_VERSION = 3 as const;
 export const PRICE_PROFILE_V3 = PRICE_PROFILE_SCHEMA_VERSION;
-export const PRICE_CURRENCY = 'USD' as const;
-export const OPENAI_CATALOG_AS_OF = '2026-07-19';
-export const OPENAI_CATALOG_VERSION = `openai-${OPENAI_CATALOG_AS_OF}`;
-export const OPENAI_PRICING_SOURCE_URL = 'https://developers.openai.com/api/docs/pricing';
-export const LONG_CONTEXT_INPUT_TOKEN_THRESHOLD = 272_000;
 export const TOKENS_PER_MILLION = 1_000_000;
 
 /** Import ceilings prevent corrupt or nonsensical user profiles from becoming trusted. */
@@ -22,46 +58,8 @@ export const MAX_RATE_PER_MILLION = 1_000_000;
 export const MAX_FAST_MULTIPLIER = 1_000;
 export const MAX_LONG_CONTEXT_THRESHOLD = 10_000_000;
 
-export interface TokenRates {
-  input: number;
-  cachedInput: number;
-  /** Omitted means legacy Auto: use the input rate. Explicit 0 is free. */
-  cacheWrite?: number;
-  output: number;
-}
-
-export interface LongContextPricing {
-  thresholdTokens: number;
-  basis: 'inputTokens';
-  appliesTo: 'entireRequest';
-  rates: TokenRates;
-}
-
-export interface StandardPricing {
-  short: TokenRates;
-  long?: LongContextPricing;
-}
-
-/** Catalog Fast/Priority card. Priority long context is explicitly unsupported. */
-export interface FastPricing {
-  short: TokenRates;
-  longSupported: boolean;
-}
-
 /** Editable custom Fast card. It must select one pricing strategy. */
-export type FastOverride =
-  | { short: TokenRates; multiplier?: never; longSupported: boolean }
-  | { short?: never; multiplier: number; longSupported: boolean };
-
-export interface PriceCatalogEntry {
-  canonicalModel: string;
-  aliases: readonly string[];
-  currency: typeof PRICE_CURRENCY;
-  standard: StandardPricing;
-  fast?: FastPricing;
-  sourceUrl: string;
-  asOf: string;
-}
+export type FastOverride = FastPricing;
 
 export interface PriceOverride {
   standard: StandardPricing;
@@ -82,7 +80,12 @@ export interface PriceProfileV3 {
   overrides: Record<string, PriceOverride>;
 }
 
-export type CostEstimateStatus = 'priced' | 'unmatched' | 'unsupported';
+export type CostEstimateStatus =
+  | 'priced'
+  | 'credit-rated'
+  | 'billing-unknown'
+  | 'unmatched'
+  | 'unsupported';
 export type CostEstimateWarning = 'fallbackStandard' | 'requestedEstimate' | 'assumedStandard';
 export type ModelMatch = 'custom' | 'preset' | 'alias' | 'none';
 export type ContextBand = 'short' | 'long';
@@ -90,6 +93,9 @@ export type ContextBand = 'short' | 'long';
 export interface CostEstimate {
   amount: number | null;
   status: CostEstimateStatus;
+  billingBasis: BillingBasis;
+  /** ChatGPT Fast consumes credits at this multiple of Standard; it is not a credit amount. */
+  creditMultiplier: number | null;
   modelMatch: ModelMatch;
   tier: ResolvedServiceTier;
   contextBand: ContextBand;
@@ -127,19 +133,83 @@ export interface PricingCoverageInput {
 
 export interface PricingCoverage {
   totalRequests: number;
+  apiTokenUsdRequests: number;
+  chatGptCreditRequests: number;
   pricedRequests: number;
+  creditRatedRequests: number;
+  creditFastRequests: number;
+  unknownBillingRequests: number;
   unmatchedRequests: number;
   unsupportedRequests: number;
   totalTokens: number;
+  apiTokenUsdTokens: number;
+  chatGptCreditTokens: number;
   pricedTokens: number;
+  creditRatedTokens: number;
+  unknownBillingTokens: number;
   totalModels: number;
   pricedModels: number;
+  apiTokenUsdModels: number;
+  apiPricedModels: number;
+  chatGptCreditModels: number;
+  creditRatedModels: number;
+  unknownBillingModels: number;
   estimatedAmount: number;
   assumedTierRequests: number;
+  /** Legacy all-request ratio. Prefer apiPricedRequestRatio for USD coverage UI. */
   pricedRequestRatio: number;
+  /** Legacy all-token ratio. Prefer apiPricedTokenRatio for USD coverage UI. */
   pricedTokenRatio: number;
   pricedModelRatio: number;
+  apiPricedRequestRatio: number;
+  apiPricedTokenRatio: number;
+  apiPricedModelRatio: number;
+  creditRatedRequestRatio: number;
+  creditRatedTokenRatio: number;
 }
+
+export type ApiFastPolicyDisplay =
+  | { kind: 'none'; multiplier: null }
+  | { kind: 'official-multiplier'; multiplier: number }
+  | { kind: 'custom-multiplier'; multiplier: number }
+  | { kind: 'explicit-rates'; multiplier: null };
+
+export const hasUnknownBillingUsage = (coverage: PricingCoverage): boolean =>
+  coverage.unknownBillingRequests > 0 ||
+  coverage.unknownBillingTokens > 0 ||
+  coverage.unknownBillingModels > 0;
+
+export const isApiUsdEstimateComplete = (coverage: PricingCoverage): boolean =>
+  coverage.apiTokenUsdRequests > 0 &&
+  coverage.pricedRequests === coverage.apiTokenUsdRequests &&
+  coverage.pricedTokens === coverage.apiTokenUsdTokens &&
+  coverage.apiPricedModels === coverage.apiTokenUsdModels &&
+  !hasUnknownBillingUsage(coverage);
+
+export const hasPricingAnomaly = (
+  coverage: PricingCoverage,
+  warnings: readonly CostEstimateWarning[] = []
+): boolean =>
+  hasUnknownBillingUsage(coverage) ||
+  coverage.unmatchedRequests > 0 ||
+  coverage.unsupportedRequests > 0 ||
+  coverage.pricedRequests < coverage.apiTokenUsdRequests ||
+  coverage.pricedTokens < coverage.apiTokenUsdTokens ||
+  coverage.apiPricedModels < coverage.apiTokenUsdModels ||
+  coverage.creditRatedRequests < coverage.chatGptCreditRequests ||
+  coverage.creditRatedTokens < coverage.chatGptCreditTokens ||
+  coverage.creditRatedModels < coverage.chatGptCreditModels ||
+  warnings.includes('fallbackStandard');
+
+export const getApiFastPolicyDisplay = (resolved: ResolvedPrice): ApiFastPolicyDisplay => {
+  if (resolved.fast === null) return { kind: 'none', multiplier: null };
+  const multiplier = resolved.fast.multiplier;
+  if (typeof multiplier !== 'number') return { kind: 'explicit-rates', multiplier: null };
+  return {
+    kind: resolved.usesCustomOverride ? 'custom-multiplier' : 'official-multiplier',
+    multiplier,
+  };
+};
 
 type RecordValue = Record<string, unknown>;
 
@@ -244,92 +314,6 @@ const multiplyRates = (rates: TokenRates, multiplier: number): TokenRates => ({
   ...(rates.cacheWrite === undefined ? {} : { cacheWrite: rates.cacheWrite * multiplier }),
   output: rates.output * multiplier,
 });
-
-const rateCard = (
-  input: number,
-  cachedInput: number,
-  cacheWrite: number | undefined,
-  output: number
-): TokenRates => ({
-  input,
-  cachedInput,
-  ...(cacheWrite === undefined ? {} : { cacheWrite }),
-  output,
-});
-
-const longCard = (rates: TokenRates): LongContextPricing => ({
-  thresholdTokens: LONG_CONTEXT_INPUT_TOKEN_THRESHOLD,
-  basis: 'inputTokens',
-  appliesTo: 'entireRequest',
-  rates,
-});
-
-/** Official OpenAI rate cards confirmed on 2026-07-19. */
-export const OPENAI_PRICE_CATALOG: readonly PriceCatalogEntry[] = [
-  {
-    canonicalModel: 'gpt-5.6-sol',
-    aliases: [],
-    currency: 'USD',
-    standard: { short: rateCard(5, 0.5, 6.25, 30), long: longCard(rateCard(10, 1, 12.5, 45)) },
-    fast: { short: rateCard(10, 1, 12.5, 60), longSupported: false },
-    sourceUrl: OPENAI_PRICING_SOURCE_URL,
-    asOf: OPENAI_CATALOG_AS_OF,
-  },
-  {
-    canonicalModel: 'gpt-5.6-terra',
-    aliases: [],
-    currency: 'USD',
-    standard: {
-      short: rateCard(2.5, 0.25, 3.125, 15),
-      long: longCard(rateCard(5, 0.5, 6.25, 22.5)),
-    },
-    fast: { short: rateCard(5, 0.5, 6.25, 30), longSupported: false },
-    sourceUrl: OPENAI_PRICING_SOURCE_URL,
-    asOf: OPENAI_CATALOG_AS_OF,
-  },
-  {
-    canonicalModel: 'gpt-5.6-luna',
-    aliases: [],
-    currency: 'USD',
-    standard: { short: rateCard(1, 0.1, 1.25, 6), long: longCard(rateCard(2, 0.2, 2.5, 9)) },
-    fast: { short: rateCard(2, 0.2, 2.5, 12), longSupported: false },
-    sourceUrl: OPENAI_PRICING_SOURCE_URL,
-    asOf: OPENAI_CATALOG_AS_OF,
-  },
-  {
-    canonicalModel: 'gpt-5.5',
-    aliases: [],
-    currency: 'USD',
-    standard: {
-      short: rateCard(5, 0.5, undefined, 30),
-      long: longCard(rateCard(10, 1, undefined, 45)),
-    },
-    fast: { short: rateCard(12.5, 1.25, undefined, 75), longSupported: false },
-    sourceUrl: OPENAI_PRICING_SOURCE_URL,
-    asOf: OPENAI_CATALOG_AS_OF,
-  },
-  {
-    canonicalModel: 'gpt-5.4',
-    aliases: [],
-    currency: 'USD',
-    standard: {
-      short: rateCard(2.5, 0.25, undefined, 15),
-      long: longCard(rateCard(5, 0.5, undefined, 22.5)),
-    },
-    fast: { short: rateCard(5, 0.5, undefined, 30), longSupported: false },
-    sourceUrl: OPENAI_PRICING_SOURCE_URL,
-    asOf: OPENAI_CATALOG_AS_OF,
-  },
-  {
-    canonicalModel: 'gpt-5.4-mini',
-    aliases: [],
-    currency: 'USD',
-    standard: { short: rateCard(0.75, 0.075, undefined, 4.5) },
-    fast: { short: rateCard(1.5, 0.15, undefined, 9), longSupported: false },
-    sourceUrl: OPENAI_PRICING_SOURCE_URL,
-    asOf: OPENAI_CATALOG_AS_OF,
-  },
-];
 
 const CATALOG_CANONICAL = new Map(
   OPENAI_PRICE_CATALOG.map((entry) => [normalizeModelKey(entry.canonicalModel), entry])
@@ -610,6 +594,8 @@ export function estimateUsageCost(
     return {
       amount: null,
       status: 'unmatched',
+      billingBasis: BILLING_BASIS_API_TOKEN_USD,
+      creditMultiplier: null,
       modelMatch: 'none',
       tier,
       contextBand: 'short',
@@ -629,6 +615,8 @@ export function estimateUsageCost(
       return {
         amount: null,
         status: 'unsupported',
+        billingBasis: BILLING_BASIS_API_TOKEN_USD,
+        creditMultiplier: null,
         modelMatch: resolved.modelMatch,
         tier,
         contextBand,
@@ -659,6 +647,8 @@ export function estimateUsageCost(
   return {
     amount: Number.isFinite(amount) ? Math.max(amount, 0) : null,
     status: Number.isFinite(amount) ? 'priced' : 'unmatched',
+    billingBasis: BILLING_BASIS_API_TOKEN_USD,
+    creditMultiplier: null,
     modelMatch: Number.isFinite(amount) ? resolved.modelMatch : 'none',
     tier,
     contextBand,
@@ -678,52 +668,154 @@ const ratio = (part: number, total: number): number => (total === 0 ? 0 : part /
 export function aggregateCostEstimateCoverage(
   inputs: Iterable<PricingCoverageInput>
 ): PricingCoverage {
-  const modelCoverage = new Map<string, { total: number; priced: number }>();
+  const modelCoverage = new Map<
+    string,
+    {
+      total: number;
+      priced: number;
+      apiTotal: number;
+      apiPriced: number;
+      creditTotal: number;
+      creditRated: number;
+      unknownBilling: number;
+    }
+  >();
   const result: Omit<
     PricingCoverage,
-    'totalModels' | 'pricedModels' | 'pricedRequestRatio' | 'pricedTokenRatio' | 'pricedModelRatio'
+    | 'totalModels'
+    | 'pricedModels'
+    | 'apiTokenUsdModels'
+    | 'apiPricedModels'
+    | 'chatGptCreditModels'
+    | 'creditRatedModels'
+    | 'unknownBillingModels'
+    | 'pricedRequestRatio'
+    | 'pricedTokenRatio'
+    | 'pricedModelRatio'
+    | 'apiPricedRequestRatio'
+    | 'apiPricedTokenRatio'
+    | 'apiPricedModelRatio'
+    | 'creditRatedRequestRatio'
+    | 'creditRatedTokenRatio'
   > = {
     totalRequests: 0,
+    apiTokenUsdRequests: 0,
+    chatGptCreditRequests: 0,
     pricedRequests: 0,
+    creditRatedRequests: 0,
+    creditFastRequests: 0,
+    unknownBillingRequests: 0,
     unmatchedRequests: 0,
     unsupportedRequests: 0,
     totalTokens: 0,
+    apiTokenUsdTokens: 0,
+    chatGptCreditTokens: 0,
     pricedTokens: 0,
+    creditRatedTokens: 0,
+    unknownBillingTokens: 0,
     estimatedAmount: 0,
     assumedTierRequests: 0,
   };
   for (const { modelName, tokenCount, estimate } of inputs) {
     result.totalRequests += 1;
     const modelKey = normalizeModelKey(modelName);
+    let currentModel:
+      | {
+          total: number;
+          priced: number;
+          apiTotal: number;
+          apiPriced: number;
+          creditTotal: number;
+          creditRated: number;
+          unknownBilling: number;
+        }
+      | undefined;
     if (modelKey) {
-      const current = modelCoverage.get(modelKey) ?? { total: 0, priced: 0 };
-      current.total += 1;
-      modelCoverage.set(modelKey, current);
+      currentModel = modelCoverage.get(modelKey) ?? {
+        total: 0,
+        priced: 0,
+        apiTotal: 0,
+        apiPriced: 0,
+        creditTotal: 0,
+        creditRated: 0,
+        unknownBilling: 0,
+      };
+      currentModel.total += 1;
+      modelCoverage.set(modelKey, currentModel);
     }
     const tokens = toTokenCount(tokenCount);
     result.totalTokens += tokens;
-    if (estimate.tier.evidence === 'assumed') result.assumedTierRequests += 1;
+
+    if (estimate.billingBasis === BILLING_BASIS_API_TOKEN_USD) {
+      result.apiTokenUsdRequests += 1;
+      result.apiTokenUsdTokens += tokens;
+      if (currentModel) currentModel.apiTotal += 1;
+    } else if (estimate.billingBasis === BILLING_BASIS_CHATGPT_CREDITS) {
+      result.chatGptCreditRequests += 1;
+      result.chatGptCreditTokens += tokens;
+      if (currentModel) currentModel.creditTotal += 1;
+    } else {
+      result.unknownBillingRequests += 1;
+      result.unknownBillingTokens += tokens;
+      if (currentModel) currentModel.unknownBilling += 1;
+    }
+
+    if (
+      estimate.tier.evidence === 'assumed' &&
+      (estimate.status === 'priced' || estimate.status === 'credit-rated')
+    ) {
+      result.assumedTierRequests += 1;
+    }
     if (estimate.status === 'priced' && estimate.amount !== null) {
       result.pricedRequests += 1;
       result.pricedTokens += tokens;
       result.estimatedAmount += estimate.amount;
-      if (modelKey) {
-        const current = modelCoverage.get(modelKey);
-        if (current) current.priced += 1;
+      if (currentModel) {
+        currentModel.priced += 1;
+        currentModel.apiPriced += 1;
       }
+    } else if (estimate.status === 'credit-rated') {
+      result.creditRatedRequests += 1;
+      result.creditRatedTokens += tokens;
+      if (estimate.tier.tier === 'fast') result.creditFastRequests += 1;
+      if (currentModel) currentModel.creditRated += 1;
+    } else if (estimate.status === 'billing-unknown') {
+      // Basis counters above already keep this request in the explicit unknown domain.
     } else if (estimate.status === 'unsupported') result.unsupportedRequests += 1;
     else result.unmatchedRequests += 1;
   }
   const totalModels = modelCoverage.size;
-  const pricedModels = Array.from(modelCoverage.values()).filter(
+  const modelStates = Array.from(modelCoverage.values());
+  const pricedModels = modelStates.filter(
     ({ total, priced }) => total > 0 && priced === total
+  ).length;
+  const apiTokenUsdModels = modelStates.filter(({ apiTotal }) => apiTotal > 0).length;
+  const apiPricedModels = modelStates.filter(
+    ({ apiTotal, apiPriced }) => apiTotal > 0 && apiPriced === apiTotal
+  ).length;
+  const chatGptCreditModels = modelStates.filter(({ creditTotal }) => creditTotal > 0).length;
+  const creditRatedModels = modelStates.filter(
+    ({ creditTotal, creditRated }) => creditTotal > 0 && creditRated === creditTotal
+  ).length;
+  const unknownBillingModels = modelStates.filter(
+    ({ unknownBilling }) => unknownBilling > 0
   ).length;
   return {
     ...result,
     totalModels,
     pricedModels,
+    apiTokenUsdModels,
+    apiPricedModels,
+    chatGptCreditModels,
+    creditRatedModels,
+    unknownBillingModels,
     pricedRequestRatio: ratio(result.pricedRequests, result.totalRequests),
     pricedTokenRatio: ratio(result.pricedTokens, result.totalTokens),
     pricedModelRatio: ratio(pricedModels, totalModels),
+    apiPricedRequestRatio: ratio(result.pricedRequests, result.apiTokenUsdRequests),
+    apiPricedTokenRatio: ratio(result.pricedTokens, result.apiTokenUsdTokens),
+    apiPricedModelRatio: ratio(apiPricedModels, apiTokenUsdModels),
+    creditRatedRequestRatio: ratio(result.creditRatedRequests, result.chatGptCreditRequests),
+    creditRatedTokenRatio: ratio(result.creditRatedTokens, result.chatGptCreditTokens),
   };
 }

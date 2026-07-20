@@ -17,10 +17,11 @@ import {
   resolveUsageTotalTokens,
   type UsageTokenFields,
 } from './usage/cacheTokens';
-import { normalizePersistedModelPrices, type ModelPrice } from './usage/modelPrices';
 import {
+  BILLING_BASIS_API_TOKEN_USD,
   aggregateCostEstimateCoverage,
   createDefaultPriceProfileV3,
+  normalizeBillingBasis,
   resolvePriceProfile,
   type CostEstimate,
   type CostEstimateWarning,
@@ -68,13 +69,14 @@ export interface RateStats {
   tokenCount: number;
 }
 
-export type { ModelPrice } from './usage/modelPrices';
 export type {
+  BillingBasis,
   ContextBand,
   CostEstimate,
   CostEstimateStatus,
   CostEstimateWarning,
   FastOverride,
+  ApiFastPolicyDisplay,
   LongContextPricing,
   ModelMatch,
   PriceCatalogEntry,
@@ -86,6 +88,11 @@ export type {
   TokenRates,
 } from './usage/pricing';
 export {
+  BILLING_BASIS_API_TOKEN_USD,
+  BILLING_BASIS_CHATGPT_CREDITS,
+  BILLING_BASIS_UNKNOWN,
+  CHATGPT_CREDIT_CATALOG,
+  CHATGPT_FAST_SOURCE_URL,
   OPENAI_CATALOG_AS_OF,
   OPENAI_CATALOG_VERSION,
   OPENAI_PRICE_CATALOG,
@@ -96,9 +103,15 @@ export {
   estimateUsageCost,
   exportPriceProfileV3,
   findCatalogEntry,
+  findChatGptCreditPolicy,
+  getApiFastPolicyDisplay,
+  hasPricingAnomaly,
+  hasUnknownBillingUsage,
   importPriceProfileV3,
+  isApiUsdEstimateComplete,
   materializePriceProfiles,
   migrateModelPricesV2ToV3,
+  normalizeBillingBasis,
   normalizePriceProfileV3,
   preflightPriceProfileImportV3,
   resolvePriceProfile,
@@ -114,6 +127,7 @@ export {
 export type { PriceProfileLoadResult, PriceProfileLoadSource } from './usage/pricing/storage';
 export {
   estimateUsageDetailCost,
+  resolveUsageDetailBillingBasis,
   resolveUsageDetailServiceTier,
   summarizeUsageDetailCosts,
 } from './usage/pricing/usagePricing';
@@ -145,6 +159,7 @@ export interface UsageDetail {
   request_service_tier?: string | null;
   response_service_tier?: string | null;
   effective_service_tier?: string | null;
+  billing_basis?: string | null;
   reasoning_effort?: string | null;
   latency_ms?: number;
   tokens: UsageTokenStats;
@@ -198,9 +213,13 @@ export interface PricingModelSummary {
   warnings: CostEstimateWarning[];
 }
 
+export interface UsagePricingAnalysis {
+  coverage: PricingCoverage;
+  modelSummaries: PricingModelSummary[];
+}
+
 export type UsageTimeRange = '7h' | '24h' | '7d' | 'all';
 
-const MODEL_PRICE_STORAGE_KEY = 'cli-proxy-model-prices-v2';
 const USAGE_ENDPOINT_METHOD_REGEX = /^(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\s+(\S+)/i;
 const USAGE_TIME_RANGE_MS: Record<Exclude<UsageTimeRange, 'all'>, number> = {
   '7h': 7 * 60 * 60 * 1000,
@@ -241,24 +260,38 @@ const reconcilePricingCoverage = (
   const totalRequests = Math.max(coverage.totalRequests, toAggregateCount(aggregateRequests));
   const totalTokens = Math.max(coverage.totalTokens, toAggregateCount(aggregateTokens));
   const missingRequests = Math.max(totalRequests - coverage.totalRequests, 0);
+  const missingTokens = Math.max(totalTokens - coverage.totalTokens, 0);
   const hasAggregateGap =
     totalRequests > coverage.totalRequests || totalTokens > coverage.totalTokens;
   const reconciledPricedModels =
     hasAggregateGap && totalModels > 0 && pricedModels >= totalModels
       ? totalModels - 1
       : pricedModels;
+  const unknownBillingModels =
+    hasAggregateGap && totalModels > 0
+      ? Math.max(coverage.unknownBillingModels, 1)
+      : coverage.unknownBillingModels;
 
   return {
     ...coverage,
     totalRequests,
-    unmatchedRequests: coverage.unmatchedRequests + missingRequests,
+    unknownBillingRequests: coverage.unknownBillingRequests + missingRequests,
     totalTokens,
+    unknownBillingTokens: coverage.unknownBillingTokens + missingTokens,
     totalModels,
     pricedModels: reconciledPricedModels,
-    assumedTierRequests: coverage.assumedTierRequests + missingRequests,
+    unknownBillingModels,
     pricedRequestRatio: pricingRatio(coverage.pricedRequests, totalRequests),
     pricedTokenRatio: pricingRatio(coverage.pricedTokens, totalTokens),
     pricedModelRatio: pricingRatio(reconciledPricedModels, totalModels),
+    apiPricedRequestRatio: pricingRatio(coverage.pricedRequests, coverage.apiTokenUsdRequests),
+    apiPricedTokenRatio: pricingRatio(coverage.pricedTokens, coverage.apiTokenUsdTokens),
+    apiPricedModelRatio: pricingRatio(coverage.apiPricedModels, coverage.apiTokenUsdModels),
+    creditRatedRequestRatio: pricingRatio(
+      coverage.creditRatedRequests,
+      coverage.chatGptCreditRequests
+    ),
+    creditRatedTokenRatio: pricingRatio(coverage.creditRatedTokens, coverage.chatGptCreditTokens),
   };
 };
 
@@ -290,19 +323,47 @@ const combinePricingCoverages = (coverages: Iterable<PricingCoverage>): PricingC
   const combined = createEmptyPricingCoverage();
   for (const coverage of coverages) {
     combined.totalRequests += coverage.totalRequests;
+    combined.apiTokenUsdRequests += coverage.apiTokenUsdRequests;
+    combined.chatGptCreditRequests += coverage.chatGptCreditRequests;
     combined.pricedRequests += coverage.pricedRequests;
+    combined.creditRatedRequests += coverage.creditRatedRequests;
+    combined.creditFastRequests += coverage.creditFastRequests;
+    combined.unknownBillingRequests += coverage.unknownBillingRequests;
     combined.unmatchedRequests += coverage.unmatchedRequests;
     combined.unsupportedRequests += coverage.unsupportedRequests;
     combined.totalTokens += coverage.totalTokens;
+    combined.apiTokenUsdTokens += coverage.apiTokenUsdTokens;
+    combined.chatGptCreditTokens += coverage.chatGptCreditTokens;
     combined.pricedTokens += coverage.pricedTokens;
+    combined.creditRatedTokens += coverage.creditRatedTokens;
+    combined.unknownBillingTokens += coverage.unknownBillingTokens;
     combined.totalModels += coverage.totalModels;
     combined.pricedModels += coverage.pricedModels;
+    combined.apiTokenUsdModels += coverage.apiTokenUsdModels;
+    combined.apiPricedModels += coverage.apiPricedModels;
+    combined.chatGptCreditModels += coverage.chatGptCreditModels;
+    combined.creditRatedModels += coverage.creditRatedModels;
+    combined.unknownBillingModels += coverage.unknownBillingModels;
     combined.estimatedAmount += coverage.estimatedAmount;
     combined.assumedTierRequests += coverage.assumedTierRequests;
   }
   combined.pricedRequestRatio = pricingRatio(combined.pricedRequests, combined.totalRequests);
   combined.pricedTokenRatio = pricingRatio(combined.pricedTokens, combined.totalTokens);
   combined.pricedModelRatio = pricingRatio(combined.pricedModels, combined.totalModels);
+  combined.apiPricedRequestRatio = pricingRatio(
+    combined.pricedRequests,
+    combined.apiTokenUsdRequests
+  );
+  combined.apiPricedTokenRatio = pricingRatio(combined.pricedTokens, combined.apiTokenUsdTokens);
+  combined.apiPricedModelRatio = pricingRatio(combined.apiPricedModels, combined.apiTokenUsdModels);
+  combined.creditRatedRequestRatio = pricingRatio(
+    combined.creditRatedRequests,
+    combined.chatGptCreditRequests
+  );
+  combined.creditRatedTokenRatio = pricingRatio(
+    combined.creditRatedTokens,
+    combined.chatGptCreditTokens
+  );
   return combined;
 };
 
@@ -510,6 +571,9 @@ const extractEffectiveServiceTier = (detail: Record<string, unknown>): string | 
     'effectiveServiceTier',
     'EffectiveServiceTier'
   );
+
+const extractBillingBasis = (detail: Record<string, unknown>) =>
+  normalizeBillingBasis(detail.billing_basis ?? detail.billingBasis ?? detail.BillingBasis);
 
 const extractReasoningEffort = (detail: Record<string, unknown>): string | null =>
   normalizeReasoningEffort(detail.reasoning_effort) ??
@@ -814,6 +878,7 @@ export function collectUsageDetails(usageData: unknown): UsageDetail[] {
           request_service_tier: extractRequestServiceTier(detailRaw),
           response_service_tier: extractResponseServiceTier(detailRaw),
           effective_service_tier: extractEffectiveServiceTier(detailRaw),
+          billing_basis: extractBillingBasis(detailRaw),
           reasoning_effort: extractReasoningEffort(detailRaw),
           latency_ms: latencyMs ?? undefined,
           tokens: normalizeUsageDetailTokens(tokensRaw),
@@ -895,6 +960,7 @@ export function collectUsageDetailsWithEndpoint(usageData: unknown): UsageDetail
           request_service_tier: extractRequestServiceTier(detailRaw),
           response_service_tier: extractResponseServiceTier(detailRaw),
           effective_service_tier: extractEffectiveServiceTier(detailRaw),
+          billing_basis: extractBillingBasis(detailRaw),
           reasoning_effort: extractReasoningEffort(detailRaw),
           latency_ms: latencyMs ?? undefined,
           tokens: normalizeUsageDetailTokens(tokensRaw),
@@ -1041,15 +1107,27 @@ export function calculatePricingCoverage(
   usageData: unknown,
   priceProfile: PriceProfileV3 = createDefaultPriceProfileV3()
 ): PricingCoverage {
+  return analyzeUsagePricing(usageData, priceProfile).coverage;
+}
+
+/** One-pass pricing analysis for UI surfaces that need both coverage and model rows. */
+export function analyzeUsagePricing(
+  usageData: unknown,
+  priceProfile: PriceProfileV3 = createDefaultPriceProfileV3()
+): UsagePricingAnalysis {
+  const modelSummaries = getPricingModelSummaries(usageData, priceProfile);
   const modelCoverage = combinePricingCoverages(
-    getPricingModelSummaries(usageData, priceProfile).map((summary) => summary.pricingCoverage)
+    modelSummaries.map((summary) => summary.pricingCoverage)
   );
   const usageRecord = isRecord(usageData) ? usageData : {};
-  return reconcilePricingCoverage(
-    modelCoverage,
-    usageRecord.total_requests,
-    usageRecord.total_tokens
-  );
+  return {
+    coverage: reconcilePricingCoverage(
+      modelCoverage,
+      usageRecord.total_requests,
+      usageRecord.total_tokens
+    ),
+    modelSummaries,
+  };
 }
 
 export function calculateTotalCost(
@@ -1057,41 +1135,6 @@ export function calculateTotalCost(
   priceProfile: PriceProfileV3 = createDefaultPriceProfileV3()
 ): number {
   return calculatePricingCoverage(usageData, priceProfile).estimatedAmount;
-}
-
-/**
- * 从 localStorage 加载模型价格
- */
-export function loadModelPrices(): Record<string, ModelPrice> {
-  try {
-    if (typeof localStorage === 'undefined') {
-      return {};
-    }
-    const raw = localStorage.getItem(MODEL_PRICE_STORAGE_KEY);
-    if (!raw) {
-      return {};
-    }
-    return normalizePersistedModelPrices(JSON.parse(raw));
-  } catch {
-    return {};
-  }
-}
-
-/**
- * 保存模型价格到 localStorage
- */
-export function saveModelPrices(prices: Record<string, ModelPrice>): void {
-  try {
-    if (typeof localStorage === 'undefined') {
-      return;
-    }
-    localStorage.setItem(
-      MODEL_PRICE_STORAGE_KEY,
-      JSON.stringify(normalizePersistedModelPrices(prices))
-    );
-  } catch {
-    console.warn('保存模型价格失败');
-  }
 }
 
 /**
@@ -1317,8 +1360,18 @@ export function getPricingModelSummaries(
       warnings: new Set<CostEstimateWarning>(),
     };
     group.pricingInputs.push(pricingInput);
-    if (pricingInput.estimate.tier.tier === 'fast') group.fastRequestCount += 1;
-    if (pricingInput.estimate.contextBand === 'long') group.longContextRequestCount += 1;
+    if (
+      pricingInput.estimate.billingBasis === BILLING_BASIS_API_TOKEN_USD &&
+      pricingInput.estimate.tier.tier === 'fast'
+    ) {
+      group.fastRequestCount += 1;
+    }
+    if (
+      pricingInput.estimate.billingBasis === BILLING_BASIS_API_TOKEN_USD &&
+      pricingInput.estimate.contextBand === 'long'
+    ) {
+      group.longContextRequestCount += 1;
+    }
     pricingInput.estimate.warnings.forEach((warning) => group.warnings.add(warning));
     groups.set(modelName, group);
   });

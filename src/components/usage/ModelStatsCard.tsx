@@ -139,7 +139,7 @@ export function ModelStatsCard({ modelStats, loading, showPricing }: ModelStatsC
                           className={styles.sortHeaderButton}
                           onClick={() => handleSort('cost')}
                         >
-                          {t('usage_stats.total_cost')}
+                          {t('usage_stats.pricing_api_usd_estimate')}
                           {arrow('cost')}
                         </button>
                       </th>
@@ -185,7 +185,8 @@ export function ModelStatsCard({ modelStats, loading, showPricing }: ModelStatsC
                       {showPricing && (
                         <td
                           title={
-                            stat.pricingCoverage.pricedRequests < stat.pricingCoverage.totalRequests
+                            stat.pricingCoverage.pricedRequests <
+                            stat.pricingCoverage.apiTokenUsdRequests
                               ? t('usage_stats.pricing_cost_incomplete')
                               : undefined
                           }

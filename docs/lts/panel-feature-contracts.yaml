@@ -45,6 +45,8 @@ features:
       - src/utils/usage/serviceTier.test.mjs
       - src/utils/usage/pricing/index.ts
       - src/utils/usage/pricing/index.test.mjs
+      - src/utils/usage/pricing/billing.ts
+      - src/utils/usage/pricing/catalog.ts
       - src/utils/usage/pricing/storage.ts
       - src/utils/usage/pricing/storage.test.mjs
       - src/utils/usage/pricing/usagePricing.ts
@@ -72,19 +74,26 @@ features:
       - request_service_tier
       - response_service_tier
       - effective_service_tier
+      - billing_basis
+      - api-token-usd
+      - chatgpt-credits
       - resolveServiceTier
       - ServiceTierEvidence
       - request_events_filter_tier
       - /usage/pricing
       - OPENAI_PRICE_CATALOG
+      - CHATGPT_CREDIT_CATALOG
+      - apiPricedRequestRatio
       - PRICE_PROFILE_STORAGE_KEY
       - cli-proxy-model-prices-v3
       - estimateUsageDetailCost
       - aggregateCostEstimateCoverage
       - calculatePricingCoverage
+      - analyzeUsagePricing
       - PricingEntryCard
       - pricing_browser_notice
       - pricing_cost_incomplete
+      - pricing_credit_notice
       - reasoning_effort
       - request_events_filter_effort
     validation:
