@@ -172,6 +172,21 @@
   line-height: 1.4;
 }
 
+.presetRecoveryNotice {
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+
+  > span {
+    min-width: 0;
+    flex: 1;
+  }
+
+  > button {
+    flex: 0 0 auto;
+  }
+}
+
 .summaryGrid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

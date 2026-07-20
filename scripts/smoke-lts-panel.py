@@ -2352,6 +2352,15 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
         catalog.wait_for()
         page.get_by_text("No usage models yet", exact=True).wait_for()
 
+        summary = page.locator('[aria-label="Pricing coverage summary"]')
+        summary.wait_for()
+        summary_text = summary.inner_text()
+        if "No API requests" not in summary_text or "0.0%" in summary_text:
+            raise AssertionError(
+                "Empty API coverage was presented as zero percent instead of unavailable: "
+                f"{summary_text!r}"
+            )
+
         preset_models = catalog.locator('[data-testid="preset-pricing-model"]')
         expected_model_count = int(catalog.get_attribute("data-model-count") or "0")
         if expected_model_count <= 0 or preset_models.count() != expected_model_count:
@@ -2482,6 +2491,41 @@ def run_usage_pricing_smoke(page: Any) -> None:
     if migration_state["v2"] is not None or not migration_state["v3"]:
         raise AssertionError(
             f"V2 pricing was not durably migrated and removed: {migration_state!r}"
+        )
+    migrated_profile = json.loads(migration_state["v3"])
+    if sorted(migrated_profile.get("overrides", {})) != ["gpt-5.4", "gpt-5.6-sol"]:
+        raise AssertionError(
+            "V2 migration silently changed or discarded legacy overrides: "
+            f"{migrated_profile!r}"
+        )
+    page.get_by_text(
+        re.compile(r"Legacy-shaped custom entries matching preset short rates: 1")
+    ).wait_for()
+    page.get_by_role("button", name="Use complete presets", exact=True).click()
+    migration_recovery_dialog = page.get_by_role("dialog", name="Use complete presets")
+    migration_recovery_dialog.wait_for()
+    migration_recovery_dialog.get_by_role("button", name="Cancel", exact=True).click()
+    migration_recovery_dialog.wait_for(state="detached")
+    cancelled_profile = page.evaluate(
+        "() => JSON.parse(localStorage.getItem('cli-proxy-model-prices-v3'))"
+    )
+    if sorted(cancelled_profile.get("overrides", {})) != ["gpt-5.4", "gpt-5.6-sol"]:
+        raise AssertionError("Cancelling preset recovery changed the persisted profile")
+    page.get_by_role("button", name="Use complete presets", exact=True).click()
+    migration_recovery_dialog = page.get_by_role("dialog", name="Use complete presets")
+    migration_recovery_dialog.get_by_role(
+        "button", name="Use complete presets", exact=True
+    ).click()
+    page.get_by_text(
+        "Complete presets applied to 1 matching entries", exact=True
+    ).last.wait_for()
+    migrated_profile = page.evaluate(
+        "() => JSON.parse(localStorage.getItem('cli-proxy-model-prices-v3'))"
+    )
+    if sorted(migrated_profile.get("overrides", {})) != ["gpt-5.6-sol"]:
+        raise AssertionError(
+            "Confirmed preset recovery did not preserve the real custom override: "
+            f"{migrated_profile!r}"
         )
 
     summary = page.locator('[aria-label="Pricing coverage summary"]')
@@ -2666,6 +2710,100 @@ def run_usage_pricing_smoke(page: Any) -> None:
         raise AssertionError("Resetting pricing restored the obsolete v2 storage key")
     if storage_after_reset["v3"]["overrides"] or storage_after_reset["v3"]["aliases"]:
         raise AssertionError("Resetting pricing did not clear v3 overrides and aliases")
+
+    page.evaluate(
+        """() => localStorage.setItem(
+          'cli-proxy-model-prices-v3',
+          JSON.stringify({
+            schemaVersion: 3,
+            currency: 'USD',
+            assumptions: { historicalPricing: 'current', unknownServiceTier: 'standard' },
+            aliases: {},
+            overrides: {
+              'gpt-5.6-sol': {
+                standard: {
+                  short: {
+                    input: 5,
+                    cachedInput: 0.5,
+                    cacheWrite: 6.25,
+                    output: 30
+                  }
+                }
+              },
+              'grok-4.5': {
+                standard: {
+                  short: { input: 2, cachedInput: 0, output: 6 }
+                }
+              }
+            }
+          })
+        )"""
+    )
+    page.reload(wait_until="domcontentloaded")
+    page.get_by_role("heading", name="Pricing workspace", exact=True).wait_for()
+    recovery_notice = page.get_by_text(
+        re.compile(r"Legacy-shaped custom entries matching preset short rates: 1")
+    )
+    recovery_notice.wait_for()
+    page.set_viewport_size({"width": 390, "height": 844})
+
+    def assert_recovery_notice_layout(locale_name: str) -> None:
+        recovery_metrics = page.locator('[data-testid="pricing-preset-recovery"]').evaluate(
+            """notice => {
+              const noticeRect = notice.getBoundingClientRect();
+              const buttonRect = notice.querySelector('button').getBoundingClientRect();
+              return {
+                documentClientWidth: document.documentElement.clientWidth,
+                documentScrollWidth: document.documentElement.scrollWidth,
+                noticeLeft: noticeRect.left,
+                noticeRight: noticeRect.right,
+                buttonLeft: buttonRect.left,
+                buttonRight: buttonRect.right,
+              };
+            }"""
+        )
+        if (
+            recovery_metrics["documentScrollWidth"]
+            > recovery_metrics["documentClientWidth"] + 1
+            or recovery_metrics["noticeLeft"] < -1
+            or recovery_metrics["noticeRight"]
+            > recovery_metrics["documentClientWidth"] + 1
+            or recovery_metrics["buttonLeft"] < -1
+            or recovery_metrics["buttonRight"]
+            > recovery_metrics["documentClientWidth"] + 1
+        ):
+            raise AssertionError(
+                f"{locale_name} preset recovery notice overflowed at 390px: "
+                f"{recovery_metrics!r}"
+            )
+
+    assert_recovery_notice_layout("English")
+    language_button = page.locator(".language-menu > button")
+    language_button.click()
+    page.get_by_role("menuitemradio", name="Русский", exact=True).click()
+    page.get_by_role(
+        "button", name="Использовать предустановки", exact=True
+    ).wait_for()
+    assert_recovery_notice_layout("Russian")
+    language_button.click()
+    page.get_by_role("menuitemradio", name="English", exact=True).click()
+    page.get_by_role("button", name="Use complete presets", exact=True).click()
+    recovery_dialog = page.get_by_role("dialog", name="Use complete presets")
+    recovery_dialog.wait_for()
+    recovery_dialog.get_by_role("button", name="Use complete presets", exact=True).click()
+    page.get_by_text(
+        "Complete presets applied to 1 matching entries", exact=True
+    ).last.wait_for()
+    recovered_profile = page.evaluate(
+        "() => JSON.parse(localStorage.getItem('cli-proxy-model-prices-v3'))"
+    )
+    if sorted(recovered_profile.get("overrides", {})) != ["grok-4.5"]:
+        raise AssertionError(
+            "Preset-equivalent v3 recovery removed real custom data or kept the matching override: "
+            f"{recovered_profile!r}"
+        )
+    if "Official API ×2.00" not in gpt56_row.inner_text():
+        raise AssertionError("Recovered GPT-5.6 pricing did not inherit the official Fast policy")
 
     page.set_viewport_size({"width": 1024, "height": 768})
     page.wait_for_function("() => window.matchMedia('(max-width: 1279px)').matches")
@@ -4295,6 +4433,12 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
                     prompt: 4,
                     completion: 20,
                     cache: 0.4
+                  },
+                  'gpt-5.4': {
+                    prompt: 2.5,
+                    completion: 15,
+                    cache: 0.25,
+                    cacheWrite: 2.5
                   }
                 })
               );

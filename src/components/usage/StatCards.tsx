@@ -15,6 +15,7 @@ import {
   formatDurationMs,
   formatPerMinuteValue,
   formatUsd,
+  getApiCoverageDisplay,
   hasUnknownBillingUsage,
   isApiUsdEstimateComplete,
   collectUsageDetails,
@@ -69,6 +70,7 @@ export function StatCards({
   });
 
   const hasPricedRequests = pricingCoverage.pricedRequests > 0;
+  const apiCoverageDisplay = getApiCoverageDisplay(pricingCoverage);
   const hasUnknownBilling = hasUnknownBillingUsage(pricingCoverage);
   const pricingComplete = isApiUsdEstimateComplete(pricingCoverage);
 
@@ -236,7 +238,9 @@ export function StatCards({
             {t('usage_stats.pricing_api_request_coverage')}:{' '}
             {loading
               ? '-'
-              : `${(pricingCoverage.apiPricedRequestRatio * 100).toFixed(1)}% (${pricingCoverage.pricedRequests}/${pricingCoverage.apiTokenUsdRequests})`}
+              : apiCoverageDisplay.requestPercent === null
+                ? t('usage_stats.pricing_no_api_requests')
+                : `${apiCoverageDisplay.requestPercent.toFixed(1)}% (${pricingCoverage.pricedRequests}/${pricingCoverage.apiTokenUsdRequests})`}
           </span>
           {!pricingComplete && (pricingCoverage.apiTokenUsdRequests > 0 || hasUnknownBilling) && (
             <span className={`${styles.statMetaItem} ${styles.statSubtle}`}>

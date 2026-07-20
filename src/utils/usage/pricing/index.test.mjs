@@ -81,6 +81,133 @@ test('v2 migration preserves Auto cache-write, explicit zero, and old string val
   });
 });
 
+test('v2 migration preserves matching rates until the user explicitly restores complete presets', () => {
+  const { profile } = pricing.migrateModelPricesV2ToV3({
+    'gpt-5.6-sol': {
+      prompt: 5,
+      completion: 30,
+      cache: 0.5,
+      cacheWrite: 6.25,
+    },
+    'gpt-5.4': {
+      prompt: 2.5,
+      completion: 15,
+      cache: 0.25,
+      cacheWrite: 2.5,
+    },
+    'gpt-5.6-terra': {
+      prompt: 2.75,
+      completion: 15,
+      cache: 0.25,
+      cacheWrite: 3.125,
+    },
+  });
+
+  assert.ok(profile.overrides['gpt-5.6-sol']);
+  assert.ok(profile.overrides['gpt-5.4']);
+  assert.equal(profile.overrides['gpt-5.6-terra'].standard.short.input, 2.75);
+  assert.equal(pricing.resolvePriceProfile('gpt-5.6-sol', profile).modelMatch, 'custom');
+
+  const recovery = pricing.restorePresetEquivalentOverrides(profile);
+  assert.deepEqual(recovery.restoredModels, ['gpt-5.6-sol', 'gpt-5.4']);
+  assert.equal(pricing.resolvePriceProfile('gpt-5.6-sol', recovery.profile).modelMatch, 'preset');
+  assert.equal(pricing.resolvePriceProfile('gpt-5.6-sol', recovery.profile).fast.multiplier, 2);
+  assert.equal(
+    pricing.resolvePriceProfile('gpt-5.6-sol', recovery.profile).standard.long.rates.output,
+    45
+  );
+});
+
+test('preset-equivalent v3 recovery is opt-in and preserves real custom overrides', () => {
+  const profile = {
+    ...pricing.createDefaultPriceProfileV3(),
+    aliases: { 'tenant/sol': 'gpt-5.6-sol' },
+    overrides: {
+      'gpt-5.6-sol': {
+        standard: {
+          short: { input: 5, cachedInput: 0.5, cacheWrite: 6.25, output: 30 },
+        },
+      },
+      'gpt-5.6-terra': {
+        standard: {
+          short: { input: 2.75, cachedInput: 0.25, cacheWrite: 3.125, output: 15 },
+        },
+      },
+      'gpt-5.4': {
+        standard: {
+          short: { input: 2.5, cachedInput: 0.25, output: 15 },
+          long: {
+            thresholdTokens: 300_000,
+            basis: 'inputTokens',
+            appliesTo: 'entireRequest',
+            rates: { input: 6, cachedInput: 0.6, output: 24 },
+          },
+        },
+      },
+      'gpt-5.6-luna': {
+        standard: {
+          short: { input: 1, cachedInput: 0.1, cacheWrite: 1.25, output: 6 },
+        },
+        fast: { multiplier: 3, longSupported: true },
+      },
+      'grok-4.5': {
+        standard: { short: { input: 2, cachedInput: 0, output: 6 } },
+      },
+    },
+  };
+
+  const recovery = pricing.restorePresetEquivalentOverrides(profile);
+  assert.deepEqual(recovery.restoredModels, ['gpt-5.6-sol']);
+  assert.equal(recovery.profile.overrides['gpt-5.6-sol'], undefined);
+  assert.ok(recovery.profile.overrides['gpt-5.6-terra']);
+  assert.ok(recovery.profile.overrides['gpt-5.4']);
+  assert.ok(recovery.profile.overrides['gpt-5.6-luna']);
+  assert.ok(recovery.profile.overrides['grok-4.5']);
+  assert.equal(recovery.profile.aliases['tenant/sol'], 'gpt-5.6-sol');
+  assert.equal(pricing.resolvePriceProfile('tenant/sol', recovery.profile).modelMatch, 'alias');
+  assert.equal(pricing.resolvePriceProfile('tenant/sol', recovery.profile).fast.multiplier, 2);
+  assert.ok(profile.overrides['gpt-5.6-sol']);
+});
+
+test('API coverage display treats absent denominators as unavailable, not zero percent', () => {
+  assert.deepEqual(
+    pricing.getApiCoverageDisplay({
+      apiTokenUsdRequests: 0,
+      pricedRequests: 0,
+      apiTokenUsdTokens: 0,
+      pricedTokens: 0,
+    }),
+    { requestPercent: null, tokenPercent: null }
+  );
+  assert.deepEqual(
+    pricing.getApiCoverageDisplay({
+      apiTokenUsdRequests: 5,
+      pricedRequests: 3,
+      apiTokenUsdTokens: 200,
+      pricedTokens: 50,
+    }),
+    { requestPercent: 60, tokenPercent: 25 }
+  );
+  assert.deepEqual(
+    pricing.getApiCoverageDisplay({
+      apiTokenUsdRequests: 0,
+      pricedRequests: 0,
+      apiTokenUsdTokens: 100,
+      pricedTokens: 0,
+    }),
+    { requestPercent: null, tokenPercent: 0 }
+  );
+  assert.deepEqual(
+    pricing.getApiCoverageDisplay({
+      apiTokenUsdRequests: 1,
+      pricedRequests: 1,
+      apiTokenUsdTokens: 0,
+      pricedTokens: 0,
+    }),
+    { requestPercent: 100, tokenPercent: null }
+  );
+});
+
 test('Fast preset and custom profiles derive rates from the selected Standard context band', () => {
   const preset = pricing.estimateUsageCost(
     'gpt-5.4-mini',

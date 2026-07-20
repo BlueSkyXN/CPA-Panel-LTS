@@ -168,6 +168,11 @@ export interface PricingCoverage {
   creditRatedTokenRatio: number;
 }
 
+export interface ApiCoverageDisplay {
+  requestPercent: number | null;
+  tokenPercent: number | null;
+}
+
 export type ApiFastPolicyDisplay =
   | { kind: 'none'; multiplier: null }
   | { kind: 'official-multiplier'; multiplier: number }
@@ -200,6 +205,22 @@ export const hasPricingAnomaly = (
   coverage.creditRatedTokens < coverage.chatGptCreditTokens ||
   coverage.creditRatedModels < coverage.chatGptCreditModels ||
   warnings.includes('fallbackStandard');
+
+export const getApiCoverageDisplay = (
+  coverage: Pick<
+    PricingCoverage,
+    'apiTokenUsdRequests' | 'pricedRequests' | 'apiTokenUsdTokens' | 'pricedTokens'
+  >
+): ApiCoverageDisplay => ({
+  requestPercent:
+    coverage.apiTokenUsdRequests > 0
+      ? (coverage.pricedRequests / coverage.apiTokenUsdRequests) * 100
+      : null,
+  tokenPercent:
+    coverage.apiTokenUsdTokens > 0
+      ? (coverage.pricedTokens / coverage.apiTokenUsdTokens) * 100
+      : null,
+});
 
 export const getApiFastPolicyDisplay = (resolved: ResolvedPrice): ApiFastPolicyDisplay => {
   if (resolved.fast === null) return { kind: 'none', multiplier: null };
@@ -337,6 +358,49 @@ export function createDefaultPriceProfileV3(): PriceProfileV3 {
 export function findCatalogEntry(modelName: string): PriceCatalogEntry | null {
   const key = normalizeModelKey(modelName);
   return CATALOG_CANONICAL.get(key) ?? CATALOG_ALIASES.get(key) ?? null;
+}
+
+const haveEquivalentTokenRates = (left: TokenRates, right: TokenRates): boolean =>
+  left.input === right.input &&
+  left.cachedInput === right.cachedInput &&
+  (left.cacheWrite ?? left.input) === (right.cacheWrite ?? right.input) &&
+  left.output === right.output;
+
+const isPresetEquivalentLegacyOverride = (
+  modelName: string,
+  override: PriceOverride
+): boolean => {
+  const catalog = findCatalogEntry(modelName);
+  return (
+    catalog !== null &&
+    override.fast === undefined &&
+    override.standard.long === undefined &&
+    haveEquivalentTokenRates(override.standard.short, catalog.standard.short)
+  );
+};
+
+export interface PresetOverrideRecovery {
+  profile: PriceProfileV3;
+  restoredModels: string[];
+}
+
+/**
+ * Finds legacy-shaped overrides that duplicate current preset short rates and
+ * removes only those entries. Existing v3 profiles call this through an
+ * explicit UI action so intentionally pinned custom rates are never discarded
+ * silently.
+ */
+export function restorePresetEquivalentOverrides(
+  profile: PriceProfileV3
+): PresetOverrideRecovery {
+  const restoredModels = Object.entries(profile.overrides)
+    .filter(([modelName, override]) => isPresetEquivalentLegacyOverride(modelName, override))
+    .map(([modelName]) => modelName);
+  if (restoredModels.length === 0) return { profile, restoredModels };
+
+  const overrides = { ...profile.overrides };
+  restoredModels.forEach((modelName) => delete overrides[modelName]);
+  return { profile: { ...profile, overrides }, restoredModels };
 }
 
 const isKnownAliasTarget = (target: string, overrides: Record<string, PriceOverride>): boolean => {
