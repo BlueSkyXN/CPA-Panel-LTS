@@ -311,7 +311,7 @@ def build_usage_payload() -> dict[str, Any]:
                 "output_tokens": 8,
                 "reasoning_tokens": 2,
                 "cached_tokens": 1,
-                "cache_read_tokens": 1,
+                "cache_read_tokens": 3,
                 "cache_creation_tokens": 4,
                 "total_tokens": 23,
             },
@@ -334,6 +334,7 @@ def build_usage_payload() -> dict[str, Any]:
                 "output_tokens": 6,
                 "reasoning_tokens": 0,
                 "cached_tokens": 0,
+                "cache_read_tokens": 1,
                 "total_tokens": 16,
             },
             "failed": False,
@@ -424,6 +425,7 @@ def build_usage_payload() -> dict[str, Any]:
             "reasoning_effort": "medium",
             "tokens": {
                 "input_tokens": 272_000,
+                "cache_read_tokens": 163_200,
                 "output_tokens": 0,
                 "total_tokens": 272_000,
             },
@@ -439,8 +441,8 @@ def build_usage_payload() -> dict[str, Any]:
             "effective_service_tier": "standard",
             "billing_basis": "api-token-usd",
             "tokens": {
-                "input_tokens": 100,
-                "output_tokens": 10,
+                "input_tokens": 0,
+                "output_tokens": 110,
                 "total_tokens": 110,
             },
             "failed": False,
@@ -2884,6 +2886,9 @@ def run_usage_service_tier_smoke(page: Any) -> None:
               cellAlign: getComputedStyle(cell).textAlign,
               headerBorderLeftStyle: getComputedStyle(header).borderLeftStyle,
               cellBorderLeftStyle: getComputedStyle(cell).borderLeftStyle,
+              headerColor: getComputedStyle(header).color,
+              cellColor: getComputedStyle(cell).color,
+              cellFontWeight: getComputedStyle(cell).fontWeight,
               headerTitle: header.getAttribute('title'),
               headerAriaLabel: header.getAttribute('aria-label'),
               cellTitle: cell.getAttribute('title'),
@@ -2919,6 +2924,22 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         raise AssertionError(
             "Request-event token headers and values are not column-aligned: "
             f"{misaligned_token_columns!r}"
+        )
+    token_header_colors = {column["headerColor"] for column in token_column_alignment}
+    if len(token_header_colors) != 1:
+        raise AssertionError(
+            "Request-event Token headers still use fixed per-column colors: "
+            f"{token_column_alignment!r}"
+        )
+    neutral_token_value_colors = {
+        column["cellColor"]
+        for column in token_column_alignment
+        if column["label"] != "Cache Read Tokens"
+    }
+    if len(neutral_token_value_colors) != 1:
+        raise AssertionError(
+            "Non-cache Request-event Token values still use fixed per-column colors: "
+            f"{token_column_alignment!r}"
         )
     header_hints = {
         column["label"]: column.get("headerAriaLabel") or column.get("headerTitle")
@@ -2957,12 +2978,14 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     priority_row = rows.filter(has_text="12").filter(has_text="Fast").first
     priority_cells = [text.strip() for text in priority_row.locator("td").all_inner_texts()]
     priority_token_values = [cell.splitlines()[0] for cell in priority_cells[-8:]]
-    if priority_token_values != ["12", "11", "8", "6", "2", "1", "4", "23"]:
+    if priority_token_values != ["12", "9", "8", "6", "2", "3", "4", "23"]:
         raise AssertionError(
             "Combined service-tier/cache row rendered the wrong token values: "
             f"{priority_cells!r}"
         )
-    low_cache_cells = priority_row.locator('td[data-cache-rate-tone="low"]')
+    low_cache_cells = rows.locator(
+        'td[data-cache-rate-tone="low"][data-cache-token-count="1"]'
+    )
     if low_cache_cells.count() != 1 or low_cache_cells.first.inner_text().strip() != "1":
         raise AssertionError("Cache Read Tokens must render as one numeric line")
     high_cache_cells = rows.locator('td[data-cache-rate-tone="high"]')
@@ -2972,20 +2995,14 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         )
     low_cache_cell = low_cache_cells.first
     high_cache_cell = high_cache_cells.first
-    low_cache_count = int(low_cache_cell.get_attribute("data-cache-token-count") or "0")
-    high_cache_count = int(high_cache_cell.get_attribute("data-cache-token-count") or "0")
-    low_cache_weight = int(low_cache_cell.get_attribute("data-cache-color-weight") or "0")
-    high_cache_weight = int(high_cache_cell.get_attribute("data-cache-color-weight") or "0")
-    if high_cache_count <= low_cache_count or high_cache_weight <= low_cache_weight:
-        raise AssertionError(
-            "Cache-read color emphasis did not grow with the numeric Token count: "
-            f"low=({low_cache_count}, {low_cache_weight}) "
-            f"high=({high_cache_count}, {high_cache_weight})"
-        )
+    if card.locator("td[data-cache-color-weight]").count() != 0:
+        raise AssertionError("Cache-read color still depends on the absolute Token count")
     low_cache_color = low_cache_cell.evaluate("cell => getComputedStyle(cell).color")
     high_cache_color = high_cache_cell.evaluate("cell => getComputedStyle(cell).color")
     if low_cache_color == high_cache_color:
         raise AssertionError("Cache-read share did not change the numeric color hue")
+    if low_cache_color in neutral_token_value_colors:
+        raise AssertionError("A low cache-read share was not emphasized against neutral Token values")
     zero_cache_cells = rows.locator(
         'td[data-cache-rate-tone="low"][data-cache-token-count="0"]'
     )
@@ -3053,8 +3070,8 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     priority_csv = priority_csv_rows[0]
     expected_priority_csv_tokens = {
         "uncached_input_tokens": "8",
-        "cached_tokens": "1",
-        "cache_read_tokens": "1",
+        "cached_tokens": "3",
+        "cache_read_tokens": "3",
         "cache_creation_tokens": "4",
         "total_tokens": "23",
     }
@@ -3126,8 +3143,8 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         "uncached_input_tokens": 8,
         "output_tokens": 8,
         "reasoning_tokens": 2,
-        "cached_tokens": 1,
-        "cache_read_tokens": 1,
+        "cached_tokens": 3,
+        "cache_read_tokens": 3,
         "cache_creation_tokens": 4,
         "total_tokens": 23,
     }
@@ -3158,6 +3175,171 @@ def run_usage_service_tier_smoke(page: Any) -> None:
 
     card.get_by_role("button", name="Clear Filters", exact=True).click()
     wait_for_row_count(8)
+
+    def get_cache_value_style(cache_cell: Any) -> dict[str, Any]:
+        return cache_cell.evaluate(
+            """cell => {
+              const value = cell.querySelector('span');
+              if (!value) throw new Error('Cache-read value is missing');
+              const style = getComputedStyle(value);
+              const rootStyle = getComputedStyle(document.documentElement);
+              const backgroundToken = rootStyle.getPropertyValue('--bg-primary').trim();
+              const probe = document.createElement('span');
+              probe.style.color = backgroundToken;
+              document.body.appendChild(probe);
+              const backgroundColor = getComputedStyle(probe).color;
+              probe.remove();
+              const toRgb = color => {
+                const channels = color.match(/[\d.]+/g)?.slice(0, 3).map(Number);
+                if (!channels || channels.length !== 3) {
+                  throw new Error(`Unable to parse color: ${color}`);
+                }
+                return channels;
+              };
+              const luminance = color => {
+                const [red, green, blue] = toRgb(color).map(channel => {
+                  const normalized = channel / 255;
+                  return normalized <= 0.04045
+                    ? normalized / 12.92
+                    : ((normalized + 0.055) / 1.055) ** 2.4;
+                });
+                return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+              };
+              const foregroundLuminance = luminance(style.color);
+              const backgroundLuminance = luminance(backgroundColor);
+              const contrastRatio =
+                (Math.max(foregroundLuminance, backgroundLuminance) + 0.05) /
+                (Math.min(foregroundLuminance, backgroundLuminance) + 0.05);
+              return {
+                color: style.color,
+                backgroundColor,
+                contrastRatio,
+                fontWeight: style.fontWeight,
+              };
+            }"""
+        )
+
+    expected_cache_font_weights = {
+        "unavailable": "600",
+        "low": "800",
+        "medium": "750",
+        "high": "650",
+        "anomaly": "820",
+    }
+    expected_cache_tone_labels = {
+        "unavailable": "Not set",
+        "low": "Low",
+        "medium": "Moderate",
+        "high": "High",
+        "anomaly": "Anomaly",
+    }
+    original_theme = page.evaluate(
+        "() => document.documentElement.getAttribute('data-theme')"
+    )
+    page.evaluate("() => document.documentElement.removeAttribute('data-theme')")
+    cache_tone_signatures = {}
+    for tone in ["unavailable", "low", "medium", "high", "anomaly"]:
+        cache_cell = card.locator(f'td[data-cache-rate-tone="{tone}"]').first
+        cache_cell.wait_for()
+        cache_description = cache_cell.get_attribute("aria-label") or ""
+        if (
+            "token" not in cache_description.lower()
+            or expected_cache_tone_labels[tone].lower() not in cache_description.lower()
+            or (tone != "unavailable" and "%" not in cache_description)
+        ):
+            raise AssertionError(
+                f"Cache-read {tone!r} state lacks an accessible Token/rate/status description: "
+                f"{cache_description!r}"
+            )
+        cache_style = get_cache_value_style(cache_cell)
+        if cache_style["fontWeight"] != expected_cache_font_weights[tone]:
+            raise AssertionError(
+                f"Cache-read {tone!r} state has the wrong numeric font weight: "
+                f"{cache_style!r}"
+            )
+        if cache_style["contrastRatio"] < 4.5:
+            raise AssertionError(
+                f"Cache-read {tone!r} state fails WCAG AA text contrast: "
+                f"{cache_style!r}"
+            )
+        cache_tone_signatures[tone] = (
+            f'{cache_style["color"]}|{cache_style["fontWeight"]}'
+        )
+    if len(set(cache_tone_signatures.values())) != len(cache_tone_signatures):
+        raise AssertionError(
+            "Cache-read semantic states reused the same color and emphasis signature: "
+            f"{cache_tone_signatures!r}"
+        )
+    cache_rate_boundaries = {
+        "medium": ('td[data-cache-rate-tone="medium"][data-cache-token-count="3"]', "25%"),
+        "high": ('td[data-cache-rate-tone="high"][data-cache-token-count="163200"]', "60%"),
+    }
+    for tone, (selector, expected_rate) in cache_rate_boundaries.items():
+        boundary_cell = card.locator(selector)
+        boundary_cell.wait_for()
+        boundary_description = boundary_cell.get_attribute("aria-label") or ""
+        if expected_rate not in boundary_description:
+            raise AssertionError(
+                f"Cache-read {tone!r} boundary lost {expected_rate}: "
+                f"{boundary_description!r}"
+            )
+
+    try:
+        for theme in ["white", "dark"]:
+            page.evaluate(
+                "theme => document.documentElement.setAttribute('data-theme', theme)",
+                theme,
+            )
+            theme_token_colors = rows.first.locator("td").evaluate_all(
+                """cells => cells.slice(-8).map(cell => getComputedStyle(cell).color)"""
+            )
+            if (
+                len(
+                    set(
+                        color
+                        for index, color in enumerate(theme_token_colors)
+                        if index != 5
+                    )
+                )
+                != 1
+            ):
+                raise AssertionError(
+                    f"{theme.capitalize()} theme restored fixed per-column Token colors: "
+                    f"{theme_token_colors!r}"
+                )
+            theme_cache_tone_signatures = {}
+            for tone in ["unavailable", "low", "medium", "high", "anomaly"]:
+                theme_cache_style = get_cache_value_style(
+                    card.locator(f'td[data-cache-rate-tone="{tone}"]').first
+                )
+                if theme_cache_style["fontWeight"] != expected_cache_font_weights[tone]:
+                    raise AssertionError(
+                        f"{theme.capitalize()}-theme Cache-read {tone!r} state has the "
+                        f"wrong numeric font weight: {theme_cache_style!r}"
+                    )
+                if theme_cache_style["contrastRatio"] < 4.5:
+                    raise AssertionError(
+                        f"{theme.capitalize()}-theme Cache-read {tone!r} state fails "
+                        f"WCAG AA text contrast: {theme_cache_style!r}"
+                    )
+                theme_cache_tone_signatures[tone] = (
+                    f'{theme_cache_style["color"]}|{theme_cache_style["fontWeight"]}'
+                )
+            if len(set(theme_cache_tone_signatures.values())) != len(
+                theme_cache_tone_signatures
+            ):
+                raise AssertionError(
+                    f"{theme.capitalize()}-theme Cache-read states reused the same "
+                    f"color and emphasis signature: {theme_cache_tone_signatures!r}"
+                )
+    finally:
+        page.evaluate(
+            """theme => {
+              if (theme === null) document.documentElement.removeAttribute('data-theme');
+              else document.documentElement.setAttribute('data-theme', theme);
+            }""",
+            original_theme,
+        )
 
     effort_color_signatures = {}
     for tone in ["none", "minimal", "low", "medium", "high", "xhigh", "max"]:
@@ -3201,7 +3383,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     cache_select = card.get_by_label("Cache Status", exact=True)
     cache_select.click()
     page.get_by_role("option", name="Has Cached Tokens", exact=True).click()
-    wait_for_row_count(4)
+    wait_for_row_count(6)
 
     card.get_by_role("button", name="Clear Filters", exact=True).click()
     wait_for_row_count(8)
@@ -3322,7 +3504,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     page.get_by_role("option", name="Cache Read Tokens", exact=True).click()
     numeric_dialog.get_by_label("Minimum", exact=True).fill("1")
     numeric_dialog.get_by_role("button", name="Apply range", exact=True).click()
-    wait_for_row_count(3)
+    wait_for_row_count(5)
     active_numeric_filter_trigger = card.get_by_role(
         "button", name="Token range: Cache Read Tokens · ≥ 1", exact=True
     )
@@ -3486,7 +3668,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     mobile_trigger_handle = mobile_numeric_trigger.element_handle()
     mobile_numeric_dialog.get_by_role("button", name="Apply range", exact=True).click()
     mobile_numeric_dialog.wait_for(state="detached")
-    wait_for_row_count(3)
+    wait_for_row_count(5)
     page.wait_for_function(
         "trigger => document.activeElement === trigger",
         arg=mobile_trigger_handle,
@@ -3511,12 +3693,66 @@ def run_usage_service_tier_smoke(page: Any) -> None:
           wrapperOverflowX: getComputedStyle(table.parentElement).overflowX,
           wrapperClientWidth: table.parentElement.clientWidth,
           wrapperScrollWidth: table.parentElement.scrollWidth,
+          documentScrollWidth: document.documentElement.scrollWidth,
+          viewportWidth: window.innerWidth,
         })"""
     )
     if table_metrics["wrapperOverflowX"] not in {"auto", "scroll"}:
         raise AssertionError(
             f"Request-event table is not horizontally scrollable on narrow screens: {table_metrics!r}"
         )
+    if table_metrics["documentScrollWidth"] > table_metrics["viewportWidth"] + 1:
+        raise AssertionError(
+            f"Request-event table causes page-level overflow at 390px: {table_metrics!r}"
+        )
+    mobile_token_colors = rows.first.locator("td").evaluate_all(
+        """cells => cells.slice(-8).map(cell => {
+          const value = cell.querySelector('span');
+          return getComputedStyle(value ?? cell).color;
+        })"""
+    )
+    if len(set(color for index, color in enumerate(mobile_token_colors) if index != 5)) != 1:
+        raise AssertionError(
+            "Mobile layout restored fixed per-column Token colors: "
+            f"{mobile_token_colors!r}"
+        )
+    mobile_cache_tone_signatures = {}
+    for tone in ["unavailable", "low", "medium", "high", "anomaly"]:
+        mobile_cache_cell = card.locator(f'td[data-cache-rate-tone="{tone}"]').first
+        mobile_cache_description = mobile_cache_cell.get_attribute("aria-label") or ""
+        if (
+            "token" not in mobile_cache_description.lower()
+            or expected_cache_tone_labels[tone].lower()
+            not in mobile_cache_description.lower()
+            or (tone != "unavailable" and "%" not in mobile_cache_description)
+        ):
+            raise AssertionError(
+                f"Mobile Cache-read {tone!r} state lost its accessible description: "
+                f"{mobile_cache_description!r}"
+            )
+        mobile_cache_style = get_cache_value_style(mobile_cache_cell)
+        if mobile_cache_style["fontWeight"] != expected_cache_font_weights[tone]:
+            raise AssertionError(
+                f"Mobile Cache-read {tone!r} state has the wrong numeric font weight: "
+                f"{mobile_cache_style!r}"
+            )
+        if mobile_cache_style["contrastRatio"] < 4.5:
+            raise AssertionError(
+                f"Mobile Cache-read {tone!r} state fails WCAG AA text contrast: "
+                f"{mobile_cache_style!r}"
+            )
+        mobile_cache_tone_signatures[tone] = (
+            f'{mobile_cache_style["color"]}|{mobile_cache_style["fontWeight"]}'
+        )
+    if len(set(mobile_cache_tone_signatures.values())) != len(
+        mobile_cache_tone_signatures
+    ):
+        raise AssertionError(
+            "Mobile Cache-read states reused the same semantic signature: "
+            f"{mobile_cache_tone_signatures!r}"
+        )
+    if "!" not in card.locator('td[data-cache-rate-tone="anomaly"]').first.inner_text():
+        raise AssertionError("Mobile anomalous cache ratio lost its non-color marker")
     page.set_viewport_size({"width": 1280, "height": 720})
 
 

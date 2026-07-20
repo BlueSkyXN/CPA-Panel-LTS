@@ -1158,38 +1158,8 @@
   letter-spacing: -0.01em;
 }
 
-.requestEventsTokenInput {
-  --request-events-token-color: color-mix(in srgb, #2563eb 68%, var(--text-primary));
-}
-
-.requestEventsTokenUncached {
-  --request-events-token-color: color-mix(in srgb, #0891b2 68%, var(--text-primary));
-}
-
-.requestEventsTokenOutput {
-  --request-events-token-color: color-mix(in srgb, #7c3aed 66%, var(--text-primary));
-}
-
-.requestEventsTokenExplicitOutput {
-  --request-events-token-color: color-mix(in srgb, #0f766e 68%, var(--text-primary));
-}
-
-.requestEventsTokenReasoning {
-  --request-events-token-color: color-mix(in srgb, #c026d3 62%, var(--text-primary));
-}
-
 .requestEventsTokenCacheRead {
-  --request-events-cache-tone-color: var(--text-tertiary);
-  --request-events-cache-color-weight: 42%;
-  --request-events-token-color: color-mix(
-    in srgb,
-    var(--request-events-cache-tone-color) var(--request-events-cache-color-weight),
-    var(--text-primary)
-  );
-}
-
-.requestEventsTokenCacheWrite {
-  --request-events-token-color: var(--amber-text);
+  --request-events-token-color: var(--text-primary);
 }
 
 .requestEventsTokenTotal {
@@ -1201,23 +1171,43 @@
 }
 
 .requestEventsCacheRateUnavailable {
-  --request-events-token-color: var(--text-tertiary);
+  --request-events-token-color: var(--text-secondary);
+
+  .requestEventsTokenValue {
+    font-weight: 600;
+  }
 }
 
 .requestEventsCacheRateLow {
-  --request-events-cache-tone-color: var(--failure-badge-text);
+  --request-events-token-color: var(--failure-badge-text);
+
+  .requestEventsTokenValue {
+    font-weight: 800;
+  }
 }
 
 .requestEventsCacheRateMedium {
-  --request-events-cache-tone-color: var(--amber-text);
+  --request-events-token-color: var(--amber-text);
+
+  .requestEventsTokenValue {
+    font-weight: 750;
+  }
 }
 
 .requestEventsCacheRateHigh {
-  --request-events-cache-tone-color: var(--success-badge-text, #065f46);
+  --request-events-token-color: var(--success-badge-text, #065f46);
+
+  .requestEventsTokenValue {
+    font-weight: 650;
+  }
 }
 
 .requestEventsCacheRateAnomaly {
-  --request-events-cache-tone-color: var(--failure-badge-text);
+  --request-events-token-color: var(--failure-badge-text);
+
+  .requestEventsTokenValue {
+    font-weight: 820;
+  }
 }
 
 .requestEventsCacheAnomalyMarker {

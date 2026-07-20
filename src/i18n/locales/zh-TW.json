@@ -1321,7 +1321,7 @@
     "request_events_explicit_output_tokens": "顯式輸出 Token",
     "request_events_output_tokens_hint": "顯式輸出 Token = 總輸出 Token - 推理 Token，結果不小於 0。",
     "request_events_cache_rate": "快取讀取占比",
-    "request_events_cache_rate_hint": "快取讀取占比 = 快取讀取 Token / 總輸入 Token。0% 與低於 25% 為偏低，25%–60% 為一般，60% 及以上為較高；快取讀取超過總輸入時標記為異常。顏色強調度隨快取讀取 Token 數量按對數增加。",
+    "request_events_cache_rate_hint": "快取讀取占比 = 快取讀取 Token / 總輸入 Token。0% 與低於 25% 為偏低，25% 至低於 60% 為一般，60% 及以上為較高；快取讀取超過總輸入時標記為異常。僅快取讀取數值依此狀態著色；其他 Token 數值保持中性。",
     "request_events_cache_rate_low": "偏低",
     "request_events_cache_rate_medium": "一般",
     "request_events_cache_rate_high": "較高",
