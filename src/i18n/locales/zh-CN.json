@@ -1295,7 +1295,7 @@
     "request_events_explicit_output_tokens": "显式输出 Token",
     "request_events_output_tokens_hint": "显式输出 Token = 总输出 Token - 思考 Token，结果不小于 0。",
     "request_events_cache_rate": "缓存读取占比",
-    "request_events_cache_rate_hint": "缓存读取占比 = 缓存读取 Token / 总输入 Token。0% 和低于 25% 为偏低，25%–60% 为一般，60% 及以上为较高；缓存读取超过总输入时标记为异常。颜色强调度随缓存读取 Token 数量按对数增加。",
+    "request_events_cache_rate_hint": "缓存读取占比 = 缓存读取 Token / 总输入 Token。0% 和低于 25% 为偏低，25% 至低于 60% 为一般，60% 及以上为较高；缓存读取超过总输入时标记为异常。仅缓存读取数值按此状态着色；其他 Token 数值保持中性。",
     "request_events_cache_rate_low": "偏低",
     "request_events_cache_rate_medium": "一般",
     "request_events_cache_rate_high": "较高",

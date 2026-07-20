@@ -53,9 +53,6 @@ const LEGACY_COLUMN_VISIBILITY_STORAGE_KEYS = [
   'cli-proxy-usage-request-event-columns-v2',
 ] as const;
 const COLUMN_VISIBILITY_STORAGE_KEY = 'cli-proxy-usage-request-event-columns-v3';
-const CACHE_COLOR_MIN_WEIGHT = 42;
-const CACHE_COLOR_MAX_WEIGHT = 90;
-const CACHE_COLOR_REFERENCE_TOKENS = 1_000_000;
 
 const REQUEST_EVENT_TIME_RANGES = ['page', 'all', '1h', '24h', '7d', '30d'] as const;
 type RequestEventTimeRange = (typeof REQUEST_EVENT_TIME_RANGES)[number];
@@ -393,17 +390,6 @@ const getCacheRateTone = (
   if (cacheRate < CACHE_RATE_LOW_THRESHOLD) return 'low';
   if (cacheRate < CACHE_RATE_HIGH_THRESHOLD) return 'medium';
   return 'high';
-};
-
-const getCacheColorWeight = (cacheReadTokens: number): number => {
-  if (cacheReadTokens <= 0) return CACHE_COLOR_MIN_WEIGHT;
-  const magnitude = Math.min(
-    Math.log10(cacheReadTokens + 1) / Math.log10(CACHE_COLOR_REFERENCE_TOKENS + 1),
-    1
-  );
-  return Math.round(
-    CACHE_COLOR_MIN_WEIGHT + (CACHE_COLOR_MAX_WEIGHT - CACHE_COLOR_MIN_WEIGHT) * magnitude
-  );
 };
 
 const getCacheRateToneClassName = (tone: RequestEventCacheRateTone): string =>
@@ -1859,15 +1845,13 @@ export function RequestEventsDetailsCard({
                   )}
                   {columnVisibility.effort && <th>{t('usage_stats.request_events_effort')}</th>}
                   {columnVisibility.totalInputTokens && (
-                    <th
-                      className={`${styles.requestEventsTokenHeader} ${styles.requestEventsTokenInput}`}
-                    >
+                    <th className={styles.requestEventsTokenHeader}>
                       {t('usage_stats.request_events_total_input_tokens')}
                     </th>
                   )}
                   {columnVisibility.displayedUncachedInputTokens && (
                     <th
-                      className={`${styles.requestEventsTokenHeader} ${styles.requestEventsTokenHeaderHint} ${styles.requestEventsTokenUncached}`}
+                      className={`${styles.requestEventsTokenHeader} ${styles.requestEventsTokenHeaderHint}`}
                       title={uncachedInputHint}
                       aria-label={uncachedInputHint}
                     >
@@ -1875,15 +1859,13 @@ export function RequestEventsDetailsCard({
                     </th>
                   )}
                   {columnVisibility.totalOutputTokens && (
-                    <th
-                      className={`${styles.requestEventsTokenHeader} ${styles.requestEventsTokenOutput}`}
-                    >
+                    <th className={styles.requestEventsTokenHeader}>
                       {t('usage_stats.request_events_total_output_tokens')}
                     </th>
                   )}
                   {columnVisibility.displayedOutputTokens && (
                     <th
-                      className={`${styles.requestEventsTokenHeader} ${styles.requestEventsTokenHeaderHint} ${styles.requestEventsTokenExplicitOutput}`}
+                      className={`${styles.requestEventsTokenHeader} ${styles.requestEventsTokenHeaderHint}`}
                       title={displayedOutputHint}
                       aria-label={displayedOutputHint}
                     >
@@ -1891,9 +1873,7 @@ export function RequestEventsDetailsCard({
                     </th>
                   )}
                   {columnVisibility.reasoningTokens && (
-                    <th
-                      className={`${styles.requestEventsTokenHeader} ${styles.requestEventsTokenReasoning}`}
-                    >
+                    <th className={styles.requestEventsTokenHeader}>
                       {t('usage_stats.reasoning_tokens')}
                     </th>
                   )}
@@ -1907,9 +1887,7 @@ export function RequestEventsDetailsCard({
                     </th>
                   )}
                   {columnVisibility.cacheWriteTokens && (
-                    <th
-                      className={`${styles.requestEventsTokenHeader} ${styles.requestEventsTokenCacheWrite}`}
-                    >
+                    <th className={styles.requestEventsTokenHeader}>
                       {t('usage_stats.cache_write_tokens')}
                     </th>
                   )}
@@ -1925,10 +1903,6 @@ export function RequestEventsDetailsCard({
               <tbody>
                 {renderedRows.map((row) => {
                   const cacheRateToneClassName = getCacheRateToneClassName(row.cacheRateTone);
-                  const cacheColorWeight = getCacheColorWeight(row.cacheReadTokens);
-                  const cacheReadStyle = {
-                    '--request-events-cache-color-weight': `${cacheColorWeight}%`,
-                  } as CSSProperties;
                   const cacheReadTokensLabel = row.cacheReadTokens.toLocaleString();
                   const inputTokensLabel = row.inputTokens.toLocaleString();
                   const cacheRateLabel =
@@ -2038,45 +2012,35 @@ export function RequestEventsDetailsCard({
                         </td>
                       )}
                       {columnVisibility.totalInputTokens && (
-                        <td
-                          className={`${styles.requestEventsTokenCell} ${styles.requestEventsTokenInput}`}
-                        >
+                        <td className={styles.requestEventsTokenCell}>
                           <span className={styles.requestEventsTokenValue}>
                             {row.inputTokens.toLocaleString()}
                           </span>
                         </td>
                       )}
                       {columnVisibility.displayedUncachedInputTokens && (
-                        <td
-                          className={`${styles.requestEventsTokenCell} ${styles.requestEventsTokenUncached}`}
-                        >
+                        <td className={styles.requestEventsTokenCell}>
                           <span className={styles.requestEventsTokenValue}>
                             {row.displayedUncachedInputTokens.toLocaleString()}
                           </span>
                         </td>
                       )}
                       {columnVisibility.totalOutputTokens && (
-                        <td
-                          className={`${styles.requestEventsTokenCell} ${styles.requestEventsTokenOutput}`}
-                        >
+                        <td className={styles.requestEventsTokenCell}>
                           <span className={styles.requestEventsTokenValue}>
                             {row.outputTokens.toLocaleString()}
                           </span>
                         </td>
                       )}
                       {columnVisibility.displayedOutputTokens && (
-                        <td
-                          className={`${styles.requestEventsTokenCell} ${styles.requestEventsTokenExplicitOutput}`}
-                        >
+                        <td className={styles.requestEventsTokenCell}>
                           <span className={styles.requestEventsTokenValue}>
                             {row.displayedOutputTokens.toLocaleString()}
                           </span>
                         </td>
                       )}
                       {columnVisibility.reasoningTokens && (
-                        <td
-                          className={`${styles.requestEventsTokenCell} ${styles.requestEventsTokenReasoning}`}
-                        >
+                        <td className={styles.requestEventsTokenCell}>
                           <span className={styles.requestEventsTokenValue}>
                             {row.reasoningTokens.toLocaleString()}
                           </span>
@@ -2085,9 +2049,7 @@ export function RequestEventsDetailsCard({
                       {columnVisibility.cacheReadTokens && (
                         <td
                           className={`${styles.requestEventsTokenCell} ${styles.requestEventsTokenCacheRead} ${cacheRateToneClassName}`}
-                          style={cacheReadStyle}
                           data-cache-rate-tone={row.cacheRateTone}
-                          data-cache-color-weight={cacheColorWeight}
                           data-cache-token-count={row.cacheReadTokens}
                           title={cacheRateCellDescription}
                           aria-label={cacheRateCellDescription}
@@ -2107,9 +2069,7 @@ export function RequestEventsDetailsCard({
                         </td>
                       )}
                       {columnVisibility.cacheWriteTokens && (
-                        <td
-                          className={`${styles.requestEventsTokenCell} ${styles.requestEventsTokenCacheWrite}`}
-                        >
+                        <td className={styles.requestEventsTokenCell}>
                           <span className={styles.requestEventsTokenValue}>
                             {row.cacheWriteTokens.toLocaleString()}
                           </span>

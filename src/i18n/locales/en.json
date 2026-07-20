@@ -1295,7 +1295,7 @@
     "request_events_explicit_output_tokens": "Explicit Output Tokens",
     "request_events_output_tokens_hint": "Explicit Output Tokens = Total Output Tokens - Reasoning Tokens, never below 0.",
     "request_events_cache_rate": "Cache Read Share",
-    "request_events_cache_rate_hint": "Cache Read Share = Cache Read Tokens / Total Input Tokens. Zero and values below 25% are low, 25%–60% is moderate, and 60% or above is high. Cache reads above total input are marked as anomalies. Color emphasis increases logarithmically with the Cache Read Token count.",
+    "request_events_cache_rate_hint": "Cache Read Share = Cache Read Tokens / Total Input Tokens. Zero and values below 25% are low, 25% up to but not including 60% is moderate, and 60% or above is high. Cache reads above total input are marked as anomalies. Only the Cache Read value is colored by this status; other Token values remain neutral.",
     "request_events_cache_rate_low": "Low",
     "request_events_cache_rate_medium": "Moderate",
     "request_events_cache_rate_high": "High",
