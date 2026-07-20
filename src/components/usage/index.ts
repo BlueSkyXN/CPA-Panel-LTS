@@ -32,6 +32,8 @@ export type { ModelStatsCardProps, ModelStat } from './ModelStatsCard';
 export { PricingEntryCard } from './PricingEntryCard';
 export type { PricingEntryCardProps } from './PricingEntryCard';
 
+export { PresetPricingCatalog } from './PresetPricingCatalog';
+
 export { CredentialStatsCard } from './CredentialStatsCard';
 export type { CredentialStatsCardProps } from './CredentialStatsCard';
 

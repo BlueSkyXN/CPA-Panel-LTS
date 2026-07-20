@@ -1,0 +1,518 @@
+.catalog {
+  min-width: 0;
+  overflow: hidden;
+  scroll-margin-top: 56px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--bg-primary);
+}
+
+.header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 18px;
+  padding: 13px 15px 12px;
+  border-bottom: 1px solid var(--border-color);
+  background: linear-gradient(105deg, var(--amber-10), transparent 42%), var(--bg-primary);
+}
+
+.heading {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+
+  h2 {
+    margin: 0;
+    font-size: 16px;
+    line-height: 1.25;
+    letter-spacing: -0.015em;
+  }
+
+  p {
+    max-width: 840px;
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 1.45;
+  }
+}
+
+.eyebrow {
+  color: var(--amber-text);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.075em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.meta {
+  display: grid;
+  min-width: 250px;
+  gap: 6px;
+  justify-items: end;
+}
+
+.metaBadges,
+.sourceLinks {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.metaBadges {
+  span,
+  strong {
+    display: inline-flex;
+    align-items: center;
+    min-height: 22px;
+    padding: 2px 7px;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg-secondary) 72%, transparent);
+    color: var(--text-secondary);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 9px;
+    font-weight: 650;
+    line-height: 1.25;
+  }
+}
+
+.sourceLinks {
+  a {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--amber-text);
+    font-size: 10px;
+    font-weight: 650;
+    line-height: 1.3;
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    &:focus-visible {
+      border-radius: 3px;
+      outline: 2px solid var(--amber-color);
+      outline-offset: 2px;
+    }
+  }
+}
+
+.tableRegion {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-gutter: stable;
+
+  &:focus-visible {
+    outline: 2px solid var(--amber-color);
+    outline-offset: -2px;
+  }
+}
+
+.table {
+  width: 100%;
+  min-width: 1060px;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+
+  th,
+  td {
+    min-width: 0;
+    padding: 7px 9px;
+    border-bottom: 1px solid var(--border-color);
+    text-align: left;
+    vertical-align: middle;
+  }
+
+  th {
+    position: sticky;
+    z-index: 2;
+    top: 0;
+    background: var(--bg-tertiary);
+    color: var(--text-tertiary);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.045em;
+    line-height: 1.25;
+    text-transform: uppercase;
+  }
+
+  th:first-child,
+  td:first-child {
+    position: sticky;
+    z-index: 1;
+    left: 0;
+    width: 174px;
+    background: var(--bg-primary);
+  }
+
+  th:first-child {
+    z-index: 3;
+    background: var(--bg-tertiary);
+  }
+
+  th:nth-child(2) {
+    width: 164px;
+  }
+
+  th:nth-child(3),
+  th:nth-child(4),
+  th:nth-child(6) {
+    width: 86px;
+  }
+
+  th:nth-child(5) {
+    width: 116px;
+  }
+
+  th:nth-child(7) {
+    width: 148px;
+  }
+
+  th:nth-child(8) {
+    width: 184px;
+  }
+
+  tbody:last-child tr:last-child td {
+    border-bottom: 0;
+  }
+
+  tbody + tbody tr:first-child td {
+    border-top: 1px solid color-mix(in srgb, var(--border-color) 72%, var(--text-tertiary));
+  }
+
+  tbody tr:hover td {
+    background: color-mix(in srgb, var(--amber-color) 4%, var(--bg-primary));
+  }
+}
+
+.modelCell,
+.contextCell,
+.rateCell,
+.policyCell,
+.creditCell {
+  strong,
+  small,
+  a {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    line-height: 1.3;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  strong {
+    font-size: 10px;
+  }
+
+  small {
+    color: var(--text-tertiary);
+    font-size: 9px;
+  }
+}
+
+.modelCell {
+  strong {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 11px;
+  }
+
+  a {
+    display: inline-flex;
+    width: fit-content;
+    align-items: center;
+    gap: 3px;
+    margin-top: 2px;
+    color: var(--amber-text);
+    font-size: 9px;
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    &:focus-visible {
+      border-radius: 3px;
+      outline: 2px solid var(--amber-color);
+      outline-offset: 1px;
+    }
+  }
+}
+
+.contextCell strong {
+  font-size: 10px;
+}
+
+.contextCell small {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.rateCell {
+  strong,
+  small {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+
+  strong {
+    font-size: 11px;
+  }
+}
+
+.inputRate strong {
+  color: var(--text-primary);
+}
+
+.cachedRate strong {
+  color: var(--success-color);
+}
+
+.cacheWriteRate strong {
+  color: color-mix(in srgb, var(--amber-color) 78%, var(--text-primary));
+  overflow: visible;
+  font-size: 10px;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.outputRate strong {
+  color: var(--amber-text);
+}
+
+.policyCell,
+.creditCell {
+  strong {
+    overflow: visible;
+    font-size: 9px;
+    line-height: 1.35;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  &[data-tone='fast'] strong {
+    color: var(--amber-text);
+  }
+
+  &[data-tone='credit'] strong {
+    color: var(--success-color);
+  }
+
+  &[data-tone='muted'] strong {
+    color: var(--text-tertiary);
+    font-weight: 600;
+  }
+}
+
+.policyCell small {
+  margin-top: 2px;
+  overflow: visible;
+  color: var(--text-secondary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 8px;
+  line-height: 1.35;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+@media (max-width: 1024px) {
+  .header {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 9px;
+  }
+
+  .meta {
+    min-width: 0;
+    justify-items: start;
+  }
+
+  .metaBadges,
+  .sourceLinks {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 768px) {
+  .catalog {
+    overflow: visible;
+    border: 0;
+    background: transparent;
+  }
+
+  .header {
+    padding: 11px;
+    border: 1px solid var(--border-color);
+    border-radius: 11px;
+  }
+
+  .heading p {
+    font-size: 10px;
+  }
+
+  .tableRegion {
+    margin-top: 7px;
+    overflow: visible;
+  }
+
+  .table {
+    display: block;
+    min-width: 0;
+
+    thead {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+    }
+
+    tbody {
+      display: grid;
+      overflow: hidden;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      background: var(--bg-primary);
+    }
+
+    tbody + tbody {
+      margin-top: 7px;
+    }
+
+    tr {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 9px 12px;
+      padding: 10px;
+    }
+
+    tr + tr {
+      border-top: 1px solid var(--border-color);
+    }
+
+    td,
+    tbody + tbody tr:first-child td {
+      display: grid;
+      min-width: 0;
+      gap: 2px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+    }
+
+    tbody tr:hover td {
+      background: transparent;
+    }
+
+    td::before {
+      color: var(--text-tertiary);
+      content: attr(data-label);
+      font-size: 8px;
+      font-weight: 800;
+      letter-spacing: 0.045em;
+      line-height: 1.25;
+      text-transform: uppercase;
+    }
+
+    th:first-child,
+    td:first-child {
+      position: static;
+      width: auto;
+      background: transparent;
+    }
+
+    tbody tr + tr .modelCell {
+      display: none;
+    }
+  }
+
+  .modelCell {
+    grid-column: 1 / -1;
+    padding-bottom: 8px !important;
+    border-bottom: 1px solid var(--border-color) !important;
+
+    &::before {
+      content: none !important;
+    }
+
+    strong {
+      font-size: 12px;
+    }
+
+    small,
+    a {
+      overflow: visible;
+      text-overflow: clip;
+      white-space: normal;
+    }
+  }
+
+  .contextCell {
+    grid-column: 1 / -1;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: baseline;
+    gap: 8px !important;
+
+    &::before {
+      grid-column: 1 / -1;
+    }
+
+    small {
+      overflow: visible;
+      text-align: right;
+      text-overflow: clip;
+      white-space: normal;
+    }
+  }
+
+  .policyCell,
+  .creditCell {
+    strong {
+      font-size: 10px;
+    }
+  }
+}
+
+@media (max-width: 420px) {
+  .header {
+    gap: 8px;
+  }
+
+  .metaBadges,
+  .sourceLinks {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sourceLinks a {
+    overflow-wrap: anywhere;
+  }
+
+  .table tr {
+    gap: 8px 10px;
+    padding: 9px;
+  }
+}

@@ -2319,6 +2319,153 @@ def run_usage_pricing_entry_smoke(page: Any) -> None:
     page.get_by_text("12 unknown-billing tokens", exact=True).first.wait_for()
 
 
+def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
+    empty_usage_payload = {
+        "usage": {
+            "total_requests": 0,
+            "success_count": 0,
+            "failure_count": 0,
+            "total_tokens": 0,
+            "apis": {},
+        }
+    }
+    page = context.new_page()
+    page.set_default_timeout(15_000)
+    page.route(
+        "**/v0/management/usage",
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps(empty_usage_payload),
+        ),
+    )
+
+    try:
+        page.goto(
+            f"{app_url}?route=pricing-empty-catalog#/usage/pricing",
+            wait_until="domcontentloaded",
+        )
+        page.get_by_role("heading", name="Pricing workspace", exact=True).wait_for()
+        catalog = page.locator('[data-testid="preset-pricing-catalog"]')
+        catalog.wait_for()
+        page.get_by_text("No usage models yet", exact=True).wait_for()
+
+        preset_models = catalog.locator('[data-testid="preset-pricing-model"]')
+        expected_model_count = int(catalog.get_attribute("data-model-count") or "0")
+        if expected_model_count <= 0 or preset_models.count() != expected_model_count:
+            raise AssertionError(
+                "Empty-usage preset catalog did not render every catalog model: "
+                f"expected {expected_model_count}, found {preset_models.count()}"
+            )
+        if page.locator('[data-testid="pricing-model-row"]').count() != 0:
+            raise AssertionError("Empty usage unexpectedly produced usage-backed pricing rows")
+
+        for model_name in [
+            "gpt-5.6-sol",
+            "gpt-5.6-terra",
+            "gpt-5.6-luna",
+            "gpt-5.5",
+            "gpt-5.4",
+            "gpt-5.4-mini",
+        ]:
+            catalog.locator(
+                f'[data-testid="preset-pricing-model"][data-model="{model_name}"]'
+            ).wait_for()
+
+        long_context_cell_text = (
+            catalog.locator(
+                '[data-testid="preset-pricing-model"][data-model="gpt-5.6-sol"] '
+                'tr[data-context-band="long"] td'
+            )
+            .nth(1)
+            .text_content()
+            or ""
+        )
+        if "gpt-5.6-sol" not in long_context_cell_text:
+            raise AssertionError(
+                "Mobile-hidden long-context model identity is missing from accessible text"
+            )
+
+        for column_name in ["Input", "Cached input", "Cache write", "Output"]:
+            catalog.get_by_role(
+                "columnheader", name=column_name, exact=True
+            ).wait_for()
+
+        catalog_text = catalog.inner_text()
+        for expected_text in [
+            "Short context",
+            "Long context",
+            "Official API ×2.50",
+            "Credits Std ×1.00 · Fast ×2.50",
+            "Fast long context unsupported",
+            "Credits: no official multiplier",
+        ]:
+            if expected_text not in catalog_text:
+                raise AssertionError(
+                    f"Empty-usage preset catalog is missing {expected_text!r}: {catalog_text!r}"
+                )
+
+        table_region = catalog.get_by_role(
+            "region", name="Complete preset price table", exact=True
+        )
+        table_region.focus()
+        if not table_region.evaluate("region => document.activeElement === region"):
+            raise AssertionError("Preset catalog table region is not keyboard focusable")
+        if table_region.evaluate("region => getComputedStyle(region).outlineStyle") == "none":
+            raise AssertionError("Preset catalog table region has no keyboard focus indicator")
+
+        page.set_viewport_size({"width": 390, "height": 844})
+        page.wait_for_function("() => window.matchMedia('(max-width: 768px)').matches")
+
+        def assert_mobile_catalog_layout(locale_name: str) -> None:
+            mobile_metrics = catalog.evaluate(
+                """catalog => ({
+                  documentClientWidth: document.documentElement.clientWidth,
+                  documentScrollWidth: document.documentElement.scrollWidth,
+                  modelGroups: Array.from(
+                    catalog.querySelectorAll('[data-testid="preset-pricing-model"]')
+                  ).map((group) => {
+                    const rect = group.getBoundingClientRect();
+                    return { left: rect.left, right: rect.right, width: rect.width };
+                  }),
+                })"""
+            )
+            if (
+                mobile_metrics["documentScrollWidth"]
+                > mobile_metrics["documentClientWidth"] + 1
+            ):
+                raise AssertionError(
+                    f"{locale_name} preset catalog causes page overflow at 390px: "
+                    f"{mobile_metrics!r}"
+                )
+            if any(
+                group["left"] < -1
+                or group["right"] > mobile_metrics["documentClientWidth"] + 1
+                or group["width"] <= 0
+                for group in mobile_metrics["modelGroups"]
+            ):
+                raise AssertionError(
+                    f"{locale_name} preset catalog cards are clipped at 390px: "
+                    f"{mobile_metrics!r}"
+                )
+
+        assert_mobile_catalog_layout("English")
+        language_button = page.locator(".language-menu > button")
+        for menu_name, catalog_title, locale_name in [
+            ("Русский", "Таблица предустановленных цен", "Russian"),
+            ("中文", "预设价格表", "Simplified Chinese"),
+        ]:
+            language_button.click()
+            page.get_by_role("menuitemradio", name=menu_name, exact=True).click()
+            catalog.get_by_role("heading", name=catalog_title, exact=True).wait_for()
+            assert_mobile_catalog_layout(locale_name)
+
+        language_button.click()
+        page.get_by_role("menuitemradio", name="English", exact=True).click()
+    finally:
+        page.close()
+
+
 def run_usage_pricing_smoke(page: Any) -> None:
     page.get_by_role("heading", name="Pricing workspace", exact=True).wait_for()
     page.get_by_text("API USD estimates are not provider invoices.", exact=True).wait_for()
@@ -3999,6 +4146,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
                     run_usage_import_review_smoke(page, state)
                 elif route == "/usage/pricing":
                     run_usage_pricing_smoke(page)
+                    run_usage_pricing_empty_catalog_smoke(context, app_url)
 
             page.goto(f"{app_url}?route=plugin-store-auth#/plugin-store", wait_until="domcontentloaded")
             page.wait_for_function("() => window.location.hash.endsWith('/plugin-store')")
