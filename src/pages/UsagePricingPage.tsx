@@ -12,6 +12,8 @@ import {
   IconChevronLeft,
   IconDownload,
   IconExternalLink,
+  IconFileText,
+  IconRefreshCw,
   IconSearch,
   IconSettings,
 } from '@/components/ui/icons';
@@ -20,16 +22,19 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useNotificationStore } from '@/stores';
 import { downloadBlob } from '@/utils/download';
 import {
+  CHATGPT_FAST_SOURCE_URL,
   OPENAI_CATALOG_AS_OF,
   OPENAI_CATALOG_VERSION,
   OPENAI_PRICE_CATALOG,
   OPENAI_PRICING_SOURCE_URL,
-  calculatePricingCoverage,
+  analyzeUsagePricing,
   createDefaultPriceProfileV3,
   findCatalogEntry,
+  findChatGptCreditPolicy,
   formatCompactNumber,
   formatUsd,
-  getPricingModelSummaries,
+  getApiFastPolicyDisplay,
+  hasPricingAnomaly,
   importPriceProfileV3,
   preflightPriceProfileImportV3,
   serializePriceProfileV3,
@@ -234,27 +239,10 @@ const buildDraftProfile = (
     : { profile: null, error: 'profile' };
 };
 
-const hasAnomaly = (summary: PricingModelSummary): boolean =>
-  summary.pricingCoverage.unsupportedRequests > 0 ||
-  summary.warnings.includes('fallbackStandard') ||
-  (summary.resolvedPrice.modelMatch !== 'none' &&
-    (summary.pricingCoverage.pricedRequests < summary.pricingCoverage.totalRequests ||
-      summary.pricingCoverage.pricedTokens < summary.pricingCoverage.totalTokens));
-
 const getPricingStatus = (summary: PricingModelSummary, profile: PriceProfileV3): PricingStatus => {
   const key = normalizeModelKey(summary.modelName);
   if (profile.overrides[key] !== undefined || profile.aliases[key] !== undefined) return 'custom';
   return summary.resolvedPrice.modelMatch === 'none' ? 'unmatched' : 'preset';
-};
-
-const derivedFastMultiplier = (summary: PricingModelSummary): number | null => {
-  const standard = summary.resolvedPrice.standard?.short;
-  const fast = summary.resolvedPrice.fast;
-  if (!standard || !fast) return null;
-  if ('multiplier' in fast && typeof fast.multiplier === 'number') return fast.multiplier;
-  if (standard.input > 0) return fast.short.input / standard.input;
-  if (standard.output > 0) return fast.short.output / standard.output;
-  return null;
 };
 
 const formatRate = (value: number | undefined): string =>
@@ -268,6 +256,7 @@ export function UsagePricingPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const isMobile = useMediaQuery('(max-width: 768px)');
+  const isEditorModal = useMediaQuery('(max-width: 1279px)');
   const { showNotification, showConfirmation } = useNotificationStore();
   const {
     usage,
@@ -284,14 +273,11 @@ export function UsagePricingPage() {
   const [mobileEditorOpen, setMobileEditorOpen] = useState(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
-  const modelSummaries = useMemo(
-    () => getPricingModelSummaries(usage, priceProfile),
+  const pricingAnalysis = useMemo(
+    () => analyzeUsagePricing(usage, priceProfile),
     [priceProfile, usage]
   );
-  const coverage = useMemo(
-    () => calculatePricingCoverage(usage, priceProfile),
-    [priceProfile, usage]
-  );
+  const { coverage, modelSummaries } = pricingAnalysis;
 
   const filteredSummaries = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -307,7 +293,9 @@ export function UsagePricingPage() {
       if (filter === 'preset') return status === 'preset';
       if (filter === 'custom') return status === 'custom';
       if (filter === 'unmatched') return status === 'unmatched';
-      if (filter === 'anomaly') return hasAnomaly(summary);
+      if (filter === 'anomaly') {
+        return hasPricingAnomaly(summary.pricingCoverage, summary.warnings);
+      }
       return true;
     });
   }, [filter, modelSummaries, priceProfile, query]);
@@ -340,19 +328,17 @@ export function UsagePricingPage() {
         : { profile: null, error: null },
     [draft, priceProfile, selectedSummary]
   );
-  const draftCoverage = useMemo(
-    () => (draftResult.profile ? calculatePricingCoverage(usage, draftResult.profile) : null),
+  const draftAnalysis = useMemo(
+    () => (draftResult.profile ? analyzeUsagePricing(usage, draftResult.profile) : null),
     [draftResult.profile, usage]
   );
-  const draftSummary = useMemo(
-    () =>
-      draftResult.profile && selectedSummary
-        ? (getPricingModelSummaries(usage, draftResult.profile).find(
-            (item) => item.modelName === selectedSummary.modelName
-          ) ?? null)
-        : null,
-    [draftResult.profile, selectedSummary, usage]
-  );
+  const draftCoverage = draftAnalysis?.coverage ?? null;
+  const draftSummary =
+    draftAnalysis && selectedSummary
+      ? (draftAnalysis.modelSummaries.find(
+          (item) => item.modelName === selectedSummary.modelName
+        ) ?? null)
+      : null;
 
   const filterOptions = useMemo(
     () =>
@@ -375,7 +361,7 @@ export function UsagePricingPage() {
   const selectModel = (modelName: string) => {
     setSelectedModel(modelName);
     setDraftState(null);
-    if (isMobile) setMobileEditorOpen(true);
+    if (isEditorModal) setMobileEditorOpen(true);
   };
 
   const updateDraft = <K extends keyof PricingEditorDraft>(
@@ -491,8 +477,9 @@ export function UsagePricingPage() {
     const currentCost = selectedSummary.estimatedAmount;
     const nextCost = draftSummary?.estimatedAmount ?? currentCost;
     const costDelta = nextCost - currentCost;
-    const currentCoverage = coverage.pricedRequestRatio * 100;
-    const nextCoverage = (draftCoverage?.pricedRequestRatio ?? coverage.pricedRequestRatio) * 100;
+    const currentCoverage = coverage.apiPricedRequestRatio * 100;
+    const nextCoverage =
+      (draftCoverage?.apiPricedRequestRatio ?? coverage.apiPricedRequestRatio) * 100;
     const clearLabel = modelIsCanonicalPreset
       ? t('usage_stats.pricing_restore_preset')
       : t('usage_stats.pricing_delete_config');
@@ -512,7 +499,11 @@ export function UsagePricingPage() {
           </span>
         </div>
 
-        <div className={styles.editorSection}>
+        <div className={styles.editorDomainNotice}>
+          {t('usage_stats.pricing_editor_domain_notice')}
+        </div>
+
+        <div className={`${styles.editorSection} ${styles.aliasSection}`}>
           <div className={styles.editorSectionTitle}>{t('usage_stats.pricing_alias')}</div>
           <Input
             value={draft.aliasTarget}
@@ -528,7 +519,10 @@ export function UsagePricingPage() {
           />
         </div>
 
-        <fieldset className={styles.editorSection} disabled={aliasMode}>
+        <fieldset
+          className={`${styles.editorSection} ${styles.standardSection}`}
+          disabled={aliasMode}
+        >
           <legend className={styles.editorSectionTitle}>
             {t('usage_stats.pricing_standard_rates')}
           </legend>
@@ -569,7 +563,7 @@ export function UsagePricingPage() {
           </div>
         </fieldset>
 
-        <fieldset className={styles.editorSection} disabled={aliasMode}>
+        <fieldset className={`${styles.editorSection} ${styles.fastSection}`} disabled={aliasMode}>
           <legend className={styles.editorSectionTitle}>
             {t('usage_stats.pricing_fast_rates')}
           </legend>
@@ -578,6 +572,7 @@ export function UsagePricingPage() {
             options={fastModeOptions}
             onChange={(value) => updateDraft('fastMode', value as FastEditorMode)}
             ariaLabel={t('usage_stats.pricing_fast_rates')}
+            size="sm"
           />
           {draft.fastMode === 'multiplier' && (
             <Input
@@ -635,7 +630,7 @@ export function UsagePricingPage() {
           )}
         </fieldset>
 
-        <fieldset className={styles.editorSection} disabled={aliasMode}>
+        <fieldset className={`${styles.editorSection} ${styles.longSection}`} disabled={aliasMode}>
           <legend className={styles.editorSectionTitle}>
             {t('usage_stats.pricing_long_context')}
           </legend>
@@ -696,7 +691,7 @@ export function UsagePricingPage() {
         <div className={styles.previewPanel}>
           <div>
             <span>{t('usage_stats.pricing_preview_affected')}</span>
-            <strong>{selectedSummary.requestCount.toLocaleString()}</strong>
+            <strong>{selectedSummary.pricingCoverage.apiTokenUsdRequests.toLocaleString()}</strong>
           </div>
           <div>
             <span>{t('usage_stats.pricing_preview_coverage')}</span>
@@ -745,7 +740,12 @@ export function UsagePricingPage() {
     <div className={styles.container} data-testid="usage-pricing-page">
       <header className={styles.header}>
         <div className={styles.headerCopy}>
-          <Button variant="ghost" size="sm" onClick={() => navigate('/usage')}>
+          <Button
+            className={styles.backButton}
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate('/usage')}
+          >
             <IconChevronLeft size={16} />
             {t('usage_stats.pricing_back')}
           </Button>
@@ -763,23 +763,27 @@ export function UsagePricingPage() {
           <span>{t('usage_stats.pricing_catalog')}</span>
           <strong>{OPENAI_CATALOG_VERSION}</strong>
           <a href={OPENAI_PRICING_SOURCE_URL} target="_blank" rel="noreferrer">
-            {t('usage_stats.pricing_source')} <IconExternalLink size={13} />
+            {t('usage_stats.pricing_api_source')} <IconExternalLink size={13} />
+          </a>
+          <a href={CHATGPT_FAST_SOURCE_URL} target="_blank" rel="noreferrer">
+            {t('usage_stats.pricing_chatgpt_source')} <IconExternalLink size={13} />
           </a>
         </div>
       </header>
 
       <div className={styles.notice}>
         <IconAlertTriangle size={17} />
-        <div>
+        <div className={styles.noticeCopy}>
           <strong>{t('usage_stats.pricing_estimate_notice')}</strong>
           <span>{t('usage_stats.pricing_browser_notice')}</span>
           <span>{t('usage_stats.pricing_history_notice')}</span>
+          <span>{t('usage_stats.pricing_credit_notice')}</span>
         </div>
       </div>
 
       {(priceProfileSource === 'v2' || priceProfileWarnings.length > 0) && (
         <div className={styles.migrationNotice}>
-          {priceProfileSource === 'v2'
+          {priceProfileSource === 'v2' && priceProfileWarnings.length === 0
             ? t('usage_stats.pricing_migrated_v2')
             : t('usage_stats.pricing_profile_warning')}
         </div>
@@ -787,31 +791,43 @@ export function UsagePricingPage() {
 
       <section className={styles.summaryGrid} aria-label={t('usage_stats.pricing_summary')}>
         <div className={styles.summaryCard}>
-          <span>{t('usage_stats.pricing_models_metric')}</span>
+          <span>{t('usage_stats.pricing_api_usd_estimate')}</span>
           <strong>
-            {coverage.pricedModels} / {coverage.totalModels}
+            {coverage.pricedRequests > 0 ? formatUsd(coverage.estimatedAmount) : '--'}
           </strong>
-          <small>{(coverage.pricedModelRatio * 100).toFixed(1)}%</small>
-        </div>
-        <div className={styles.summaryCard}>
-          <span>{t('usage_stats.pricing_request_coverage')}</span>
-          <strong>{(coverage.pricedRequestRatio * 100).toFixed(1)}%</strong>
           <small>
-            {coverage.pricedRequests} / {coverage.totalRequests}
+            {coverage.pricedRequests} / {coverage.apiTokenUsdRequests}{' '}
+            {t('usage_stats.pricing_requests_unit')}
           </small>
         </div>
         <div className={styles.summaryCard}>
-          <span>{t('usage_stats.pricing_token_coverage')}</span>
-          <strong>{(coverage.pricedTokenRatio * 100).toFixed(1)}%</strong>
+          <span>{t('usage_stats.pricing_api_request_coverage')}</span>
+          <strong>{(coverage.apiPricedRequestRatio * 100).toFixed(1)}%</strong>
           <small>
-            {formatCompactNumber(coverage.pricedTokens)} /{' '}
-            {formatCompactNumber(coverage.totalTokens)}
+            {t('usage_stats.pricing_api_token_coverage', {
+              percent: (coverage.apiPricedTokenRatio * 100).toFixed(1),
+            })}
           </small>
         </div>
         <div className={styles.summaryCard}>
-          <span>{t('usage_stats.pricing_assumed_tier')}</span>
-          <strong>{coverage.assumedTierRequests.toLocaleString()}</strong>
-          <small>{t('usage_stats.pricing_assumed_tier_hint')}</small>
+          <span>{t('usage_stats.pricing_credit_rated')}</span>
+          <strong>
+            {coverage.creditRatedRequests} / {coverage.chatGptCreditRequests}
+          </strong>
+          <small>
+            {t('usage_stats.pricing_credit_fast_count', {
+              count: coverage.creditFastRequests,
+            })}
+          </small>
+        </div>
+        <div className={styles.summaryCard}>
+          <span>{t('usage_stats.pricing_unknown_billing')}</span>
+          <strong>{coverage.unknownBillingRequests.toLocaleString()}</strong>
+          <small>
+            {t('usage_stats.pricing_unknown_billing_hint', {
+              tokens: formatCompactNumber(coverage.unknownBillingTokens),
+            })}
+          </small>
         </div>
       </section>
 
@@ -830,10 +846,13 @@ export function UsagePricingPage() {
           options={filterOptions}
           onChange={(value) => setFilter(value as PricingFilter)}
           fullWidth={false}
+          size="sm"
+          className={styles.filterSelect}
           ariaLabel={t('usage_stats.pricing_filter')}
         />
         <div className={styles.toolbarActions}>
           <Button variant="secondary" size="sm" onClick={() => importInputRef.current?.click()}>
+            <IconFileText size={15} />
             {t('usage_stats.pricing_import_action')}
           </Button>
           <Button variant="secondary" size="sm" onClick={exportProfile}>
@@ -841,6 +860,7 @@ export function UsagePricingPage() {
             {t('usage_stats.pricing_export_action')}
           </Button>
           <Button variant="danger" size="sm" onClick={resetAll}>
+            <IconRefreshCw size={15} />
             {t('usage_stats.pricing_reset_action')}
           </Button>
           <input
@@ -854,7 +874,9 @@ export function UsagePricingPage() {
       </section>
 
       {loading && !usage ? (
-        <div className={styles.loadingState}>{t('common.loading')}</div>
+        <div className={styles.loadingState} role="status">
+          {t('common.loading')}
+        </div>
       ) : modelSummaries.length === 0 ? (
         <EmptyState
           title={t('usage_stats.pricing_empty_title')}
@@ -868,18 +890,19 @@ export function UsagePricingPage() {
           <div className={styles.modelPanel}>
             <div className={styles.modelHeader} aria-hidden="true">
               <span>{t('usage_stats.model_name')}</span>
-              <span>{t('usage_stats.pricing_standard_short')}</span>
-              <span>{t('usage_stats.pricing_fast')}</span>
+              <span>{t('usage_stats.pricing_standard_api')}</span>
+              <span>{t('usage_stats.pricing_fast_policies')}</span>
               <span>{t('usage_stats.pricing_long_context')}</span>
-              <span>{t('usage_stats.pricing_usage')}</span>
-              <span>{t('usage_stats.total_cost')}</span>
+              <span>{t('usage_stats.pricing_usage_by_basis')}</span>
+              <span>{t('usage_stats.pricing_api_usd')}</span>
             </div>
             <div className={styles.modelList}>
               {filteredSummaries.map((summary) => {
                 const standard = summary.resolvedPrice.standard?.short;
-                const fastMultiplier = derivedFastMultiplier(summary);
+                const fastPolicy = getApiFastPolicyDisplay(summary.resolvedPrice);
+                const creditPolicy = findChatGptCreditPolicy(summary.modelName);
                 const active = summary.modelName === activeModelName;
-                const anomaly = hasAnomaly(summary);
+                const anomaly = hasPricingAnomaly(summary.pricingCoverage, summary.warnings);
                 const pricingStatus = getPricingStatus(summary, priceProfile);
                 return (
                   <button
@@ -892,8 +915,12 @@ export function UsagePricingPage() {
                     data-model={summary.modelName}
                   >
                     <span className={styles.modelIdentity}>
-                      <strong>{summary.modelName}</strong>
-                      <small>
+                      <strong title={summary.modelName}>{summary.modelName}</strong>
+                      <small
+                        title={
+                          summary.resolvedPrice.resolvedModel ?? t('usage_stats.pricing_unmatched')
+                        }
+                      >
                         {summary.resolvedPrice.resolvedModel ?? t('usage_stats.pricing_unmatched')}
                       </small>
                       <span className={styles.rowBadges}>
@@ -919,7 +946,7 @@ export function UsagePricingPage() {
                     </span>
                     <span
                       className={styles.rateCell}
-                      data-label={t('usage_stats.pricing_standard_short')}
+                      data-label={t('usage_stats.pricing_standard_api')}
                     >
                       <strong>{standard ? formatRate(standard.input) : '--'}</strong>
                       <small>
@@ -928,16 +955,29 @@ export function UsagePricingPage() {
                           : '--'}
                       </small>
                     </span>
-                    <span className={styles.rateCell} data-label={t('usage_stats.pricing_fast')}>
+                    <span
+                      className={styles.rateCell}
+                      data-label={t('usage_stats.pricing_fast_policies')}
+                    >
                       <strong>
-                        {fastMultiplier === null ? '--' : `${fastMultiplier.toFixed(2)}×`}
+                        {fastPolicy.kind === 'none'
+                          ? '--'
+                          : fastPolicy.kind === 'explicit-rates'
+                            ? t('usage_stats.pricing_api_priority_explicit_rates')
+                            : t(
+                                fastPolicy.kind === 'custom-multiplier'
+                                  ? 'usage_stats.pricing_api_priority_multiplier_custom'
+                                  : 'usage_stats.pricing_api_priority_multiplier_official',
+                                { multiplier: fastPolicy.multiplier.toFixed(2) }
+                              )}
                       </strong>
                       <small>
-                        {summary.resolvedPrice.fast === null
-                          ? '--'
-                          : summary.resolvedPrice.fast.longSupported === false
-                            ? t('usage_stats.pricing_long_unsupported')
-                            : t('usage_stats.pricing_fast_configured')}
+                        {creditPolicy === null
+                          ? t('usage_stats.pricing_chatgpt_credit_unavailable')
+                          : t('usage_stats.pricing_chatgpt_credit_multipliers', {
+                              standard: creditPolicy.standardMultiplier.toFixed(2),
+                              fast: creditPolicy.fastMultiplier.toFixed(2),
+                            })}
                       </small>
                     </span>
                     <span
@@ -950,36 +990,66 @@ export function UsagePricingPage() {
                           : '--'}
                       </strong>
                       <small>
-                        {summary.longContextRequestCount > 0
-                          ? t('usage_stats.pricing_long_requests', {
-                              count: summary.longContextRequestCount,
-                            })
-                          : t('usage_stats.pricing_short_only')}
+                        {summary.longContextRequestCount > 0 &&
+                        summary.resolvedPrice.fast?.longSupported === false
+                          ? t('usage_stats.pricing_long_unsupported')
+                          : summary.longContextRequestCount > 0
+                            ? t('usage_stats.pricing_long_requests', {
+                                count: summary.longContextRequestCount,
+                              })
+                            : summary.resolvedPrice.standard?.long
+                              ? t('usage_stats.pricing_short_only')
+                              : t('usage_stats.pricing_single_rate_card')}
                       </small>
                     </span>
-                    <span className={styles.usageCell} data-label={t('usage_stats.pricing_usage')}>
+                    <span
+                      className={styles.usageCell}
+                      data-label={t('usage_stats.pricing_usage_by_basis')}
+                      title={t('usage_stats.pricing_usage_breakdown', {
+                        api: summary.pricingCoverage.apiTokenUsdRequests,
+                        credits: summary.pricingCoverage.chatGptCreditRequests,
+                        unknown: summary.pricingCoverage.unknownBillingRequests,
+                      })}
+                    >
                       <strong>{summary.requestCount.toLocaleString()}</strong>
-                      <small>{formatCompactNumber(summary.tokenCount)}</small>
+                      <small>
+                        {t('usage_stats.pricing_usage_breakdown', {
+                          api: summary.pricingCoverage.apiTokenUsdRequests,
+                          credits: summary.pricingCoverage.chatGptCreditRequests,
+                          unknown: summary.pricingCoverage.unknownBillingRequests,
+                        })}
+                      </small>
                     </span>
-                    <span className={styles.costCell} data-label={t('usage_stats.total_cost')}>
+                    <span className={styles.costCell} data-label={t('usage_stats.pricing_api_usd')}>
                       <strong>
                         {summary.pricingCoverage.pricedRequests > 0
                           ? formatUsd(summary.estimatedAmount)
                           : '--'}
                       </strong>
                       <small>
-                        {(summary.pricingCoverage.pricedRequestRatio * 100).toFixed(1)}%
+                        {summary.pricingCoverage.apiTokenUsdRequests > 0
+                          ? `${(summary.pricingCoverage.apiPricedRequestRatio * 100).toFixed(1)}%`
+                          : t('usage_stats.pricing_no_api_requests')}
                       </small>
                     </span>
                   </button>
                 );
               })}
               {filteredSummaries.length === 0 && (
-                <div className={styles.noMatches}>{t('usage_stats.pricing_no_matches')}</div>
+                <div className={styles.noMatches} role="status">
+                  {t('usage_stats.pricing_no_matches')}
+                </div>
               )}
             </div>
           </div>
-          {!isMobile && <aside className={styles.editorPanel}>{renderEditor()}</aside>}
+          {!isEditorModal && (
+            <aside
+              className={styles.editorPanel}
+              aria-label={t('usage_stats.pricing_editor_title')}
+            >
+              {renderEditor()}
+            </aside>
+          )}
         </div>
       )}
 
@@ -991,10 +1061,10 @@ export function UsagePricingPage() {
       </footer>
 
       <Modal
-        open={isMobile && mobileEditorOpen}
+        open={isEditorModal && mobileEditorOpen}
         title={selectedSummary?.modelName ?? t('usage_stats.pricing_editor_title')}
         onClose={() => setMobileEditorOpen(false)}
-        width="100%"
+        width={isMobile ? '100%' : '760px'}
         className={styles.mobileEditorModal}
       >
         {renderEditor()}

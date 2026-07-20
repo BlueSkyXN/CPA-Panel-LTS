@@ -302,6 +302,7 @@ def build_usage_payload() -> dict[str, Any]:
             "request_service_tier": " priority ",
             "response_service_tier": " priority ",
             "effective_service_tier": " priority ",
+            "billing_basis": "chatgpt-credits",
             "reasoning_effort": " max ",
             "latency": 110,
             "tokens": {
@@ -324,6 +325,7 @@ def build_usage_payload() -> dict[str, Any]:
             "requestServiceTier": " priority ",
             "responseServiceTier": " default ",
             "effectiveServiceTier": " standard ",
+            "billingBasis": "chatgpt-credits",
             "reasoningEffort": " high ",
             "latency": 120,
             "tokens": {
@@ -340,12 +342,14 @@ def build_usage_payload() -> dict[str, Any]:
             "timestamp": timestamp(3),
             "source": "codex-key-1",
             "AuthIndex": "codex-smoke-auth",
+            "reasoning_effort": "none",
             "latency": 130,
             "tokens": {
                 "input_tokens": 9,
                 "output_tokens": 3,
                 "reasoning_tokens": 0,
-                "cached_tokens": 0,
+                "cached_tokens": 12,
+                "cache_read_tokens": 12,
                 "total_tokens": 12,
             },
             "failed": True,
@@ -357,13 +361,15 @@ def build_usage_payload() -> dict[str, Any]:
             "ServiceTier": " flex ",
             "RequestServiceTier": " priority ",
             "ResponseServiceTier": " flex ",
+            "BillingBasis": "api-token-usd",
             "ReasoningEffort": " low ",
             "latency": 140,
             "tokens": {
                 "input_tokens": 11,
                 "output_tokens": 7,
                 "reasoning_tokens": 1,
-                "cached_tokens": 0,
+                "cached_tokens": 7,
+                "cache_read_tokens": 7,
                 "total_tokens": 19,
             },
             "failed": False,
@@ -374,7 +380,8 @@ def build_usage_payload() -> dict[str, Any]:
             "auth_index": "codex-smoke-auth",
             "service_tier": " cache-import ",
             "request_service_tier": " fast ",
-            "reasoning_effort": "max",
+            "billing_basis": "api-token-usd",
+            "reasoning_effort": "xhigh",
             "latency": 150,
             "tokens": {
                 "input_tokens": 20,
@@ -397,6 +404,8 @@ def build_usage_payload() -> dict[str, Any]:
             "effective_service_tier": "priority",
             "response_service_tier": "priority",
             "request_service_tier": "priority",
+            "billing_basis": "api-token-usd",
+            "reasoning_effort": "minimal",
             "tokens": {
                 "input_tokens": 271_999,
                 "output_tokens": 0,
@@ -411,6 +420,8 @@ def build_usage_payload() -> dict[str, Any]:
             "effective_service_tier": "priority",
             "response_service_tier": "priority",
             "request_service_tier": "priority",
+            "billing_basis": "api-token-usd",
+            "reasoning_effort": "medium",
             "tokens": {
                 "input_tokens": 272_000,
                 "output_tokens": 0,
@@ -422,10 +433,11 @@ def build_usage_payload() -> dict[str, Any]:
 
     unmatched_details = [
         {
-            "timestamp": timestamp(8),
+            "timestamp": timestamp(58),
             "source": "codex-key-1",
             "auth_index": "codex-smoke-auth",
             "effective_service_tier": "standard",
+            "billing_basis": "api-token-usd",
             "tokens": {
                 "input_tokens": 100,
                 "output_tokens": 10,
@@ -440,13 +452,13 @@ def build_usage_payload() -> dict[str, Any]:
             "total_requests": 8,
             "success_count": 7,
             "failure_count": 1,
-            "total_tokens": 544_211,
+            "total_tokens": 1_544_211,
             "apis": {
                 "POST /v1/responses": {
                     "total_requests": 8,
                     "success_count": 7,
                     "failure_count": 1,
-                    "total_tokens": 544_211,
+                    "total_tokens": 1_544_211,
                     "models": {
                         "gpt-5.6-sol": {
                             "total_requests": 5,
@@ -459,7 +471,7 @@ def build_usage_payload() -> dict[str, Any]:
                             "total_requests": 2,
                             "success_count": 2,
                             "failure_count": 0,
-                            "total_tokens": 543_999,
+                            "total_tokens": 1_543_999,
                             "details": gpt54_details,
                         },
                         "vendor/unmatched-model": {
@@ -2241,25 +2253,57 @@ def run_remote_cloud_connect_runtime_smoke(page: Any, app_url: str) -> None:
 
 
 def run_usage_pricing_entry_smoke(page: Any) -> None:
-    page.get_by_text("Cost estimate coverage", exact=True).wait_for()
-    page.get_by_text("Partial estimate:", exact=False).first.wait_for()
+    page.get_by_text("Billing and pricing coverage", exact=True).wait_for()
+    page.get_by_text("Partial API USD estimate:", exact=False).first.wait_for()
+    page.get_by_text("12 unknown-billing tokens", exact=True).first.wait_for()
     pricing_buttons = page.get_by_role("button", name="Configure pricing", exact=True)
     if pricing_buttons.count() < 2:
         raise AssertionError(
             "Usage page must expose pricing from the cost summary and trend/entry surfaces"
         )
 
+    # Aggregate/detail reconciliation is available for All Time; bounded windows are
+    # detail-derived because aggregate-only Tokens have no timestamp attribution.
+    page_time_range = page.get_by_label("Time Range", exact=True).first
+    page_time_range.click()
+    page.get_by_role("option", name="All Time", exact=True).click()
+    page.get_by_text("1.0M unknown-billing tokens", exact=True).first.wait_for()
+    page.get_by_text(
+        "API USD estimate is incomplete; unmatched, unsupported, or unknown-billing usage is excluded.",
+        exact=True,
+    ).first.wait_for()
+    page_time_range.click()
+    page.get_by_role("option", name="Last 24 Hours", exact=True).click()
+    page.get_by_text("12 unknown-billing tokens", exact=True).first.wait_for()
+
 
 def run_usage_pricing_smoke(page: Any) -> None:
     page.get_by_role("heading", name="Pricing workspace", exact=True).wait_for()
-    page.get_by_text("Legacy v2 prices were migrated in memory.", exact=False).wait_for()
-    page.get_by_text("Estimates are not provider invoices.", exact=True).wait_for()
+    page.get_by_text("API USD estimates are not provider invoices.", exact=True).wait_for()
     page.get_by_text("The profile is stored only in this browser", exact=False).wait_for()
+    page.get_by_text("ChatGPT credits are shown only as official", exact=False).wait_for()
+    migration_state = page.evaluate(
+        """() => ({
+          v2: localStorage.getItem('cli-proxy-model-prices-v2'),
+          v3: localStorage.getItem('cli-proxy-model-prices-v3'),
+        })"""
+    )
+    if migration_state["v2"] is not None or not migration_state["v3"]:
+        raise AssertionError(
+            f"V2 pricing was not durably migrated and removed: {migration_state!r}"
+        )
 
     summary = page.locator('[aria-label="Pricing coverage summary"]')
     summary.wait_for()
     summary_text = summary.inner_text()
-    for expected in ["1 / 3", "75.0%", "2"]:
+    for expected in [
+        "3 / 5 requests",
+        "60.0%",
+        "2 / 2",
+        "1 Fast",
+        "Unknown billing basis",
+        "1.0M tokens excluded",
+    ]:
         if expected not in summary_text:
             raise AssertionError(
                 f"Pricing summary missing {expected!r}: {summary_text!r}"
@@ -2279,8 +2323,13 @@ def run_usage_pricing_smoke(page: Any) -> None:
         page.locator(f'[data-testid="pricing-model-row"][data-model="{model_name}"]').wait_for()
 
     gpt54_row = page.locator('[data-testid="pricing-model-row"][data-model="gpt-5.4"]')
-    gpt54_text = gpt54_row.inner_text()
-    for expected in ["Needs review", "Fast long context unsupported"]:
+    gpt54_text = gpt54_row.text_content() or ""
+    for expected in [
+        "Needs review",
+        "Fast long context unsupported",
+        "Official API ×2.00",
+        "Credits Std ×1.00 · Fast ×2.00",
+    ]:
         if expected not in gpt54_text:
             raise AssertionError(
                 f"Long-context pricing anomaly is not visible in the model row: {gpt54_text!r}"
@@ -2288,7 +2337,7 @@ def run_usage_pricing_smoke(page: Any) -> None:
 
     filter_select = page.get_by_label("Pricing status filter", exact=True)
     filter_select.click()
-    page.get_by_role("option", name="Unmatched", exact=True).click()
+    page.get_by_role("option", name="API unmatched", exact=True).click()
     wait_for_model_rows(1)
     if "vendor/unmatched-model" not in rows.first.inner_text():
         raise AssertionError("Unmatched pricing filter returned the wrong model set")
@@ -2318,10 +2367,16 @@ def run_usage_pricing_smoke(page: Any) -> None:
           v3: JSON.parse(localStorage.getItem('cli-proxy-model-prices-v3')),
         })"""
     )
-    if not storage_after_restore["v2"]:
-        raise AssertionError("Restoring a preset deleted the v2 rollback copy")
+    if storage_after_restore["v2"] is not None:
+        raise AssertionError("Persisted v3 migration left the obsolete v2 storage key behind")
     if storage_after_restore["v3"]["overrides"]:
         raise AssertionError("Restoring a preset did not clear the migrated override")
+    restored_gpt56_text = gpt56_row.inner_text()
+    for expected in ["Official API ×2.00", "Credits Std ×1.00 · Fast ×2.50"]:
+        if expected not in restored_gpt56_text:
+            raise AssertionError(
+                f"Restored GPT-5.6 row lost separate Fast policies: {restored_gpt56_text!r}"
+            )
 
     fast_mode = editor.get_by_label("Fast rates · USD / 1M", exact=True)
     fast_mode.click()
@@ -2336,6 +2391,8 @@ def run_usage_pricing_smoke(page: Any) -> None:
     )
     if stored_multiplier != 3:
         raise AssertionError(f"Fast multiplier was not persisted: {stored_multiplier!r}")
+    if "Custom API ×3.00" not in gpt56_row.inner_text():
+        raise AssertionError("Custom Fast multiplier was presented as an official policy")
 
     with page.expect_download() as profile_download:
         page.get_by_role("button", name="Export profile", exact=True).click()
@@ -2350,6 +2407,21 @@ def run_usage_pricing_smoke(page: Any) -> None:
     ) != 3:
         raise AssertionError("Pricing profile export lost the Fast multiplier")
 
+    fast_mode.click()
+    page.get_by_role("option", name="Explicit rates", exact=True).click()
+    fast_section = editor.locator("fieldset").filter(has_text="Fast rates · USD / 1M")
+    fast_section.get_by_label("Input", exact=True).fill("10")
+    fast_section.get_by_label("Cached input", exact=True).fill("1")
+    fast_section.get_by_label("Cache write", exact=True).fill("12.5")
+    fast_section.get_by_label("Output", exact=True).fill("40")
+    editor.get_by_role("button", name="Save", exact=True).click()
+    page.get_by_text("Pricing profile saved", exact=True).last.wait_for()
+    explicit_row_text = gpt56_row.inner_text()
+    if "API explicit rates" not in explicit_row_text or "Custom API ×" in explicit_row_text:
+        raise AssertionError(
+            f"Explicit Fast rates were collapsed into one multiplier: {explicit_row_text!r}"
+        )
+
     unmatched_row = page.locator(
         '[data-testid="pricing-model-row"][data-model="vendor/unmatched-model"]'
     )
@@ -2359,13 +2431,13 @@ def run_usage_pricing_smoke(page: Any) -> None:
     editor.get_by_role("button", name="Save", exact=True).click()
     page.get_by_text("Pricing profile saved", exact=True).last.wait_for()
     unmatched_text = unmatched_row.inner_text()
-    for expected in ["Custom", "Alias"]:
+    for expected in ["Custom", "Alias", "Credits: no official multiplier"]:
         if expected not in unmatched_text:
             raise AssertionError(
                 f"Saved pricing alias is not visible in the model row: {unmatched_text!r}"
             )
-    summary.get_by_text("2 / 3", exact=True).wait_for()
-    summary.get_by_text("87.5%", exact=True).first.wait_for()
+    summary.get_by_text("4 / 5 requests", exact=True).wait_for()
+    summary.get_by_text("80.0%", exact=True).first.wait_for()
 
     editor.get_by_role("button", name="Delete configuration", exact=True).click()
     page.get_by_text("Custom pricing removed", exact=True).last.wait_for()
@@ -2399,30 +2471,176 @@ def run_usage_pricing_smoke(page: Any) -> None:
           v3: JSON.parse(localStorage.getItem('cli-proxy-model-prices-v3')),
         })"""
     )
-    if not storage_after_reset["v2"]:
-        raise AssertionError("Resetting pricing deleted the v2 rollback copy")
+    if storage_after_reset["v2"] is not None:
+        raise AssertionError("Resetting pricing restored the obsolete v2 storage key")
     if storage_after_reset["v3"]["overrides"] or storage_after_reset["v3"]["aliases"]:
         raise AssertionError("Resetting pricing did not clear v3 overrides and aliases")
 
-    page.set_viewport_size({"width": 390, "height": 844})
+    page.set_viewport_size({"width": 1024, "height": 768})
+    page.wait_for_function("() => window.matchMedia('(max-width: 1279px)').matches")
+    page.wait_for_function(
+        "() => document.querySelector('[data-testid=\"pricing-editor\"]') === null"
+    )
     gpt54_row.click()
-    mobile_dialog = page.get_by_role("dialog", name="gpt-5.4")
-    mobile_dialog.wait_for()
-    mobile_dialog.get_by_text("Fast rates · USD / 1M", exact=True).wait_for()
+    compact_dialog = page.get_by_role("dialog", name="gpt-5.4")
+    compact_dialog.wait_for()
+    compact_dialog.get_by_text("Fast rates · USD / 1M", exact=True).wait_for()
     page.keyboard.press("Escape")
-    page.wait_for_function("() => document.querySelectorAll('[role=\"dialog\"]').length === 0")
+    compact_dialog.wait_for(state="detached")
+    page.wait_for_function(
+        "row => document.activeElement === row",
+        arg=gpt54_row.element_handle(),
+    )
+
+    language_button = page.locator(".language-menu > button")
+    language_button.click()
+    page.get_by_role("menuitemradio", name="Русский", exact=True).click()
+
+    page.set_viewport_size({"width": 390, "height": 844})
+    russian_summary = page.get_by_label("Сводка покрытия цен", exact=True)
+    russian_summary.wait_for()
+    page.get_by_text("Неизвестная основа тарификации", exact=True).wait_for()
+    mobile_summary_metrics = russian_summary.evaluate(
+        """summary => ({
+          columns: getComputedStyle(summary).gridTemplateColumns.split(' ').length,
+          textOverflows: Array.from(summary.querySelectorAll('span, small')).filter((node) => {
+            const style = getComputedStyle(node);
+            return style.whiteSpace === 'nowrap' || node.scrollWidth > node.clientWidth + 1;
+          }).map((node) => node.textContent?.trim()),
+          documentClientWidth: document.documentElement.clientWidth,
+          documentScrollWidth: document.documentElement.scrollWidth,
+        })"""
+    )
+    if mobile_summary_metrics["columns"] != 1 or mobile_summary_metrics["textOverflows"]:
+        raise AssertionError(
+            f"Russian pricing summary is truncated at 390px: {mobile_summary_metrics!r}"
+        )
+    if (
+        mobile_summary_metrics["documentScrollWidth"]
+        > mobile_summary_metrics["documentClientWidth"] + 1
+    ):
+        raise AssertionError(
+            f"Pricing workspace overflows at 390px: {mobile_summary_metrics!r}"
+        )
+
+    page.set_viewport_size({"width": 769, "height": 900})
+    toolbar_actions = page.get_by_role(
+        "button", name="Импортировать профиль", exact=True
+    ).locator("xpath=..")
+    toolbar_metrics = toolbar_actions.evaluate(
+        """actions => {
+          const bounds = actions.getBoundingClientRect();
+          return {
+            clientWidth: actions.clientWidth,
+            scrollWidth: actions.scrollWidth,
+            buttons: Array.from(actions.querySelectorAll('button')).map((button) => {
+              const rect = button.getBoundingClientRect();
+              return { text: button.textContent?.trim(), left: rect.left, right: rect.right };
+            }),
+            left: bounds.left,
+            right: bounds.right,
+          };
+        }"""
+    )
+    if toolbar_metrics["scrollWidth"] > toolbar_metrics["clientWidth"] + 1 or any(
+        button["left"] < toolbar_metrics["left"] - 1
+        or button["right"] > toolbar_metrics["right"] + 1
+        for button in toolbar_metrics["buttons"]
+    ):
+        raise AssertionError(
+            f"Russian pricing toolbar is clipped at 769px: {toolbar_metrics!r}"
+        )
+
+    language_button.click()
+    page.get_by_role("menuitemradio", name="English", exact=True).click()
     page.set_viewport_size({"width": 1280, "height": 720})
+    page.wait_for_function("() => !window.matchMedia('(max-width: 1279px)').matches")
+    page.locator('[data-testid="pricing-editor"]').wait_for()
 
 
 def run_usage_service_tier_smoke(page: Any) -> None:
     card = page.get_by_text("Request Events", exact=True).locator("xpath=../..")
     card.wait_for()
+    table_region = card.get_by_role("region", name="Request events table", exact=True)
+    table_region.wait_for()
+    table_region.focus()
+    page.keyboard.press("Shift+Tab")
+    page.keyboard.press("Tab")
+    if not table_region.evaluate("region => document.activeElement === region"):
+        raise AssertionError("Request-event table region is not reachable by keyboard")
+    focus_outline = table_region.evaluate(
+        "region => getComputedStyle(region).outlineStyle"
+    )
+    if focus_outline == "none":
+        raise AssertionError("Request-event table region has no keyboard focus indicator")
     card.get_by_role("columnheader", name="Tier", exact=True).wait_for()
+    card.get_by_role("columnheader", name="Billing", exact=True).wait_for()
     card.get_by_role("columnheader", name="Effort", exact=True).wait_for()
+    if card.get_by_role("columnheader", name="Source", exact=True).count() != 0:
+        raise AssertionError("Request events must hide the Source column by default")
+    if card.get_by_role("columnheader", name="Auth Index", exact=True).count() != 0:
+        raise AssertionError("Request events must hide the Auth Index column by default")
     if card.get_by_role("columnheader", name="Thinking", exact=True).count() != 0:
         raise AssertionError("Request events must expose one canonical effort column")
-    card.get_by_role("columnheader", name="Cache Read Tokens", exact=True).wait_for()
+    card.get_by_role("columnheader", name="Total Input Tokens", exact=True).wait_for()
+    card.locator("th", has_text="Uncached Input Tokens").wait_for()
+    card.get_by_role("columnheader", name="Total Output Tokens", exact=True).wait_for()
+    card.locator("th", has_text="Explicit Output Tokens").wait_for()
+    card.locator("th", has_text="Cache Read Tokens").wait_for()
     card.get_by_role("columnheader", name="Cache Write Tokens", exact=True).wait_for()
+
+    card.get_by_role("button", name="Column Settings", exact=True).click()
+    column_dialog = card.get_by_role("dialog", name="Column Settings", exact=True)
+    column_dialog.wait_for()
+    source_column = column_dialog.get_by_role("checkbox", name="Source", exact=True)
+    auth_index_column = column_dialog.get_by_role("checkbox", name="Auth Index", exact=True)
+    billing_column = column_dialog.get_by_role("checkbox", name="Billing", exact=True)
+    if source_column.is_checked() or auth_index_column.is_checked():
+        raise AssertionError("Default request-event columns exposed Source or Auth Index")
+    if not billing_column.is_checked():
+        raise AssertionError("Default request-event columns hid the billing basis")
+    source_column.check()
+    auth_index_column.check()
+    card.get_by_role("columnheader", name="Source", exact=True).wait_for()
+    card.get_by_role("columnheader", name="Auth Index", exact=True).wait_for()
+    column_dialog.get_by_role("button", name="Restore Default Columns", exact=True).click()
+    if card.get_by_role("columnheader", name="Source", exact=True).count() != 0:
+        raise AssertionError("Restoring request-event columns did not hide Source")
+    if card.get_by_role("columnheader", name="Auth Index", exact=True).count() != 0:
+        raise AssertionError("Restoring request-event columns did not hide Auth Index")
+    stored_column_state = page.evaluate(
+        """() => ({
+          legacy: localStorage.getItem('cli-proxy-usage-request-event-columns-v1'),
+          current: JSON.parse(
+            localStorage.getItem('cli-proxy-usage-request-event-columns-v2')
+          ),
+        })"""
+    )
+    stored_columns = stored_column_state["current"]
+    if stored_column_state["legacy"] is not None:
+        raise AssertionError("The obsolete request-event column defaults were not removed")
+    if (
+        stored_columns.get("source") is not False
+        or stored_columns.get("authIndex") is not False
+        or stored_columns.get("billing") is not True
+    ):
+        raise AssertionError(
+            f"Request-event default columns were not persisted: {stored_columns!r}"
+        )
+
+    for checkbox in column_dialog.get_by_role("checkbox").all():
+        checkbox_id = checkbox.get_attribute("id") or ""
+        if checkbox_id.endswith("-timestamp") or checkbox_id.endswith("-latency"):
+            continue
+        if checkbox.is_checked():
+            checkbox.uncheck()
+    timestamp_column = column_dialog.get_by_role("checkbox", name="Timestamp", exact=True)
+    if not timestamp_column.is_disabled():
+        raise AssertionError(
+            "Column settings allowed the last non-conditional request-event column to be hidden"
+        )
+    column_dialog.get_by_role("button", name="Restore Default Columns", exact=True).click()
+    page.keyboard.press("Escape")
 
     rows = card.locator("tbody tr")
 
@@ -2439,8 +2657,87 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     model_select.click()
     page.get_by_role("option", name="gpt-5.6-sol", exact=True).click()
     wait_for_row_count(5)
-    for expected_label in ["Fast", "Std", "max", "high", "low"]:
+    token_column_alignment = card.locator("table").evaluate(
+        """(table, labels) => {
+          const headers = Array.from(table.tHead?.rows[0]?.cells ?? []);
+          const firstRow = table.tBodies[0]?.rows[0];
+          return labels.map((label) => {
+            const header = headers.find((cell) => cell.textContent?.trim() === label);
+            const cell = header && firstRow ? firstRow.cells[header.cellIndex] : null;
+            if (!header || !cell) return { label, missing: true };
+            const headerRect = header.getBoundingClientRect();
+            const cellRect = cell.getBoundingClientRect();
+            return {
+              label,
+              missing: false,
+              headerAlign: getComputedStyle(header).textAlign,
+              cellAlign: getComputedStyle(cell).textAlign,
+              headerBorderLeftStyle: getComputedStyle(header).borderLeftStyle,
+              cellBorderLeftStyle: getComputedStyle(cell).borderLeftStyle,
+              headerTitle: header.getAttribute('title'),
+              headerAriaLabel: header.getAttribute('aria-label'),
+              cellTitle: cell.getAttribute('title'),
+              cellAriaLabel: cell.getAttribute('aria-label'),
+              leftDelta: Math.abs(headerRect.left - cellRect.left),
+              rightDelta: Math.abs(headerRect.right - cellRect.right),
+            };
+          });
+        }""",
+        [
+            "Total Input Tokens",
+            "Uncached Input Tokens",
+            "Total Output Tokens",
+            "Explicit Output Tokens",
+            "Reasoning Tokens",
+            "Cache Read Tokens",
+            "Cache Write Tokens",
+            "Total Tokens",
+        ],
+    )
+    misaligned_token_columns = [
+        column
+        for column in token_column_alignment
+        if column.get("missing")
+        or column.get("headerAlign") != "right"
+        or column.get("cellAlign") != "right"
+        or column.get("headerBorderLeftStyle") != "dashed"
+        or column.get("cellBorderLeftStyle") != "dashed"
+        or column.get("leftDelta", 1) > 0.5
+        or column.get("rightDelta", 1) > 0.5
+    ]
+    if misaligned_token_columns:
+        raise AssertionError(
+            "Request-event token headers and values are not column-aligned: "
+            f"{misaligned_token_columns!r}"
+        )
+    header_hints = {
+        column["label"]: column.get("headerAriaLabel") or column.get("headerTitle")
+        for column in token_column_alignment
+        if column["label"]
+        in {"Uncached Input Tokens", "Explicit Output Tokens", "Cache Read Tokens"}
+    }
+    if any(not hint for hint in header_hints.values()):
+        raise AssertionError(
+            f"Derived token explanations were not attached to column headers: {header_hints!r}"
+        )
+    unexpected_value_tooltips = [
+        column["label"]
+        for column in token_column_alignment
+        if column.get("cellTitle") is not None and column["label"] != "Cache Read Tokens"
+    ]
+    if unexpected_value_tooltips:
+        raise AssertionError(
+            "Non-cache Token value cells still expose disruptive hover explanations: "
+            f"{unexpected_value_tooltips!r}"
+        )
+    for expected_label in ["Fast", "Std", "none", "low", "high", "xhigh", "max"]:
         card.get_by_text(expected_label, exact=True).first.wait_for()
+    if card.get_by_text("Credits", exact=True).count() != 2:
+        raise AssertionError("Request events did not render two ChatGPT credit billing badges")
+    if card.get_by_text("API USD", exact=True).count() != 2:
+        raise AssertionError("Request events did not render two API USD billing badges")
+    if card.get_by_text("Unknown", exact=True).count() != 1:
+        raise AssertionError("Request events did not render the legacy unknown billing badge")
 
     fast_rows = rows.filter(has_text="Fast")
     if fast_rows.count() != 2:
@@ -2449,10 +2746,53 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         )
     priority_row = rows.filter(has_text="12").filter(has_text="Fast").first
     priority_cells = [text.strip() for text in priority_row.locator("td").all_inner_texts()]
-    if priority_cells[-6:] != ["12", "8", "2", "1", "4", "23"]:
+    priority_token_values = [cell.splitlines()[0] for cell in priority_cells[-8:]]
+    if priority_token_values != ["12", "11", "8", "6", "2", "1", "4", "23"]:
         raise AssertionError(
             "Combined service-tier/cache row rendered the wrong token values: "
             f"{priority_cells!r}"
+        )
+    low_cache_cells = priority_row.locator('td[data-cache-rate-tone="low"]')
+    if low_cache_cells.count() != 1 or low_cache_cells.first.inner_text().strip() != "1":
+        raise AssertionError("Cache Read Tokens must render as one numeric line")
+    high_cache_cells = rows.locator('td[data-cache-rate-tone="high"]')
+    if high_cache_cells.count() == 0:
+        raise AssertionError(
+            "High cache-read share did not receive the ratio-based color tone"
+        )
+    low_cache_cell = low_cache_cells.first
+    high_cache_cell = high_cache_cells.first
+    low_cache_count = int(low_cache_cell.get_attribute("data-cache-token-count") or "0")
+    high_cache_count = int(high_cache_cell.get_attribute("data-cache-token-count") or "0")
+    low_cache_weight = int(low_cache_cell.get_attribute("data-cache-color-weight") or "0")
+    high_cache_weight = int(high_cache_cell.get_attribute("data-cache-color-weight") or "0")
+    if high_cache_count <= low_cache_count or high_cache_weight <= low_cache_weight:
+        raise AssertionError(
+            "Cache-read color emphasis did not grow with the numeric Token count: "
+            f"low=({low_cache_count}, {low_cache_weight}) "
+            f"high=({high_cache_count}, {high_cache_weight})"
+        )
+    low_cache_color = low_cache_cell.evaluate("cell => getComputedStyle(cell).color")
+    high_cache_color = high_cache_cell.evaluate("cell => getComputedStyle(cell).color")
+    if low_cache_color == high_cache_color:
+        raise AssertionError("Cache-read share did not change the numeric color hue")
+    zero_cache_cells = rows.locator(
+        'td[data-cache-rate-tone="low"][data-cache-token-count="0"]'
+    )
+    if zero_cache_cells.count() == 0:
+        raise AssertionError("A known 0% cache-read share was not classified as Low")
+    anomaly_cache_cells = rows.locator('td[data-cache-rate-tone="anomaly"]')
+    if anomaly_cache_cells.count() != 1:
+        raise AssertionError(
+            f"Expected one anomalous cache ratio, found {anomaly_cache_cells.count()}"
+        )
+    anomaly_cache_cell = anomaly_cache_cells.first
+    if "!" not in anomaly_cache_cell.inner_text():
+        raise AssertionError("Anomalous cache ratio did not expose a non-color marker")
+    anomaly_description = anomaly_cache_cell.get_attribute("aria-label") or ""
+    if "exceed" not in anomaly_description.lower():
+        raise AssertionError(
+            f"Anomalous cache ratio lacks an accessible explanation: {anomaly_description!r}"
         )
 
     with page.expect_download() as csv_download:
@@ -2477,8 +2817,19 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         raise AssertionError(
             f"Request-event CSV lost tier evidence: {csv_evidence!r}"
         )
+    csv_billing = sorted(row.get("billing_basis", "") for row in csv_rows)
+    if csv_billing != [
+        "api-token-usd",
+        "api-token-usd",
+        "chatgpt-credits",
+        "chatgpt-credits",
+        "unknown",
+    ]:
+        raise AssertionError(
+            f"Request-event CSV lost normalized billing basis: {csv_billing!r}"
+        )
     csv_efforts = sorted(row.get("reasoning_effort", "") for row in csv_rows)
-    if csv_efforts != ["", "high", "low", "max", "max"]:
+    if csv_efforts != ["high", "low", "max", "none", "xhigh"]:
         raise AssertionError(
             f"Request-event CSV lost raw reasoning_effort values: {csv_efforts!r}"
         )
@@ -2533,11 +2884,22 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         raise AssertionError(
             f"Request-event JSON resolved tiers incorrectly: {resolved_json_tiers!r}"
         )
+    json_billing = sorted(str(row.get("billing_basis")) for row in json_rows)
+    if json_billing != [
+        "api-token-usd",
+        "api-token-usd",
+        "chatgpt-credits",
+        "chatgpt-credits",
+        "unknown",
+    ]:
+        raise AssertionError(
+            f"Request-event JSON lost normalized billing basis: {json_billing!r}"
+        )
     json_efforts = sorted(
         "<null>" if row.get("reasoning_effort") is None else str(row.get("reasoning_effort"))
         for row in json_rows
     )
-    if json_efforts != ["<null>", "high", "low", "max", "max"]:
+    if json_efforts != ["high", "low", "max", "none", "xhigh"]:
         raise AssertionError(
             f"Request-event JSON lost raw reasoning_effort values: {json_efforts!r}"
         )
@@ -2587,13 +2949,105 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     card.get_by_role("button", name="Clear Filters", exact=True).click()
     wait_for_row_count(8)
 
+    effort_color_signatures = {}
+    for tone in ["none", "minimal", "low", "medium", "high", "xhigh", "max"]:
+        badge = card.locator(f'[data-reasoning-effort-tone="{tone}"]').first
+        badge.wait_for()
+        effort_color_signatures[tone] = badge.evaluate(
+            """element => {
+              const style = getComputedStyle(element);
+              return [style.color, style.backgroundColor, style.borderColor].join('|');
+            }"""
+        )
+    if len(set(effort_color_signatures.values())) != len(effort_color_signatures):
+        raise AssertionError(
+            "Reasoning-effort levels reused a visual color signature: "
+            f"{effort_color_signatures!r}"
+        )
+    if card.locator('[data-reasoning-effort-tone="empty"]').count() != 1:
+        raise AssertionError("Legacy unknown effort lost its separate muted treatment")
+
     effort_select = card.get_by_label("Effort", exact=True)
     effort_select.click()
     page.get_by_role("option", name="max", exact=True).click()
-    wait_for_row_count(2)
+    wait_for_row_count(1)
     for row_text in rows.all_inner_texts():
         if "max" not in row_text:
             raise AssertionError("Effort filter returned a row without the selected raw effort")
+
+    card.get_by_role("button", name="Clear Filters", exact=True).click()
+    wait_for_row_count(8)
+
+    result_select = card.get_by_label("Result", exact=True)
+    result_select.click()
+    page.get_by_role("option", name="Failure", exact=True).click()
+    wait_for_row_count(1)
+    if "Failure" not in rows.first.inner_text():
+        raise AssertionError("Result filter returned a successful request")
+
+    card.get_by_role("button", name="Clear Filters", exact=True).click()
+    wait_for_row_count(8)
+
+    cache_select = card.get_by_label("Cache Status", exact=True)
+    cache_select.click()
+    page.get_by_role("option", name="Has Cached Tokens", exact=True).click()
+    wait_for_row_count(4)
+
+    card.get_by_role("button", name="Clear Filters", exact=True).click()
+    wait_for_row_count(8)
+
+    numeric_metric_select = card.get_by_label("Token metric", exact=True)
+    numeric_metric_select.click()
+    for metric_name in [
+        "Total Input Tokens",
+        "Uncached Input Tokens",
+        "Total Output Tokens",
+        "Explicit Output Tokens",
+        "Reasoning Tokens",
+        "Cache Read Tokens",
+        "Cache Write Tokens",
+        "Total Tokens",
+    ]:
+        page.get_by_role("option", name=metric_name, exact=True).wait_for()
+    page.get_by_role("option", name="Cache Read Tokens", exact=True).click()
+    numeric_minimum = card.get_by_label("Minimum", exact=True)
+    numeric_maximum = card.get_by_label("Maximum", exact=True)
+    numeric_minimum.fill("1")
+    wait_for_row_count(3)
+    numeric_maximum.fill("1")
+    wait_for_row_count(1)
+    if rows.first.locator('td[data-cache-token-count="1"]').count() != 1:
+        raise AssertionError("Inclusive Token range did not retain the exact boundary value")
+
+    numeric_minimum.fill("8")
+    card.get_by_text(
+        "Minimum cannot be greater than maximum.", exact=True
+    ).wait_for()
+    wait_for_row_count(8)
+
+    card.get_by_role("button", name="Clear Filters", exact=True).click()
+    wait_for_row_count(8)
+    if numeric_metric_select.inner_text().strip() != "Select metric":
+        raise AssertionError("Clearing filters did not reset the Token metric")
+    if not numeric_minimum.is_disabled() or not numeric_maximum.is_disabled():
+        raise AssertionError("Numeric bounds remained enabled without a selected Token metric")
+    if numeric_minimum.input_value() or numeric_maximum.input_value():
+        raise AssertionError("Clearing filters did not clear the numeric bounds")
+
+    time_range_select = card.get_by_label("Time Range", exact=True)
+    if "Follow Page (Last 24 Hours)" not in time_range_select.inner_text():
+        raise AssertionError("Request-event time filter did not expose its page-range scope")
+    time_range_select.click()
+    for range_label in [
+        "All Time",
+        "Last 1 Hour",
+        "Last 24 Hours",
+        "Last 7 Days",
+        "Last 30 Days",
+    ]:
+        page.get_by_role("option", name=range_label, exact=True).wait_for()
+    page.get_by_role("option", name="All Time", exact=True).click()
+    wait_for_row_count(8)
 
     card.get_by_role("button", name="Clear Filters", exact=True).click()
     wait_for_row_count(8)
@@ -2612,6 +3066,104 @@ def run_usage_service_tier_smoke(page: Any) -> None:
             f"Request-event table is not horizontally scrollable on narrow screens: {table_metrics!r}"
         )
     page.set_viewport_size({"width": 1280, "height": 720})
+
+
+def run_usage_request_event_clock_smoke(context: Any, app_url: str) -> None:
+    browser = context.browser
+    if browser is None:
+        raise AssertionError("Request-event clock smoke cannot create an isolated context")
+    clock_context = browser.new_context(storage_state=context.storage_state())
+    clock_page = clock_context.new_page()
+    clock_page.set_default_timeout(15_000)
+    try:
+        # Install before navigation so React never mixes native and fake timers.
+        clock_page.clock.install()
+        clock_page.goto(
+            f"{app_url}?route=request-events-clock#/usage",
+            wait_until="domcontentloaded",
+        )
+        clock_page.wait_for_function("() => window.location.hash.endsWith('/usage')")
+        card = clock_page.get_by_text("Request Events", exact=True).locator("xpath=../..")
+        card.wait_for()
+        rows = card.locator("tbody tr")
+
+        def wait_for_clock_row_count(expected: int) -> None:
+            for _ in range(50):
+                if rows.count() == expected:
+                    return
+                clock_page.wait_for_timeout(100)
+            raise AssertionError(
+                f"Expected {expected} clock-scoped request rows, found {rows.count()}"
+            )
+
+        time_range_select = card.get_by_label("Time Range", exact=True)
+        time_range_select.click()
+        clock_page.get_by_role("option", name="Last 1 Hour", exact=True).click()
+        wait_for_clock_row_count(8)
+        clock_page.clock.fast_forward("03:00")
+        wait_for_clock_row_count(7)
+    finally:
+        clock_context.close()
+
+
+def run_usage_request_event_column_storage_smoke(context: Any, app_url: str) -> None:
+    storage_page = context.new_page()
+    storage_page.set_default_timeout(15_000)
+    storage_key = "cli-proxy-usage-request-event-columns-v2"
+    try:
+        storage_page.goto(
+            f"{app_url}?route=request-events-columns#/usage",
+            wait_until="domcontentloaded",
+        )
+        card = storage_page.get_by_text("Request Events", exact=True).locator("xpath=../..")
+        card.wait_for()
+        card.get_by_role("button", name="Column Settings", exact=True).click()
+        settings = card.get_by_role("dialog", name="Column Settings", exact=True)
+        settings.get_by_role("checkbox", name="Source", exact=True).check()
+        card.get_by_role("columnheader", name="Source", exact=True).wait_for()
+
+        storage_page.reload(wait_until="domcontentloaded")
+        card = storage_page.get_by_text("Request Events", exact=True).locator("xpath=../..")
+        card.get_by_role("columnheader", name="Source", exact=True).wait_for()
+
+        storage_page.evaluate(
+            """key => {
+              localStorage.setItem(key, JSON.stringify({
+                timestamp: false,
+                model: false,
+                source: false,
+                authIndex: false,
+                tier: false,
+                billing: false,
+                result: false,
+                latency: true,
+                effort: false,
+                totalInputTokens: false,
+                displayedUncachedInputTokens: false,
+                totalOutputTokens: false,
+                displayedOutputTokens: false,
+                reasoningTokens: false,
+                cacheReadTokens: false,
+                cacheWriteTokens: false,
+                totalTokens: false,
+                unexpected: true,
+              }));
+            }""",
+            storage_key,
+        )
+        storage_page.reload(wait_until="domcontentloaded")
+        card = storage_page.get_by_text("Request Events", exact=True).locator("xpath=../..")
+        card.get_by_role("columnheader", name="Timestamp", exact=True).wait_for()
+        storage_page.wait_for_function(
+            """key => {
+              const stored = JSON.parse(localStorage.getItem(key) || '{}');
+              return stored.timestamp === true && !('unexpected' in stored);
+            }""",
+            arg=storage_key,
+        )
+    finally:
+        storage_page.evaluate("key => localStorage.removeItem(key)", storage_key)
+        storage_page.close()
 
 
 def run_branded_provider_visibility_smoke(
@@ -2707,6 +3259,7 @@ def run_usage_import_review_smoke(page: Any, state: MockCoreState) -> None:
         "gpt-5.6-sol"
     ]["details"][-1]
     legacy_detail = json.loads(json.dumps(current_detail))
+    legacy_detail.pop("billing_basis", None)
     legacy_tokens = legacy_detail["tokens"]
     legacy_tokens["cached_tokens"] = legacy_tokens["cache_creation_tokens"]
     legacy_tokens["cache_read_tokens"] = 0
@@ -2923,15 +3476,24 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
               JSON.stringify({ state: { language: 'en' }, version: 0 })
             );
             localStorage.setItem(
-              'cli-proxy-model-prices-v2',
-              JSON.stringify({
-                'gpt-5.6-sol': {
-                  prompt: 4,
-                  completion: 20,
-                  cache: 0.4
-                }
-              })
+              'cli-proxy-usage-request-event-columns-v1',
+              JSON.stringify({ source: true, authIndex: true, billing: false })
             );
+            if (
+              !localStorage.getItem('cli-proxy-model-prices-v3') &&
+              !localStorage.getItem('cli-proxy-model-prices-v2')
+            ) {
+              localStorage.setItem(
+                'cli-proxy-model-prices-v2',
+                JSON.stringify({
+                  'gpt-5.6-sol': {
+                    prompt: 4,
+                    completion: 20,
+                    cache: 0.4
+                  }
+                })
+              );
+            }
             window.__ltsSmokeClipboard = [];
             Object.defineProperty(navigator, 'clipboard', {
               configurable: true,
@@ -2998,6 +3560,20 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
                 if route == "/usage":
                     run_usage_pricing_entry_smoke(page)
                     run_usage_service_tier_smoke(page)
+                    page.evaluate(
+                        """() => {
+                          window.__ltsNativeDateNow = Date.now;
+                          window.__ltsNativeSetTimeout = window.setTimeout;
+                        }"""
+                    )
+                    run_usage_request_event_clock_smoke(context, app_url)
+                    native_clock_preserved = page.evaluate(
+                        """() => Date.now === window.__ltsNativeDateNow
+                          && window.setTimeout === window.__ltsNativeSetTimeout"""
+                    )
+                    if not native_clock_preserved:
+                        raise AssertionError("Request-event clock smoke polluted the main page clock")
+                    run_usage_request_event_column_storage_smoke(context, app_url)
                     run_usage_import_review_smoke(page, state)
                 elif route == "/usage/pricing":
                     run_usage_pricing_smoke(page)

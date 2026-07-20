@@ -752,14 +752,105 @@
 .requestEventsActions {
   display: inline-flex;
   align-items: center;
+  justify-content: flex-end;
   gap: $spacing-xs;
   flex-wrap: wrap;
 }
 
-.requestEventsToolbar {
+.requestEventsColumnSettings {
+  position: relative;
+}
+
+.requestEventsColumnSettingsTrigger {
+  white-space: nowrap;
+}
+
+.requestEventsColumnSettingsPopover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(68vh, 520px);
+  overflow: auto;
+  padding: $spacing-sm;
+  border: 1px solid var(--border-color);
+  border-radius: $radius-md;
+  background: var(--bg-primary);
+  box-shadow: var(--shadow-lg);
+}
+
+// Motion keeps an identity transform on the route layer after entry, which otherwise
+// turns the mobile fixed column sheet into a page-relative element.
+:global(.page-transition__layer):has(.requestEventsColumnSettingsPopover) {
+  transform: none !important;
+}
+
+.requestEventsColumnSettingsTitle {
+  margin-bottom: $spacing-xs;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.requestEventsColumnSettingsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px $spacing-xs;
+}
+
+.requestEventsColumnToggle {
   display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 8px;
+  border-radius: $radius-sm;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
+  &:has(input:focus-visible) {
+    outline: 2px solid var(--primary-color);
+    outline-offset: -2px;
+  }
+
+  &:has(input:disabled) {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
+  input {
+    flex: 0 0 auto;
+    margin: 0;
+    accent-color: var(--primary-color);
+  }
+
+  span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.requestEventsColumnSettingsFooter {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: $spacing-xs;
+  padding-top: $spacing-xs;
+  border-top: 1px solid var(--border-color);
+}
+
+.requestEventsToolbar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
   gap: $spacing-sm;
-  flex-wrap: wrap;
   align-items: flex-end;
   margin-bottom: $spacing-sm;
 }
@@ -768,7 +859,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  min-width: 180px;
+  min-width: 0;
 }
 
 .requestEventsFilterLabel {
@@ -778,7 +869,43 @@
 }
 
 .requestEventsSelect {
-  min-width: 180px;
+  width: 100%;
+  min-width: 0;
+}
+
+.requestEventsNumericFilterItem {
+  grid-column: span 2;
+}
+
+.requestEventsNumericControls {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.35fr) minmax(92px, 0.7fr) auto minmax(92px, 0.7fr);
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+
+  :global(.form-group) {
+    min-width: 0;
+    margin: 0;
+  }
+}
+
+.requestEventsNumericMetric,
+.requestEventsNumericInput {
+  min-width: 0;
+}
+
+.requestEventsNumericSeparator {
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.requestEventsNumericError {
+  color: var(--failure-badge-text);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.35;
 }
 
 .requestEventsMeta {
@@ -801,15 +928,139 @@
   max-height: 460px;
   border: 1px solid var(--border-color);
   border-radius: $radius-md;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.requestEventsTableWrapper:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
 }
 
 .requestEventsTable {
-  min-width: 1680px;
+  width: max-content;
+  min-width: 100%;
+
+  th + th,
+  td + td {
+    border-left: 1px dashed color-mix(in srgb, var(--border-color) 76%, transparent);
+  }
 
   .modelCell {
     min-width: 120px;
     white-space: nowrap;
   }
+}
+
+.requestEventsTokenHeader,
+.requestEventsTokenCell {
+  --request-events-token-color: var(--text-primary);
+}
+
+.requestEventsTable th.requestEventsTokenHeader,
+.requestEventsTable td.requestEventsTokenCell {
+  min-width: 112px;
+  text-align: right;
+  vertical-align: middle;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--request-events-token-color);
+}
+
+.requestEventsTokenHeader {
+  font-weight: 750 !important;
+}
+
+.requestEventsTokenHeaderHint {
+  cursor: help;
+  text-decoration: underline dotted;
+  text-decoration-color: color-mix(in srgb, currentColor 58%, transparent);
+  text-underline-offset: 3px;
+}
+
+.requestEventsTokenValue {
+  display: block;
+  font-weight: 720;
+  letter-spacing: -0.01em;
+}
+
+.requestEventsTokenInput {
+  --request-events-token-color: color-mix(in srgb, #2563eb 68%, var(--text-primary));
+}
+
+.requestEventsTokenUncached {
+  --request-events-token-color: color-mix(in srgb, #0891b2 68%, var(--text-primary));
+}
+
+.requestEventsTokenOutput {
+  --request-events-token-color: color-mix(in srgb, #7c3aed 66%, var(--text-primary));
+}
+
+.requestEventsTokenExplicitOutput {
+  --request-events-token-color: color-mix(in srgb, #0f766e 68%, var(--text-primary));
+}
+
+.requestEventsTokenReasoning {
+  --request-events-token-color: color-mix(in srgb, #c026d3 62%, var(--text-primary));
+}
+
+.requestEventsTokenCacheRead {
+  --request-events-cache-tone-color: var(--text-tertiary);
+  --request-events-cache-color-weight: 42%;
+  --request-events-token-color: color-mix(
+    in srgb,
+    var(--request-events-cache-tone-color) var(--request-events-cache-color-weight),
+    var(--text-primary)
+  );
+}
+
+.requestEventsTokenCacheWrite {
+  --request-events-token-color: var(--amber-text);
+}
+
+.requestEventsTokenTotal {
+  --request-events-token-color: var(--text-primary);
+
+  .requestEventsTokenValue {
+    font-weight: 820;
+  }
+}
+
+.requestEventsCacheRateUnavailable {
+  --request-events-token-color: var(--text-tertiary);
+}
+
+.requestEventsCacheRateLow {
+  --request-events-cache-tone-color: var(--failure-badge-text);
+}
+
+.requestEventsCacheRateMedium {
+  --request-events-cache-tone-color: var(--amber-text);
+}
+
+.requestEventsCacheRateHigh {
+  --request-events-cache-tone-color: var(--success-badge-text, #065f46);
+}
+
+.requestEventsCacheRateAnomaly {
+  --request-events-cache-tone-color: var(--failure-badge-text);
+}
+
+.requestEventsCacheAnomalyMarker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 14px;
+  height: 14px;
+  margin-left: 5px;
+  border: 1px solid var(--failure-badge-border);
+  border-radius: $radius-full;
+  background: var(--failure-badge-bg);
+  color: var(--failure-badge-text);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  vertical-align: middle;
 }
 
 .requestEventsTimestamp {
@@ -868,15 +1119,69 @@
 }
 
 .requestEventsEffortBadge {
-  color: var(--primary-color);
-  background: color-mix(in srgb, var(--primary-color) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--primary-color) 28%, transparent);
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
 }
 
 .requestEventsEffortEmpty {
   color: var(--text-tertiary);
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
+}
+
+.requestEventsEffortNone {
+  color: color-mix(in srgb, #64748b 70%, var(--text-primary));
+  background: color-mix(in srgb, #64748b 12%, transparent);
+  border-color: color-mix(in srgb, #64748b 36%, var(--border-color));
+}
+
+.requestEventsEffortMinimal {
+  color: color-mix(in srgb, #0891b2 64%, var(--text-primary));
+  background: color-mix(in srgb, #0891b2 11%, transparent);
+  border-color: color-mix(in srgb, #0891b2 34%, var(--border-color));
+}
+
+.requestEventsEffortLow {
+  color: var(--success-badge-text, #065f46);
+  background: var(--success-badge-bg, #d1fae5);
+  border-color: var(--success-badge-border, #6ee7b7);
+}
+
+.requestEventsEffortMedium {
+  color: color-mix(in srgb, #2563eb 62%, var(--text-primary));
+  background: color-mix(in srgb, #2563eb 11%, transparent);
+  border-color: color-mix(in srgb, #2563eb 34%, var(--border-color));
+}
+
+.requestEventsEffortHigh {
+  color: color-mix(in srgb, #7c3aed 62%, var(--text-primary));
+  background: color-mix(in srgb, #7c3aed 12%, transparent);
+  border-color: color-mix(in srgb, #7c3aed 36%, var(--border-color));
+}
+
+.requestEventsEffortXHigh {
+  color: var(--amber-text);
+  background: var(--amber-10);
+  border-color: var(--amber-30);
+}
+
+.requestEventsEffortMax {
+  color: var(--failure-badge-text);
+  background: var(--failure-badge-bg);
+  border-color: var(--failure-badge-border);
+}
+
+.requestEventsEffortUltra {
+  color: color-mix(in srgb, #c026d3 66%, var(--text-primary));
+  background: color-mix(in srgb, #c026d3 12%, transparent);
+  border-color: color-mix(in srgb, #c026d3 38%, var(--border-color));
+}
+
+.requestEventsEffortOther {
+  color: color-mix(in srgb, #475569 62%, var(--text-primary));
+  background: color-mix(in srgb, #475569 10%, transparent);
+  border-color: color-mix(in srgb, #475569 32%, var(--border-color));
 }
 
 .requestEventsTierBadge {
@@ -902,9 +1207,113 @@
 }
 
 .requestEventsTierStd {
-  color: var(--text-secondary);
-  background: var(--bg-tertiary);
+  color: color-mix(in srgb, #2563eb 58%, var(--text-primary));
+  background: color-mix(in srgb, #2563eb 11%, transparent);
+  border: 1px solid color-mix(in srgb, #2563eb 34%, var(--border-color));
+}
+
+.requestEventsBillingBadge {
+  display: inline-flex;
+  min-width: 58px;
+  max-width: 128px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 2px 8px;
   border: 1px solid var(--border-color);
+  border-radius: $radius-full;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.requestEventsBillingApi {
+  border-color: color-mix(in srgb, #059669 34%, var(--border-color));
+  background: color-mix(in srgb, #059669 11%, transparent);
+  color: color-mix(in srgb, #059669 64%, var(--text-primary));
+}
+
+.requestEventsBillingCredits {
+  border-color: color-mix(in srgb, #7c3aed 34%, var(--border-color));
+  background: color-mix(in srgb, #7c3aed 11%, transparent);
+  color: color-mix(in srgb, #7c3aed 64%, var(--text-primary));
+}
+
+.requestEventsBillingUnknown {
+  border-color: color-mix(in srgb, var(--text-tertiary) 32%, var(--border-color));
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+@include mobile {
+  .requestEventsActions {
+    width: 100%;
+    justify-content: flex-start;
+
+    :global(.btn.btn-sm) {
+      padding: 7px 8px;
+      font-size: 13px;
+    }
+  }
+
+  .requestEventsColumnSettingsTriggerLabel {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .requestEventsColumnSettingsPopover {
+    position: fixed;
+    top: auto;
+    right: $spacing-md;
+    bottom: $spacing-md;
+    left: $spacing-md;
+    width: auto;
+    max-height: min(70dvh, 520px);
+  }
+
+  .requestEventsColumnSettingsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .requestEventsToolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: $spacing-xs;
+  }
+
+  .requestEventsNumericFilterItem {
+    grid-column: 1 / -1;
+  }
+
+  .requestEventsNumericControls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .requestEventsNumericMetric {
+    grid-column: 1 / -1;
+  }
+
+  .requestEventsNumericSeparator {
+    display: none;
+  }
+
+  .requestEventsTableWrapper {
+    max-height: min(62vh, 460px);
+  }
+}
+
+@media (max-width: 360px) {
+  .requestEventsToolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .chartLineHeader {

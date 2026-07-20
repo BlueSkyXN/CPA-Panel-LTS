@@ -43,10 +43,3 @@ export interface UsageStats {
   };
   modelStats: ModelUsage[];
 }
-
-// 模型价格
-export interface ModelPrice {
-  modelName: string;
-  inputPricePer1M: number;
-  outputPricePer1M: number;
-}

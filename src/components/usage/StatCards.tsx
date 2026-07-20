@@ -15,6 +15,8 @@ import {
   formatDurationMs,
   formatPerMinuteValue,
   formatUsd,
+  hasUnknownBillingUsage,
+  isApiUsdEstimateComplete,
   collectUsageDetails,
   extractTotalTokens,
   type PricingCoverage,
@@ -67,9 +69,8 @@ export function StatCards({
   });
 
   const hasPricedRequests = pricingCoverage.pricedRequests > 0;
-  const pricingComplete =
-    pricingCoverage.totalRequests > 0 &&
-    pricingCoverage.pricedRequests === pricingCoverage.totalRequests;
+  const hasUnknownBilling = hasUnknownBillingUsage(pricingCoverage);
+  const pricingComplete = isApiUsdEstimateComplete(pricingCoverage);
 
   const { tokenBreakdown, rateStats, latencyStats } = useMemo(() => {
     const empty = {
@@ -223,7 +224,7 @@ export function StatCards({
     },
     {
       key: 'cost',
-      label: t('usage_stats.total_cost'),
+      label: t('usage_stats.pricing_api_usd_estimate'),
       icon: <IconDollarSign size={16} />,
       accent: '#f59e0b',
       accentSoft: 'rgba(245, 158, 11, 0.18)',
@@ -232,12 +233,36 @@ export function StatCards({
       meta: (
         <>
           <span className={styles.statMetaItem}>
-            {t('usage_stats.pricing_request_coverage')}:{' '}
-            {loading ? '-' : `${(pricingCoverage.pricedRequestRatio * 100).toFixed(1)}%`}
+            {t('usage_stats.pricing_api_request_coverage')}:{' '}
+            {loading
+              ? '-'
+              : `${(pricingCoverage.apiPricedRequestRatio * 100).toFixed(1)}% (${pricingCoverage.pricedRequests}/${pricingCoverage.apiTokenUsdRequests})`}
           </span>
-          {!pricingComplete && pricingCoverage.totalRequests > 0 && (
+          {!pricingComplete && (pricingCoverage.apiTokenUsdRequests > 0 || hasUnknownBilling) && (
             <span className={`${styles.statMetaItem} ${styles.statSubtle}`}>
               {t('usage_stats.pricing_cost_incomplete')}
+            </span>
+          )}
+          {pricingCoverage.chatGptCreditRequests > 0 && (
+            <span className={styles.statMetaItem}>
+              {t('usage_stats.pricing_credit_requests', {
+                count: pricingCoverage.chatGptCreditRequests,
+              })}
+            </span>
+          )}
+          {pricingCoverage.unknownBillingRequests > 0 && (
+            <span className={`${styles.statMetaItem} ${styles.statSubtle}`}>
+              {t('usage_stats.pricing_unknown_requests', {
+                count: pricingCoverage.unknownBillingRequests,
+              })}
+            </span>
+          )}
+          {pricingCoverage.unknownBillingTokens > 0 && (
+            <span className={`${styles.statMetaItem} ${styles.statSubtle}`}>
+              {t('usage_stats.pricing_unknown_tokens', {
+                count: pricingCoverage.unknownBillingTokens,
+                tokens: formatCompactNumber(pricingCoverage.unknownBillingTokens),
+              })}
             </span>
           )}
           <button type="button" className={styles.statInlineAction} onClick={onOpenPricing}>

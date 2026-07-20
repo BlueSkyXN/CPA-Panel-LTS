@@ -2,7 +2,13 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { IconDollarSign, IconSettings } from '@/components/ui/icons';
-import { formatUsd, type PricingCoverage } from '@/utils/usage';
+import {
+  formatCompactNumber,
+  formatUsd,
+  hasUnknownBillingUsage,
+  isApiUsdEstimateComplete,
+  type PricingCoverage,
+} from '@/utils/usage';
 import styles from '@/pages/UsagePage.module.scss';
 
 export interface PricingEntryCardProps {
@@ -12,8 +18,9 @@ export interface PricingEntryCardProps {
 
 export function PricingEntryCard({ coverage, onOpen }: PricingEntryCardProps) {
   const { t } = useTranslation();
-  const requestPercent = coverage.pricedRequestRatio * 100;
-  const modelPercent = coverage.pricedModelRatio * 100;
+  const requestPercent = coverage.apiPricedRequestRatio * 100;
+  const hasUnknownBilling = hasUnknownBillingUsage(coverage);
+  const pricingComplete = isApiUsdEstimateComplete(coverage);
 
   return (
     <Card className={styles.pricingEntryCard}>
@@ -28,7 +35,7 @@ export function PricingEntryCard({ coverage, onOpen }: PricingEntryCardProps) {
           </div>
         </div>
         <div className={styles.pricingEntryAmount}>
-          <span>{t('usage_stats.total_cost')}</span>
+          <span>{t('usage_stats.pricing_api_usd_estimate')}</span>
           <strong>
             {coverage.pricedRequests > 0 ? formatUsd(coverage.estimatedAmount) : '--'}
           </strong>
@@ -43,15 +50,39 @@ export function PricingEntryCard({ coverage, onOpen }: PricingEntryCardProps) {
       </div>
       <div className={styles.pricingEntryMeta}>
         <span>
-          {t('usage_stats.pricing_models_covered', {
-            priced: coverage.pricedModels,
-            total: coverage.totalModels,
+          {t('usage_stats.pricing_api_models_covered', {
+            priced: coverage.apiPricedModels,
+            total: coverage.apiTokenUsdModels,
           })}
         </span>
         <span>
-          {t('usage_stats.pricing_requests_covered', { percent: requestPercent.toFixed(1) })}
+          {t('usage_stats.pricing_api_requests_covered', {
+            priced: coverage.pricedRequests,
+            total: coverage.apiTokenUsdRequests,
+            percent: requestPercent.toFixed(1),
+          })}
         </span>
-        <span>{t('usage_stats.pricing_models_ratio', { percent: modelPercent.toFixed(1) })}</span>
+        <span>
+          {t('usage_stats.pricing_credit_requests', {
+            count: coverage.chatGptCreditRequests,
+          })}
+        </span>
+        <span>
+          {t('usage_stats.pricing_unknown_requests', {
+            count: coverage.unknownBillingRequests,
+          })}
+        </span>
+        {!pricingComplete && (coverage.apiTokenUsdRequests > 0 || hasUnknownBilling) && (
+          <span>{t('usage_stats.pricing_cost_incomplete')}</span>
+        )}
+        {coverage.unknownBillingTokens > 0 && (
+          <span>
+            {t('usage_stats.pricing_unknown_tokens', {
+              count: coverage.unknownBillingTokens,
+              tokens: formatCompactNumber(coverage.unknownBillingTokens),
+            })}
+          </span>
+        )}
       </div>
     </Card>
   );

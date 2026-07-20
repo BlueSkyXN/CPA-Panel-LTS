@@ -165,6 +165,8 @@ for path in \
   src/utils/usage/reasoningEffort.test.mjs \
   src/utils/usage/pricing/index.ts \
   src/utils/usage/pricing/index.test.mjs \
+  src/utils/usage/pricing/billing.ts \
+  src/utils/usage/pricing/catalog.ts \
   src/utils/usage/pricing/storage.ts \
   src/utils/usage/pricing/storage.test.mjs \
   src/utils/usage/pricing/usagePricing.ts \
@@ -211,6 +213,7 @@ require_file_contains src/utils/usage.ts "service_tier"
 require_file_contains src/utils/usage.ts "request_service_tier"
 require_file_contains src/utils/usage.ts "response_service_tier"
 require_file_contains src/utils/usage.ts "effective_service_tier"
+require_file_contains src/utils/usage.ts "billing_basis"
 require_file_contains src/utils/usage.ts "resolveUsageTotalTokens"
 require_file_contains src/utils/usage/cacheTokens.ts "resolveCacheWriteUnitPrice"
 require_file_contains src/utils/usage/cacheTokens.ts "uncached_input_tokens"
@@ -229,10 +232,16 @@ require_file_contains src/utils/usage/serviceTier.ts "ServiceTierEvidence"
 require_file_contains src/utils/usage/serviceTier.test.mjs "unknown response blocks fallback"
 require_file_contains src/utils/usage/pricing/index.ts "OPENAI_PRICE_CATALOG"
 require_file_contains src/utils/usage/pricing/index.ts "aggregateCostEstimateCoverage"
+require_file_contains src/utils/usage/pricing/index.ts "apiPricedRequestRatio"
+require_file_contains src/utils/usage/pricing/billing.ts "api-token-usd"
+require_file_contains src/utils/usage/pricing/billing.ts "chatgpt-credits"
+require_file_contains src/utils/usage/pricing/catalog.ts "OPENAI_PRICE_CATALOG"
+require_file_contains src/utils/usage/pricing/catalog.ts "CHATGPT_CREDIT_CATALOG"
 require_file_contains src/utils/usage/pricing/storage.ts "PRICE_PROFILE_STORAGE_KEY"
 require_file_contains src/utils/usage/pricing/storage.ts "cli-proxy-model-prices-v3"
 require_file_contains src/utils/usage/pricing/usagePricing.ts "estimateUsageDetailCost"
 require_file_contains src/utils/usage.ts "calculatePricingCoverage"
+require_file_contains src/utils/usage.ts "analyzeUsagePricing"
 require_file_contains src/utils/usage/pricing/usageAggregation.test.mjs "hourly, and daily pricing share one amount"
 require_file_contains src/pages/UsagePage.tsx "PricingEntryCard"
 require_file_contains src/pages/UsagePricingPage.tsx "usage-pricing-page"
@@ -241,11 +250,13 @@ require_file_contains package.json "test:usage-pricing-v3"
 require_file_contains package.json "test:usage-pricing-storage"
 require_file_contains package.json "test:usage-pricing-integration"
 require_file_contains scripts/smoke-lts-panel.py "run_usage_pricing_smoke"
+require_file_contains scripts/smoke-lts-panel.py '"billing_basis": "chatgpt-credits"'
 require_file_contains scripts/smoke-lts-panel.py "cli-proxy-model-prices-v3"
 require_file_contains scripts/smoke-lts-panel.py "Fast long context unsupported"
 require_file_contains scripts/smoke-lts-panel-core.py "build_service_tier_usage_snapshot"
 require_file_contains scripts/smoke-lts-panel-core.py "effective_service_tier"
 require_file_contains scripts/smoke-lts-panel-core.py '"/usage/pricing"'
+require_file_contains scripts/smoke-lts-panel-core.py '"billing_basis": "api-token-usd"'
 require_file_not_contains src/utils/usage/reasoningEffort.ts "GPT56_ULTRA_WIRE_MODELS"
 require_file_not_contains src/utils/usage/reasoningEffort.ts "isGPT56UltraWireModel"
 require_file_not_contains src/utils/usage/reasoningEffort.ts "max-ultra-wire"
@@ -275,6 +286,10 @@ require_file_contains src/i18n/locales/en.json "pricing_cost_incomplete"
 require_file_contains src/i18n/locales/zh-CN.json "pricing_cost_incomplete"
 require_file_contains src/i18n/locales/zh-TW.json "pricing_cost_incomplete"
 require_file_contains src/i18n/locales/ru.json "pricing_cost_incomplete"
+require_file_contains src/i18n/locales/en.json "pricing_credit_notice"
+require_file_contains src/i18n/locales/zh-CN.json "pricing_credit_notice"
+require_file_contains src/i18n/locales/zh-TW.json "pricing_credit_notice"
+require_file_contains src/i18n/locales/ru.json "pricing_credit_notice"
 require_file_contains src/i18n/locales/en.json "request_events_filter_effort"
 require_file_contains src/i18n/locales/zh-CN.json "request_events_filter_effort"
 require_file_contains src/i18n/locales/zh-TW.json "request_events_filter_effort"

@@ -1,9 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { IconSettings } from '@/components/ui/icons';
+import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
+import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { authFilesApi } from '@/services/api/authFiles';
 import type { GeminiKeyConfig, ProviderKeyConfig, OpenAIProviderConfig } from '@/types';
 import type { AuthFileItem } from '@/types/authFile';
@@ -11,14 +14,19 @@ import type { CredentialInfo } from '@/types/sourceInfo';
 import { buildSourceInfoMap, resolveSourceDisplay } from '@/utils/sourceResolver';
 import { parseTimestampMs } from '@/utils/timestamp';
 import {
+  BILLING_BASIS_API_TOKEN_USD,
+  BILLING_BASIS_CHATGPT_CREDITS,
   collectUsageDetails,
   extractLatencyMs,
   extractTotalTokens,
   formatDurationMs,
   LATENCY_SOURCE_FIELD,
   normalizeAuthIndex,
+  normalizeBillingBasis,
   resolveServiceTier,
+  type BillingBasis,
   type ResolvedServiceTier,
+  type UsageTimeRange,
 } from '@/utils/usage';
 import {
   getUsageCacheTokenCounts,
@@ -33,7 +41,113 @@ const SERVICE_TIER_FAST_FILTER = '__service_tier_fast__';
 const SERVICE_TIER_STD_FILTER = '__service_tier_std__';
 const REASONING_EFFORT_LEGACY_UNKNOWN_FILTER = '__reasoning_effort_legacy_unknown__';
 const REASONING_EFFORT_RAW_FILTER_PREFIX = '__reasoning_effort_raw__:';
+const RESULT_SUCCESS_FILTER = '__result_success__';
+const RESULT_FAILED_FILTER = '__result_failed__';
+const CACHE_PRESENT_FILTER = '__cache_present__';
+const CACHE_ABSENT_FILTER = '__cache_absent__';
 const MAX_RENDERED_EVENTS = 500;
+const LEGACY_COLUMN_VISIBILITY_STORAGE_KEY = 'cli-proxy-usage-request-event-columns-v1';
+const COLUMN_VISIBILITY_STORAGE_KEY = 'cli-proxy-usage-request-event-columns-v2';
+const CACHE_COLOR_MIN_WEIGHT = 42;
+const CACHE_COLOR_MAX_WEIGHT = 90;
+const CACHE_COLOR_REFERENCE_TOKENS = 1_000_000;
+
+const REQUEST_EVENT_TIME_RANGES = ['page', 'all', '1h', '24h', '7d', '30d'] as const;
+type RequestEventTimeRange = (typeof REQUEST_EVENT_TIME_RANGES)[number];
+
+const REQUEST_EVENT_TIME_RANGE_MS: Record<
+  Exclude<RequestEventTimeRange, 'page' | 'all'>,
+  number
+> = {
+  '1h': 60 * 60 * 1000,
+  '24h': 24 * 60 * 60 * 1000,
+  '7d': 7 * 24 * 60 * 60 * 1000,
+  '30d': 30 * 24 * 60 * 60 * 1000,
+};
+
+const PAGE_TIME_RANGE_MS: Record<Exclude<UsageTimeRange, 'all'>, number> = {
+  '7h': 7 * 60 * 60 * 1000,
+  '24h': 24 * 60 * 60 * 1000,
+  '7d': 7 * 24 * 60 * 60 * 1000,
+};
+
+const PAGE_TIME_RANGE_LABEL_KEYS: Record<UsageTimeRange, string> = {
+  '7h': 'usage_stats.range_7h',
+  '24h': 'usage_stats.range_24h',
+  '7d': 'usage_stats.range_7d',
+  all: 'usage_stats.range_all',
+};
+
+const CACHE_RATE_LOW_THRESHOLD = 0.25;
+const CACHE_RATE_HIGH_THRESHOLD = 0.6;
+
+const REQUEST_EVENT_COLUMN_IDS = [
+  'timestamp',
+  'model',
+  'source',
+  'authIndex',
+  'tier',
+  'billing',
+  'result',
+  'latency',
+  'effort',
+  'totalInputTokens',
+  'displayedUncachedInputTokens',
+  'totalOutputTokens',
+  'displayedOutputTokens',
+  'reasoningTokens',
+  'cacheReadTokens',
+  'cacheWriteTokens',
+  'totalTokens',
+] as const;
+
+type RequestEventColumnId = (typeof REQUEST_EVENT_COLUMN_IDS)[number];
+type RequestEventColumnVisibility = Record<RequestEventColumnId, boolean>;
+type RequestEventCacheRateTone = 'unavailable' | 'low' | 'medium' | 'high' | 'anomaly';
+type RequestEventReasoningEffortTone =
+  | 'empty'
+  | 'none'
+  | 'minimal'
+  | 'low'
+  | 'medium'
+  | 'high'
+  | 'xhigh'
+  | 'max'
+  | 'ultra'
+  | 'other';
+
+const REQUEST_EVENT_NUMERIC_METRIC_IDS = [
+  'totalInputTokens',
+  'displayedUncachedInputTokens',
+  'totalOutputTokens',
+  'displayedOutputTokens',
+  'reasoningTokens',
+  'cacheReadTokens',
+  'cacheWriteTokens',
+  'totalTokens',
+] as const;
+
+type RequestEventNumericMetricId = (typeof REQUEST_EVENT_NUMERIC_METRIC_IDS)[number];
+
+const DEFAULT_COLUMN_VISIBILITY: RequestEventColumnVisibility = {
+  timestamp: true,
+  model: true,
+  source: false,
+  authIndex: false,
+  tier: true,
+  billing: true,
+  result: true,
+  latency: true,
+  effort: true,
+  totalInputTokens: true,
+  displayedUncachedInputTokens: true,
+  totalOutputTokens: true,
+  displayedOutputTokens: true,
+  reasoningTokens: true,
+  cacheReadTokens: true,
+  cacheWriteTokens: true,
+  totalTokens: true,
+};
 
 type RequestEventRow = {
   id: string;
@@ -54,6 +168,9 @@ type RequestEventRow = {
   serviceTierFilterValue: string;
   serviceTierLabel: string;
   serviceTierTitle: string;
+  billingBasis: BillingBasis;
+  billingBasisLabel: string;
+  billingBasisTitle: string;
   reasoningEffort: string | null;
   reasoningEffortFilterValue: string;
   reasoningEffortLabel: string;
@@ -61,16 +178,55 @@ type RequestEventRow = {
   latencyMs: number | null;
   inputTokens: number;
   uncachedInputTokens: number | null;
+  displayedUncachedInputTokens: number;
   outputTokens: number;
+  displayedOutputTokens: number;
   reasoningTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
+  cacheRate: number | null;
+  cacheRateTone: RequestEventCacheRateTone;
   totalTokens: number;
+};
+
+const isRequestEventNumericMetricId = (value: string): value is RequestEventNumericMetricId =>
+  REQUEST_EVENT_NUMERIC_METRIC_IDS.some((candidate) => candidate === value);
+
+const getRequestEventNumericValue = (
+  row: RequestEventRow,
+  metric: RequestEventNumericMetricId
+): number => {
+  switch (metric) {
+    case 'totalInputTokens':
+      return row.inputTokens;
+    case 'displayedUncachedInputTokens':
+      return row.displayedUncachedInputTokens;
+    case 'totalOutputTokens':
+      return row.outputTokens;
+    case 'displayedOutputTokens':
+      return row.displayedOutputTokens;
+    case 'reasoningTokens':
+      return row.reasoningTokens;
+    case 'cacheReadTokens':
+      return row.cacheReadTokens;
+    case 'cacheWriteTokens':
+      return row.cacheWriteTokens;
+    case 'totalTokens':
+      return row.totalTokens;
+  }
+};
+
+const parseNumericFilterBound = (value: string): number | null => {
+  if (!value.trim()) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 };
 
 export interface RequestEventsDetailsCardProps {
   usage: unknown;
   loading: boolean;
+  pageTimeRange: UsageTimeRange;
+  referenceNowMs: number;
   geminiKeys: GeminiKeyConfig[];
   claudeConfigs: ProviderKeyConfig[];
   codexConfigs: ProviderKeyConfig[];
@@ -91,6 +247,132 @@ const getReasoningEffortFilterValue = (reasoningEffort: string | null): string =
   )}`;
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
+
+const isRequestEventTimeRange = (value: string): value is RequestEventTimeRange =>
+  REQUEST_EVENT_TIME_RANGES.some((candidate) => candidate === value);
+
+const normalizeColumnVisibility = (value: unknown): RequestEventColumnVisibility => {
+  const record = isRecord(value) ? value : {};
+  const normalized = REQUEST_EVENT_COLUMN_IDS.reduce<RequestEventColumnVisibility>(
+    (normalized, columnId) => {
+      normalized[columnId] =
+        typeof record[columnId] === 'boolean'
+          ? (record[columnId] as boolean)
+          : DEFAULT_COLUMN_VISIBILITY[columnId];
+      return normalized;
+    },
+    { ...DEFAULT_COLUMN_VISIBILITY }
+  );
+
+  const hasStableVisibleColumn = REQUEST_EVENT_COLUMN_IDS.some(
+    (columnId) => columnId !== 'latency' && normalized[columnId]
+  );
+  if (!hasStableVisibleColumn) {
+    normalized.timestamp = true;
+  }
+
+  return normalized;
+};
+
+const needsColumnVisibilityNormalization = (
+  stored: unknown,
+  normalized: RequestEventColumnVisibility
+): boolean => {
+  if (!isRecord(stored)) return true;
+  const allowedIds = new Set<string>(REQUEST_EVENT_COLUMN_IDS);
+  return (
+    Object.keys(stored).some((key) => !allowedIds.has(key)) ||
+    REQUEST_EVENT_COLUMN_IDS.some((columnId) => stored[columnId] !== normalized[columnId])
+  );
+};
+
+const getReasoningEffortTone = (
+  reasoningEffort: string | null
+): RequestEventReasoningEffortTone => {
+  if (!reasoningEffort) return 'empty';
+  switch (reasoningEffort.trim().toLowerCase()) {
+    case 'none':
+      return 'none';
+    case 'minimal':
+      return 'minimal';
+    case 'low':
+      return 'low';
+    case 'medium':
+      return 'medium';
+    case 'high':
+      return 'high';
+    case 'xhigh':
+      return 'xhigh';
+    case 'max':
+      return 'max';
+    case 'ultra':
+      return 'ultra';
+    default:
+      return 'other';
+  }
+};
+
+const getReasoningEffortClassName = (reasoningEffort: string | null): string => {
+  const tone = getReasoningEffortTone(reasoningEffort);
+  if (tone === 'empty') {
+    return `${styles.requestEventsEffortBadge} ${styles.requestEventsEffortEmpty}`;
+  }
+  const toneClassName = {
+    none: styles.requestEventsEffortNone,
+    minimal: styles.requestEventsEffortMinimal,
+    low: styles.requestEventsEffortLow,
+    medium: styles.requestEventsEffortMedium,
+    high: styles.requestEventsEffortHigh,
+    xhigh: styles.requestEventsEffortXHigh,
+    max: styles.requestEventsEffortMax,
+    ultra: styles.requestEventsEffortUltra,
+    other: styles.requestEventsEffortOther,
+  }[tone];
+  return `${styles.requestEventsEffortBadge} ${toneClassName}`;
+};
+
+const resolveCacheRate = (inputTokens: number, cacheReadTokens: number): number | null => {
+  if (inputTokens <= 0) return null;
+  return Math.max(cacheReadTokens / inputTokens, 0);
+};
+
+const getCacheRateTone = (
+  cacheRate: number | null,
+  inputTokens: number,
+  cacheReadTokens: number
+): RequestEventCacheRateTone => {
+  if (cacheReadTokens > 0 && (inputTokens <= 0 || cacheReadTokens > inputTokens)) {
+    return 'anomaly';
+  }
+  if (inputTokens <= 0) return 'unavailable';
+  if (cacheRate === null) return 'unavailable';
+  if (cacheRate < CACHE_RATE_LOW_THRESHOLD) return 'low';
+  if (cacheRate < CACHE_RATE_HIGH_THRESHOLD) return 'medium';
+  return 'high';
+};
+
+const getCacheColorWeight = (cacheReadTokens: number): number => {
+  if (cacheReadTokens <= 0) return CACHE_COLOR_MIN_WEIGHT;
+  const magnitude = Math.min(
+    Math.log10(cacheReadTokens + 1) / Math.log10(CACHE_COLOR_REFERENCE_TOKENS + 1),
+    1
+  );
+  return Math.round(
+    CACHE_COLOR_MIN_WEIGHT + (CACHE_COLOR_MAX_WEIGHT - CACHE_COLOR_MIN_WEIGHT) * magnitude
+  );
+};
+
+const getCacheRateToneClassName = (tone: RequestEventCacheRateTone): string =>
+  ({
+    unavailable: styles.requestEventsCacheRateUnavailable,
+    low: styles.requestEventsCacheRateLow,
+    medium: styles.requestEventsCacheRateMedium,
+    high: styles.requestEventsCacheRateHigh,
+    anomaly: styles.requestEventsCacheRateAnomaly,
+  })[tone];
+
 const encodeCsv = (value: string | number): string => {
   const text = String(value ?? '');
   const trimmedLeft = text.replace(/^\s+/, '');
@@ -101,6 +383,8 @@ const encodeCsv = (value: string | number): string => {
 export function RequestEventsDetailsCard({
   usage,
   loading,
+  pageTimeRange,
+  referenceNowMs,
   geminiKeys,
   claudeConfigs,
   codexConfigs,
@@ -112,13 +396,86 @@ export function RequestEventsDetailsCard({
     field: LATENCY_SOURCE_FIELD,
     unit: t('usage_stats.duration_unit_ms'),
   });
+  const uncachedInputHint = t('usage_stats.request_events_uncached_input_tokens_hint');
+  const displayedOutputHint = t('usage_stats.request_events_output_tokens_hint');
+  const cacheRateFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat(i18n.language, {
+        style: 'percent',
+        maximumFractionDigits: 1,
+      }),
+    [i18n.language]
+  );
 
   const [modelFilter, setModelFilter] = useState(ALL_FILTER);
   const [sourceFilter, setSourceFilter] = useState(ALL_FILTER);
   const [authIndexFilter, setAuthIndexFilter] = useState(ALL_FILTER);
   const [serviceTierFilter, setServiceTierFilter] = useState(ALL_FILTER);
   const [reasoningEffortFilter, setReasoningEffortFilter] = useState(ALL_FILTER);
+  const [resultFilter, setResultFilter] = useState(ALL_FILTER);
+  const [timeRangeFilter, setTimeRangeFilter] = useState<RequestEventTimeRange>('page');
+  const [timeRangeClockMs, setTimeRangeClockMs] = useState(0);
+  const [cacheFilter, setCacheFilter] = useState(ALL_FILTER);
+  const [numericMetricFilter, setNumericMetricFilter] = useState(ALL_FILTER);
+  const [numericMinimumFilter, setNumericMinimumFilter] = useState('');
+  const [numericMaximumFilter, setNumericMaximumFilter] = useState('');
   const [authFileMap, setAuthFileMap] = useState<Map<string, CredentialInfo>>(new Map());
+  const [columnSettingsOpen, setColumnSettingsOpen] = useState(false);
+  const [storedColumnVisibility, setStoredColumnVisibility] = useLocalStorage<unknown>(
+    COLUMN_VISIBILITY_STORAGE_KEY,
+    DEFAULT_COLUMN_VISIBILITY
+  );
+  const columnVisibility = useMemo(
+    () => normalizeColumnVisibility(storedColumnVisibility),
+    [storedColumnVisibility]
+  );
+  const columnSettingsId = useId();
+  const numericFilterErrorId = useId();
+  const columnSettingsRef = useRef<HTMLDivElement | null>(null);
+  const columnSettingsPanelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (needsColumnVisibilityNormalization(storedColumnVisibility, columnVisibility)) {
+      setStoredColumnVisibility(columnVisibility);
+    }
+  }, [columnVisibility, setStoredColumnVisibility, storedColumnVisibility]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.removeItem(LEGACY_COLUMN_VISIBILITY_STORAGE_KEY);
+    } catch {
+      // A storage policy may block cleanup; the v2 key still keeps the new defaults authoritative.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!columnSettingsOpen) return;
+
+    columnSettingsPanelRef.current
+      ?.querySelector<HTMLInputElement>('input[type="checkbox"]:not(:disabled)')
+      ?.focus();
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!columnSettingsRef.current?.contains(event.target as Node)) {
+        setColumnSettingsOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      setColumnSettingsOpen(false);
+      columnSettingsRef.current
+        ?.querySelector<HTMLButtonElement>('[data-column-settings-trigger]')
+        ?.focus();
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [columnSettingsOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -198,6 +555,15 @@ export function RequestEventsDetailsCard({
         `usage_stats.request_events_tier_tooltip_${resolvedServiceTier.evidence}`,
         { tier: serviceTierLabel }
       );
+      const billingBasis = normalizeBillingBasis(detail.billing_basis);
+      const billingBasisKey =
+        billingBasis === BILLING_BASIS_API_TOKEN_USD
+          ? 'api'
+          : billingBasis === BILLING_BASIS_CHATGPT_CREDITS
+            ? 'credits'
+            : 'unknown';
+      const billingBasisLabel = t(`usage_stats.request_events_billing_${billingBasisKey}`);
+      const billingBasisTitle = t(`usage_stats.request_events_billing_${billingBasisKey}_tooltip`);
       const reasoningEffort = normalizeReasoningEffort(detail.reasoning_effort);
       const reasoningEffortFilterValue = getReasoningEffortFilterValue(reasoningEffort);
       const reasoningEffortLabel =
@@ -207,6 +573,9 @@ export function RequestEventsDetailsCard({
       const outputTokens = Math.max(toNumber(detail.tokens?.output_tokens), 0);
       const reasoningTokens = Math.max(toNumber(detail.tokens?.reasoning_tokens), 0);
       const { cacheReadTokens, cacheWriteTokens } = getUsageCacheTokenCounts(detail.tokens);
+      const displayedUncachedInputTokens = Math.max(inputTokens - cacheReadTokens, 0);
+      const displayedOutputTokens = Math.max(outputTokens - reasoningTokens, 0);
+      const cacheRate = resolveCacheRate(inputTokens, cacheReadTokens);
       const totalTokens = Math.max(
         toNumber(detail.tokens?.total_tokens),
         extractTotalTokens(detail)
@@ -232,6 +601,9 @@ export function RequestEventsDetailsCard({
         serviceTierFilterValue,
         serviceTierLabel,
         serviceTierTitle,
+        billingBasis,
+        billingBasisLabel,
+        billingBasisTitle,
         reasoningEffort,
         reasoningEffortFilterValue,
         reasoningEffortLabel,
@@ -239,10 +611,14 @@ export function RequestEventsDetailsCard({
         latencyMs,
         inputTokens,
         uncachedInputTokens,
+        displayedUncachedInputTokens,
         outputTokens,
+        displayedOutputTokens,
         reasoningTokens,
         cacheReadTokens,
         cacheWriteTokens,
+        cacheRate,
+        cacheRateTone: getCacheRateTone(cacheRate, inputTokens, cacheReadTokens),
         totalTokens,
       };
     });
@@ -283,22 +659,52 @@ export function RequestEventsDetailsCard({
       .sort((a, b) => b.timestampMs - a.timestampMs);
   }, [authFileMap, i18n.language, sourceInfoMap, t, usage]);
 
-  const hasLatencyData = useMemo(() => rows.some((row) => row.latencyMs !== null), [rows]);
+  const effectiveTimeRangeFilter = isRequestEventTimeRange(timeRangeFilter)
+    ? timeRangeFilter
+    : 'page';
+  const shouldTrackTime = effectiveTimeRangeFilter !== 'page' && effectiveTimeRangeFilter !== 'all';
+  const effectiveNowMs = shouldTrackTime
+    ? Math.max(referenceNowMs, timeRangeClockMs)
+    : referenceNowMs;
+  const pageTimeRangeDurationMs =
+    pageTimeRange === 'all' ? null : PAGE_TIME_RANGE_MS[pageTimeRange];
+
+  const timeScopedRows = useMemo(() => {
+    if (effectiveTimeRangeFilter === 'all') return rows;
+    if (effectiveNowMs <= 0) return rows;
+
+    const durationMs =
+      effectiveTimeRangeFilter === 'page'
+        ? pageTimeRangeDurationMs
+        : REQUEST_EVENT_TIME_RANGE_MS[effectiveTimeRangeFilter];
+    if (durationMs === null) return rows;
+
+    const cutoffMs = effectiveNowMs - durationMs;
+    return rows.filter(
+      (row) =>
+        row.timestampMs > 0 && row.timestampMs >= cutoffMs && row.timestampMs <= effectiveNowMs
+    );
+  }, [effectiveNowMs, effectiveTimeRangeFilter, pageTimeRangeDurationMs, rows]);
+
+  const hasLatencyData = useMemo(
+    () => timeScopedRows.some((row) => row.latencyMs !== null),
+    [timeScopedRows]
+  );
 
   const modelOptions = useMemo(
     () => [
       { value: ALL_FILTER, label: t('usage_stats.filter_all') },
-      ...Array.from(new Set(rows.map((row) => row.model))).map((model) => ({
+      ...Array.from(new Set(timeScopedRows.map((row) => row.model))).map((model) => ({
         value: model,
         label: model,
       })),
     ],
-    [rows, t]
+    [t, timeScopedRows]
   );
 
   const sourceOptions = useMemo(() => {
     const optionMap = new Map<string, string>();
-    rows.forEach((row) => {
+    timeScopedRows.forEach((row) => {
       if (!optionMap.has(row.sourceKey)) {
         optionMap.set(row.sourceKey, row.source);
       }
@@ -311,17 +717,17 @@ export function RequestEventsDetailsCard({
         label,
       })),
     ];
-  }, [rows, t]);
+  }, [t, timeScopedRows]);
 
   const authIndexOptions = useMemo(
     () => [
       { value: ALL_FILTER, label: t('usage_stats.filter_all') },
-      ...Array.from(new Set(rows.map((row) => row.authIndex))).map((authIndex) => ({
+      ...Array.from(new Set(timeScopedRows.map((row) => row.authIndex))).map((authIndex) => ({
         value: authIndex,
         label: authIndex,
       })),
     ],
-    [rows, t]
+    [t, timeScopedRows]
   );
 
   const serviceTierOptions = useMemo(
@@ -335,7 +741,7 @@ export function RequestEventsDetailsCard({
 
   const reasoningEffortOptions = useMemo(() => {
     const optionMap = new Map<string, string>();
-    rows.forEach((row) => {
+    timeScopedRows.forEach((row) => {
       if (!optionMap.has(row.reasoningEffortFilterValue)) {
         optionMap.set(row.reasoningEffortFilterValue, row.reasoningEffortLabel);
       }
@@ -347,7 +753,106 @@ export function RequestEventsDetailsCard({
         .sort(([, left], [, right]) => left.localeCompare(right, i18n.language))
         .map(([value, label]) => ({ value, label })),
     ];
-  }, [i18n.language, rows, t]);
+  }, [i18n.language, t, timeScopedRows]);
+
+  const resultOptions = useMemo(
+    () => [
+      { value: ALL_FILTER, label: t('usage_stats.filter_all') },
+      { value: RESULT_SUCCESS_FILTER, label: t('stats.success') },
+      { value: RESULT_FAILED_FILTER, label: t('stats.failure') },
+    ],
+    [t]
+  );
+
+  const timeRangeOptions = useMemo(() => {
+    const pageRangeLabel = t(PAGE_TIME_RANGE_LABEL_KEYS[pageTimeRange]);
+
+    return [
+      {
+        value: 'page',
+        label: t('usage_stats.request_events_range_page', { range: pageRangeLabel }),
+      },
+      { value: 'all', label: t('usage_stats.range_all') },
+      ...(['1h', '24h', '7d', '30d'] as const).map((range) => ({
+        value: range,
+        label: t(`usage_stats.range_${range}`),
+      })),
+    ];
+  }, [pageTimeRange, t]);
+
+  const cacheOptions = useMemo(
+    () => [
+      { value: ALL_FILTER, label: t('usage_stats.filter_all') },
+      { value: CACHE_PRESENT_FILTER, label: t('usage_stats.request_events_cache_present') },
+      { value: CACHE_ABSENT_FILTER, label: t('usage_stats.request_events_cache_absent') },
+    ],
+    [t]
+  );
+
+  const numericMetricOptions = useMemo(
+    () => [
+      { value: ALL_FILTER, label: t('usage_stats.request_events_numeric_any') },
+      {
+        value: 'totalInputTokens',
+        label: t('usage_stats.request_events_total_input_tokens'),
+      },
+      {
+        value: 'displayedUncachedInputTokens',
+        label: t('usage_stats.request_events_uncached_input_tokens'),
+      },
+      {
+        value: 'totalOutputTokens',
+        label: t('usage_stats.request_events_total_output_tokens'),
+      },
+      {
+        value: 'displayedOutputTokens',
+        label: t('usage_stats.request_events_explicit_output_tokens'),
+      },
+      { value: 'reasoningTokens', label: t('usage_stats.reasoning_tokens') },
+      { value: 'cacheReadTokens', label: t('usage_stats.cache_read_tokens') },
+      { value: 'cacheWriteTokens', label: t('usage_stats.cache_write_tokens') },
+      { value: 'totalTokens', label: t('usage_stats.total_tokens') },
+    ],
+    [t]
+  );
+
+  const columnOptions = useMemo(
+    () => [
+      {
+        id: 'timestamp' as const,
+        label: t('usage_stats.request_events_timestamp'),
+      },
+      { id: 'model' as const, label: t('usage_stats.model_name') },
+      { id: 'source' as const, label: t('usage_stats.request_events_source') },
+      { id: 'authIndex' as const, label: t('usage_stats.request_events_auth_index') },
+      { id: 'tier' as const, label: t('usage_stats.request_events_tier') },
+      { id: 'billing' as const, label: t('usage_stats.request_events_billing') },
+      { id: 'result' as const, label: t('usage_stats.request_events_result') },
+      { id: 'latency' as const, label: t('usage_stats.time') },
+      { id: 'effort' as const, label: t('usage_stats.request_events_effort') },
+      {
+        id: 'totalInputTokens' as const,
+        label: t('usage_stats.request_events_total_input_tokens'),
+      },
+      {
+        id: 'displayedUncachedInputTokens' as const,
+        label: t('usage_stats.request_events_uncached_input_tokens'),
+      },
+      {
+        id: 'totalOutputTokens' as const,
+        label: t('usage_stats.request_events_total_output_tokens'),
+      },
+      {
+        id: 'displayedOutputTokens' as const,
+        label: t('usage_stats.request_events_explicit_output_tokens'),
+      },
+      { id: 'reasoningTokens' as const, label: t('usage_stats.reasoning_tokens') },
+      { id: 'cacheReadTokens' as const, label: t('usage_stats.cache_read_tokens') },
+      { id: 'cacheWriteTokens' as const, label: t('usage_stats.cache_write_tokens') },
+      { id: 'totalTokens' as const, label: t('usage_stats.total_tokens') },
+    ],
+    [t]
+  );
 
   const modelOptionSet = useMemo(
     () => new Set(modelOptions.map((option) => option.value)),
@@ -369,6 +874,10 @@ export function RequestEventsDetailsCard({
     () => new Set(reasoningEffortOptions.map((option) => option.value)),
     [reasoningEffortOptions]
   );
+  const numericMetricOptionSet = useMemo(
+    () => new Set(numericMetricOptions.map((option) => option.value)),
+    [numericMetricOptions]
+  );
 
   const effectiveModelFilter = modelOptionSet.has(modelFilter) ? modelFilter : ALL_FILTER;
   const effectiveSourceFilter = sourceOptionSet.has(sourceFilter) ? sourceFilter : ALL_FILTER;
@@ -381,10 +890,38 @@ export function RequestEventsDetailsCard({
   const effectiveReasoningEffortFilter = reasoningEffortOptionSet.has(reasoningEffortFilter)
     ? reasoningEffortFilter
     : ALL_FILTER;
+  const effectiveNumericMetricFilter = numericMetricOptionSet.has(numericMetricFilter)
+    ? numericMetricFilter
+    : ALL_FILTER;
+  const numericMinimumValue = parseNumericFilterBound(numericMinimumFilter);
+  const numericMaximumValue = parseNumericFilterBound(numericMaximumFilter);
+  const numericMinimumInvalid = numericMinimumFilter.trim() !== '' && numericMinimumValue === null;
+  const numericMaximumInvalid = numericMaximumFilter.trim() !== '' && numericMaximumValue === null;
+  const numericRangeInvalid =
+    numericMinimumValue !== null &&
+    numericMaximumValue !== null &&
+    numericMinimumValue > numericMaximumValue;
+  const numericFilterInvalid =
+    numericMinimumInvalid || numericMaximumInvalid || numericRangeInvalid;
+  const numericFilterError =
+    numericMinimumInvalid || numericMaximumInvalid
+      ? t('usage_stats.request_events_numeric_invalid')
+      : numericRangeInvalid
+        ? t('usage_stats.request_events_numeric_range_invalid')
+        : '';
+
+  useEffect(() => {
+    if (!shouldTrackTime) return;
+
+    const updateClock = () => setTimeRangeClockMs(Date.now());
+    updateClock();
+    const intervalId = window.setInterval(updateClock, 60 * 1000);
+    return () => window.clearInterval(intervalId);
+  }, [effectiveTimeRangeFilter, shouldTrackTime]);
 
   const filteredRows = useMemo(
     () =>
-      rows.filter((row) => {
+      timeScopedRows.filter((row) => {
         const modelMatched =
           effectiveModelFilter === ALL_FILTER || row.model === effectiveModelFilter;
         const sourceMatched =
@@ -397,21 +934,46 @@ export function RequestEventsDetailsCard({
         const reasoningEffortMatched =
           effectiveReasoningEffortFilter === ALL_FILTER ||
           row.reasoningEffortFilterValue === effectiveReasoningEffortFilter;
+        const resultMatched =
+          resultFilter === ALL_FILTER ||
+          (resultFilter === RESULT_FAILED_FILTER ? row.failed : !row.failed);
+        const hasCacheTokens = row.cacheReadTokens > 0 || row.cacheWriteTokens > 0;
+        const cacheMatched =
+          cacheFilter === ALL_FILTER ||
+          (cacheFilter === CACHE_PRESENT_FILTER ? hasCacheTokens : !hasCacheTokens);
+        const numericMetric = isRequestEventNumericMetricId(effectiveNumericMetricFilter)
+          ? effectiveNumericMetricFilter
+          : null;
+        const numericValue = numericMetric ? getRequestEventNumericValue(row, numericMetric) : null;
+        const numericMatched =
+          numericMetric === null ||
+          numericFilterInvalid ||
+          ((numericMinimumValue === null || numericValue! >= numericMinimumValue) &&
+            (numericMaximumValue === null || numericValue! <= numericMaximumValue));
         return (
           modelMatched &&
           sourceMatched &&
           authIndexMatched &&
           serviceTierMatched &&
-          reasoningEffortMatched
+          reasoningEffortMatched &&
+          resultMatched &&
+          cacheMatched &&
+          numericMatched
         );
       }),
     [
+      cacheFilter,
       effectiveAuthIndexFilter,
       effectiveModelFilter,
       effectiveReasoningEffortFilter,
       effectiveServiceTierFilter,
       effectiveSourceFilter,
-      rows,
+      effectiveNumericMetricFilter,
+      numericFilterInvalid,
+      numericMaximumValue,
+      numericMinimumValue,
+      resultFilter,
+      timeScopedRows,
     ]
   );
 
@@ -422,7 +984,13 @@ export function RequestEventsDetailsCard({
     effectiveSourceFilter !== ALL_FILTER ||
     effectiveAuthIndexFilter !== ALL_FILTER ||
     effectiveServiceTierFilter !== ALL_FILTER ||
-    effectiveReasoningEffortFilter !== ALL_FILTER;
+    effectiveReasoningEffortFilter !== ALL_FILTER ||
+    resultFilter !== ALL_FILTER ||
+    effectiveTimeRangeFilter !== 'page' ||
+    cacheFilter !== ALL_FILTER ||
+    effectiveNumericMetricFilter !== ALL_FILTER ||
+    numericMinimumFilter.trim() !== '' ||
+    numericMaximumFilter.trim() !== '';
 
   const handleClearFilters = () => {
     setModelFilter(ALL_FILTER);
@@ -430,6 +998,28 @@ export function RequestEventsDetailsCard({
     setAuthIndexFilter(ALL_FILTER);
     setServiceTierFilter(ALL_FILTER);
     setReasoningEffortFilter(ALL_FILTER);
+    setResultFilter(ALL_FILTER);
+    setTimeRangeFilter('page');
+    setCacheFilter(ALL_FILTER);
+    setNumericMetricFilter(ALL_FILTER);
+    setNumericMinimumFilter('');
+    setNumericMaximumFilter('');
+  };
+
+  const stableVisibleColumnCount = REQUEST_EVENT_COLUMN_IDS.reduce(
+    (count, columnId) => count + (columnId !== 'latency' && columnVisibility[columnId] ? 1 : 0),
+    0
+  );
+
+  const handleToggleColumn = (columnId: RequestEventColumnId) => {
+    setStoredColumnVisibility({
+      ...columnVisibility,
+      [columnId]: !columnVisibility[columnId],
+    });
+  };
+
+  const handleRestoreDefaultColumns = () => {
+    setStoredColumnVisibility(DEFAULT_COLUMN_VISIBILITY);
   };
 
   const handleExportCsv = () => {
@@ -447,6 +1037,7 @@ export function RequestEventsDetailsCard({
       'effective_service_tier',
       'resolved_service_tier',
       'service_tier_evidence',
+      'billing_basis',
       'reasoning_effort',
       'result',
       ...(hasLatencyData ? ['latency_ms'] : []),
@@ -473,6 +1064,7 @@ export function RequestEventsDetailsCard({
         row.effectiveServiceTier ?? '',
         row.resolvedServiceTier.tier,
         row.resolvedServiceTier.evidence,
+        row.billingBasis,
         row.reasoningEffort ?? '',
         row.failed ? 'failed' : 'success',
         ...(hasLatencyData ? [row.latencyMs ?? ''] : []),
@@ -512,6 +1104,7 @@ export function RequestEventsDetailsCard({
       effective_service_tier: row.effectiveServiceTier,
       resolved_service_tier: row.resolvedServiceTier.tier,
       service_tier_evidence: row.resolvedServiceTier.evidence,
+      billing_basis: row.billingBasis,
       reasoning_effort: row.reasoningEffort,
       failed: row.failed,
       ...(hasLatencyData && row.latencyMs !== null ? { latency_ms: row.latencyMs } : {}),
@@ -566,6 +1159,87 @@ export function RequestEventsDetailsCard({
           >
             {t('usage_stats.export_json')}
           </Button>
+          <div
+            ref={columnSettingsRef}
+            className={styles.requestEventsColumnSettings}
+            onBlur={(event) => {
+              const nextTarget = event.relatedTarget;
+              if (nextTarget instanceof Node && !event.currentTarget.contains(nextTarget)) {
+                setColumnSettingsOpen(false);
+              }
+            }}
+          >
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className={styles.requestEventsColumnSettingsTrigger}
+              data-column-settings-trigger
+              aria-haspopup="dialog"
+              aria-expanded={columnSettingsOpen}
+              aria-controls={columnSettingsId}
+              aria-label={t('usage_stats.request_events_column_settings')}
+              onClick={() => setColumnSettingsOpen((open) => !open)}
+            >
+              <IconSettings size={15} aria-hidden="true" />
+              <span className={styles.requestEventsColumnSettingsTriggerLabel}>
+                {t('usage_stats.request_events_column_settings')}
+              </span>
+            </Button>
+            {columnSettingsOpen && (
+              <div
+                ref={columnSettingsPanelRef}
+                id={columnSettingsId}
+                role="dialog"
+                aria-modal="false"
+                aria-labelledby={`${columnSettingsId}-title`}
+                className={styles.requestEventsColumnSettingsPopover}
+              >
+                <div
+                  id={`${columnSettingsId}-title`}
+                  className={styles.requestEventsColumnSettingsTitle}
+                >
+                  {t('usage_stats.request_events_column_settings')}
+                </div>
+                <div className={styles.requestEventsColumnSettingsGrid}>
+                  {columnOptions
+                    .filter((column) => column.id !== 'latency' || hasLatencyData)
+                    .map((column) => {
+                      const checkboxId = `${columnSettingsId}-${column.id}`;
+                      const checked = columnVisibility[column.id];
+                      return (
+                        <label
+                          key={column.id}
+                          htmlFor={checkboxId}
+                          className={styles.requestEventsColumnToggle}
+                        >
+                          <input
+                            id={checkboxId}
+                            type="checkbox"
+                            checked={checked}
+                            disabled={
+                              checked && column.id !== 'latency' && stableVisibleColumnCount === 1
+                            }
+                            onChange={() => handleToggleColumn(column.id)}
+                          />
+                          <span>{column.label}</span>
+                        </label>
+                      );
+                    })}
+                </div>
+                <div className={styles.requestEventsColumnSettingsFooter}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleRestoreDefaultColumns}
+                  >
+                    {t('usage_stats.request_events_restore_default_columns')}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       }
     >
@@ -635,11 +1309,117 @@ export function RequestEventsDetailsCard({
             fullWidth={false}
           />
         </div>
+        <div className={styles.requestEventsFilterItem}>
+          <span className={styles.requestEventsFilterLabel}>
+            {t('usage_stats.request_events_result')}
+          </span>
+          <Select
+            value={resultFilter}
+            options={resultOptions}
+            onChange={setResultFilter}
+            className={styles.requestEventsSelect}
+            ariaLabel={t('usage_stats.request_events_result')}
+            fullWidth={false}
+          />
+        </div>
+        <div className={styles.requestEventsFilterItem}>
+          <span className={styles.requestEventsFilterLabel}>{t('usage_stats.range_filter')}</span>
+          <Select
+            value={effectiveTimeRangeFilter}
+            options={timeRangeOptions}
+            onChange={(value) => {
+              if (!isRequestEventTimeRange(value)) return;
+              setTimeRangeFilter(value);
+              if (value !== 'page' && value !== 'all') {
+                setTimeRangeClockMs(Date.now());
+              }
+            }}
+            className={styles.requestEventsSelect}
+            ariaLabel={t('usage_stats.range_filter')}
+            fullWidth={false}
+          />
+        </div>
+        <div className={styles.requestEventsFilterItem}>
+          <span className={styles.requestEventsFilterLabel}>
+            {t('usage_stats.request_events_filter_cache')}
+          </span>
+          <Select
+            value={cacheFilter}
+            options={cacheOptions}
+            onChange={setCacheFilter}
+            className={styles.requestEventsSelect}
+            ariaLabel={t('usage_stats.request_events_filter_cache')}
+            fullWidth={false}
+          />
+        </div>
+        <div
+          className={`${styles.requestEventsFilterItem} ${styles.requestEventsNumericFilterItem}`}
+        >
+          <span className={styles.requestEventsFilterLabel}>
+            {t('usage_stats.request_events_numeric_filter')}
+          </span>
+          <div className={styles.requestEventsNumericControls}>
+            <Select
+              value={effectiveNumericMetricFilter}
+              options={numericMetricOptions}
+              onChange={(value) => {
+                setNumericMetricFilter(value);
+                if (value === ALL_FILTER) {
+                  setNumericMinimumFilter('');
+                  setNumericMaximumFilter('');
+                }
+              }}
+              className={styles.requestEventsNumericMetric}
+              ariaLabel={t('usage_stats.request_events_numeric_metric')}
+              fullWidth={false}
+            />
+            <Input
+              type="number"
+              min={0}
+              step={1}
+              inputMode="numeric"
+              value={numericMinimumFilter}
+              onChange={(event) => setNumericMinimumFilter(event.target.value)}
+              placeholder={t('usage_stats.request_events_numeric_min')}
+              aria-label={t('usage_stats.request_events_numeric_min')}
+              aria-describedby={numericFilterError ? numericFilterErrorId : undefined}
+              aria-invalid={numericMinimumInvalid || numericRangeInvalid}
+              disabled={effectiveNumericMetricFilter === ALL_FILTER}
+              className={styles.requestEventsNumericInput}
+            />
+            <span className={styles.requestEventsNumericSeparator} aria-hidden="true">
+              –
+            </span>
+            <Input
+              type="number"
+              min={0}
+              step={1}
+              inputMode="numeric"
+              value={numericMaximumFilter}
+              onChange={(event) => setNumericMaximumFilter(event.target.value)}
+              placeholder={t('usage_stats.request_events_numeric_max')}
+              aria-label={t('usage_stats.request_events_numeric_max')}
+              aria-describedby={numericFilterError ? numericFilterErrorId : undefined}
+              aria-invalid={numericMaximumInvalid || numericRangeInvalid}
+              disabled={effectiveNumericMetricFilter === ALL_FILTER}
+              className={styles.requestEventsNumericInput}
+            />
+          </div>
+          {numericFilterError && (
+            <span
+              id={numericFilterErrorId}
+              className={styles.requestEventsNumericError}
+              role="alert"
+            >
+              {numericFilterError}
+            </span>
+          )}
+        </div>
       </div>
 
-      {loading && rows.length === 0 ? (
+      {loading && timeScopedRows.length === 0 ? (
         <div className={styles.hint}>{t('common.loading')}</div>
-      ) : rows.length === 0 ? (
+      ) : timeScopedRows.length === 0 ? (
         <EmptyState
           title={t('usage_stats.request_events_empty_title')}
           description={t('usage_stats.request_events_empty_desc')}
@@ -664,89 +1444,299 @@ export function RequestEventsDetailsCard({
             )}
           </div>
 
-          <div className={styles.requestEventsTableWrapper}>
+          <div
+            className={styles.requestEventsTableWrapper}
+            role="region"
+            tabIndex={0}
+            aria-label={t('usage_stats.request_events_table_region')}
+          >
             <table className={`${styles.table} ${styles.requestEventsTable}`}>
               <thead>
                 <tr>
-                  <th>{t('usage_stats.request_events_timestamp')}</th>
-                  <th>{t('usage_stats.model_name')}</th>
-                  <th>{t('usage_stats.request_events_source')}</th>
-                  <th>{t('usage_stats.request_events_auth_index')}</th>
-                  <th>{t('usage_stats.request_events_tier')}</th>
-                  <th>{t('usage_stats.request_events_result')}</th>
-                  {hasLatencyData && <th title={latencyHint}>{t('usage_stats.time')}</th>}
-                  <th>{t('usage_stats.request_events_effort')}</th>
-                  <th>{t('usage_stats.input_tokens')}</th>
-                  <th>{t('usage_stats.output_tokens')}</th>
-                  <th>{t('usage_stats.reasoning_tokens')}</th>
-                  <th>{t('usage_stats.cache_read_tokens')}</th>
-                  <th>{t('usage_stats.cache_write_tokens')}</th>
-                  <th>{t('usage_stats.total_tokens')}</th>
+                  {columnVisibility.timestamp && (
+                    <th>{t('usage_stats.request_events_timestamp')}</th>
+                  )}
+                  {columnVisibility.model && <th>{t('usage_stats.model_name')}</th>}
+                  {columnVisibility.source && <th>{t('usage_stats.request_events_source')}</th>}
+                  {columnVisibility.authIndex && (
+                    <th>{t('usage_stats.request_events_auth_index')}</th>
+                  )}
+                  {columnVisibility.tier && <th>{t('usage_stats.request_events_tier')}</th>}
+                  {columnVisibility.billing && <th>{t('usage_stats.request_events_billing')}</th>}
+                  {columnVisibility.result && <th>{t('usage_stats.request_events_result')}</th>}
+                  {columnVisibility.latency && hasLatencyData && (
+                    <th title={latencyHint}>{t('usage_stats.time')}</th>
+                  )}
+                  {columnVisibility.effort && <th>{t('usage_stats.request_events_effort')}</th>}
+                  {columnVisibility.totalInputTokens && (
+                    <th
+                      className={`${styles.requestEventsTokenHeader} ${styles.requestEventsTokenInput}`}
+                    >
+                      {t('usage_stats.request_events_total_input_tokens')}
+                    </th>
+                  )}
+                  {columnVisibility.displayedUncachedInputTokens && (
+                    <th
+                      className={`${styles.requestEventsTokenHeader} ${styles.requestEventsTokenHeaderHint} ${styles.requestEventsTokenUncached}`}
+                      title={uncachedInputHint}
+                      aria-label={uncachedInputHint}
+                    >
+                      {t('usage_stats.request_events_uncached_input_tokens')}
+                    </th>
+                  )}
+                  {columnVisibility.totalOutputTokens && (
+                    <th
+                      className={`${styles.requestEventsTokenHeader} ${styles.requestEventsTokenOutput}`}
+                    >
+                      {t('usage_stats.request_events_total_output_tokens')}
+                    </th>
+                  )}
+                  {columnVisibility.displayedOutputTokens && (
+                    <th
+                      className={`${styles.requestEventsTokenHeader} ${styles.requestEventsTokenHeaderHint} ${styles.requestEventsTokenExplicitOutput}`}
+                      title={displayedOutputHint}
+                      aria-label={displayedOutputHint}
+                    >
+                      {t('usage_stats.request_events_explicit_output_tokens')}
+                    </th>
+                  )}
+                  {columnVisibility.reasoningTokens && (
+                    <th
+                      className={`${styles.requestEventsTokenHeader} ${styles.requestEventsTokenReasoning}`}
+                    >
+                      {t('usage_stats.reasoning_tokens')}
+                    </th>
+                  )}
+                  {columnVisibility.cacheReadTokens && (
+                    <th
+                      className={`${styles.requestEventsTokenHeader} ${styles.requestEventsTokenHeaderHint} ${styles.requestEventsTokenCacheRead}`}
+                      title={t('usage_stats.request_events_cache_rate_hint')}
+                      aria-label={t('usage_stats.request_events_cache_rate_hint')}
+                    >
+                      {t('usage_stats.cache_read_tokens')}
+                    </th>
+                  )}
+                  {columnVisibility.cacheWriteTokens && (
+                    <th
+                      className={`${styles.requestEventsTokenHeader} ${styles.requestEventsTokenCacheWrite}`}
+                    >
+                      {t('usage_stats.cache_write_tokens')}
+                    </th>
+                  )}
+                  {columnVisibility.totalTokens && (
+                    <th
+                      className={`${styles.requestEventsTokenHeader} ${styles.requestEventsTokenTotal}`}
+                    >
+                      {t('usage_stats.total_tokens')}
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
-                {renderedRows.map((row) => (
-                  <tr key={row.id}>
-                    <td title={row.timestamp} className={styles.requestEventsTimestamp}>
-                      {row.timestampLabel}
-                    </td>
-                    <td className={styles.modelCell}>{row.model}</td>
-                    <td className={styles.requestEventsSourceCell} title={row.source}>
-                      <span>{row.source}</span>
-                      {row.sourceType && (
-                        <span className={styles.credentialType}>{row.sourceType}</span>
+                {renderedRows.map((row) => {
+                  const cacheRateToneClassName = getCacheRateToneClassName(row.cacheRateTone);
+                  const cacheColorWeight = getCacheColorWeight(row.cacheReadTokens);
+                  const cacheReadStyle = {
+                    '--request-events-cache-color-weight': `${cacheColorWeight}%`,
+                  } as CSSProperties;
+                  const cacheReadTokensLabel = row.cacheReadTokens.toLocaleString();
+                  const inputTokensLabel = row.inputTokens.toLocaleString();
+                  const cacheRateLabel =
+                    row.cacheRate === null
+                      ? t('common.not_set')
+                      : cacheRateFormatter.format(row.cacheRate);
+                  const cacheRateToneLabel =
+                    row.cacheRateTone === 'anomaly'
+                      ? t('usage_stats.request_events_cache_rate_anomaly')
+                      : row.cacheRateTone === 'unavailable'
+                        ? t('common.not_set')
+                        : t(`usage_stats.request_events_cache_rate_${row.cacheRateTone}`);
+                  const cacheAnomalyLabel =
+                    row.cacheRateTone === 'anomaly'
+                      ? t('usage_stats.request_events_cache_rate_anomaly_label', {
+                          tokens: cacheReadTokensLabel,
+                          input: inputTokensLabel,
+                        })
+                      : null;
+                  const cacheRateCellLabel = t('usage_stats.request_events_cache_rate_cell_label', {
+                    tokens: cacheReadTokensLabel,
+                    rate: cacheRateLabel,
+                    tone: cacheRateToneLabel,
+                  });
+                  const cacheRateCellDescription = cacheAnomalyLabel
+                    ? `${cacheRateCellLabel} ${cacheAnomalyLabel}`
+                    : cacheRateCellLabel;
+
+                  return (
+                    <tr key={row.id}>
+                      {columnVisibility.timestamp && (
+                        <td title={row.timestamp} className={styles.requestEventsTimestamp}>
+                          {row.timestampLabel}
+                        </td>
                       )}
-                    </td>
-                    <td className={styles.requestEventsAuthIndex} title={row.authIndex}>
-                      {row.authIndex}
-                    </td>
-                    <td>
-                      <span
-                        className={`${styles.requestEventsTierBadge} ${
-                          row.resolvedServiceTier.tier === 'fast'
-                            ? styles.requestEventsTierFast
-                            : styles.requestEventsTierStd
-                        }`}
-                        title={row.serviceTierTitle}
-                        aria-label={row.serviceTierTitle}
-                      >
-                        {row.serviceTierLabel}
-                      </span>
-                    </td>
-                    <td>
-                      <span
-                        className={
-                          row.failed
-                            ? styles.requestEventsResultFailed
-                            : styles.requestEventsResultSuccess
-                        }
-                      >
-                        {row.failed ? t('stats.failure') : t('stats.success')}
-                      </span>
-                    </td>
-                    {hasLatencyData && (
-                      <td className={styles.durationCell}>{formatDurationMs(row.latencyMs)}</td>
-                    )}
-                    <td>
-                      <span
-                        className={
-                          row.reasoningEffort === null
-                            ? styles.requestEventsEffortEmpty
-                            : styles.requestEventsEffortBadge
-                        }
-                        title={row.reasoningEffort ?? undefined}
-                      >
-                        {row.reasoningEffortLabel}
-                      </span>
-                    </td>
-                    <td>{row.inputTokens.toLocaleString()}</td>
-                    <td>{row.outputTokens.toLocaleString()}</td>
-                    <td>{row.reasoningTokens.toLocaleString()}</td>
-                    <td>{row.cacheReadTokens.toLocaleString()}</td>
-                    <td>{row.cacheWriteTokens.toLocaleString()}</td>
-                    <td>{row.totalTokens.toLocaleString()}</td>
-                  </tr>
-                ))}
+                      {columnVisibility.model && <td className={styles.modelCell}>{row.model}</td>}
+                      {columnVisibility.source && (
+                        <td className={styles.requestEventsSourceCell} title={row.source}>
+                          <span>{row.source}</span>
+                          {row.sourceType && (
+                            <span className={styles.credentialType}>{row.sourceType}</span>
+                          )}
+                        </td>
+                      )}
+                      {columnVisibility.authIndex && (
+                        <td className={styles.requestEventsAuthIndex} title={row.authIndex}>
+                          {row.authIndex}
+                        </td>
+                      )}
+                      {columnVisibility.tier && (
+                        <td>
+                          <span
+                            className={`${styles.requestEventsTierBadge} ${
+                              row.resolvedServiceTier.tier === 'fast'
+                                ? styles.requestEventsTierFast
+                                : styles.requestEventsTierStd
+                            }`}
+                            title={row.serviceTierTitle}
+                            aria-label={row.serviceTierTitle}
+                          >
+                            {row.serviceTierLabel}
+                          </span>
+                        </td>
+                      )}
+                      {columnVisibility.billing && (
+                        <td>
+                          <span
+                            className={`${styles.requestEventsBillingBadge} ${
+                              row.billingBasis === BILLING_BASIS_API_TOKEN_USD
+                                ? styles.requestEventsBillingApi
+                                : row.billingBasis === BILLING_BASIS_CHATGPT_CREDITS
+                                  ? styles.requestEventsBillingCredits
+                                  : styles.requestEventsBillingUnknown
+                            }`}
+                            title={row.billingBasisTitle}
+                            aria-label={row.billingBasisTitle}
+                          >
+                            {row.billingBasisLabel}
+                          </span>
+                        </td>
+                      )}
+                      {columnVisibility.result && (
+                        <td>
+                          <span
+                            className={
+                              row.failed
+                                ? styles.requestEventsResultFailed
+                                : styles.requestEventsResultSuccess
+                            }
+                          >
+                            {row.failed ? t('stats.failure') : t('stats.success')}
+                          </span>
+                        </td>
+                      )}
+                      {columnVisibility.latency && hasLatencyData && (
+                        <td className={styles.durationCell}>{formatDurationMs(row.latencyMs)}</td>
+                      )}
+                      {columnVisibility.effort && (
+                        <td>
+                          <span
+                            className={getReasoningEffortClassName(row.reasoningEffort)}
+                            title={row.reasoningEffort ?? undefined}
+                            data-reasoning-effort-tone={getReasoningEffortTone(row.reasoningEffort)}
+                          >
+                            {row.reasoningEffortLabel}
+                          </span>
+                        </td>
+                      )}
+                      {columnVisibility.totalInputTokens && (
+                        <td
+                          className={`${styles.requestEventsTokenCell} ${styles.requestEventsTokenInput}`}
+                        >
+                          <span className={styles.requestEventsTokenValue}>
+                            {row.inputTokens.toLocaleString()}
+                          </span>
+                        </td>
+                      )}
+                      {columnVisibility.displayedUncachedInputTokens && (
+                        <td
+                          className={`${styles.requestEventsTokenCell} ${styles.requestEventsTokenUncached}`}
+                        >
+                          <span className={styles.requestEventsTokenValue}>
+                            {row.displayedUncachedInputTokens.toLocaleString()}
+                          </span>
+                        </td>
+                      )}
+                      {columnVisibility.totalOutputTokens && (
+                        <td
+                          className={`${styles.requestEventsTokenCell} ${styles.requestEventsTokenOutput}`}
+                        >
+                          <span className={styles.requestEventsTokenValue}>
+                            {row.outputTokens.toLocaleString()}
+                          </span>
+                        </td>
+                      )}
+                      {columnVisibility.displayedOutputTokens && (
+                        <td
+                          className={`${styles.requestEventsTokenCell} ${styles.requestEventsTokenExplicitOutput}`}
+                        >
+                          <span className={styles.requestEventsTokenValue}>
+                            {row.displayedOutputTokens.toLocaleString()}
+                          </span>
+                        </td>
+                      )}
+                      {columnVisibility.reasoningTokens && (
+                        <td
+                          className={`${styles.requestEventsTokenCell} ${styles.requestEventsTokenReasoning}`}
+                        >
+                          <span className={styles.requestEventsTokenValue}>
+                            {row.reasoningTokens.toLocaleString()}
+                          </span>
+                        </td>
+                      )}
+                      {columnVisibility.cacheReadTokens && (
+                        <td
+                          className={`${styles.requestEventsTokenCell} ${styles.requestEventsTokenCacheRead} ${cacheRateToneClassName}`}
+                          style={cacheReadStyle}
+                          data-cache-rate-tone={row.cacheRateTone}
+                          data-cache-color-weight={cacheColorWeight}
+                          data-cache-token-count={row.cacheReadTokens}
+                          title={cacheRateCellDescription}
+                          aria-label={cacheRateCellDescription}
+                        >
+                          <span className={styles.requestEventsTokenValue}>
+                            {cacheReadTokensLabel}
+                            {cacheAnomalyLabel && (
+                              <span
+                                className={styles.requestEventsCacheAnomalyMarker}
+                                title={cacheAnomalyLabel}
+                                aria-hidden="true"
+                              >
+                                !
+                              </span>
+                            )}
+                          </span>
+                        </td>
+                      )}
+                      {columnVisibility.cacheWriteTokens && (
+                        <td
+                          className={`${styles.requestEventsTokenCell} ${styles.requestEventsTokenCacheWrite}`}
+                        >
+                          <span className={styles.requestEventsTokenValue}>
+                            {row.cacheWriteTokens.toLocaleString()}
+                          </span>
+                        </td>
+                      )}
+                      {columnVisibility.totalTokens && (
+                        <td
+                          className={`${styles.requestEventsTokenCell} ${styles.requestEventsTokenTotal}`}
+                        >
+                          <span className={styles.requestEventsTokenValue}>
+                            {row.totalTokens.toLocaleString()}
+                          </span>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

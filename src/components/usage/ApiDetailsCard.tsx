@@ -74,7 +74,7 @@ export function ApiDetailsCard({ apiStats, loading, showPricing }: ApiDetailsCar
                 ['endpoint', 'usage_stats.api_endpoint'],
                 ['requests', 'usage_stats.requests_count'],
                 ['tokens', 'usage_stats.tokens_count'],
-                ...(showPricing ? [['cost', 'usage_stats.total_cost']] : []),
+                ...(showPricing ? [['cost', 'usage_stats.pricing_api_usd_estimate']] : []),
               ] as [ApiSortKey, string][]
             ).map(([key, labelKey]) => (
               <button
@@ -133,12 +133,13 @@ export function ApiDetailsCard({ apiStats, loading, showPricing }: ApiDetailsCar
                               className={styles.apiBadge}
                               title={
                                 api.pricingCoverage.pricedRequests <
-                                api.pricingCoverage.totalRequests
+                                api.pricingCoverage.apiTokenUsdRequests
                                   ? t('usage_stats.pricing_cost_incomplete')
                                   : undefined
                               }
                             >
-                              {t('usage_stats.total_cost')}: {formatUsd(api.totalCost)}
+                              {t('usage_stats.pricing_api_usd_estimate')}:{' '}
+                              {formatUsd(api.totalCost)}
                             </span>
                           )}
                         </div>

@@ -191,9 +191,11 @@ export function UsagePage() {
     [t]
   );
 
+  const nowMs = lastRefreshedAt?.getTime() ?? 0;
+
   const filteredUsage = useMemo(
-    () => (usage ? filterUsageByTimeRange(usage, timeRange) : null),
-    [usage, timeRange]
+    () => (usage && nowMs > 0 ? filterUsageByTimeRange(usage, timeRange, nowMs) : (usage ?? null)),
+    [nowMs, timeRange, usage]
   );
   const hourWindowHours = timeRange === 'all' ? undefined : HOUR_WINDOW_BY_TIME_RANGE[timeRange];
 
@@ -222,8 +224,6 @@ export function UsagePage() {
       // Ignore storage errors.
     }
   }, [timeRange]);
-
-  const nowMs = lastRefreshedAt?.getTime() ?? 0;
 
   // Sparklines hook
   const { requestsSparkline, tokensSparkline, rpmSparkline, tpmSparkline, costSparkline } =
@@ -404,8 +404,10 @@ export function UsagePage() {
       </div>
 
       <RequestEventsDetailsCard
-        usage={filteredUsage}
+        usage={usage}
         loading={loading}
+        pageTimeRange={timeRange}
+        referenceNowMs={nowMs}
         geminiKeys={config?.geminiApiKeys || []}
         claudeConfigs={config?.claudeApiKeys || []}
         codexConfigs={config?.codexApiKeys || []}
