@@ -434,7 +434,6 @@ def build_service_tier_usage_snapshot() -> dict[str, Any]:
             "request_service_tier": "priority",
             "response_service_tier": "standard",
             "effective_service_tier": "standard",
-            "billing_basis": "api-token-usd",
             "tokens": {"input_tokens": 5, "output_tokens": 7, "total_tokens": 12},
             "failed": False,
         },
@@ -445,7 +444,6 @@ def build_service_tier_usage_snapshot() -> dict[str, Any]:
             "service_tier": "auto",
             "request_service_tier": "auto",
             "effective_service_tier": "priority",
-            "billing_basis": "chatgpt-credits",
             "tokens": {"input_tokens": 8, "output_tokens": 4, "total_tokens": 12},
             "failed": False,
         },
@@ -456,7 +454,6 @@ def build_service_tier_usage_snapshot() -> dict[str, Any]:
             "service_tier": "priority",
             "request_service_tier": "priority",
             "response_service_tier": "future-tier",
-            "billing_basis": "unknown",
             "tokens": {"input_tokens": 6, "output_tokens": 3, "total_tokens": 9},
             "failed": False,
         },
@@ -1124,15 +1121,6 @@ def run_endpoint_smoke(api_url: str, include_plugin_store: bool, include_write_s
     tier_details = assert_list(tier_model.get("details"), "service-tier details")
     if len(tier_details) != 3:
         raise AssertionError(f"Service-tier export lost request details: {tier_details!r}")
-    billing_bases = sorted(
-        str(item.get("billing_basis"))
-        for item in tier_details
-        if isinstance(item, dict)
-    )
-    if billing_bases != ["api-token-usd", "chatgpt-credits", "unknown"]:
-        raise AssertionError(
-            f"Core import/export lost billing_basis values: {billing_bases!r}"
-        )
     standard_detail = next(
         (
             item
@@ -2057,7 +2045,6 @@ def run_browser_smoke(
                         "xpath=../.."
                     )
                     events_card.wait_for()
-                    events_card.get_by_role("columnheader", name="Billing", exact=True).wait_for()
                     rows = events_card.locator("tbody tr")
                     for _ in range(50):
                         if rows.count() == 3:
@@ -2076,11 +2063,6 @@ def run_browser_smoke(
                     events_card.get_by_label(
                         "Historical or unknown tier; estimated as Std.", exact=True
                     ).wait_for()
-                    for billing_label in ["API USD", "Credits", "Unknown"]:
-                        if events_card.get_by_text(billing_label, exact=True).count() != 1:
-                            raise AssertionError(
-                                f"Real Core billing basis {billing_label!r} was not rendered once"
-                            )
                     tier_select = events_card.get_by_label("Tier", exact=True)
                     tier_select.click()
                     page.get_by_role("option", name="Fast", exact=True).wait_for()
@@ -2097,11 +2079,8 @@ def run_browser_smoke(
                     ).wait_for()
                     pricing_summary.get_by_text("3 / 3 requests", exact=True).wait_for()
                     pricing_summary.get_by_text("100.0%", exact=True).first.wait_for()
-                    pricing_summary.get_by_text("1 / 1", exact=True).wait_for()
-                    pricing_summary.get_by_text("Unknown billing basis", exact=True).wait_for()
                     seen.append(
-                        "BROWSER real Core pricing route estimates every matched billing domain "
-                        "locally while preserving audit labels"
+                        "BROWSER real Core pricing route estimates every matched usage record locally"
                     )
         except PlaywrightError as exc:
             with contextlib.suppress(Exception):

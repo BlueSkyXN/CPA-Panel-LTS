@@ -1,12 +1,10 @@
 import { useTranslation } from 'react-i18next';
 import { IconExternalLink } from '@/components/ui/icons';
 import {
-  CHATGPT_FAST_SOURCE_URL,
   OPENAI_CATALOG_AS_OF,
   OPENAI_CATALOG_VERSION,
   OPENAI_PRICE_CATALOG,
   OPENAI_PRICING_SOURCE_URL,
-  findChatGptCreditPolicy,
   formatCompactNumber,
   type PriceCatalogEntry,
   type TokenRates,
@@ -123,9 +121,6 @@ export function PresetPricingCatalog() {
             <a href={OPENAI_PRICING_SOURCE_URL} target="_blank" rel="noreferrer">
               {t('usage_stats.pricing_api_source')} <IconExternalLink size={13} />
             </a>
-            <a href={CHATGPT_FAST_SOURCE_URL} target="_blank" rel="noreferrer">
-              {t('usage_stats.pricing_chatgpt_source')} <IconExternalLink size={13} />
-            </a>
           </div>
         </div>
       </header>
@@ -149,11 +144,9 @@ export function PresetPricingCatalog() {
               <th scope="col">{t('usage_stats.pricing_rate_cache_write')}</th>
               <th scope="col">{t('usage_stats.pricing_rate_output')}</th>
               <th scope="col">{t('usage_stats.pricing_fast_policies')}</th>
-              <th scope="col">{t('usage_stats.pricing_catalog_chatgpt_credits')}</th>
             </tr>
           </thead>
           {OPENAI_PRICE_CATALOG.map((entry) => {
-            const creditPolicy = findChatGptCreditPolicy(entry.canonicalModel);
             return (
               <tbody
                 key={entry.canonicalModel}
@@ -242,20 +235,6 @@ export function PresetPricingCatalog() {
                       >
                         <strong>{fastPolicy.label}</strong>
                         {fastPolicy.detail && <small>{fastPolicy.detail}</small>}
-                      </td>
-                      <td
-                        className={styles.creditCell}
-                        data-label={t('usage_stats.pricing_catalog_chatgpt_credits')}
-                        data-tone={creditPolicy ? 'credit' : 'muted'}
-                      >
-                        <strong>
-                          {creditPolicy
-                            ? t('usage_stats.pricing_chatgpt_credit_multipliers', {
-                                standard: creditPolicy.standardMultiplier.toFixed(2),
-                                fast: creditPolicy.fastMultiplier.toFixed(2),
-                              })
-                            : t('usage_stats.pricing_chatgpt_credit_unavailable')}
-                        </strong>
                       </td>
                     </tr>
                   );

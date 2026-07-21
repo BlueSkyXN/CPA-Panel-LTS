@@ -527,11 +527,61 @@
     gap: 4px;
   }
 
+  .nav-drawer-row {
+    display: flex;
+    align-items: stretch;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .nav-drawer-link {
+    min-width: 0;
+    flex: 1;
+  }
+
   .nav-drawer-toggle {
     width: 100%;
     background: transparent;
     font: inherit;
     text-align: left;
+  }
+
+  .nav-drawer-action {
+    width: 34px;
+    min-width: 34px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    background: transparent;
+    color: color-mix(in srgb, var(--text-primary) 52%, transparent);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition:
+      background $transition-fast,
+      border-color $transition-fast,
+      color $transition-fast,
+      transform $transition-fast;
+
+    &:hover {
+      background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+      border-color: color-mix(in srgb, var(--border-color) 58%, transparent);
+      color: var(--text-primary);
+    }
+
+    &:focus-visible {
+      outline: 2px solid color-mix(in srgb, var(--primary-color) 74%, transparent);
+      outline-offset: 2px;
+    }
+
+    &.open svg {
+      transform: rotate(180deg);
+    }
+
+    svg {
+      transition: transform $transition-fast;
+    }
   }
 
   .nav-drawer-caret {
@@ -570,6 +620,11 @@
       border-color $transition-fast,
       color $transition-fast,
       transform $transition-fast;
+
+    &:focus-visible {
+      outline: 2px solid color-mix(in srgb, var(--primary-color) 74%, transparent);
+      outline-offset: 2px;
+    }
 
     .nav-icon {
       width: 28px;

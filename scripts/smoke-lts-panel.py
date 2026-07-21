@@ -302,12 +302,10 @@ def build_usage_payload() -> dict[str, Any]:
             "request_service_tier": " priority ",
             "response_service_tier": " priority ",
             "effective_service_tier": " priority ",
-            "billing_basis": "chatgpt-credits",
             "reasoning_effort": " max ",
             "latency": 110,
             "tokens": {
                 "input_tokens": 12,
-                "uncached_input_tokens": 8,
                 "output_tokens": 8,
                 "reasoning_tokens": 2,
                 "cached_tokens": 1,
@@ -325,12 +323,10 @@ def build_usage_payload() -> dict[str, Any]:
             "requestServiceTier": " priority ",
             "responseServiceTier": " default ",
             "effectiveServiceTier": " standard ",
-            "billingBasis": "chatgpt-credits",
             "reasoningEffort": " high ",
             "latency": 120,
             "tokens": {
                 "input_tokens": 10,
-                "uncached_input_tokens": 0,
                 "output_tokens": 6,
                 "reasoning_tokens": 0,
                 "cached_tokens": 0,
@@ -362,7 +358,6 @@ def build_usage_payload() -> dict[str, Any]:
             "ServiceTier": " flex ",
             "RequestServiceTier": " priority ",
             "ResponseServiceTier": " flex ",
-            "BillingBasis": "api-token-usd",
             "ReasoningEffort": " low ",
             "latency": 140,
             "tokens": {
@@ -381,7 +376,6 @@ def build_usage_payload() -> dict[str, Any]:
             "auth_index": "codex-smoke-auth",
             "service_tier": " cache-import ",
             "request_service_tier": " fast ",
-            "billing_basis": "api-token-usd",
             "reasoning_effort": "xhigh",
             "latency": 150,
             "tokens": {
@@ -405,7 +399,6 @@ def build_usage_payload() -> dict[str, Any]:
             "effective_service_tier": "priority",
             "response_service_tier": "priority",
             "request_service_tier": "priority",
-            "billing_basis": "api-token-usd",
             "reasoning_effort": "minimal",
             "tokens": {
                 "input_tokens": 271_999,
@@ -421,7 +414,6 @@ def build_usage_payload() -> dict[str, Any]:
             "effective_service_tier": "priority",
             "response_service_tier": "priority",
             "request_service_tier": "priority",
-            "billing_basis": "api-token-usd",
             "reasoning_effort": "medium",
             "tokens": {
                 "input_tokens": 272_000,
@@ -439,7 +431,6 @@ def build_usage_payload() -> dict[str, Any]:
             "source": "codex-key-1",
             "auth_index": "codex-smoke-auth",
             "effective_service_tier": "standard",
-            "billing_basis": "api-token-usd",
             "tokens": {
                 "input_tokens": 0,
                 "output_tokens": 110,
@@ -514,7 +505,6 @@ def build_usage_request_event_clock_payload() -> dict[str, Any]:
                     "source": "request-events-clock",
                     "auth_index": "request-events-clock-auth",
                     "effective_service_tier": "standard",
-                    "billing_basis": "api-token-usd",
                     "tokens": {
                         "input_tokens": 1,
                         "output_tokens": 0,
@@ -667,9 +657,14 @@ def build_plugin_list_payload(enabled: bool = True) -> dict[str, Any]:
                         "path": "/plugin/mock-resource.html",
                         "menu": "Mock Resource",
                         "description": "Mock plugin resource page",
+                    },
+                    {
+                        "path": "/plugin/mock-settings.html",
+                        "menu": "Mock Resource Settings",
+                        "description": "Mock plugin settings page",
                     }
                 ],
-            }
+            },
         ],
     }
 
@@ -1038,6 +1033,13 @@ class MockCoreHandler(BaseHTTPRequestHandler):
         if path == "/plugin/mock-resource.html":
             self._send_bytes(
                 b"<!doctype html><title>Mock Resource</title><main>Mock plugin resource loaded</main>",
+                content_type="text/html; charset=utf-8",
+            )
+            return
+
+        if path == "/plugin/mock-settings.html":
+            self._send_bytes(
+                b"<!doctype html><title>Mock Resource Settings</title><main>Mock plugin settings loaded</main>",
                 content_type="text/html; charset=utf-8",
             )
             return
@@ -2297,9 +2299,8 @@ def run_remote_cloud_connect_runtime_smoke(page: Any, app_url: str) -> None:
 
 
 def run_usage_pricing_entry_smoke(page: Any) -> None:
-    page.get_by_text("Local estimate and billing evidence", exact=True).wait_for()
+    page.get_by_text("Local API-equivalent estimate", exact=True).wait_for()
     page.get_by_text("Partial local estimate:", exact=False).first.wait_for()
-    page.get_by_text("12 unknown-billing tokens", exact=True).first.wait_for()
     pricing_buttons = page.get_by_role("button", name="Configure pricing", exact=True)
     if pricing_buttons.count() < 2:
         raise AssertionError(
@@ -2311,14 +2312,12 @@ def run_usage_pricing_entry_smoke(page: Any) -> None:
     page_time_range = page.get_by_label("Time Range", exact=True).first
     page_time_range.click()
     page.get_by_role("option", name="All Time", exact=True).click()
-    page.get_by_text("1.0M unknown-billing tokens", exact=True).first.wait_for()
     page.get_by_text(
         "The local estimate is incomplete; unmatched, unsupported, or detail-less usage is excluded.",
         exact=True,
     ).first.wait_for()
     page_time_range.click()
     page.get_by_role("option", name="Last 24 Hours", exact=True).click()
-    page.get_by_text("12 unknown-billing tokens", exact=True).first.wait_for()
 
 
 def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
@@ -2407,9 +2406,7 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
             "Short context",
             "Long context",
             "Official API ×2.50",
-            "Credits Std ×1.00 · Fast ×2.50",
             "Fast long context unsupported",
-            "Credits: no official multiplier",
         ]:
             if expected_text not in catalog_text:
                 raise AssertionError(
@@ -2483,7 +2480,6 @@ def run_usage_pricing_smoke(page: Any) -> None:
         "Local API-equivalent estimates are references, not provider invoices.", exact=True
     ).wait_for()
     page.get_by_text("The profile is stored only in this browser", exact=False).wait_for()
-    page.get_by_text("ChatGPT credits retain their official", exact=False).wait_for()
     migration_state = page.evaluate(
         """() => ({
           v2: localStorage.getItem('cli-proxy-model-prices-v2'),
@@ -2536,10 +2532,6 @@ def run_usage_pricing_smoke(page: Any) -> None:
     for expected in [
         "6 / 8 requests",
         "75.0%",
-        "2 / 2",
-        "1 Fast",
-        "Unknown billing basis",
-        "1.0M tokens have unknown billing provenance",
     ]:
         if expected not in summary_text:
             raise AssertionError(
@@ -2547,8 +2539,7 @@ def run_usage_pricing_smoke(page: Any) -> None:
             )
     if not re.search(r"\$\d", summary_text):
         raise AssertionError(
-            "Browser-local pricing did not produce an amount for matched usage across billing "
-            f"domains: {summary_text!r}"
+            f"Browser-local pricing did not produce an amount for matched usage: {summary_text!r}"
         )
 
     rows = page.locator('[data-testid="pricing-model-row"]')
@@ -2570,7 +2561,6 @@ def run_usage_pricing_smoke(page: Any) -> None:
         "Needs review",
         "Fast long context unsupported",
         "Official API ×2.00",
-        "Credits Std ×1.00 · Fast ×2.00",
     ]:
         if expected not in gpt54_text:
             raise AssertionError(
@@ -2601,8 +2591,7 @@ def run_usage_pricing_smoke(page: Any) -> None:
     ).inner_text()
     if "$" not in gpt56_local_amount or "100.0%" not in gpt56_local_amount:
         raise AssertionError(
-            "ChatGPT-credit and unknown-billing GPT-5.6 usage was not fully included in the "
-            f"browser-local estimate: {gpt56_local_amount!r}"
+            f"GPT-5.6 usage was not fully included in the browser-local estimate: {gpt56_local_amount!r}"
         )
     gpt56_row.click()
     editor = page.locator('[data-testid="pricing-editor"]')
@@ -2622,7 +2611,7 @@ def run_usage_pricing_smoke(page: Any) -> None:
     if storage_after_restore["v3"]["overrides"]:
         raise AssertionError("Restoring a preset did not clear the migrated override")
     restored_gpt56_text = gpt56_row.inner_text()
-    for expected in ["Official API ×2.00", "Credits Std ×1.00 · Fast ×2.50"]:
+    for expected in ["Official API ×2.00"]:
         if expected not in restored_gpt56_text:
             raise AssertionError(
                 f"Restored GPT-5.6 row lost separate Fast policies: {restored_gpt56_text!r}"
@@ -2681,7 +2670,7 @@ def run_usage_pricing_smoke(page: Any) -> None:
     editor.get_by_role("button", name="Save", exact=True).click()
     page.get_by_text("Pricing profile saved", exact=True).last.wait_for()
     unmatched_text = unmatched_row.inner_text()
-    for expected in ["Custom", "Alias", "Credits: no official multiplier"]:
+    for expected in ["Custom", "Alias"]:
         if expected not in unmatched_text:
             raise AssertionError(
                 f"Saved pricing alias is not visible in the model row: {unmatched_text!r}"
@@ -2843,7 +2832,6 @@ def run_usage_pricing_smoke(page: Any) -> None:
     page.set_viewport_size({"width": 390, "height": 844})
     russian_summary = page.get_by_label("Сводка покрытия цен", exact=True)
     russian_summary.wait_for()
-    page.get_by_text("Неизвестная основа тарификации", exact=True).wait_for()
     mobile_summary_metrics = russian_summary.evaluate(
         """summary => ({
           columns: getComputedStyle(summary).gridTemplateColumns.split(' ').length,
@@ -2918,7 +2906,6 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     if focus_outline == "none":
         raise AssertionError("Request-event table region has no keyboard focus indicator")
     card.get_by_role("columnheader", name="Tier", exact=True).wait_for()
-    card.get_by_role("columnheader", name="Billing", exact=True).wait_for()
     card.get_by_role("columnheader", name="Effort", exact=True).wait_for()
     if card.get_by_role("columnheader", name="Source", exact=True).count() != 0:
         raise AssertionError("Request events must hide the Source column by default")
@@ -2940,11 +2927,8 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     column_dialog.wait_for()
     source_column = column_dialog.get_by_role("checkbox", name="Source", exact=True)
     auth_index_column = column_dialog.get_by_role("checkbox", name="Auth Index", exact=True)
-    billing_column = column_dialog.get_by_role("checkbox", name="Billing", exact=True)
     if source_column.is_checked() or auth_index_column.is_checked():
         raise AssertionError("Default request-event columns exposed Source or Auth Index")
-    if not billing_column.is_checked():
-        raise AssertionError("Default request-event columns hid the billing basis")
     source_column.check()
     auth_index_column.check()
     card.get_by_role("columnheader", name="Source", exact=True).wait_for()
@@ -2975,7 +2959,6 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         "source": False,
         "authIndex": False,
         "tier": True,
-        "billing": True,
         "result": True,
         "latency": True,
         "effort": True,
@@ -3116,13 +3099,6 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         )
     for expected_label in ["Fast", "Std", "none", "low", "high", "xhigh", "max"]:
         card.get_by_text(expected_label, exact=True).first.wait_for()
-    if card.get_by_text("Credits", exact=True).count() != 2:
-        raise AssertionError("Request events did not render two ChatGPT credit billing badges")
-    if card.get_by_text("API USD", exact=True).count() != 2:
-        raise AssertionError("Request events did not render two API USD billing badges")
-    if card.get_by_text("Unknown", exact=True).count() != 1:
-        raise AssertionError("Request events did not render the legacy unknown billing badge")
-
     fast_rows = rows.filter(has_text="Fast")
     if fast_rows.count() != 2:
         raise AssertionError(
@@ -3136,6 +3112,8 @@ def run_usage_service_tier_smoke(page: Any) -> None:
             "Combined service-tier/cache row rendered the wrong token values: "
             f"{priority_cells!r}"
         )
+    if card.locator("td[data-uncached-input-source]").count() != 0:
+        raise AssertionError("Uncached input must be calculated locally without a source badge")
     low_cache_cells = rows.locator(
         'td[data-cache-rate-tone="low"][data-cache-token-count="1"]'
     )
@@ -3197,17 +3175,6 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         raise AssertionError(
             f"Request-event CSV lost tier evidence: {csv_evidence!r}"
         )
-    csv_billing = sorted(row.get("billing_basis", "") for row in csv_rows)
-    if csv_billing != [
-        "api-token-usd",
-        "api-token-usd",
-        "chatgpt-credits",
-        "chatgpt-credits",
-        "unknown",
-    ]:
-        raise AssertionError(
-            f"Request-event CSV lost normalized billing basis: {csv_billing!r}"
-        )
     csv_efforts = sorted(row.get("reasoning_effort", "") for row in csv_rows)
     if csv_efforts != ["high", "low", "max", "none", "xhigh"]:
         raise AssertionError(
@@ -3222,7 +3189,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         )
     priority_csv = priority_csv_rows[0]
     expected_priority_csv_tokens = {
-        "uncached_input_tokens": "8",
+        "uncached_input_tokens": "9",
         "cached_tokens": "3",
         "cache_read_tokens": "3",
         "cache_creation_tokens": "4",
@@ -3239,9 +3206,9 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     standard_csv_rows = [
         row for row in csv_rows if row.get("effective_service_tier") == "standard"
     ]
-    if len(standard_csv_rows) != 1 or standard_csv_rows[0].get("uncached_input_tokens") != "0":
+    if len(standard_csv_rows) != 1 or standard_csv_rows[0].get("uncached_input_tokens") != "9":
         raise AssertionError(
-            "Request-event CSV lost explicit zero uncached input: "
+            "Request-event CSV did not derive uncached input from input minus cache reads: "
             f"{standard_csv_rows!r}"
         )
 
@@ -3264,17 +3231,6 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         raise AssertionError(
             f"Request-event JSON resolved tiers incorrectly: {resolved_json_tiers!r}"
         )
-    json_billing = sorted(str(row.get("billing_basis")) for row in json_rows)
-    if json_billing != [
-        "api-token-usd",
-        "api-token-usd",
-        "chatgpt-credits",
-        "chatgpt-credits",
-        "unknown",
-    ]:
-        raise AssertionError(
-            f"Request-event JSON lost normalized billing basis: {json_billing!r}"
-        )
     json_efforts = sorted(
         "<null>" if row.get("reasoning_effort") is None else str(row.get("reasoning_effort"))
         for row in json_rows
@@ -3293,7 +3249,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     priority_json_tokens = priority_json_rows[0].get("tokens", {})
     expected_priority_json_tokens = {
         "input_tokens": 12,
-        "uncached_input_tokens": 8,
+        "uncached_input_tokens": 9,
         "output_tokens": 8,
         "reasoning_tokens": 2,
         "cached_tokens": 3,
@@ -3310,9 +3266,9 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         row for row in json_rows if row.get("effective_service_tier") == "standard"
     ]
     standard_json_tokens = standard_json_rows[0].get("tokens", {}) if len(standard_json_rows) == 1 else {}
-    if standard_json_tokens.get("uncached_input_tokens") != 0:
+    if standard_json_tokens.get("uncached_input_tokens") != 9:
         raise AssertionError(
-            "Request-event JSON lost explicit zero uncached input: "
+            "Request-event JSON did not derive uncached input from input minus cache reads: "
             f"{standard_json_rows!r}"
         )
 
@@ -4057,7 +4013,6 @@ def run_usage_request_event_column_storage_smoke(context: Any, app_url: str) -> 
                 source: false,
                 authIndex: false,
                 tier: false,
-                billing: false,
                 result: false,
                 latency: true,
                 effort: false,
@@ -4217,7 +4172,6 @@ def run_usage_import_review_smoke(page: Any, state: MockCoreState) -> None:
         "gpt-5.6-sol"
     ]["details"][-1]
     legacy_detail = json.loads(json.dumps(current_detail))
-    legacy_detail.pop("billing_basis", None)
     legacy_tokens = legacy_detail["tokens"]
     legacy_tokens["cached_tokens"] = legacy_tokens["cache_creation_tokens"]
     legacy_tokens["cache_read_tokens"] = 0
@@ -4310,6 +4264,13 @@ def run_plugin_runtime_mismatch_smoke(
         page.wait_for_function("() => window.location.hash.endsWith('/plugins')")
         page.get_by_text("Plugin runtime unavailable", exact=True).first.wait_for()
 
+    def wait_for_plugin_store_shortcut() -> None:
+        plugin_drawer = page.get_by_role("button", name="Plugins", exact=True)
+        plugin_drawer.wait_for()
+        if plugin_drawer.get_attribute("aria-expanded") != "true":
+            plugin_drawer.click()
+        page.get_by_role("link", name="Plugin Store", exact=True).wait_for()
+
     try:
         state.supports_plugin = False
         state.emit_plugin_support_header = True
@@ -4350,7 +4311,7 @@ def run_plugin_runtime_mismatch_smoke(
         state.plugin_endpoint_available = True
         logout()
         login()
-        page.get_by_role("link", name="Plugin Store").wait_for()
+        wait_for_plugin_store_shortcut()
 
         state.supports_plugin = False
         state.plugin_endpoint_available = False
@@ -4373,7 +4334,7 @@ def run_plugin_runtime_mismatch_smoke(
         state.plugins_config_enabled = True
         logout()
         login()
-        page.get_by_role("link", name="Plugin Store").wait_for()
+        wait_for_plugin_store_shortcut()
 
         state.supports_plugin = False
         state.arm_delayed_config_response()
@@ -4384,11 +4345,11 @@ def run_plugin_runtime_mismatch_smoke(
         logout()
         state.supports_plugin = True
         login()
-        page.get_by_role("link", name="Plugin Store").wait_for()
+        wait_for_plugin_store_shortcut()
 
         state.release_delayed_config.set()
         page.wait_for_timeout(500)
-        page.get_by_role("link", name="Plugin Store").wait_for()
+        wait_for_plugin_store_shortcut()
         if page.get_by_role("link", name="Plugins (runtime unavailable)").count() != 0:
             raise AssertionError("A stale capability response polluted the active connection")
 
@@ -4399,19 +4360,82 @@ def run_plugin_runtime_mismatch_smoke(
 
         logout()
         login()
-        page.get_by_role("link", name="Plugin Store").wait_for()
+        wait_for_plugin_store_shortcut()
 
         state.release_delayed_config.set()
         page.wait_for_timeout(500)
         if page.get_by_title("Logout").count() != 1:
             raise AssertionError("A stale unauthorized response logged out the active connection")
-        page.get_by_role("link", name="Plugin Store").wait_for()
+        wait_for_plugin_store_shortcut()
     finally:
         state.release_delayed_config.set()
         state.supports_plugin = True
         state.emit_plugin_support_header = True
         state.plugin_endpoint_available = True
         state.plugins_config_enabled = True
+
+
+def run_sidebar_navigation_smoke(page: Any) -> None:
+    navigation = page.get_by_role("navigation", name="Primary navigation")
+    navigation.wait_for()
+
+    for group_label in ["Operate", "Gateway", "Observe", "Control", "Plugins"]:
+        navigation.locator(
+            ".nav-group-label", has_text=re.compile(f"^{re.escape(group_label)}$")
+        ).wait_for()
+
+    usage_drawer = navigation.get_by_role("button", name="Usage Statistics", exact=True)
+    if usage_drawer.get_attribute("aria-expanded") != "false":
+        raise AssertionError("Usage drawer must start collapsed away from Usage routes")
+    usage_drawer.click()
+    navigation.get_by_role("link", name="Pricing workspace", exact=True).wait_for()
+    if usage_drawer.get_attribute("aria-expanded") != "true":
+        raise AssertionError("Usage drawer did not expose its shortcut")
+
+    navigation.get_by_role("link", name="Pricing workspace", exact=True).click()
+    page.wait_for_function("() => window.location.hash.endsWith('/usage/pricing')")
+    if usage_drawer.get_attribute("aria-expanded") != "true":
+        raise AssertionError("Active Usage child did not keep its drawer open")
+    usage_drawer.click()
+    if usage_drawer.get_attribute("aria-expanded") != "false":
+        raise AssertionError("Active Usage drawer could not be manually collapsed")
+
+    plugin_drawer = navigation.get_by_role("button", name="Mock Resource Plugin", exact=True)
+    plugin_drawer.wait_for()
+    plugin_drawer.click()
+    navigation.get_by_role("link", name="Mock Resource Settings", exact=True).wait_for()
+    navigation.get_by_role("link", name="Mock Resource Settings", exact=True).click()
+    page.wait_for_function("() => window.location.hash.endsWith('/plugin-pages/mock-plugin/1')")
+    if plugin_drawer.get_attribute("aria-expanded") != "true":
+        raise AssertionError("Active plugin child did not keep its drawer open")
+    plugin_drawer.click()
+    if plugin_drawer.get_attribute("aria-expanded") != "false":
+        raise AssertionError("Active plugin drawer could not be manually collapsed")
+
+    page.locator(".sidebar-toggle-floating").click()
+    if navigation.locator(".nav-group-label", has_text=re.compile(r"^Operate$")).count() != 0:
+        raise AssertionError("Collapsed sidebar still exposed group labels")
+    page.get_by_title("Mock Resource Plugin").click()
+    navigation.get_by_role("link", name="Mock Resource Settings", exact=True).wait_for()
+
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.locator(".mobile-menu-btn").click()
+    navigation.get_by_role("link", name="Mock Resource Settings", exact=True).click()
+    page.wait_for_function("() => window.location.hash.endsWith('/plugin-pages/mock-plugin/1')")
+    sidebar_class = page.locator(".sidebar").get_attribute("class") or ""
+    if "open" in sidebar_class.split():
+        raise AssertionError("Selecting a mobile sidebar child did not close the sidebar")
+    mobile_metrics = page.evaluate(
+        """
+        () => ({
+          clientWidth: document.documentElement.clientWidth,
+          scrollWidth: document.documentElement.scrollWidth,
+        })
+        """
+    )
+    if mobile_metrics["scrollWidth"] > mobile_metrics["clientWidth"] + 1:
+        raise AssertionError(f"Sidebar hierarchy overflowed on mobile: {mobile_metrics!r}")
+    page.set_viewport_size({"width": 1280, "height": 720})
 
 
 def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: bool) -> None:
@@ -4435,7 +4459,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             );
             localStorage.setItem(
               'cli-proxy-usage-request-event-columns-v1',
-              JSON.stringify({ source: true, authIndex: true, billing: false })
+              JSON.stringify({ source: true, authIndex: true })
             );
             if (
               !localStorage.getItem('cli-proxy-model-prices-v3') &&
@@ -4488,6 +4512,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
                 raise AssertionError("Remember password checkbox did not become checked")
             page.get_by_role("button", name=re.compile("Login|Connect", re.I)).click()
             page.wait_for_url(re.compile(r".*/#/$"), timeout=20_000)
+            run_sidebar_navigation_smoke(page)
 
             route_checks = [
                 ("/", "System Overview", None),

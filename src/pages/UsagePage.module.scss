@@ -1376,41 +1376,6 @@
   border: 1px solid color-mix(in srgb, #2563eb 34%, var(--border-color));
 }
 
-.requestEventsBillingBadge {
-  display: inline-flex;
-  min-width: 58px;
-  max-width: 128px;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  padding: 2px 8px;
-  border: 1px solid var(--border-color);
-  border-radius: $radius-full;
-  font-size: 10px;
-  font-weight: 650;
-  line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.requestEventsBillingApi {
-  border-color: color-mix(in srgb, #059669 34%, var(--border-color));
-  background: color-mix(in srgb, #059669 11%, transparent);
-  color: color-mix(in srgb, #059669 64%, var(--text-primary));
-}
-
-.requestEventsBillingCredits {
-  border-color: color-mix(in srgb, #7c3aed 34%, var(--border-color));
-  background: color-mix(in srgb, #7c3aed 11%, transparent);
-  color: color-mix(in srgb, #7c3aed 64%, var(--text-primary));
-}
-
-.requestEventsBillingUnknown {
-  border-color: color-mix(in srgb, var(--text-tertiary) 32%, var(--border-color));
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-}
-
 @include mobile {
   .requestEventsActions {
     width: 100%;

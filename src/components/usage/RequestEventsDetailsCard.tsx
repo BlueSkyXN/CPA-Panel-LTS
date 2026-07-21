@@ -16,17 +16,13 @@ import type { CredentialInfo } from '@/types/sourceInfo';
 import { buildSourceInfoMap, resolveSourceDisplay } from '@/utils/sourceResolver';
 import { parseTimestampMs } from '@/utils/timestamp';
 import {
-  BILLING_BASIS_API_TOKEN_USD,
-  BILLING_BASIS_CHATGPT_CREDITS,
   collectUsageDetails,
   extractLatencyMs,
   extractTotalTokens,
   formatDurationMs,
   LATENCY_SOURCE_FIELD,
   normalizeAuthIndex,
-  normalizeBillingBasis,
   resolveServiceTier,
-  type BillingBasis,
   type ResolvedServiceTier,
   type UsageTimeRange,
 } from '@/utils/usage';
@@ -89,7 +85,6 @@ const REQUEST_EVENT_COLUMN_IDS = [
   'source',
   'authIndex',
   'tier',
-  'billing',
   'result',
   'latency',
   'effort',
@@ -137,7 +132,6 @@ const DEFAULT_COLUMN_VISIBILITY: RequestEventColumnVisibility = {
   source: false,
   authIndex: false,
   tier: true,
-  billing: true,
   result: true,
   latency: true,
   effort: true,
@@ -170,16 +164,12 @@ type RequestEventRow = {
   serviceTierFilterValue: string;
   serviceTierLabel: string;
   serviceTierTitle: string;
-  billingBasis: BillingBasis;
-  billingBasisLabel: string;
-  billingBasisTitle: string;
   reasoningEffort: string | null;
   reasoningEffortFilterValue: string;
   reasoningEffortLabel: string;
   failed: boolean;
   latencyMs: number | null;
   inputTokens: number;
-  uncachedInputTokens: number | null;
   displayedUncachedInputTokens: number;
   outputTokens: number;
   displayedOutputTokens: number;
@@ -717,25 +707,15 @@ export function RequestEventsDetailsCard({
         `usage_stats.request_events_tier_tooltip_${resolvedServiceTier.evidence}`,
         { tier: serviceTierLabel }
       );
-      const billingBasis = normalizeBillingBasis(detail.billing_basis);
-      const billingBasisKey =
-        billingBasis === BILLING_BASIS_API_TOKEN_USD
-          ? 'api'
-          : billingBasis === BILLING_BASIS_CHATGPT_CREDITS
-            ? 'credits'
-            : 'unknown';
-      const billingBasisLabel = t(`usage_stats.request_events_billing_${billingBasisKey}`);
-      const billingBasisTitle = t(`usage_stats.request_events_billing_${billingBasisKey}_tooltip`);
       const reasoningEffort = normalizeReasoningEffort(detail.reasoning_effort);
       const reasoningEffortFilterValue = getReasoningEffortFilterValue(reasoningEffort);
       const reasoningEffortLabel =
         reasoningEffort ?? t('usage_stats.request_events_effort_legacy_unknown');
       const inputTokens = Math.max(toNumber(detail.tokens?.input_tokens), 0);
-      const uncachedInputTokens = getUsageUncachedInputTokenCount(detail.tokens);
       const outputTokens = Math.max(toNumber(detail.tokens?.output_tokens), 0);
       const reasoningTokens = Math.max(toNumber(detail.tokens?.reasoning_tokens), 0);
       const { cacheReadTokens, cacheWriteTokens } = getUsageCacheTokenCounts(detail.tokens);
-      const displayedUncachedInputTokens = Math.max(inputTokens - cacheReadTokens, 0);
+      const displayedUncachedInputTokens = getUsageUncachedInputTokenCount(detail.tokens);
       const displayedOutputTokens = Math.max(outputTokens - reasoningTokens, 0);
       const cacheRate = resolveCacheRate(inputTokens, cacheReadTokens);
       const totalTokens = Math.max(
@@ -763,16 +743,12 @@ export function RequestEventsDetailsCard({
         serviceTierFilterValue,
         serviceTierLabel,
         serviceTierTitle,
-        billingBasis,
-        billingBasisLabel,
-        billingBasisTitle,
         reasoningEffort,
         reasoningEffortFilterValue,
         reasoningEffortLabel,
         failed: detail.failed === true,
         latencyMs,
         inputTokens,
-        uncachedInputTokens,
         displayedUncachedInputTokens,
         outputTokens,
         displayedOutputTokens,
@@ -987,7 +963,6 @@ export function RequestEventsDetailsCard({
       { id: 'source' as const, label: t('usage_stats.request_events_source') },
       { id: 'authIndex' as const, label: t('usage_stats.request_events_auth_index') },
       { id: 'tier' as const, label: t('usage_stats.request_events_tier') },
-      { id: 'billing' as const, label: t('usage_stats.request_events_billing') },
       { id: 'result' as const, label: t('usage_stats.request_events_result') },
       { id: 'latency' as const, label: t('usage_stats.time') },
       { id: 'effort' as const, label: t('usage_stats.request_events_effort') },
@@ -1280,7 +1255,6 @@ export function RequestEventsDetailsCard({
       'effective_service_tier',
       'resolved_service_tier',
       'service_tier_evidence',
-      'billing_basis',
       'reasoning_effort',
       'result',
       ...(hasLatencyData ? ['latency_ms'] : []),
@@ -1307,12 +1281,11 @@ export function RequestEventsDetailsCard({
         row.effectiveServiceTier ?? '',
         row.resolvedServiceTier.tier,
         row.resolvedServiceTier.evidence,
-        row.billingBasis,
         row.reasoningEffort ?? '',
         row.failed ? 'failed' : 'success',
         ...(hasLatencyData ? [row.latencyMs ?? ''] : []),
         row.inputTokens,
-        row.uncachedInputTokens ?? '',
+        row.displayedUncachedInputTokens,
         row.outputTokens,
         row.reasoningTokens,
         row.cacheReadTokens,
@@ -1347,15 +1320,12 @@ export function RequestEventsDetailsCard({
       effective_service_tier: row.effectiveServiceTier,
       resolved_service_tier: row.resolvedServiceTier.tier,
       service_tier_evidence: row.resolvedServiceTier.evidence,
-      billing_basis: row.billingBasis,
       reasoning_effort: row.reasoningEffort,
       failed: row.failed,
       ...(hasLatencyData && row.latencyMs !== null ? { latency_ms: row.latencyMs } : {}),
       tokens: {
         input_tokens: row.inputTokens,
-        ...(row.uncachedInputTokens !== null
-          ? { uncached_input_tokens: row.uncachedInputTokens }
-          : {}),
+        uncached_input_tokens: row.displayedUncachedInputTokens,
         output_tokens: row.outputTokens,
         reasoning_tokens: row.reasoningTokens,
         cached_tokens: row.cacheReadTokens,
@@ -1838,7 +1808,6 @@ export function RequestEventsDetailsCard({
                     <th>{t('usage_stats.request_events_auth_index')}</th>
                   )}
                   {columnVisibility.tier && <th>{t('usage_stats.request_events_tier')}</th>}
-                  {columnVisibility.billing && <th>{t('usage_stats.request_events_billing')}</th>}
                   {columnVisibility.result && <th>{t('usage_stats.request_events_result')}</th>}
                   {columnVisibility.latency && hasLatencyData && (
                     <th title={latencyHint}>{t('usage_stats.time')}</th>
@@ -1964,23 +1933,6 @@ export function RequestEventsDetailsCard({
                             aria-label={row.serviceTierTitle}
                           >
                             {row.serviceTierLabel}
-                          </span>
-                        </td>
-                      )}
-                      {columnVisibility.billing && (
-                        <td>
-                          <span
-                            className={`${styles.requestEventsBillingBadge} ${
-                              row.billingBasis === BILLING_BASIS_API_TOKEN_USD
-                                ? styles.requestEventsBillingApi
-                                : row.billingBasis === BILLING_BASIS_CHATGPT_CREDITS
-                                  ? styles.requestEventsBillingCredits
-                                  : styles.requestEventsBillingUnknown
-                            }`}
-                            title={row.billingBasisTitle}
-                            aria-label={row.billingBasisTitle}
-                          >
-                            {row.billingBasisLabel}
                           </span>
                         </td>
                       )}

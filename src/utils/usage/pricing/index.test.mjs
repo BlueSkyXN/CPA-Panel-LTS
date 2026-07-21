@@ -40,10 +40,6 @@ test('catalog is versioned, self-describing, exact, and keeps Priority long cont
   assert.equal(gpt55.standard.long.basis, 'inputTokens');
   assert.equal(gpt55.standard.long.appliesTo, 'entireRequest');
   assert.equal(gpt55.fast.multiplier, 2.5);
-  assert.equal(pricing.findChatGptCreditPolicy('gpt-5.6-sol').fastMultiplier, 2.5);
-  assert.equal(pricing.findChatGptCreditPolicy('gpt-5.6').fastMultiplier, 2.5);
-  assert.equal(pricing.findChatGptCreditPolicy('gpt-5.4').fastMultiplier, 2);
-  assert.equal(pricing.findChatGptCreditPolicy('gpt-5.4-mini'), null);
   assert.equal(pricing.findCatalogEntry('gpt-5.6-sol-preview'), null);
   assert.equal(pricing.findCatalogEntry('tenant/gpt-5.6-sol'), null);
   assert.equal(pricing.findCatalogEntry('gpt-5.6').canonicalModel, 'gpt-5.6-sol');
@@ -169,55 +165,6 @@ test('preset-equivalent v3 recovery is opt-in and preserves real custom override
   assert.ok(profile.overrides['gpt-5.6-sol']);
 });
 
-test('API coverage display treats absent denominators as unavailable, not zero percent', () => {
-  assert.deepEqual(
-    pricing.getApiCoverageDisplay({
-      apiTokenUsdRequests: 0,
-      apiPricedRequests: 0,
-      apiTokenUsdTokens: 0,
-      apiPricedTokens: 0,
-    }),
-    { requestPercent: null, tokenPercent: null }
-  );
-  assert.deepEqual(
-    pricing.getApiCoverageDisplay({
-      apiTokenUsdRequests: 5,
-      apiPricedRequests: 3,
-      apiTokenUsdTokens: 200,
-      apiPricedTokens: 50,
-    }),
-    { requestPercent: 60, tokenPercent: 25 }
-  );
-  assert.deepEqual(
-    pricing.getApiCoverageDisplay({
-      apiTokenUsdRequests: 0,
-      apiPricedRequests: 0,
-      apiTokenUsdTokens: 100,
-      apiPricedTokens: 0,
-    }),
-    { requestPercent: null, tokenPercent: 0 }
-  );
-  assert.deepEqual(
-    pricing.getApiCoverageDisplay({
-      apiTokenUsdRequests: 1,
-      apiPricedRequests: 1,
-      apiTokenUsdTokens: 0,
-      apiPricedTokens: 0,
-    }),
-    { requestPercent: 100, tokenPercent: null }
-  );
-
-  assert.deepEqual(
-    pricing.getLocalEstimateCoverageDisplay({
-      totalRequests: 4,
-      pricedRequests: 3,
-      totalTokens: 200,
-      pricedTokens: 150,
-    }),
-    { requestPercent: 75, tokenPercent: 75 }
-  );
-});
-
 test('Fast preset and custom profiles derive rates from the selected Standard context band', () => {
   const preset = pricing.estimateUsageCost(
     'gpt-5.4-mini',
@@ -303,7 +250,7 @@ test('Fast long context remains unsupported and evidence warnings stay explicit'
   assert.deepEqual(assumed.warnings, ['assumedStandard']);
 });
 
-test('cost uses the existing GPT-5.6 cache split and honors Auto versus explicit free cache write', () => {
+test('cost uses the normalized cache split and honors Auto versus explicit free cache write', () => {
   const usage = {
     input_tokens: 200_000,
     output_tokens: 100_000,
@@ -326,8 +273,8 @@ test('cost uses the existing GPT-5.6 cache split and honors Auto versus explicit
   const free = pricing.migrateModelPricesV2ToV3({
     local: { prompt: 10, completion: 20, cache: 1, cacheWrite: 0 },
   }).profile;
-  approx(pricing.estimateUsageCost('local', usage, auto, tier()).amount, 4.13);
-  approx(pricing.estimateUsageCost('local', usage, free, tier()).amount, 3.73);
+  approx(pricing.estimateUsageCost('local', usage, auto, tier()).amount, 3.73);
+  approx(pricing.estimateUsageCost('local', usage, free, tier()).amount, 3.33);
 });
 
 test('strict import preflight rejects damaged data, alias collisions, and invalid targets; roundtrip stays valid', () => {
@@ -406,39 +353,18 @@ test('coverage reports request, token, model, amount, and assumed-tier completen
     ]),
     {
       totalRequests: 3,
-      apiTokenUsdRequests: 3,
-      apiPricedRequests: 1,
-      chatGptCreditRequests: 0,
       pricedRequests: 1,
-      creditRatedRequests: 0,
-      creditFastRequests: 0,
-      unknownBillingRequests: 0,
       unmatchedRequests: 1,
       unsupportedRequests: 1,
       totalTokens: 1_272_020,
-      apiTokenUsdTokens: 1_272_020,
-      apiPricedTokens: 1_000_000,
-      chatGptCreditTokens: 0,
       pricedTokens: 1_000_000,
-      creditRatedTokens: 0,
-      unknownBillingTokens: 0,
       totalModels: 3,
       pricedModels: 1,
-      apiTokenUsdModels: 3,
-      apiPricedModels: 1,
-      chatGptCreditModels: 0,
-      creditRatedModels: 0,
-      unknownBillingModels: 0,
       estimatedAmount: 0.75,
       assumedTierRequests: 0,
       pricedRequestRatio: 1 / 3,
       pricedTokenRatio: 1_000_000 / 1_272_020,
       pricedModelRatio: 1 / 3,
-      apiPricedRequestRatio: 1 / 3,
-      apiPricedTokenRatio: 1_000_000 / 1_272_020,
-      apiPricedModelRatio: 1 / 3,
-      creditRatedRequestRatio: 0,
-      creditRatedTokenRatio: 0,
     }
   );
 });
@@ -462,31 +388,17 @@ test('a model is covered only when every request for that model is priced', () =
   assert.equal(coverage.unsupportedRequests, 1);
 });
 
-test('token-only aggregate gaps make the local estimate incomplete without changing API-domain ratios', () => {
-  const priced = pricing.estimateUsageCost(
-    'gpt-5.4-mini',
-    { input_tokens: 1_000_000 },
-    undefined,
-    tier()
-  );
+test('local estimate completeness remains false when aggregate totals exceed priced details', () => {
   const complete = pricing.aggregateCostEstimateCoverage([
-    { modelName: 'gpt-5.4-mini', tokenCount: 1_000_000, estimate: priced },
+    {
+      modelName: 'gpt-5.4-mini',
+      tokenCount: 1_000_000,
+      estimate: pricing.estimateUsageCost('gpt-5.4-mini', { input_tokens: 1_000_000 }, undefined, tier()),
+    },
   ]);
-  const tokenGap = {
-    ...complete,
-    totalTokens: 2_000_000,
-    unknownBillingTokens: 1_000_000,
-    unknownBillingModels: 1,
-    pricedModels: 0,
-    pricedModelRatio: 0,
-  };
-
-  assert.equal(tokenGap.apiPricedRequestRatio, 1);
-  assert.equal(tokenGap.apiPricedTokenRatio, 1);
-  assert.equal(pricing.hasUnknownBillingUsage(tokenGap), true);
-  assert.equal(pricing.isApiUsdEstimateComplete(tokenGap), true);
-  assert.equal(pricing.isLocalEstimateComplete(tokenGap), false);
-  assert.equal(pricing.hasPricingAnomaly(tokenGap), true);
+  const gap = { ...complete, totalTokens: 2_000_000, pricedModels: 0, pricedModelRatio: 0 };
+  assert.equal(pricing.isLocalEstimateComplete(gap), false);
+  assert.equal(pricing.hasPricingAnomaly(gap), true);
 });
 
 test('Fast policy display distinguishes official and custom multipliers from explicit rates', () => {
