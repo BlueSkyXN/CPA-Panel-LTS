@@ -2095,11 +2095,13 @@ def run_browser_smoke(
                     page.locator(
                         '[data-testid="pricing-model-row"][data-model="gpt-5.4"]'
                     ).wait_for()
-                    pricing_summary.get_by_text("1 / 1 requests", exact=True).wait_for()
+                    pricing_summary.get_by_text("3 / 3 requests", exact=True).wait_for()
+                    pricing_summary.get_by_text("100.0%", exact=True).first.wait_for()
                     pricing_summary.get_by_text("1 / 1", exact=True).wait_for()
                     pricing_summary.get_by_text("Unknown billing basis", exact=True).wait_for()
                     seen.append(
-                        "BROWSER real Core pricing route separates API USD, credits, and unknown"
+                        "BROWSER real Core pricing route estimates every matched billing domain "
+                        "locally while preserving audit labels"
                     )
         except PlaywrightError as exc:
             with contextlib.suppress(Exception):

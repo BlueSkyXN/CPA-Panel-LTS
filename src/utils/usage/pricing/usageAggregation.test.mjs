@@ -255,43 +255,44 @@ test('a token-only aggregate gap prevents full model coverage without inventing 
   assert.equal(coverage.pricedTokenRatio, 0.5);
   assert.equal(coverage.pricedModels, 0);
   assert.equal(usage.hasUnknownBillingUsage(coverage), true);
-  assert.equal(usage.isApiUsdEstimateComplete(coverage), false);
+  assert.equal(usage.isApiUsdEstimateComplete(coverage), true);
+  assert.equal(usage.isLocalEstimateComplete(coverage), false);
   assert.equal(usage.hasPricingAnomaly(coverage), true);
 
   const summary = usage.getPricingModelSummaries(tokenGapFixture)[0];
   assert.equal(usage.hasPricingAnomaly(summary.pricingCoverage, summary.warnings), true);
 });
 
-test('mixed billing domains keep API USD, ChatGPT credit rates, and unknown usage separate', () => {
+test('mixed billing domains all receive local estimates while audit domains stay separate', () => {
   const mixedFixture = {
     total_requests: 3,
-    total_tokens: 3_000_000,
+    total_tokens: 3_000,
     apis: {
       'POST /v1/responses': {
         total_requests: 3,
-        total_tokens: 3_000_000,
+        total_tokens: 3_000,
         models: {
           'gpt-5.6-sol': {
             total_requests: 3,
-            total_tokens: 3_000_000,
+            total_tokens: 3_000,
             details: [
               {
                 timestamp: timestamps[0],
                 effective_service_tier: 'standard',
                 billing_basis: 'api-token-usd',
-                tokens: { input_tokens: 1_000_000, total_tokens: 1_000_000 },
+                tokens: { input_tokens: 1_000, total_tokens: 1_000 },
               },
               {
                 timestamp: timestamps[1],
                 effective_service_tier: 'priority',
                 billing_basis: 'chatgpt-credits',
-                tokens: { input_tokens: 1_000_000, total_tokens: 1_000_000 },
+                tokens: { input_tokens: 1_000, total_tokens: 1_000 },
               },
               {
                 timestamp: timestamps[2],
                 effective_service_tier: 'standard',
                 billing_basis: 'unknown',
-                tokens: { input_tokens: 1_000_000, total_tokens: 1_000_000 },
+                tokens: { input_tokens: 1_000, total_tokens: 1_000 },
               },
             ],
           },
@@ -303,7 +304,7 @@ test('mixed billing domains keep API USD, ChatGPT credit rates, and unknown usag
   const coverage = usage.calculatePricingCoverage(mixedFixture);
   assert.equal(coverage.totalRequests, 3);
   assert.equal(coverage.apiTokenUsdRequests, 1);
-  assert.equal(coverage.pricedRequests, 1);
+  assert.equal(coverage.pricedRequests, 3);
   assert.equal(coverage.apiPricedRequestRatio, 1);
   assert.equal(coverage.chatGptCreditRequests, 1);
   assert.equal(coverage.creditRatedRequests, 1);
@@ -311,19 +312,21 @@ test('mixed billing domains keep API USD, ChatGPT credit rates, and unknown usag
   assert.equal(coverage.creditRatedRequestRatio, 1);
   assert.equal(coverage.unknownBillingRequests, 1);
   assert.equal(coverage.unmatchedRequests, 0);
-  assert.equal(usage.isApiUsdEstimateComplete(coverage), false);
-  assert.equal(coverage.estimatedAmount, 10);
-  assert.equal(usage.calculateTotalCost(mixedFixture), 10);
+  assert.equal(usage.isApiUsdEstimateComplete(coverage), true);
+  assert.equal(usage.isLocalEstimateComplete(coverage), true);
+  assert.equal(usage.hasPricingAnomaly(coverage), false);
+  assert.equal(coverage.estimatedAmount, 0.02);
+  assert.equal(usage.calculateTotalCost(mixedFixture), 0.02);
 
   const hourly = usage.buildHourlyCostSeries(mixedFixture, undefined, 2);
   const daily = usage.buildDailyCostSeries(mixedFixture);
   assert.equal(
     hourly.data.reduce((sum, amount) => sum + amount, 0),
-    10
+    0.02
   );
   assert.equal(
     daily.data.reduce((sum, amount) => sum + amount, 0),
-    10
+    0.02
   );
 
   const [summary] = usage.getPricingModelSummaries(mixedFixture);

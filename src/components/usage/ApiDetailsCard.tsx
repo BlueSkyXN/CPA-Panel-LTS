@@ -133,7 +133,7 @@ export function ApiDetailsCard({ apiStats, loading, showPricing }: ApiDetailsCar
                               className={styles.apiBadge}
                               title={
                                 api.pricingCoverage.pricedRequests <
-                                api.pricingCoverage.apiTokenUsdRequests
+                                api.pricingCoverage.totalRequests
                                   ? t('usage_stats.pricing_cost_incomplete')
                                   : undefined
                               }

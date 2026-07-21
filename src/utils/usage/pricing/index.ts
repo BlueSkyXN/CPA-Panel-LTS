@@ -80,12 +80,7 @@ export interface PriceProfileV3 {
   overrides: Record<string, PriceOverride>;
 }
 
-export type CostEstimateStatus =
-  | 'priced'
-  | 'credit-rated'
-  | 'billing-unknown'
-  | 'unmatched'
-  | 'unsupported';
+export type CostEstimateStatus = 'priced' | 'unmatched' | 'unsupported';
 export type CostEstimateWarning = 'fallbackStandard' | 'requestedEstimate' | 'assumedStandard';
 export type ModelMatch = 'custom' | 'preset' | 'alias' | 'none';
 export type ContextBand = 'short' | 'long';
@@ -134,7 +129,9 @@ export interface PricingCoverageInput {
 export interface PricingCoverage {
   totalRequests: number;
   apiTokenUsdRequests: number;
+  apiPricedRequests: number;
   chatGptCreditRequests: number;
+  /** Requests covered by the browser-local API-equivalent estimate. */
   pricedRequests: number;
   creditRatedRequests: number;
   creditFastRequests: number;
@@ -143,7 +140,9 @@ export interface PricingCoverage {
   unsupportedRequests: number;
   totalTokens: number;
   apiTokenUsdTokens: number;
+  apiPricedTokens: number;
   chatGptCreditTokens: number;
+  /** Tokens covered by the browser-local API-equivalent estimate. */
   pricedTokens: number;
   creditRatedTokens: number;
   unknownBillingTokens: number;
@@ -156,9 +155,9 @@ export interface PricingCoverage {
   unknownBillingModels: number;
   estimatedAmount: number;
   assumedTierRequests: number;
-  /** Legacy all-request ratio. Prefer apiPricedRequestRatio for USD coverage UI. */
+  /** Browser-local API-equivalent request coverage across all billing domains. */
   pricedRequestRatio: number;
-  /** Legacy all-token ratio. Prefer apiPricedTokenRatio for USD coverage UI. */
+  /** Browser-local API-equivalent token coverage across all billing domains. */
   pricedTokenRatio: number;
   pricedModelRatio: number;
   apiPricedRequestRatio: number;
@@ -186,40 +185,53 @@ export const hasUnknownBillingUsage = (coverage: PricingCoverage): boolean =>
 
 export const isApiUsdEstimateComplete = (coverage: PricingCoverage): boolean =>
   coverage.apiTokenUsdRequests > 0 &&
-  coverage.pricedRequests === coverage.apiTokenUsdRequests &&
-  coverage.pricedTokens === coverage.apiTokenUsdTokens &&
-  coverage.apiPricedModels === coverage.apiTokenUsdModels &&
-  !hasUnknownBillingUsage(coverage);
+  coverage.apiPricedRequests === coverage.apiTokenUsdRequests &&
+  coverage.apiPricedTokens === coverage.apiTokenUsdTokens &&
+  coverage.apiPricedModels === coverage.apiTokenUsdModels;
+
+export const isLocalEstimateComplete = (coverage: PricingCoverage): boolean =>
+  (coverage.totalRequests > 0 || coverage.totalTokens > 0 || coverage.totalModels > 0) &&
+  coverage.pricedRequests === coverage.totalRequests &&
+  coverage.pricedTokens === coverage.totalTokens &&
+  coverage.pricedModels === coverage.totalModels;
 
 export const hasPricingAnomaly = (
   coverage: PricingCoverage,
   warnings: readonly CostEstimateWarning[] = []
 ): boolean =>
-  hasUnknownBillingUsage(coverage) ||
   coverage.unmatchedRequests > 0 ||
   coverage.unsupportedRequests > 0 ||
-  coverage.pricedRequests < coverage.apiTokenUsdRequests ||
-  coverage.pricedTokens < coverage.apiTokenUsdTokens ||
-  coverage.apiPricedModels < coverage.apiTokenUsdModels ||
-  coverage.creditRatedRequests < coverage.chatGptCreditRequests ||
-  coverage.creditRatedTokens < coverage.chatGptCreditTokens ||
-  coverage.creditRatedModels < coverage.chatGptCreditModels ||
+  coverage.pricedRequests < coverage.totalRequests ||
+  coverage.pricedTokens < coverage.totalTokens ||
+  coverage.pricedModels < coverage.totalModels ||
   warnings.includes('fallbackStandard');
 
 export const getApiCoverageDisplay = (
   coverage: Pick<
     PricingCoverage,
-    'apiTokenUsdRequests' | 'pricedRequests' | 'apiTokenUsdTokens' | 'pricedTokens'
+    'apiTokenUsdRequests' | 'apiPricedRequests' | 'apiTokenUsdTokens' | 'apiPricedTokens'
   >
 ): ApiCoverageDisplay => ({
   requestPercent:
     coverage.apiTokenUsdRequests > 0
-      ? (coverage.pricedRequests / coverage.apiTokenUsdRequests) * 100
+      ? (coverage.apiPricedRequests / coverage.apiTokenUsdRequests) * 100
       : null,
   tokenPercent:
     coverage.apiTokenUsdTokens > 0
-      ? (coverage.pricedTokens / coverage.apiTokenUsdTokens) * 100
+      ? (coverage.apiPricedTokens / coverage.apiTokenUsdTokens) * 100
       : null,
+});
+
+export const getLocalEstimateCoverageDisplay = (
+  coverage: Pick<
+    PricingCoverage,
+    'totalRequests' | 'pricedRequests' | 'totalTokens' | 'pricedTokens'
+  >
+): ApiCoverageDisplay => ({
+  requestPercent:
+    coverage.totalRequests > 0 ? (coverage.pricedRequests / coverage.totalRequests) * 100 : null,
+  tokenPercent:
+    coverage.totalTokens > 0 ? (coverage.pricedTokens / coverage.totalTokens) * 100 : null,
 });
 
 export const getApiFastPolicyDisplay = (resolved: ResolvedPrice): ApiFastPolicyDisplay => {
@@ -764,6 +776,7 @@ export function aggregateCostEstimateCoverage(
   > = {
     totalRequests: 0,
     apiTokenUsdRequests: 0,
+    apiPricedRequests: 0,
     chatGptCreditRequests: 0,
     pricedRequests: 0,
     creditRatedRequests: 0,
@@ -773,6 +786,7 @@ export function aggregateCostEstimateCoverage(
     unsupportedRequests: 0,
     totalTokens: 0,
     apiTokenUsdTokens: 0,
+    apiPricedTokens: 0,
     chatGptCreditTokens: 0,
     pricedTokens: 0,
     creditRatedTokens: 0,
@@ -824,29 +838,36 @@ export function aggregateCostEstimateCoverage(
       if (currentModel) currentModel.unknownBilling += 1;
     }
 
-    if (
-      estimate.tier.evidence === 'assumed' &&
-      (estimate.status === 'priced' || estimate.status === 'credit-rated')
-    ) {
+    const localAmount = estimate.status === 'priced' ? estimate.amount : null;
+    const isLocallyPriced = localAmount !== null;
+    const isCreditRated =
+      estimate.billingBasis === BILLING_BASIS_CHATGPT_CREDITS &&
+      estimate.creditMultiplier !== null;
+
+    if (estimate.tier.evidence === 'assumed' && isLocallyPriced) {
       result.assumedTierRequests += 1;
     }
-    if (estimate.status === 'priced' && estimate.amount !== null) {
+    if (isLocallyPriced) {
       result.pricedRequests += 1;
       result.pricedTokens += tokens;
-      result.estimatedAmount += estimate.amount;
+      result.estimatedAmount += localAmount;
       if (currentModel) {
         currentModel.priced += 1;
-        currentModel.apiPriced += 1;
       }
-    } else if (estimate.status === 'credit-rated') {
+      if (estimate.billingBasis === BILLING_BASIS_API_TOKEN_USD) {
+        result.apiPricedRequests += 1;
+        result.apiPricedTokens += tokens;
+        if (currentModel) currentModel.apiPriced += 1;
+      }
+    }
+    if (isCreditRated) {
       result.creditRatedRequests += 1;
       result.creditRatedTokens += tokens;
       if (estimate.tier.tier === 'fast') result.creditFastRequests += 1;
       if (currentModel) currentModel.creditRated += 1;
-    } else if (estimate.status === 'billing-unknown') {
-      // Basis counters above already keep this request in the explicit unknown domain.
-    } else if (estimate.status === 'unsupported') result.unsupportedRequests += 1;
-    else result.unmatchedRequests += 1;
+    }
+    if (estimate.status === 'unsupported') result.unsupportedRequests += 1;
+    else if (estimate.status === 'unmatched') result.unmatchedRequests += 1;
   }
   const totalModels = modelCoverage.size;
   const modelStates = Array.from(modelCoverage.values());
@@ -876,8 +897,8 @@ export function aggregateCostEstimateCoverage(
     pricedRequestRatio: ratio(result.pricedRequests, result.totalRequests),
     pricedTokenRatio: ratio(result.pricedTokens, result.totalTokens),
     pricedModelRatio: ratio(pricedModels, totalModels),
-    apiPricedRequestRatio: ratio(result.pricedRequests, result.apiTokenUsdRequests),
-    apiPricedTokenRatio: ratio(result.pricedTokens, result.apiTokenUsdTokens),
+    apiPricedRequestRatio: ratio(result.apiPricedRequests, result.apiTokenUsdRequests),
+    apiPricedTokenRatio: ratio(result.apiPricedTokens, result.apiTokenUsdTokens),
     apiPricedModelRatio: ratio(apiPricedModels, apiTokenUsdModels),
     creditRatedRequestRatio: ratio(result.creditRatedRequests, result.chatGptCreditRequests),
     creditRatedTokenRatio: ratio(result.creditRatedTokens, result.chatGptCreditTokens),

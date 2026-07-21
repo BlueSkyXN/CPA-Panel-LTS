@@ -88,6 +88,9 @@ features:
       - OPENAI_PRICE_CATALOG
       - CHATGPT_CREDIT_CATALOG
       - apiPricedRequestRatio
+      - getLocalEstimateCoverageDisplay
+      - isLocalEstimateComplete
+      - billing domains remain audit metadata
       - PRICE_PROFILE_STORAGE_KEY
       - cli-proxy-model-prices-v3
       - estimateUsageDetailCost

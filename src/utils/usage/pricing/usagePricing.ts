@@ -10,7 +10,6 @@ import {
   type PricingCoverageInput,
 } from './index';
 import {
-  BILLING_BASIS_API_TOKEN_USD,
   BILLING_BASIS_CHATGPT_CREDITS,
   normalizeBillingBasis,
   type BillingBasis,
@@ -51,36 +50,21 @@ export function estimateUsageDetailCost(
   const tier = resolveUsageDetailServiceTier(detail);
   const billingBasis = resolveUsageDetailBillingBasis(detail);
   const apiEstimate = estimateUsageCost(modelName, detail.tokens, profile, tier);
-  let estimate: CostEstimate;
-
-  if (billingBasis === BILLING_BASIS_API_TOKEN_USD) {
-    estimate = apiEstimate;
-  } else if (billingBasis === BILLING_BASIS_CHATGPT_CREDITS) {
-    // Browser-local API aliases must never authenticate a model for ChatGPT credits.
-    // Credit policies match only the observed model or aliases owned by the official catalog.
-    const creditPolicy = findChatGptCreditPolicy(modelName);
-    estimate = {
-      ...apiEstimate,
-      amount: null,
-      status: creditPolicy ? 'credit-rated' : 'unmatched',
-      billingBasis,
-      creditMultiplier: creditPolicy
-        ? tier.tier === 'fast'
-          ? creditPolicy.fastMultiplier
-          : creditPolicy.standardMultiplier
-        : null,
-      rates: null,
-    };
-  } else {
-    estimate = {
-      ...apiEstimate,
-      amount: null,
-      status: 'billing-unknown',
-      billingBasis,
-      creditMultiplier: null,
-      rates: null,
-    };
-  }
+  // The API-equivalent estimate is always browser-local. Billing basis is
+  // retained only as audit metadata and must never gate a catalog/profile match.
+  const creditPolicy =
+    billingBasis === BILLING_BASIS_CHATGPT_CREDITS
+      ? findChatGptCreditPolicy(modelName)
+      : null;
+  const estimate: CostEstimate = {
+    ...apiEstimate,
+    billingBasis,
+    creditMultiplier: creditPolicy
+      ? tier.tier === 'fast'
+        ? creditPolicy.fastMultiplier
+        : creditPolicy.standardMultiplier
+      : null,
+  };
   return {
     modelName,
     tokenCount: resolveUsageTotalTokens(detail.tokens, modelName),

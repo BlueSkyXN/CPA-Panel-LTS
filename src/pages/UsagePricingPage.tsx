@@ -31,8 +31,8 @@ import {
   findChatGptCreditPolicy,
   formatCompactNumber,
   formatUsd,
-  getApiCoverageDisplay,
   getApiFastPolicyDisplay,
+  getLocalEstimateCoverageDisplay,
   hasPricingAnomaly,
   importPriceProfileV3,
   preflightPriceProfileImportV3,
@@ -278,7 +278,7 @@ export function UsagePricingPage() {
     [priceProfile, usage]
   );
   const { coverage, modelSummaries } = pricingAnalysis;
-  const apiCoverageDisplay = getApiCoverageDisplay(coverage);
+  const localCoverageDisplay = getLocalEstimateCoverageDisplay(coverage);
   const presetOverrideRecovery = useMemo(
     () => restorePresetEquivalentOverrides(priceProfile),
     [priceProfile]
@@ -498,9 +498,9 @@ export function UsagePricingPage() {
     const currentCost = selectedSummary.estimatedAmount;
     const nextCost = draftSummary?.estimatedAmount ?? currentCost;
     const costDelta = nextCost - currentCost;
-    const currentCoverage = getApiCoverageDisplay(coverage).requestPercent;
+    const currentCoverage = getLocalEstimateCoverageDisplay(coverage).requestPercent;
     const nextCoverage = draftCoverage
-      ? getApiCoverageDisplay(draftCoverage).requestPercent
+      ? getLocalEstimateCoverageDisplay(draftCoverage).requestPercent
       : currentCoverage;
     const clearLabel = modelIsCanonicalPreset
       ? t('usage_stats.pricing_restore_preset')
@@ -713,7 +713,7 @@ export function UsagePricingPage() {
         <div className={styles.previewPanel}>
           <div>
             <span>{t('usage_stats.pricing_preview_affected')}</span>
-            <strong>{selectedSummary.pricingCoverage.apiTokenUsdRequests.toLocaleString()}</strong>
+            <strong>{selectedSummary.pricingCoverage.totalRequests.toLocaleString()}</strong>
           </div>
           <div>
             <span>{t('usage_stats.pricing_preview_coverage')}</span>
@@ -837,26 +837,26 @@ export function UsagePricingPage() {
             {coverage.pricedRequests > 0 ? formatUsd(coverage.estimatedAmount) : '--'}
           </strong>
           <small>
-            {coverage.pricedRequests} / {coverage.apiTokenUsdRequests}{' '}
+            {coverage.pricedRequests} / {coverage.totalRequests}{' '}
             {t('usage_stats.pricing_requests_unit')}
           </small>
         </div>
         <div className={styles.summaryCard}>
           <span>{t('usage_stats.pricing_api_request_coverage')}</span>
           <strong>
-            {apiCoverageDisplay.requestPercent === null
+            {localCoverageDisplay.requestPercent === null
               ? '--'
-              : `${apiCoverageDisplay.requestPercent.toFixed(1)}%`}
+              : `${localCoverageDisplay.requestPercent.toFixed(1)}%`}
           </strong>
           <small>
-            {apiCoverageDisplay.tokenPercent === null
+            {localCoverageDisplay.tokenPercent === null
               ? t(
-                  coverage.apiTokenUsdRequests === 0
+                  coverage.totalRequests === 0
                     ? 'usage_stats.pricing_no_api_requests'
                     : 'usage_stats.pricing_no_api_tokens'
                 )
               : t('usage_stats.pricing_api_token_coverage', {
-                  percent: apiCoverageDisplay.tokenPercent.toFixed(1),
+                  percent: localCoverageDisplay.tokenPercent.toFixed(1),
                 })}
           </small>
         </div>
@@ -1077,8 +1077,8 @@ export function UsagePricingPage() {
                           : '--'}
                       </strong>
                       <small>
-                        {summary.pricingCoverage.apiTokenUsdRequests > 0
-                          ? `${(summary.pricingCoverage.apiPricedRequestRatio * 100).toFixed(1)}%`
+                        {summary.pricingCoverage.totalRequests > 0
+                          ? `${(summary.pricingCoverage.pricedRequestRatio * 100).toFixed(1)}%`
                           : t('usage_stats.pricing_no_api_requests')}
                       </small>
                     </span>

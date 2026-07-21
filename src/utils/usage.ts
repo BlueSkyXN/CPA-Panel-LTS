@@ -18,7 +18,6 @@ import {
   type UsageTokenFields,
 } from './usage/cacheTokens';
 import {
-  BILLING_BASIS_API_TOKEN_USD,
   aggregateCostEstimateCoverage,
   createDefaultPriceProfileV3,
   normalizeBillingBasis,
@@ -108,10 +107,12 @@ export {
   findChatGptCreditPolicy,
   getApiCoverageDisplay,
   getApiFastPolicyDisplay,
+  getLocalEstimateCoverageDisplay,
   hasPricingAnomaly,
   hasUnknownBillingUsage,
   importPriceProfileV3,
   isApiUsdEstimateComplete,
+  isLocalEstimateComplete,
   materializePriceProfiles,
   migrateModelPricesV2ToV3,
   normalizeBillingBasis,
@@ -288,8 +289,11 @@ const reconcilePricingCoverage = (
     pricedRequestRatio: pricingRatio(coverage.pricedRequests, totalRequests),
     pricedTokenRatio: pricingRatio(coverage.pricedTokens, totalTokens),
     pricedModelRatio: pricingRatio(reconciledPricedModels, totalModels),
-    apiPricedRequestRatio: pricingRatio(coverage.pricedRequests, coverage.apiTokenUsdRequests),
-    apiPricedTokenRatio: pricingRatio(coverage.pricedTokens, coverage.apiTokenUsdTokens),
+    apiPricedRequestRatio: pricingRatio(
+      coverage.apiPricedRequests,
+      coverage.apiTokenUsdRequests
+    ),
+    apiPricedTokenRatio: pricingRatio(coverage.apiPricedTokens, coverage.apiTokenUsdTokens),
     apiPricedModelRatio: pricingRatio(coverage.apiPricedModels, coverage.apiTokenUsdModels),
     creditRatedRequestRatio: pricingRatio(
       coverage.creditRatedRequests,
@@ -328,6 +332,7 @@ const combinePricingCoverages = (coverages: Iterable<PricingCoverage>): PricingC
   for (const coverage of coverages) {
     combined.totalRequests += coverage.totalRequests;
     combined.apiTokenUsdRequests += coverage.apiTokenUsdRequests;
+    combined.apiPricedRequests += coverage.apiPricedRequests;
     combined.chatGptCreditRequests += coverage.chatGptCreditRequests;
     combined.pricedRequests += coverage.pricedRequests;
     combined.creditRatedRequests += coverage.creditRatedRequests;
@@ -337,6 +342,7 @@ const combinePricingCoverages = (coverages: Iterable<PricingCoverage>): PricingC
     combined.unsupportedRequests += coverage.unsupportedRequests;
     combined.totalTokens += coverage.totalTokens;
     combined.apiTokenUsdTokens += coverage.apiTokenUsdTokens;
+    combined.apiPricedTokens += coverage.apiPricedTokens;
     combined.chatGptCreditTokens += coverage.chatGptCreditTokens;
     combined.pricedTokens += coverage.pricedTokens;
     combined.creditRatedTokens += coverage.creditRatedTokens;
@@ -355,10 +361,13 @@ const combinePricingCoverages = (coverages: Iterable<PricingCoverage>): PricingC
   combined.pricedTokenRatio = pricingRatio(combined.pricedTokens, combined.totalTokens);
   combined.pricedModelRatio = pricingRatio(combined.pricedModels, combined.totalModels);
   combined.apiPricedRequestRatio = pricingRatio(
-    combined.pricedRequests,
+    combined.apiPricedRequests,
     combined.apiTokenUsdRequests
   );
-  combined.apiPricedTokenRatio = pricingRatio(combined.pricedTokens, combined.apiTokenUsdTokens);
+  combined.apiPricedTokenRatio = pricingRatio(
+    combined.apiPricedTokens,
+    combined.apiTokenUsdTokens
+  );
   combined.apiPricedModelRatio = pricingRatio(combined.apiPricedModels, combined.apiTokenUsdModels);
   combined.creditRatedRequestRatio = pricingRatio(
     combined.creditRatedRequests,
@@ -1364,16 +1373,10 @@ export function getPricingModelSummaries(
       warnings: new Set<CostEstimateWarning>(),
     };
     group.pricingInputs.push(pricingInput);
-    if (
-      pricingInput.estimate.billingBasis === BILLING_BASIS_API_TOKEN_USD &&
-      pricingInput.estimate.tier.tier === 'fast'
-    ) {
+    if (pricingInput.estimate.tier.tier === 'fast') {
       group.fastRequestCount += 1;
     }
-    if (
-      pricingInput.estimate.billingBasis === BILLING_BASIS_API_TOKEN_USD &&
-      pricingInput.estimate.contextBand === 'long'
-    ) {
+    if (pricingInput.estimate.contextBand === 'long') {
       group.longContextRequestCount += 1;
     }
     pricingInput.estimate.warnings.forEach((warning) => group.warnings.add(warning));
