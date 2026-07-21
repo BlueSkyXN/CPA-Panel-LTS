@@ -18,7 +18,14 @@ export interface ModelStatsCardProps {
   showPricing: boolean;
 }
 
-type SortKey = 'model' | 'requests' | 'tokens' | 'cost' | 'successRate' | 'averageLatencyMs';
+type SortKey =
+  | 'model'
+  | 'requests'
+  | 'tokens'
+  | 'cacheRate'
+  | 'cost'
+  | 'successRate'
+  | 'averageLatencyMs';
 type SortDir = 'asc' | 'desc';
 
 interface ModelStatWithRate extends ModelStat {
@@ -26,13 +33,22 @@ interface ModelStatWithRate extends ModelStat {
 }
 
 export function ModelStatsCard({ modelStats, loading, showPricing }: ModelStatsCardProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [sortKey, setSortKey] = useState<SortKey>('requests');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const latencyHint = t('usage_stats.latency_unit_hint', {
     field: LATENCY_SOURCE_FIELD,
     unit: t('usage_stats.duration_unit_ms'),
   });
+  const cacheRateHint = t('usage_stats.model_cache_rate_hint');
+  const cacheRateFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat(i18n.language, {
+        style: 'percent',
+        maximumFractionDigits: 1,
+      }),
+    [i18n.language]
+  );
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -111,6 +127,17 @@ export function ModelStatsCard({ modelStats, loading, showPricing }: ModelStatsC
                         {arrow('tokens')}
                       </button>
                     </th>
+                    <th className={styles.sortableHeader} aria-sort={ariaSort('cacheRate')}>
+                      <button
+                        type="button"
+                        className={styles.sortHeaderButton}
+                        onClick={() => handleSort('cacheRate')}
+                        title={cacheRateHint}
+                      >
+                        {t('usage_stats.model_cache_rate')}
+                        {arrow('cacheRate')}
+                      </button>
+                    </th>
                     <th className={styles.sortableHeader} aria-sort={ariaSort('averageLatencyMs')}>
                       <button
                         type="button"
@@ -166,6 +193,11 @@ export function ModelStatsCard({ modelStats, loading, showPricing }: ModelStatsC
                         </span>
                       </td>
                       <td>{formatCompactNumber(stat.tokens)}</td>
+                      <td title={cacheRateHint}>
+                        {stat.cacheRate === null
+                          ? t('common.not_set')
+                          : cacheRateFormatter.format(stat.cacheRate)}
+                      </td>
                       <td className={styles.durationCell}>
                         {formatDurationMs(stat.averageLatencyMs)}
                       </td>

@@ -128,7 +128,12 @@ export function useUsageData(): UseUsageDataReturn {
 
     const preflight = analyzeUsageImport(payload, usageSnapshot);
     if (!preflight.valid) {
-      showNotification(t('usage_stats.import_invalid'), 'error');
+      showNotification(
+        preflight.issues.includes('unsupported_legacy_token_contract')
+          ? t('usage_stats.import_unsupported_legacy_token_contract')
+          : t('usage_stats.import_invalid'),
+        'error'
+      );
       return;
     }
 
@@ -136,10 +141,6 @@ export function useUsageData(): UseUsageDataReturn {
       t('usage_stats.import_review_summary', {
         version: preflight.version ?? '-',
         details: preflight.detailCount,
-      }),
-      t('usage_stats.import_review_cache_summary', {
-        legacy: preflight.legacyCacheAliasCount,
-        canonical: preflight.canonicalCacheWriteCount,
       }),
       t('usage_stats.import_review_duplicates', { count: preflight.duplicateCount }),
       t('usage_stats.import_review_overlaps', { count: preflight.overlapCount }),
@@ -163,20 +164,6 @@ export function useUsageData(): UseUsageDataReturn {
               t('usage_stats.import_review_current_unavailable')
             )
           : null,
-        createElement(
-          'p',
-          {
-            style: {
-              margin: 0,
-              padding: '0.75rem',
-              borderRadius: '0.5rem',
-              background: 'var(--warning-bg, rgba(245, 158, 11, 0.12))',
-              color: 'var(--warning-text, var(--warning-color, #92400e))',
-              border: '1px solid var(--warning-border, rgba(245, 158, 11, 0.28))',
-            },
-          },
-          t('usage_stats.import_review_warning')
-        )
       ),
       confirmText: t('usage_stats.import_review_confirm'),
       variant: 'primary',

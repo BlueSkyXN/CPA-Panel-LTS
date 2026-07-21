@@ -22,13 +22,11 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useNotificationStore } from '@/stores';
 import { downloadBlob } from '@/utils/download';
 import {
-  CHATGPT_FAST_SOURCE_URL,
   OPENAI_CATALOG_VERSION,
   OPENAI_PRICING_SOURCE_URL,
   analyzeUsagePricing,
   createDefaultPriceProfileV3,
   findCatalogEntry,
-  findChatGptCreditPolicy,
   formatCompactNumber,
   formatUsd,
   getApiFastPolicyDisplay,
@@ -788,9 +786,6 @@ export function UsagePricingPage() {
           <a href={OPENAI_PRICING_SOURCE_URL} target="_blank" rel="noreferrer">
             {t('usage_stats.pricing_api_source')} <IconExternalLink size={13} />
           </a>
-          <a href={CHATGPT_FAST_SOURCE_URL} target="_blank" rel="noreferrer">
-            {t('usage_stats.pricing_chatgpt_source')} <IconExternalLink size={13} />
-          </a>
         </div>
       </header>
 
@@ -800,7 +795,6 @@ export function UsagePricingPage() {
           <strong>{t('usage_stats.pricing_estimate_notice')}</strong>
           <span>{t('usage_stats.pricing_browser_notice')}</span>
           <span>{t('usage_stats.pricing_history_notice')}</span>
-          <span>{t('usage_stats.pricing_credit_notice')}</span>
         </div>
       </div>
 
@@ -852,32 +846,12 @@ export function UsagePricingPage() {
             {localCoverageDisplay.tokenPercent === null
               ? t(
                   coverage.totalRequests === 0
-                    ? 'usage_stats.pricing_no_api_requests'
-                    : 'usage_stats.pricing_no_api_tokens'
+                    ? 'usage_stats.pricing_no_usage_requests'
+                    : 'usage_stats.pricing_no_usage_tokens'
                 )
-              : t('usage_stats.pricing_api_token_coverage', {
+              : t('usage_stats.pricing_token_coverage', {
                   percent: localCoverageDisplay.tokenPercent.toFixed(1),
                 })}
-          </small>
-        </div>
-        <div className={styles.summaryCard}>
-          <span>{t('usage_stats.pricing_credit_rated')}</span>
-          <strong>
-            {coverage.creditRatedRequests} / {coverage.chatGptCreditRequests}
-          </strong>
-          <small>
-            {t('usage_stats.pricing_credit_fast_count', {
-              count: coverage.creditFastRequests,
-            })}
-          </small>
-        </div>
-        <div className={styles.summaryCard}>
-          <span>{t('usage_stats.pricing_unknown_billing')}</span>
-          <strong>{coverage.unknownBillingRequests.toLocaleString()}</strong>
-          <small>
-            {t('usage_stats.pricing_unknown_billing_hint', {
-              tokens: formatCompactNumber(coverage.unknownBillingTokens),
-            })}
           </small>
         </div>
       </section>
@@ -944,14 +918,13 @@ export function UsagePricingPage() {
               <span>{t('usage_stats.pricing_standard_api')}</span>
               <span>{t('usage_stats.pricing_fast_policies')}</span>
               <span>{t('usage_stats.pricing_long_context')}</span>
-              <span>{t('usage_stats.pricing_usage_by_basis')}</span>
+              <span>{t('usage_stats.pricing_usage')}</span>
               <span>{t('usage_stats.pricing_api_usd')}</span>
             </div>
             <div className={styles.modelList}>
               {filteredSummaries.map((summary) => {
                 const standard = summary.resolvedPrice.standard?.short;
                 const fastPolicy = getApiFastPolicyDisplay(summary.resolvedPrice);
-                const creditPolicy = findChatGptCreditPolicy(summary.modelName);
                 const active = summary.modelName === activeModelName;
                 const anomaly = hasPricingAnomaly(summary.pricingCoverage, summary.warnings);
                 const pricingStatus = getPricingStatus(summary, priceProfile);
@@ -1022,14 +995,7 @@ export function UsagePricingPage() {
                                 { multiplier: fastPolicy.multiplier.toFixed(2) }
                               )}
                       </strong>
-                      <small>
-                        {creditPolicy === null
-                          ? t('usage_stats.pricing_chatgpt_credit_unavailable')
-                          : t('usage_stats.pricing_chatgpt_credit_multipliers', {
-                              standard: creditPolicy.standardMultiplier.toFixed(2),
-                              fast: creditPolicy.fastMultiplier.toFixed(2),
-                            })}
-                      </small>
+                      <small>{t('usage_stats.pricing_api_usd')}</small>
                     </span>
                     <span
                       className={styles.rateCell}
@@ -1054,19 +1020,12 @@ export function UsagePricingPage() {
                     </span>
                     <span
                       className={styles.usageCell}
-                      data-label={t('usage_stats.pricing_usage_by_basis')}
-                      title={t('usage_stats.pricing_usage_breakdown', {
-                        api: summary.pricingCoverage.apiTokenUsdRequests,
-                        credits: summary.pricingCoverage.chatGptCreditRequests,
-                        unknown: summary.pricingCoverage.unknownBillingRequests,
-                      })}
+                      data-label={t('usage_stats.pricing_usage')}
                     >
                       <strong>{summary.requestCount.toLocaleString()}</strong>
                       <small>
-                        {t('usage_stats.pricing_usage_breakdown', {
-                          api: summary.pricingCoverage.apiTokenUsdRequests,
-                          credits: summary.pricingCoverage.chatGptCreditRequests,
-                          unknown: summary.pricingCoverage.unknownBillingRequests,
+                        {t('usage_stats.pricing_requests_covered', {
+                          percent: (summary.pricingCoverage.pricedRequestRatio * 100).toFixed(1),
                         })}
                       </small>
                     </span>
@@ -1079,7 +1038,7 @@ export function UsagePricingPage() {
                       <small>
                         {summary.pricingCoverage.totalRequests > 0
                           ? `${(summary.pricingCoverage.pricedRequestRatio * 100).toFixed(1)}%`
-                          : t('usage_stats.pricing_no_api_requests')}
+                          : t('usage_stats.pricing_no_usage_requests')}
                       </small>
                     </span>
                   </button>

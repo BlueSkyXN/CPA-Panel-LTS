@@ -2,7 +2,8 @@ export type UsageImportPreflightIssue =
   | 'payload_not_object'
   | 'missing_usage'
   | 'unsupported_version'
-  | 'invalid_usage_apis';
+  | 'invalid_usage_apis'
+  | 'unsupported_legacy_token_contract';
 
 export interface UsageImportPreflightResult {
   valid: boolean;
@@ -10,8 +11,6 @@ export interface UsageImportPreflightResult {
   detailCount: number;
   currentDetailCount: number;
   currentUsageAvailable: boolean;
-  legacyCacheAliasCount: number;
-  canonicalCacheWriteCount: number;
   duplicateCount: number;
   overlapCount: number;
   issues: UsageImportPreflightIssue[];
@@ -30,12 +29,6 @@ interface NumericField {
   value: number;
 }
 
-interface CanonicalCacheIdentity {
-  cacheReadTokens: number;
-  cacheWriteTokens: number;
-  legacyCreationAlias: boolean;
-}
-
 const isRecord = (value: unknown): value is UnknownRecord =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 
@@ -47,12 +40,9 @@ const toFiniteNumber = (value: unknown): number => {
   return Number.isFinite(numeric) ? Math.max(numeric, 0) : 0;
 };
 
-const readNumericField = (value: UnknownRecord, keys: readonly string[]): NumericField => {
-  for (const key of keys) {
-    if (!hasOwn(value, key)) continue;
-    return { present: true, value: toFiniteNumber(value[key]) };
-  }
-  return { present: false, value: 0 };
+const readCanonicalNumericField = (value: UnknownRecord, key: string): NumericField => {
+  if (!hasOwn(value, key)) return { present: false, value: 0 };
+  return { present: true, value: toFiniteNumber(value[key]) };
 };
 
 const readText = (value: UnknownRecord, keys: readonly string[]): string => {
@@ -90,79 +80,32 @@ const collectUsageDetailEntries = (snapshot: UnknownRecord): UsageDetailEntry[] 
   return entries;
 };
 
-const resolveCanonicalCacheIdentity = (tokens: UnknownRecord): CanonicalCacheIdentity => {
-  const explicitRead = readNumericField(tokens, [
-    'cache_read_tokens',
-    'cacheReadTokens',
-    'CacheReadTokens',
-  ]);
-  const cachedAlias = readNumericField(tokens, [
-    'cached_tokens',
-    'cache_tokens',
-    'cachedTokens',
-    'CachedTokens',
-  ]);
-  const cacheWrite = readNumericField(tokens, [
-    'cache_creation_tokens',
-    'cache_write_tokens',
-    'cacheCreationTokens',
-    'cacheWriteTokens',
-    'CacheCreationTokens',
-  ]);
-
-  const legacyCreationAlias =
-    cacheWrite.value > 0 &&
-    (!explicitRead.present || explicitRead.value === 0) &&
-    cachedAlias.present &&
-    cachedAlias.value === cacheWrite.value;
-
-  const cacheReadTokens = explicitRead.present
-    ? explicitRead.value
-    : legacyCreationAlias
-      ? 0
-      : cachedAlias.value;
-
-  return {
-    cacheReadTokens,
-    cacheWriteTokens: cacheWrite.value,
-    legacyCreationAlias,
-  };
-};
-
 const buildCanonicalDetailIdentity = (entry: UsageDetailEntry): string => {
   const { detail } = entry;
   const tokens = isRecord(detail.tokens) ? detail.tokens : {};
-  const cache = resolveCanonicalCacheIdentity(tokens);
-  const input = readNumericField(tokens, ['input_tokens', 'inputTokens', 'InputTokens']);
-  const output = readNumericField(tokens, ['output_tokens', 'outputTokens', 'OutputTokens']);
-  const reasoning = readNumericField(tokens, [
+  const tokenIdentity = [
+    'input_tokens',
+    'output_tokens',
     'reasoning_tokens',
-    'reasoningTokens',
-    'ReasoningTokens',
-  ]);
-  const total = readNumericField(tokens, ['total_tokens', 'totalTokens', 'TotalTokens']);
-  const hasBreakdown =
-    input.present ||
-    output.present ||
-    reasoning.present ||
-    cache.cacheReadTokens > 0 ||
-    cache.cacheWriteTokens > 0;
+    'cached_tokens',
+    'cache_read_tokens',
+    'cache_creation_tokens',
+    'total_tokens',
+  ].map((key) => {
+    const field = readCanonicalNumericField(tokens, key);
+    return [field.present, field.value];
+  });
 
   return JSON.stringify([
     entry.apiName,
     entry.modelName,
-    readText(detail, ['timestamp', 'Timestamp']),
-    readText(detail, ['source', 'Source']),
-    readText(detail, ['auth_index', 'authIndex', 'AuthIndex']),
-    readBoolean(detail, ['failed', 'Failed']),
-    readText(detail, ['failure_reason', 'failureReason', 'FailureReason']),
-    readNumericField(detail, ['failure_status', 'failureStatus', 'FailureStatus']).value,
-    input.value,
-    output.value,
-    reasoning.value,
-    cache.cacheReadTokens,
-    cache.cacheWriteTokens,
-    hasBreakdown ? null : total.value,
+    readText(detail, ['timestamp']),
+    readText(detail, ['source']),
+    readText(detail, ['auth_index']),
+    readBoolean(detail, ['failed']),
+    readText(detail, ['failure_reason']),
+    readCanonicalNumericField(detail, 'failure_status').value,
+    tokenIdentity,
   ]);
 };
 
@@ -201,23 +144,32 @@ export function analyzeUsageImport(
   }
 
   const importedEntries = usageSnapshot ? collectUsageDetailEntries(usageSnapshot) : [];
+  if (
+    importedEntries.some((entry) => {
+      const tokens = isRecord(entry.detail.tokens) ? entry.detail.tokens : {};
+      return hasOwn(tokens, 'uncached_input_tokens');
+    })
+  ) {
+    issues.push('unsupported_legacy_token_contract');
+    return {
+      valid: false,
+      version,
+      detailCount: importedEntries.length,
+      currentDetailCount: 0,
+      currentUsageAvailable: false,
+      duplicateCount: 0,
+      overlapCount: 0,
+      issues,
+    };
+  }
+
   const currentSnapshot = resolveCurrentSnapshot(currentUsage);
   const currentUsageAvailable = Boolean(currentSnapshot && isRecord(currentSnapshot.apis));
   const currentEntries = currentSnapshot ? collectUsageDetailEntries(currentSnapshot) : [];
 
-  let legacyCacheAliasCount = 0;
-  let canonicalCacheWriteCount = 0;
   const importedIdentityCounts = new Map<string, number>();
 
   importedEntries.forEach((entry) => {
-    const tokens = isRecord(entry.detail.tokens) ? entry.detail.tokens : {};
-    const cache = resolveCanonicalCacheIdentity(tokens);
-    if (cache.legacyCreationAlias) {
-      legacyCacheAliasCount += 1;
-    } else if (cache.cacheWriteTokens > 0) {
-      canonicalCacheWriteCount += 1;
-    }
-
     const identity = buildCanonicalDetailIdentity(entry);
     importedIdentityCounts.set(identity, (importedIdentityCounts.get(identity) ?? 0) + 1);
   });
@@ -239,8 +191,6 @@ export function analyzeUsageImport(
     detailCount: importedEntries.length,
     currentDetailCount: currentEntries.length,
     currentUsageAvailable,
-    legacyCacheAliasCount,
-    canonicalCacheWriteCount,
     duplicateCount,
     overlapCount,
     issues,

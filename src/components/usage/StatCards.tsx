@@ -237,34 +237,12 @@ export function StatCards({
             {loading
               ? '-'
               : localCoverageDisplay.requestPercent === null
-                ? t('usage_stats.pricing_no_api_requests')
+                ? t('usage_stats.pricing_no_usage_requests')
                 : `${localCoverageDisplay.requestPercent.toFixed(1)}% (${pricingCoverage.pricedRequests}/${pricingCoverage.totalRequests})`}
           </span>
           {!pricingComplete && pricingCoverage.totalRequests > 0 && (
             <span className={`${styles.statMetaItem} ${styles.statSubtle}`}>
               {t('usage_stats.pricing_cost_incomplete')}
-            </span>
-          )}
-          {pricingCoverage.chatGptCreditRequests > 0 && (
-            <span className={styles.statMetaItem}>
-              {t('usage_stats.pricing_credit_requests', {
-                count: pricingCoverage.chatGptCreditRequests,
-              })}
-            </span>
-          )}
-          {pricingCoverage.unknownBillingRequests > 0 && (
-            <span className={`${styles.statMetaItem} ${styles.statSubtle}`}>
-              {t('usage_stats.pricing_unknown_requests', {
-                count: pricingCoverage.unknownBillingRequests,
-              })}
-            </span>
-          )}
-          {pricingCoverage.unknownBillingTokens > 0 && (
-            <span className={`${styles.statMetaItem} ${styles.statSubtle}`}>
-              {t('usage_stats.pricing_unknown_tokens', {
-                count: pricingCoverage.unknownBillingTokens,
-                tokens: formatCompactNumber(pricingCoverage.unknownBillingTokens),
-              })}
             </span>
           )}
           <button type="button" className={styles.statInlineAction} onClick={onOpenPricing}>

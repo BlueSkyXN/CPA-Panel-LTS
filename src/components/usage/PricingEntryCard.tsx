@@ -3,7 +3,6 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { IconDollarSign, IconSettings } from '@/components/ui/icons';
 import {
-  formatCompactNumber,
   formatUsd,
   getLocalEstimateCoverageDisplay,
   isLocalEstimateComplete,
@@ -50,40 +49,20 @@ export function PricingEntryCard({ coverage, onOpen }: PricingEntryCardProps) {
       </div>
       <div className={styles.pricingEntryMeta}>
         <span>
-          {t('usage_stats.pricing_api_models_covered', {
+          {t('usage_stats.pricing_models_covered', {
             priced: coverage.pricedModels,
             total: coverage.totalModels,
           })}
         </span>
         <span>
           {localCoverageDisplay.requestPercent === null
-            ? t('usage_stats.pricing_no_api_requests')
-            : t('usage_stats.pricing_api_requests_covered', {
-                priced: coverage.pricedRequests,
-                total: coverage.totalRequests,
+            ? t('usage_stats.pricing_no_usage_requests')
+            : t('usage_stats.pricing_requests_covered', {
                 percent: localCoverageDisplay.requestPercent.toFixed(1),
               })}
         </span>
-        <span>
-          {t('usage_stats.pricing_credit_requests', {
-            count: coverage.chatGptCreditRequests,
-          })}
-        </span>
-        <span>
-          {t('usage_stats.pricing_unknown_requests', {
-            count: coverage.unknownBillingRequests,
-          })}
-        </span>
         {!pricingComplete && coverage.totalRequests > 0 && (
           <span>{t('usage_stats.pricing_cost_incomplete')}</span>
-        )}
-        {coverage.unknownBillingTokens > 0 && (
-          <span>
-            {t('usage_stats.pricing_unknown_tokens', {
-              count: coverage.unknownBillingTokens,
-              tokens: formatCompactNumber(coverage.unknownBillingTokens),
-            })}
-          </span>
         )}
       </div>
     </Card>

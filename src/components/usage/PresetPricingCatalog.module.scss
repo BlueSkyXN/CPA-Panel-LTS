@@ -178,10 +178,6 @@
     width: 148px;
   }
 
-  th:nth-child(8) {
-    width: 184px;
-  }
-
   tbody:last-child tr:last-child td {
     border-bottom: 0;
   }
@@ -198,8 +194,7 @@
 .modelCell,
 .contextCell,
 .rateCell,
-.policyCell,
-.creditCell {
+.policyCell {
   strong,
   small,
   a {
@@ -291,8 +286,7 @@
   color: var(--amber-text);
 }
 
-.policyCell,
-.creditCell {
+.policyCell {
   strong {
     overflow: visible;
     font-size: 9px;
@@ -303,10 +297,6 @@
 
   &[data-tone='fast'] strong {
     color: var(--amber-text);
-  }
-
-  &[data-tone='credit'] strong {
-    color: var(--success-color);
   }
 
   &[data-tone='muted'] strong {
@@ -488,8 +478,7 @@
     }
   }
 
-  .policyCell,
-  .creditCell {
+  .policyCell {
     strong {
       font-size: 10px;
     }

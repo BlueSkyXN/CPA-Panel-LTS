@@ -1,13 +1,10 @@
 export interface UsageTokenFields {
   input_tokens?: unknown;
-  uncached_input_tokens?: unknown;
   output_tokens?: unknown;
   reasoning_tokens?: unknown;
   cached_tokens?: unknown;
-  cache_tokens?: unknown;
   cache_read_tokens?: unknown;
   cache_creation_tokens?: unknown;
-  cache_write_tokens?: unknown;
   total_tokens?: unknown;
   [key: string]: unknown;
 }
@@ -32,8 +29,6 @@ export interface UsagePriceFields {
 
 const TOKENS_PER_PRICE_UNIT = 1_000_000;
 
-const GPT_56_MODEL_PATTERN = /(?:^|[/:])gpt-5\.6(?:$|[-_.:/])/;
-
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 
@@ -43,26 +38,13 @@ const toOptionalTokenCount = (value: unknown): number | null => {
   return Number.isFinite(parsed) ? Math.max(parsed, 0) : null;
 };
 
-const toAuthoritativeTokenCount = (value: unknown): number | null => {
-  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) return null;
-  return value;
-};
-
-const toExplicitUncachedInputCount = (
-  value: unknown,
-  inputTokenValue: unknown
-): number | null => {
-  const inputTokens = toAuthoritativeTokenCount(inputTokenValue);
-  const uncachedInputTokens = toAuthoritativeTokenCount(value);
-  if (inputTokens === null || uncachedInputTokens === null || uncachedInputTokens > inputTokens) {
-    return null;
-  }
-  return uncachedInputTokens;
-};
-
-export function getUsageUncachedInputTokenCount(tokens: unknown): number | null {
+// This cache-rate complement is distinct from normal prompt input: cache
+// creation remains a separate billing category.
+export function getUsageNonCacheReadInputTokenCount(tokens: unknown): number {
   const record = isRecord(tokens) ? tokens : {};
-  return toExplicitUncachedInputCount(record.uncached_input_tokens, record.input_tokens);
+  const inputTokens = toTokenCount(record.input_tokens);
+  const { cacheReadTokens } = getUsageCacheTokenCounts(record);
+  return Math.max(inputTokens - cacheReadTokens, 0);
 }
 
 export const toTokenCount = (value: unknown): number => toOptionalTokenCount(value) ?? 0;
@@ -70,67 +52,41 @@ export const toTokenCount = (value: unknown): number => toOptionalTokenCount(val
 export function getUsageCacheTokenCounts(tokens: unknown): UsageCacheTokenCounts {
   const record = isRecord(tokens) ? tokens : {};
   const explicitRead = toOptionalTokenCount(record.cache_read_tokens);
-  const legacyReadCandidates = [record.cached_tokens, record.cache_tokens]
-    .map(toOptionalTokenCount)
-    .filter((value): value is number => value !== null);
-  const legacyRead = legacyReadCandidates.length > 0 ? Math.max(...legacyReadCandidates) : 0;
-
-  const explicitWrite = toOptionalTokenCount(record.cache_creation_tokens);
-  const writeAlias = toOptionalTokenCount(record.cache_write_tokens);
+  const cachedTokensMirror = toOptionalTokenCount(record.cached_tokens);
 
   return {
-    cacheReadTokens: explicitRead ?? legacyRead,
-    cacheWriteTokens: explicitWrite ?? writeAlias ?? 0,
+    cacheReadTokens: explicitRead ?? cachedTokensMirror ?? 0,
+    cacheWriteTokens: toOptionalTokenCount(record.cache_creation_tokens) ?? 0,
   };
-}
-
-export function isGpt56CacheWriteModel(modelName: string): boolean {
-  const normalized = modelName.trim().toLowerCase();
-  if (!normalized) return false;
-  return GPT_56_MODEL_PATTERN.test(normalized);
 }
 
 export function splitUsageTokensForCost(
   tokens: UsageTokenFields,
-  modelName: string
+  _modelName: string
 ): UsageCostTokenSplit {
   const inputTokens = toTokenCount(tokens.input_tokens);
   const outputTokens = toTokenCount(tokens.output_tokens);
   const { cacheReadTokens, cacheWriteTokens } = getUsageCacheTokenCounts(tokens);
-  const explicitUncachedInputTokens = getUsageUncachedInputTokenCount(tokens);
-  const promptDiscountTokens =
-    cacheReadTokens + (isGpt56CacheWriteModel(modelName) ? cacheWriteTokens : 0);
 
   return {
     inputTokens,
     outputTokens,
     cacheReadTokens,
     cacheWriteTokens,
-    promptTokens: explicitUncachedInputTokens ?? Math.max(inputTokens - promptDiscountTokens, 0),
+    promptTokens: Math.max(inputTokens - cacheReadTokens - cacheWriteTokens, 0),
   };
 }
 
 export function calculateFallbackUsageTotalTokens(
   tokens: UsageTokenFields,
-  modelName: string
+  _modelName: string
 ): number {
   const inputTokens = toTokenCount(tokens.input_tokens);
   const outputTokens = toTokenCount(tokens.output_tokens);
   const reasoningTokens = toTokenCount(tokens.reasoning_tokens);
-  const { cacheReadTokens, cacheWriteTokens } = getUsageCacheTokenCounts(tokens);
-  const explicitUncachedInputTokens = getUsageUncachedInputTokenCount(tokens);
-  if (explicitUncachedInputTokens !== null) {
-    return (
-      explicitUncachedInputTokens +
-      outputTokens +
-      reasoningTokens +
-      cacheReadTokens +
-      cacheWriteTokens
-    );
-  }
-  const cacheTokens = isGpt56CacheWriteModel(modelName) ? 0 : cacheReadTokens + cacheWriteTokens;
 
-  return inputTokens + outputTokens + reasoningTokens + cacheTokens;
+  // input_tokens is already normalized to include cache reads and writes.
+  return inputTokens + outputTokens + reasoningTokens;
 }
 
 export function resolveUsageTotalTokens(tokens: UsageTokenFields, modelName: string): number {

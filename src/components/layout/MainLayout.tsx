@@ -7,10 +7,16 @@ import {
   useRef,
   useState,
 } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { PageTransition } from '@/components/common/PageTransition';
+import { SidebarNavigation } from '@/components/layout/SidebarNavigation';
+import {
+  flattenSidebarNavPaths,
+  type SidebarNavGroup,
+  type SidebarNavItem,
+} from '@/components/layout/sidebarNavigationModel';
 import { MainRoutes } from '@/router/MainRoutes';
 import {
   IconSidebarAuthFiles,
@@ -436,39 +442,204 @@ export function MainLayout() {
     };
   }, [loadPluginResources]);
 
-  const navItems = [
-    { path: '/', label: t('nav.dashboard'), icon: sidebarIcons.dashboard },
-    { path: '/config', label: t('nav.config_management'), icon: sidebarIcons.config },
-    { path: '/ai-providers', label: t('nav.ai_providers'), icon: sidebarIcons.aiProviders },
-    { path: '/auth-files', label: t('nav.auth_files'), icon: sidebarIcons.authFiles },
-    { path: '/oauth', label: t('nav.oauth', { defaultValue: 'OAuth' }), icon: sidebarIcons.oauth },
-    { path: '/quota', label: t('nav.quota_management'), icon: sidebarIcons.quota },
-    { path: '/usage', label: t('nav.usage_stats'), icon: sidebarIcons.usage },
-    ...(supportsPlugin
-      ? [
-          { path: '/plugins', label: t('nav.plugins'), icon: sidebarIcons.plugins },
-          { path: '/plugin-store', label: t('nav.plugin_store'), icon: sidebarIcons.pluginStore },
-          ...pluginResourceEntries.map((entry) => ({
-            path: entry.route,
-            label: entry.label,
-            icon: sidebarIcons.plugins,
-          })),
-        ]
-      : showPluginRuntimeDiagnostic
-        ? [
+  const pluginResourceGroups = pluginResourceEntries.reduce<
+    Array<{ pluginID: string; pluginTitle: string; entries: PluginResourceEntry[] }>
+  >((groups, resource) => {
+    const group = groups.find((item) => item.pluginID === resource.pluginID);
+    if (group) {
+      group.entries.push(resource);
+      return groups;
+    }
+
+    groups.push({
+      pluginID: resource.pluginID,
+      pluginTitle: resource.pluginTitle,
+      entries: [resource],
+    });
+    return groups;
+  }, []);
+
+  const pluginPageNavItems: SidebarNavItem[] = supportsPlugin
+    ? pluginResourceGroups.flatMap((group): SidebarNavItem[] => {
+        if (group.entries.length === 1) {
+          const resource = group.entries[0];
+          return [
             {
-              path: '/plugins',
-              label: t('nav.plugins_runtime_unavailable'),
+              kind: 'link',
+              path: resource.route,
+              label: resource.label,
+              meta: resource.description,
               icon: sidebarIcons.plugins,
+              end: true,
             },
-          ]
-        : []),
-    ...(config?.loggingToFile
-      ? [{ path: '/logs', label: t('nav.logs'), icon: sidebarIcons.logs }]
+          ];
+        }
+
+        return [
+          {
+            kind: 'drawer',
+            id: `plugin-pages-${encodeURIComponent(group.pluginID)}`,
+            label: group.pluginTitle,
+            meta: t('plugin_resource.page_count', { count: group.entries.length }),
+            icon: sidebarIcons.plugins,
+            children: group.entries.map((resource) => ({
+              kind: 'link',
+              path: resource.route,
+              label: resource.label,
+              icon: <span className="nav-sub-dot" aria-hidden="true" />,
+              end: true,
+            })),
+          },
+        ];
+      })
+    : [];
+
+  const navGroups: SidebarNavGroup[] = [
+    {
+      id: 'operate',
+      label: t('nav_groups.operate'),
+      items: [
+        {
+          kind: 'link',
+          path: '/',
+          label: t('nav.dashboard'),
+          meta: t('nav_meta.dashboard'),
+          icon: sidebarIcons.dashboard,
+          end: true,
+        },
+      ],
+    },
+    {
+      id: 'gateway',
+      label: t('nav_groups.gateway'),
+      items: [
+        {
+          kind: 'link',
+          path: '/ai-providers',
+          label: t('nav.ai_providers'),
+          meta: t('nav_meta.ai_providers'),
+          icon: sidebarIcons.aiProviders,
+        },
+        {
+          kind: 'link',
+          path: '/auth-files',
+          label: t('nav.auth_files'),
+          meta: t('nav_meta.auth_files'),
+          icon: sidebarIcons.authFiles,
+        },
+        {
+          kind: 'link',
+          path: '/oauth',
+          label: t('nav.oauth', { defaultValue: 'OAuth' }),
+          meta: t('nav_meta.oauth'),
+          icon: sidebarIcons.oauth,
+        },
+      ],
+    },
+    {
+      id: 'observe',
+      label: t('nav_groups.observe'),
+      items: [
+        {
+          kind: 'link',
+          path: '/quota',
+          label: t('nav.quota_management'),
+          meta: t('nav_meta.quota_management'),
+          icon: sidebarIcons.quota,
+        },
+        {
+          kind: 'drawer',
+          id: 'usage',
+          path: '/usage',
+          label: t('nav.usage_stats'),
+          meta: t('nav_meta.usage_stats'),
+          icon: sidebarIcons.usage,
+          children: [
+            {
+              kind: 'link',
+              path: '/usage/pricing',
+              label: t('usage_stats.pricing_title'),
+              icon: <span className="nav-sub-dot" aria-hidden="true" />,
+              end: true,
+            },
+          ],
+        },
+        ...(config?.loggingToFile
+          ? [
+              {
+                kind: 'link' as const,
+                path: '/logs',
+                label: t('nav.logs'),
+                meta: t('nav_meta.logs'),
+                icon: sidebarIcons.logs,
+              },
+            ]
+          : []),
+      ],
+    },
+    {
+      id: 'control',
+      label: t('nav_groups.control'),
+      items: [
+        {
+          kind: 'link',
+          path: '/config',
+          label: t('nav.config_management'),
+          meta: t('nav_meta.config_management'),
+          icon: sidebarIcons.config,
+        },
+        ...(supportsPlugin
+          ? [
+              {
+                kind: 'drawer' as const,
+                id: 'plugins',
+                path: '/plugins',
+                label: t('nav.plugins'),
+                meta: t('nav_meta.plugins'),
+                icon: sidebarIcons.plugins,
+                children: [
+                  {
+                    kind: 'link' as const,
+                    path: '/plugin-store',
+                    label: t('nav.plugin_store'),
+                    icon: <span className="nav-sub-dot" aria-hidden="true" />,
+                    end: true,
+                  },
+                ],
+              },
+            ]
+          : showPluginRuntimeDiagnostic
+            ? [
+                {
+                  kind: 'link' as const,
+                  path: '/plugins',
+                  label: t('nav.plugins_runtime_unavailable'),
+                  icon: sidebarIcons.plugins,
+                },
+              ]
+            : []),
+        {
+          kind: 'link',
+          path: '/system',
+          label: t('nav.system_info'),
+          meta: t('nav_meta.system_info'),
+          icon: sidebarIcons.system,
+        },
+      ],
+    },
+    ...(pluginPageNavItems.length > 0
+      ? [
+          {
+            id: 'plugin-pages',
+            label: t('nav_groups.plugin_pages'),
+            placement: 'bottom' as const,
+            items: pluginPageNavItems,
+          },
+        ]
       : []),
-    { path: '/system', label: t('nav.system_info'), icon: sidebarIcons.system },
   ];
-  const navOrder = navItems.map((item) => item.path);
+  const navOrder = flattenSidebarNavPaths(navGroups);
+  const sidebarNavigationKey = navOrder.join('|');
   const getRouteOrder = (pathname: string) => {
     const trimmedPath =
       pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
@@ -729,20 +900,15 @@ export function MainLayout() {
             {showSidebarLabels && <span className="sidebar-brand-title">{abbrBrandName}</span>}
           </div>
 
-          <div className="nav-section">
-            {navItems.map((item) => (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-                onClick={() => setSidebarOpen(false)}
-                title={showSidebarLabels ? undefined : item.label}
-              >
-                <span className="nav-icon">{item.icon}</span>
-                {showSidebarLabels && <span className="nav-label">{item.label}</span>}
-              </NavLink>
-            ))}
-          </div>
+          <SidebarNavigation
+            key={sidebarNavigationKey}
+            groups={navGroups}
+            collapsed={sidebarCollapsed}
+            showLabels={showSidebarLabels}
+            ariaLabel={t('sidebar.primary_navigation')}
+            onNavigate={() => setSidebarOpen(false)}
+            onRequestExpand={() => setSidebarCollapsed(false)}
+          />
         </aside>
 
         <div className={`content${isLogsPage ? ' content-logs' : ''}`} ref={contentRef}>

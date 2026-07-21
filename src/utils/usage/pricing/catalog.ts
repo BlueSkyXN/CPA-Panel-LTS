@@ -3,8 +3,6 @@ export const PRICE_CURRENCY = 'USD' as const;
 export const OPENAI_CATALOG_AS_OF = '2026-07-20';
 export const OPENAI_CATALOG_VERSION = `openai-${OPENAI_CATALOG_AS_OF}`;
 export const OPENAI_PRICING_SOURCE_URL = 'https://developers.openai.com/api/docs/pricing';
-export const CHATGPT_FAST_SOURCE_URL =
-  'https://learn.chatgpt.com/docs/agent-configuration/speed#fast-mode';
 export const LONG_CONTEXT_INPUT_TOKEN_THRESHOLD = 272_000;
 
 export interface TokenRates {
@@ -40,15 +38,6 @@ export interface PriceCatalogEntry {
   fast?: FastPricing;
   sourceUrl: string;
   pricingNotesUrl?: string;
-  asOf: string;
-}
-
-export interface ChatGptCreditPolicy {
-  canonicalModel: string;
-  aliases: readonly string[];
-  standardMultiplier: 1;
-  fastMultiplier: number;
-  sourceUrl: string;
   asOf: string;
 }
 
@@ -148,43 +137,3 @@ export const OPENAI_PRICE_CATALOG: readonly PriceCatalogEntry[] = [
     asOf: OPENAI_CATALOG_AS_OF,
   },
 ];
-
-/** ChatGPT credit multipliers are not API token prices and are never converted to USD. */
-export const CHATGPT_CREDIT_CATALOG: readonly ChatGptCreditPolicy[] = [
-  ...['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'].map((canonicalModel) => ({
-    canonicalModel,
-    aliases: (canonicalModel === 'gpt-5.6-sol' ? ['gpt-5.6'] : []) as readonly string[],
-    standardMultiplier: 1 as const,
-    fastMultiplier: 2.5,
-    sourceUrl: CHATGPT_FAST_SOURCE_URL,
-    asOf: OPENAI_CATALOG_AS_OF,
-  })),
-  {
-    canonicalModel: 'gpt-5.5',
-    aliases: [],
-    standardMultiplier: 1,
-    fastMultiplier: 2.5,
-    sourceUrl: CHATGPT_FAST_SOURCE_URL,
-    asOf: OPENAI_CATALOG_AS_OF,
-  },
-  {
-    canonicalModel: 'gpt-5.4',
-    aliases: [],
-    standardMultiplier: 1,
-    fastMultiplier: 2,
-    sourceUrl: CHATGPT_FAST_SOURCE_URL,
-    asOf: OPENAI_CATALOG_AS_OF,
-  },
-];
-
-const normalizeModelKey = (value: string): string => value.trim().toLowerCase();
-const CREDIT_POLICIES = new Map(
-  CHATGPT_CREDIT_CATALOG.flatMap((policy) => [
-    [normalizeModelKey(policy.canonicalModel), policy] as const,
-    ...policy.aliases.map((alias) => [normalizeModelKey(alias), policy] as const),
-  ])
-);
-
-export function findChatGptCreditPolicy(modelName: string): ChatGptCreditPolicy | null {
-  return CREDIT_POLICIES.get(normalizeModelKey(modelName)) ?? null;
-}
