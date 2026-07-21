@@ -14,7 +14,7 @@ const {
   calculateFallbackUsageTotalTokens,
   calculateUsageCost,
   getUsageCacheTokenCounts,
-  getUsageUncachedInputTokenCount,
+  getUsageNonCacheReadInputTokenCount,
   resolveCacheWriteUnitPrice,
   resolveUsageTotalTokens,
   splitUsageTokensForCost,
@@ -35,49 +35,36 @@ const assertApproxCost = (actual, expected) => {
   );
 };
 
-test('canonical cache fields win while legacy aliases remain supported', () => {
+test('canonical cache fields win and cached_tokens permanently mirrors cache reads', () => {
   assert.deepEqual(
     getUsageCacheTokenCounts({
       cache_read_tokens: 7,
       cached_tokens: 99,
       cache_creation_tokens: 11,
-      cache_write_tokens: 88,
     }),
     { cacheReadTokens: 7, cacheWriteTokens: 11 }
   );
 
-  assert.deepEqual(
-    getUsageCacheTokenCounts({ cached_tokens: 5, cache_tokens: 9, cache_write_tokens: 13 }),
-    { cacheReadTokens: 9, cacheWriteTokens: 13 }
-  );
+  assert.deepEqual(getUsageCacheTokenCounts({ cached_tokens: 5 }), {
+    cacheReadTokens: 5,
+    cacheWriteTokens: 0,
+  });
+
+  assert.deepEqual(getUsageCacheTokenCounts({ cache_tokens: 9, cache_write_tokens: 13 }), {
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+  });
 });
 
-test('Panel derives uncached input from normalized token fields', () => {
+test('Panel derives the non-cache-read input cache-rate complement', () => {
   const normalizedTokens = {
     input_tokens: 100,
     cache_read_tokens: 30,
     cache_creation_tokens: 40,
   };
 
-  assert.equal(getUsageUncachedInputTokenCount(normalizedTokens), 70);
-  assert.equal(getUsageUncachedInputTokenCount({ input_tokens: 3, cache_read_tokens: 5 }), 0);
-});
-
-test('obsolete Core uncached input values do not affect Panel calculations', () => {
-  const normalizedTokens = {
-    input_tokens: 100,
-    cache_read_tokens: 30,
-    cache_creation_tokens: 40,
-  };
-  const legacyPayload = JSON.parse(
-    '{"input_tokens":100,"cache_read_tokens":30,"cache_creation_tokens":40,"uncached_input_tokens":0}'
-  );
-
-  assert.equal(getUsageUncachedInputTokenCount(legacyPayload), 70);
-  assert.deepEqual(
-    splitUsageTokensForCost(legacyPayload, 'legacy-alias'),
-    splitUsageTokensForCost(normalizedTokens, 'normalized-alias')
-  );
+  assert.equal(getUsageNonCacheReadInputTokenCount(normalizedTokens), 70);
+  assert.equal(getUsageNonCacheReadInputTokenCount({ input_tokens: 3, cache_read_tokens: 5 }), 0);
 });
 
 test('pricing always subtracts cache reads and writes from normal prompt input', () => {

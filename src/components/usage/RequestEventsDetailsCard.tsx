@@ -28,7 +28,7 @@ import {
 } from '@/utils/usage';
 import {
   getUsageCacheTokenCounts,
-  getUsageUncachedInputTokenCount,
+  getUsageNonCacheReadInputTokenCount,
 } from '@/utils/usage/cacheTokens';
 import { normalizeReasoningEffort } from '@/utils/usage/reasoningEffort';
 import { downloadBlob } from '@/utils/download';
@@ -89,7 +89,7 @@ const REQUEST_EVENT_COLUMN_IDS = [
   'latency',
   'effort',
   'totalInputTokens',
-  'displayedUncachedInputTokens',
+  'nonCacheReadInputTokens',
   'totalOutputTokens',
   'displayedOutputTokens',
   'reasoningTokens',
@@ -115,7 +115,7 @@ type RequestEventReasoningEffortTone =
 
 const REQUEST_EVENT_NUMERIC_METRIC_IDS = [
   'totalInputTokens',
-  'displayedUncachedInputTokens',
+  'nonCacheReadInputTokens',
   'totalOutputTokens',
   'displayedOutputTokens',
   'reasoningTokens',
@@ -136,7 +136,7 @@ const DEFAULT_COLUMN_VISIBILITY: RequestEventColumnVisibility = {
   latency: true,
   effort: true,
   totalInputTokens: true,
-  displayedUncachedInputTokens: true,
+  nonCacheReadInputTokens: true,
   totalOutputTokens: true,
   displayedOutputTokens: true,
   reasoningTokens: true,
@@ -170,7 +170,7 @@ type RequestEventRow = {
   failed: boolean;
   latencyMs: number | null;
   inputTokens: number;
-  displayedUncachedInputTokens: number;
+  nonCacheReadInputTokens: number;
   outputTokens: number;
   displayedOutputTokens: number;
   reasoningTokens: number;
@@ -191,8 +191,8 @@ const getRequestEventNumericValue = (
   switch (metric) {
     case 'totalInputTokens':
       return row.inputTokens;
-    case 'displayedUncachedInputTokens':
-      return row.displayedUncachedInputTokens;
+    case 'nonCacheReadInputTokens':
+      return row.nonCacheReadInputTokens;
     case 'totalOutputTokens':
       return row.outputTokens;
     case 'displayedOutputTokens':
@@ -415,7 +415,7 @@ export function RequestEventsDetailsCard({
     field: LATENCY_SOURCE_FIELD,
     unit: t('usage_stats.duration_unit_ms'),
   });
-  const uncachedInputHint = t('usage_stats.request_events_uncached_input_tokens_hint');
+  const nonCacheReadInputHint = t('usage_stats.request_events_non_cache_read_input_tokens_hint');
   const displayedOutputHint = t('usage_stats.request_events_output_tokens_hint');
   const cacheRateFormatter = useMemo(
     () =>
@@ -504,8 +504,8 @@ export function RequestEventsDetailsCard({
         setStoredColumnVisibility(columnVisibility);
       }
 
-      // v1/v2 were development-era defaults. v3 intentionally starts from the
-      // formal Source/Auth-hidden and eight-Token-visible default set.
+      // v1/v2 were development-era defaults. v3 starts from the formal
+      // Source/Auth-hidden and eight-Token-visible default set.
       LEGACY_COLUMN_VISIBILITY_STORAGE_KEYS.forEach((key) => {
         window.localStorage.removeItem(key);
       });
@@ -715,7 +715,7 @@ export function RequestEventsDetailsCard({
       const outputTokens = Math.max(toNumber(detail.tokens?.output_tokens), 0);
       const reasoningTokens = Math.max(toNumber(detail.tokens?.reasoning_tokens), 0);
       const { cacheReadTokens, cacheWriteTokens } = getUsageCacheTokenCounts(detail.tokens);
-      const displayedUncachedInputTokens = getUsageUncachedInputTokenCount(detail.tokens);
+      const nonCacheReadInputTokens = getUsageNonCacheReadInputTokenCount(detail.tokens);
       const displayedOutputTokens = Math.max(outputTokens - reasoningTokens, 0);
       const cacheRate = resolveCacheRate(inputTokens, cacheReadTokens);
       const totalTokens = Math.max(
@@ -749,7 +749,7 @@ export function RequestEventsDetailsCard({
         failed: detail.failed === true,
         latencyMs,
         inputTokens,
-        displayedUncachedInputTokens,
+        nonCacheReadInputTokens,
         outputTokens,
         displayedOutputTokens,
         reasoningTokens,
@@ -934,8 +934,8 @@ export function RequestEventsDetailsCard({
         label: t('usage_stats.request_events_total_input_tokens'),
       },
       {
-        value: 'displayedUncachedInputTokens',
-        label: t('usage_stats.request_events_uncached_input_tokens'),
+        value: 'nonCacheReadInputTokens',
+        label: t('usage_stats.request_events_non_cache_read_input_tokens'),
       },
       {
         value: 'totalOutputTokens',
@@ -971,8 +971,8 @@ export function RequestEventsDetailsCard({
         label: t('usage_stats.request_events_total_input_tokens'),
       },
       {
-        id: 'displayedUncachedInputTokens' as const,
-        label: t('usage_stats.request_events_uncached_input_tokens'),
+        id: 'nonCacheReadInputTokens' as const,
+        label: t('usage_stats.request_events_non_cache_read_input_tokens'),
       },
       {
         id: 'totalOutputTokens' as const,
@@ -1259,7 +1259,7 @@ export function RequestEventsDetailsCard({
       'result',
       ...(hasLatencyData ? ['latency_ms'] : []),
       'input_tokens',
-      'uncached_input_tokens',
+      'non_cache_read_input_tokens',
       'output_tokens',
       'reasoning_tokens',
       'cached_tokens',
@@ -1285,7 +1285,7 @@ export function RequestEventsDetailsCard({
         row.failed ? 'failed' : 'success',
         ...(hasLatencyData ? [row.latencyMs ?? ''] : []),
         row.inputTokens,
-        row.displayedUncachedInputTokens,
+        row.nonCacheReadInputTokens,
         row.outputTokens,
         row.reasoningTokens,
         row.cacheReadTokens,
@@ -1325,7 +1325,7 @@ export function RequestEventsDetailsCard({
       ...(hasLatencyData && row.latencyMs !== null ? { latency_ms: row.latencyMs } : {}),
       tokens: {
         input_tokens: row.inputTokens,
-        uncached_input_tokens: row.displayedUncachedInputTokens,
+        non_cache_read_input_tokens: row.nonCacheReadInputTokens,
         output_tokens: row.outputTokens,
         reasoning_tokens: row.reasoningTokens,
         cached_tokens: row.cacheReadTokens,
@@ -1818,13 +1818,13 @@ export function RequestEventsDetailsCard({
                       {t('usage_stats.request_events_total_input_tokens')}
                     </th>
                   )}
-                  {columnVisibility.displayedUncachedInputTokens && (
+                  {columnVisibility.nonCacheReadInputTokens && (
                     <th
                       className={`${styles.requestEventsTokenHeader} ${styles.requestEventsTokenHeaderHint}`}
-                      title={uncachedInputHint}
-                      aria-label={uncachedInputHint}
+                      title={nonCacheReadInputHint}
+                      aria-label={nonCacheReadInputHint}
                     >
-                      {t('usage_stats.request_events_uncached_input_tokens')}
+                      {t('usage_stats.request_events_non_cache_read_input_tokens')}
                     </th>
                   )}
                   {columnVisibility.totalOutputTokens && (
@@ -1970,10 +1970,10 @@ export function RequestEventsDetailsCard({
                           </span>
                         </td>
                       )}
-                      {columnVisibility.displayedUncachedInputTokens && (
+                      {columnVisibility.nonCacheReadInputTokens && (
                         <td className={styles.requestEventsTokenCell}>
                           <span className={styles.requestEventsTokenValue}>
-                            {row.displayedUncachedInputTokens.toLocaleString()}
+                            {row.nonCacheReadInputTokens.toLocaleString()}
                           </span>
                         </td>
                       )}

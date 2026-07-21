@@ -2914,7 +2914,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     if card.get_by_role("columnheader", name="Thinking", exact=True).count() != 0:
         raise AssertionError("Request events must expose one canonical effort column")
     card.get_by_role("columnheader", name="Total Input Tokens", exact=True).wait_for()
-    card.locator("th", has_text="Uncached Input Tokens").wait_for()
+    card.locator("th", has_text="Non-Cache-Read Input Tokens").wait_for()
     card.get_by_role("columnheader", name="Total Output Tokens", exact=True).wait_for()
     card.locator("th", has_text="Explicit Output Tokens").wait_for()
     card.get_by_role("columnheader", name="Reasoning Tokens", exact=True).wait_for()
@@ -2963,7 +2963,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         "latency": True,
         "effort": True,
         "totalInputTokens": True,
-        "displayedUncachedInputTokens": True,
+        "nonCacheReadInputTokens": True,
         "totalOutputTokens": True,
         "displayedOutputTokens": True,
         "reasoningTokens": True,
@@ -3036,7 +3036,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         }""",
         [
             "Total Input Tokens",
-            "Uncached Input Tokens",
+            "Non-Cache-Read Input Tokens",
             "Total Output Tokens",
             "Explicit Output Tokens",
             "Reasoning Tokens",
@@ -3081,7 +3081,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         column["label"]: column.get("headerAriaLabel") or column.get("headerTitle")
         for column in token_column_alignment
         if column["label"]
-        in {"Uncached Input Tokens", "Explicit Output Tokens", "Cache Read Tokens"}
+        in {"Non-Cache-Read Input Tokens", "Explicit Output Tokens", "Cache Read Tokens"}
     }
     if any(not hint for hint in header_hints.values()):
         raise AssertionError(
@@ -3112,8 +3112,8 @@ def run_usage_service_tier_smoke(page: Any) -> None:
             "Combined service-tier/cache row rendered the wrong token values: "
             f"{priority_cells!r}"
         )
-    if card.locator("td[data-uncached-input-source]").count() != 0:
-        raise AssertionError("Uncached input must be calculated locally without a source badge")
+    if card.locator("td[data-non-cache-read-input-source]").count() != 0:
+        raise AssertionError("Non-cache-read input must be calculated locally without a source badge")
     low_cache_cells = rows.locator(
         'td[data-cache-rate-tone="low"][data-cache-token-count="1"]'
     )
@@ -3189,7 +3189,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         )
     priority_csv = priority_csv_rows[0]
     expected_priority_csv_tokens = {
-        "uncached_input_tokens": "9",
+        "non_cache_read_input_tokens": "9",
         "cached_tokens": "3",
         "cache_read_tokens": "3",
         "cache_creation_tokens": "4",
@@ -3206,9 +3206,9 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     standard_csv_rows = [
         row for row in csv_rows if row.get("effective_service_tier") == "standard"
     ]
-    if len(standard_csv_rows) != 1 or standard_csv_rows[0].get("uncached_input_tokens") != "9":
+    if len(standard_csv_rows) != 1 or standard_csv_rows[0].get("non_cache_read_input_tokens") != "9":
         raise AssertionError(
-            "Request-event CSV did not derive uncached input from input minus cache reads: "
+            "Request-event CSV did not derive non-cache-read input from input minus cache reads: "
             f"{standard_csv_rows!r}"
         )
 
@@ -3249,7 +3249,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     priority_json_tokens = priority_json_rows[0].get("tokens", {})
     expected_priority_json_tokens = {
         "input_tokens": 12,
-        "uncached_input_tokens": 9,
+        "non_cache_read_input_tokens": 9,
         "output_tokens": 8,
         "reasoning_tokens": 2,
         "cached_tokens": 3,
@@ -3266,9 +3266,9 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         row for row in json_rows if row.get("effective_service_tier") == "standard"
     ]
     standard_json_tokens = standard_json_rows[0].get("tokens", {}) if len(standard_json_rows) == 1 else {}
-    if standard_json_tokens.get("uncached_input_tokens") != 9:
+    if standard_json_tokens.get("non_cache_read_input_tokens") != 9:
         raise AssertionError(
-            "Request-event JSON did not derive uncached input from input minus cache reads: "
+            "Request-event JSON did not derive non-cache-read input from input minus cache reads: "
             f"{standard_json_rows!r}"
         )
 
@@ -3515,7 +3515,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     numeric_metric_select.click()
     for metric_name in [
         "Total Input Tokens",
-        "Uncached Input Tokens",
+        "Non-Cache-Read Input Tokens",
         "Total Output Tokens",
         "Explicit Output Tokens",
         "Reasoning Tokens",
@@ -3987,7 +3987,7 @@ def run_usage_request_event_column_storage_smoke(context: Any, app_url: str) -> 
               return legacy.every((key) => localStorage.getItem(key) === null) &&
                 stored.source === false && stored.authIndex === false &&
                 stored.totalInputTokens === true &&
-                stored.displayedUncachedInputTokens === true &&
+                stored.nonCacheReadInputTokens === true &&
                 stored.totalOutputTokens === true &&
                 stored.displayedOutputTokens === true &&
                 stored.reasoningTokens === true && stored.cacheReadTokens === true &&
@@ -4017,7 +4017,7 @@ def run_usage_request_event_column_storage_smoke(context: Any, app_url: str) -> 
                 latency: true,
                 effort: false,
                 totalInputTokens: false,
-                displayedUncachedInputTokens: false,
+                nonCacheReadInputTokens: false,
                 totalOutputTokens: false,
                 displayedOutputTokens: false,
                 reasoningTokens: false,
@@ -4167,14 +4167,15 @@ def run_branded_provider_visibility_smoke(
         state.include_branded_providers = True
 
 
-def run_usage_import_review_smoke(page: Any, state: MockCoreState) -> None:
+def run_usage_import_contract_smoke(page: Any, state: MockCoreState) -> None:
     current_detail = state.usage_payload["usage"]["apis"]["POST /v1/responses"]["models"][
         "gpt-5.6-sol"
     ]["details"][-1]
-    legacy_detail = json.loads(json.dumps(current_detail))
-    legacy_tokens = legacy_detail["tokens"]
-    legacy_tokens["cached_tokens"] = legacy_tokens["cache_creation_tokens"]
-    legacy_tokens["cache_read_tokens"] = 0
+    rejected_detail = json.loads(json.dumps(current_detail))
+    rejected_tokens = rejected_detail["tokens"]
+    rejected_tokens["uncached_input_tokens"] = (
+        rejected_tokens["input_tokens"] - rejected_tokens["cache_read_tokens"]
+    )
 
     import_payload = {
         "version": 1,
@@ -4183,7 +4184,7 @@ def run_usage_import_review_smoke(page: Any, state: MockCoreState) -> None:
                 "POST /v1/responses": {
                     "models": {
                         "gpt-5.6-sol": {
-                            "details": [legacy_detail, json.loads(json.dumps(legacy_detail))]
+                            "details": [rejected_detail]
                         }
                     }
                 }
@@ -4195,25 +4196,56 @@ def run_usage_import_review_smoke(page: Any, state: MockCoreState) -> None:
 
     page.locator('input[type="file"][accept*=".json"]').set_input_files(
         {
-            "name": "usage-import-legacy-cache.json",
+            "name": "usage-import-unsupported-legacy-token-contract.json",
             "mimeType": "application/json",
             "buffer": json.dumps(import_payload).encode("utf-8"),
+        }
+    )
+
+    page.get_by_text(
+        "unsupported legacy token contract: uncached_input_tokens",
+        exact=True,
+    ).wait_for()
+    if page.get_by_role("dialog", name="Review usage import").count() != 0:
+        raise AssertionError("Unsupported legacy token contracts must not open an import confirmation")
+
+    if sum(request == import_route for request in state.requests) != before_posts:
+        raise AssertionError("Unsupported legacy token contracts must not POST usage imports")
+
+    canonical_detail = json.loads(json.dumps(current_detail))
+    canonical_payload = {
+        "version": 1,
+        "usage": {
+            "apis": {
+                "POST /v1/responses": {
+                    "models": {
+                        "gpt-5.6-sol": {
+                            "details": [canonical_detail]
+                        }
+                    }
+                }
+            }
+        },
+    }
+    page.locator('input[type="file"][accept*=".json"]').set_input_files(
+        {
+            "name": "usage-import-canonical-token-contract.json",
+            "mimeType": "application/json",
+            "buffer": json.dumps(canonical_payload).encode("utf-8"),
         }
     )
 
     dialog = page.get_by_role("dialog", name="Review usage import")
     dialog.wait_for()
     for expected_text in [
-        "Version 1 · 2 request details",
-        "2 legacy cache aliases · 0 independent cache-write records",
-        "1 potential duplicates inside this file",
+        "Version 1 · 1 request details",
+        "0 potential duplicates inside this file",
         "1 potential overlaps with current usage",
-        "Export a current backup before continuing.",
     ]:
         dialog.get_by_text(expected_text, exact=False).wait_for()
 
     if sum(request == import_route for request in state.requests) != before_posts:
-        raise AssertionError("Usage import POST occurred before the review dialog was confirmed")
+        raise AssertionError("Canonical usage import POST occurred before confirmation")
 
     with page.expect_response(
         lambda response: response.request.method == "POST"
@@ -4226,17 +4258,14 @@ def run_usage_import_review_smoke(page: Any, state: MockCoreState) -> None:
         exact=True,
     ).wait_for()
     if sum(request == import_route for request in state.requests) != before_posts + 1:
-        raise AssertionError("Usage import POST count did not change exactly once after confirmation")
+        raise AssertionError("Canonical usage import must POST exactly once after confirmation")
 
     posted_payload = json.loads(state.request_bodies[import_route][-1])
     posted_details = posted_payload["usage"]["apis"]["POST /v1/responses"]["models"][
         "gpt-5.6-sol"
     ]["details"]
-    posted_tokens = posted_details[0]["tokens"]
-    if len(posted_details) != 2 or posted_tokens != legacy_tokens:
-        raise AssertionError(
-            "Usage import review mutated the uploaded legacy cache snapshot before POST"
-        )
+    if posted_details != [canonical_detail]:
+        raise AssertionError("Canonical usage import was mutated before POST")
 
 
 def run_plugin_runtime_mismatch_smoke(
@@ -4563,7 +4592,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
                     if not native_clock_preserved:
                         raise AssertionError("Request-event clock smoke polluted the main page clock")
                     run_usage_request_event_column_storage_smoke(context, app_url)
-                    run_usage_import_review_smoke(page, state)
+                    run_usage_import_contract_smoke(page, state)
                 elif route == "/usage/pricing":
                     run_usage_pricing_smoke(page)
                     run_usage_pricing_empty_catalog_smoke(context, app_url)

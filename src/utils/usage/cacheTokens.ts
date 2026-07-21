@@ -3,10 +3,8 @@ export interface UsageTokenFields {
   output_tokens?: unknown;
   reasoning_tokens?: unknown;
   cached_tokens?: unknown;
-  cache_tokens?: unknown;
   cache_read_tokens?: unknown;
   cache_creation_tokens?: unknown;
-  cache_write_tokens?: unknown;
   total_tokens?: unknown;
   [key: string]: unknown;
 }
@@ -40,9 +38,9 @@ const toOptionalTokenCount = (value: unknown): number | null => {
   return Number.isFinite(parsed) ? Math.max(parsed, 0) : null;
 };
 
-// This is a Panel-owned cache-read metric. Cache writes remain a separate
-// billing category and must not reduce the request's uncached input count.
-export function getUsageUncachedInputTokenCount(tokens: unknown): number {
+// This cache-rate complement is distinct from normal prompt input: cache
+// creation remains a separate billing category.
+export function getUsageNonCacheReadInputTokenCount(tokens: unknown): number {
   const record = isRecord(tokens) ? tokens : {};
   const inputTokens = toTokenCount(record.input_tokens);
   const { cacheReadTokens } = getUsageCacheTokenCounts(record);
@@ -54,17 +52,11 @@ export const toTokenCount = (value: unknown): number => toOptionalTokenCount(val
 export function getUsageCacheTokenCounts(tokens: unknown): UsageCacheTokenCounts {
   const record = isRecord(tokens) ? tokens : {};
   const explicitRead = toOptionalTokenCount(record.cache_read_tokens);
-  const legacyReadCandidates = [record.cached_tokens, record.cache_tokens]
-    .map(toOptionalTokenCount)
-    .filter((value): value is number => value !== null);
-  const legacyRead = legacyReadCandidates.length > 0 ? Math.max(...legacyReadCandidates) : 0;
-
-  const explicitWrite = toOptionalTokenCount(record.cache_creation_tokens);
-  const writeAlias = toOptionalTokenCount(record.cache_write_tokens);
+  const cachedTokensMirror = toOptionalTokenCount(record.cached_tokens);
 
   return {
-    cacheReadTokens: explicitRead ?? legacyRead,
-    cacheWriteTokens: explicitWrite ?? writeAlias ?? 0,
+    cacheReadTokens: explicitRead ?? cachedTokensMirror ?? 0,
+    cacheWriteTokens: toOptionalTokenCount(record.cache_creation_tokens) ?? 0,
   };
 }
 

@@ -54,17 +54,15 @@ const canonicalCreation = detail({
   total_tokens: 2234,
 });
 
-test('legacy and canonical creation-only records share one import identity despite total drift', () => {
+test('records with different cached and total token shapes remain distinct import details', () => {
   const result = analyzeUsageImport(payload(legacyCreation, canonicalCreation));
 
   assert.equal(result.valid, true);
   assert.equal(result.detailCount, 2);
-  assert.equal(result.legacyCacheAliasCount, 1);
-  assert.equal(result.canonicalCacheWriteCount, 1);
-  assert.equal(result.duplicateCount, 1);
+  assert.equal(result.duplicateCount, 0);
 });
 
-test('a real cache read is not mistaken for a legacy creation alias', () => {
+test('a distinct canonical cache breakdown is not a duplicate', () => {
   const result = analyzeUsageImport(
     payload(
       detail({
@@ -78,27 +76,25 @@ test('a real cache read is not mistaken for a legacy creation alias', () => {
     )
   );
 
-  assert.equal(result.legacyCacheAliasCount, 0);
-  assert.equal(result.canonicalCacheWriteCount, 1);
   assert.equal(result.duplicateCount, 0);
 });
 
-test('legacy import reports an overlap with an equivalent current canonical record', () => {
+test('different cached and total token shapes do not overlap current records', () => {
   const currentUsage = payload(canonicalCreation).usage;
   const result = analyzeUsageImport(payload(legacyCreation), currentUsage);
 
   assert.equal(result.currentUsageAvailable, true);
   assert.equal(result.currentDetailCount, 1);
-  assert.equal(result.overlapCount, 1);
+  assert.equal(result.overlapCount, 0);
 });
 
-test('canonical import reports an overlap with an equivalent current legacy record', () => {
+test('canonical imports do not overlap a current record with different token shapes', () => {
   const currentUsage = payload(legacyCreation).usage;
   const result = analyzeUsageImport(payload(canonicalCreation), currentUsage);
 
   assert.equal(result.currentUsageAvailable, true);
   assert.equal(result.currentDetailCount, 1);
-  assert.equal(result.overlapCount, 1);
+  assert.equal(result.overlapCount, 0);
 });
 
 test('duplicate count includes repeated canonical identities only after the first', () => {
@@ -107,7 +103,22 @@ test('duplicate count includes repeated canonical identities only after the firs
   );
 
   assert.equal(result.detailCount, 3);
-  assert.equal(result.duplicateCount, 2);
+  assert.equal(result.duplicateCount, 1);
+});
+
+test('legacy uncached input token fields are rejected before upload', () => {
+  const result = analyzeUsageImport(
+    payload(
+      detail({
+        input_tokens: 12,
+        cache_read_tokens: 3,
+        uncached_input_tokens: 9,
+      })
+    )
+  );
+
+  assert.equal(result.valid, false);
+  assert.deepEqual(result.issues, ['unsupported_legacy_token_contract']);
 });
 
 test('unsupported and malformed payloads are rejected before upload', () => {

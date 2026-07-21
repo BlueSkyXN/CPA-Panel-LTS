@@ -68,7 +68,8 @@ features:
       - collectUsageDetailsForCandidates
       - resolveUsageTotalTokens
       - resolveCacheWriteUnitPrice
-      - getUsageUncachedInputTokenCount
+      - getUsageNonCacheReadInputTokenCount
+      - non_cache_read_input_tokens
       - normalizePersistedModelPrices
       - analyzeUsageImport
       - normalizeReasoningEffort
