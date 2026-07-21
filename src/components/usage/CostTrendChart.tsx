@@ -8,7 +8,7 @@ import {
   buildHourlyCostSeries,
   buildDailyCostSeries,
   formatUsd,
-  isApiUsdEstimateComplete,
+  isLocalEstimateComplete,
   type PriceProfileV3,
   type PricingCoverage,
 } from '@/utils/usage';
@@ -107,15 +107,11 @@ export function CostTrendChart({
     };
   }, [usage, period, isDark, isMobile, priceProfile, hourWindowHours, t]);
 
-  const pricingComplete = pricingCoverage !== null && isApiUsdEstimateComplete(pricingCoverage);
+  const pricingComplete = pricingCoverage !== null && isLocalEstimateComplete(pricingCoverage);
   const hasUnpricedUsage =
     pricingCoverage !== null &&
-    pricingCoverage.apiTokenUsdRequests > 0 &&
-    pricingCoverage.pricedRequests === 0;
-  const hasOnlyNonApiUsage =
-    pricingCoverage !== null &&
     pricingCoverage.totalRequests > 0 &&
-    pricingCoverage.apiTokenUsdRequests === 0;
+    pricingCoverage.pricedRequests === 0;
 
   return (
     <Card
@@ -151,9 +147,7 @@ export function CostTrendChart({
           {t(
             hasUnpricedUsage
               ? 'usage_stats.pricing_cost_incomplete'
-              : hasOnlyNonApiUsage
-                ? 'usage_stats.pricing_no_api_usage'
-                : 'usage_stats.cost_no_data'
+              : 'usage_stats.cost_no_data'
           )}
         </div>
       ) : (
@@ -161,8 +155,8 @@ export function CostTrendChart({
           {pricingCoverage && !pricingComplete && (
             <div className={styles.costCoverageNote}>
               {t('usage_stats.pricing_partial_coverage', {
-                request: (pricingCoverage.apiPricedRequestRatio * 100).toFixed(1),
-                token: (pricingCoverage.apiPricedTokenRatio * 100).toFixed(1),
+                request: (pricingCoverage.pricedRequestRatio * 100).toFixed(1),
+                token: (pricingCoverage.pricedTokenRatio * 100).toFixed(1),
               })}
             </div>
           )}

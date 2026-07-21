@@ -2297,8 +2297,8 @@ def run_remote_cloud_connect_runtime_smoke(page: Any, app_url: str) -> None:
 
 
 def run_usage_pricing_entry_smoke(page: Any) -> None:
-    page.get_by_text("Billing and pricing coverage", exact=True).wait_for()
-    page.get_by_text("Partial API USD estimate:", exact=False).first.wait_for()
+    page.get_by_text("Local estimate and billing evidence", exact=True).wait_for()
+    page.get_by_text("Partial local estimate:", exact=False).first.wait_for()
     page.get_by_text("12 unknown-billing tokens", exact=True).first.wait_for()
     pricing_buttons = page.get_by_role("button", name="Configure pricing", exact=True)
     if pricing_buttons.count() < 2:
@@ -2313,7 +2313,7 @@ def run_usage_pricing_entry_smoke(page: Any) -> None:
     page.get_by_role("option", name="All Time", exact=True).click()
     page.get_by_text("1.0M unknown-billing tokens", exact=True).first.wait_for()
     page.get_by_text(
-        "API USD estimate is incomplete; unmatched, unsupported, or unknown-billing usage is excluded.",
+        "The local estimate is incomplete; unmatched, unsupported, or detail-less usage is excluded.",
         exact=True,
     ).first.wait_for()
     page_time_range.click()
@@ -2355,9 +2355,9 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
         summary = page.locator('[aria-label="Pricing coverage summary"]')
         summary.wait_for()
         summary_text = summary.inner_text()
-        if "No API requests" not in summary_text or "0.0%" in summary_text:
+        if "No usage requests" not in summary_text or "0.0%" in summary_text:
             raise AssertionError(
-                "Empty API coverage was presented as zero percent instead of unavailable: "
+                "Empty local estimate coverage was presented as zero percent instead of unavailable: "
                 f"{summary_text!r}"
             )
 
@@ -2479,9 +2479,11 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
 
 def run_usage_pricing_smoke(page: Any) -> None:
     page.get_by_role("heading", name="Pricing workspace", exact=True).wait_for()
-    page.get_by_text("API USD estimates are not provider invoices.", exact=True).wait_for()
+    page.get_by_text(
+        "Local API-equivalent estimates are references, not provider invoices.", exact=True
+    ).wait_for()
     page.get_by_text("The profile is stored only in this browser", exact=False).wait_for()
-    page.get_by_text("ChatGPT credits are shown only as official", exact=False).wait_for()
+    page.get_by_text("ChatGPT credits retain their official", exact=False).wait_for()
     migration_state = page.evaluate(
         """() => ({
           v2: localStorage.getItem('cli-proxy-model-prices-v2'),
@@ -2532,17 +2534,22 @@ def run_usage_pricing_smoke(page: Any) -> None:
     summary.wait_for()
     summary_text = summary.inner_text()
     for expected in [
-        "3 / 5 requests",
-        "60.0%",
+        "6 / 8 requests",
+        "75.0%",
         "2 / 2",
         "1 Fast",
         "Unknown billing basis",
-        "1.0M tokens excluded",
+        "1.0M tokens have unknown billing provenance",
     ]:
         if expected not in summary_text:
             raise AssertionError(
                 f"Pricing summary missing {expected!r}: {summary_text!r}"
             )
+    if not re.search(r"\$\d", summary_text):
+        raise AssertionError(
+            "Browser-local pricing did not produce an amount for matched usage across billing "
+            f"domains: {summary_text!r}"
+        )
 
     rows = page.locator('[data-testid="pricing-model-row"]')
 
@@ -2572,7 +2579,7 @@ def run_usage_pricing_smoke(page: Any) -> None:
 
     filter_select = page.get_by_label("Pricing status filter", exact=True)
     filter_select.click()
-    page.get_by_role("option", name="API unmatched", exact=True).click()
+    page.get_by_role("option", name="Locally unmatched", exact=True).click()
     wait_for_model_rows(1)
     if "vendor/unmatched-model" not in rows.first.inner_text():
         raise AssertionError("Unmatched pricing filter returned the wrong model set")
@@ -2589,6 +2596,14 @@ def run_usage_pricing_smoke(page: Any) -> None:
     wait_for_model_rows(3)
 
     gpt56_row = page.locator('[data-testid="pricing-model-row"][data-model="gpt-5.6-sol"]')
+    gpt56_local_amount = gpt56_row.locator(
+        '[data-label="Local API-equivalent amount"]'
+    ).inner_text()
+    if "$" not in gpt56_local_amount or "100.0%" not in gpt56_local_amount:
+        raise AssertionError(
+            "ChatGPT-credit and unknown-billing GPT-5.6 usage was not fully included in the "
+            f"browser-local estimate: {gpt56_local_amount!r}"
+        )
     gpt56_row.click()
     editor = page.locator('[data-testid="pricing-editor"]')
     editor.wait_for()
@@ -2671,8 +2686,8 @@ def run_usage_pricing_smoke(page: Any) -> None:
             raise AssertionError(
                 f"Saved pricing alias is not visible in the model row: {unmatched_text!r}"
             )
-    summary.get_by_text("4 / 5 requests", exact=True).wait_for()
-    summary.get_by_text("80.0%", exact=True).first.wait_for()
+    summary.get_by_text("7 / 8 requests", exact=True).wait_for()
+    summary.get_by_text("87.5%", exact=True).first.wait_for()
 
     editor.get_by_role("button", name="Delete configuration", exact=True).click()
     page.get_by_text("Custom pricing removed", exact=True).last.wait_for()

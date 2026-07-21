@@ -173,38 +173,48 @@ test('API coverage display treats absent denominators as unavailable, not zero p
   assert.deepEqual(
     pricing.getApiCoverageDisplay({
       apiTokenUsdRequests: 0,
-      pricedRequests: 0,
+      apiPricedRequests: 0,
       apiTokenUsdTokens: 0,
-      pricedTokens: 0,
+      apiPricedTokens: 0,
     }),
     { requestPercent: null, tokenPercent: null }
   );
   assert.deepEqual(
     pricing.getApiCoverageDisplay({
       apiTokenUsdRequests: 5,
-      pricedRequests: 3,
+      apiPricedRequests: 3,
       apiTokenUsdTokens: 200,
-      pricedTokens: 50,
+      apiPricedTokens: 50,
     }),
     { requestPercent: 60, tokenPercent: 25 }
   );
   assert.deepEqual(
     pricing.getApiCoverageDisplay({
       apiTokenUsdRequests: 0,
-      pricedRequests: 0,
+      apiPricedRequests: 0,
       apiTokenUsdTokens: 100,
-      pricedTokens: 0,
+      apiPricedTokens: 0,
     }),
     { requestPercent: null, tokenPercent: 0 }
   );
   assert.deepEqual(
     pricing.getApiCoverageDisplay({
       apiTokenUsdRequests: 1,
-      pricedRequests: 1,
+      apiPricedRequests: 1,
       apiTokenUsdTokens: 0,
-      pricedTokens: 0,
+      apiPricedTokens: 0,
     }),
     { requestPercent: 100, tokenPercent: null }
+  );
+
+  assert.deepEqual(
+    pricing.getLocalEstimateCoverageDisplay({
+      totalRequests: 4,
+      pricedRequests: 3,
+      totalTokens: 200,
+      pricedTokens: 150,
+    }),
+    { requestPercent: 75, tokenPercent: 75 }
   );
 });
 
@@ -397,6 +407,7 @@ test('coverage reports request, token, model, amount, and assumed-tier completen
     {
       totalRequests: 3,
       apiTokenUsdRequests: 3,
+      apiPricedRequests: 1,
       chatGptCreditRequests: 0,
       pricedRequests: 1,
       creditRatedRequests: 0,
@@ -406,6 +417,7 @@ test('coverage reports request, token, model, amount, and assumed-tier completen
       unsupportedRequests: 1,
       totalTokens: 1_272_020,
       apiTokenUsdTokens: 1_272_020,
+      apiPricedTokens: 1_000_000,
       chatGptCreditTokens: 0,
       pricedTokens: 1_000_000,
       creditRatedTokens: 0,
@@ -450,7 +462,7 @@ test('a model is covered only when every request for that model is priced', () =
   assert.equal(coverage.unsupportedRequests, 1);
 });
 
-test('token-only unknown usage makes the API USD estimate incomplete without changing API-domain ratios', () => {
+test('token-only aggregate gaps make the local estimate incomplete without changing API-domain ratios', () => {
   const priced = pricing.estimateUsageCost(
     'gpt-5.4-mini',
     { input_tokens: 1_000_000 },
@@ -472,7 +484,8 @@ test('token-only unknown usage makes the API USD estimate incomplete without cha
   assert.equal(tokenGap.apiPricedRequestRatio, 1);
   assert.equal(tokenGap.apiPricedTokenRatio, 1);
   assert.equal(pricing.hasUnknownBillingUsage(tokenGap), true);
-  assert.equal(pricing.isApiUsdEstimateComplete(tokenGap), false);
+  assert.equal(pricing.isApiUsdEstimateComplete(tokenGap), true);
+  assert.equal(pricing.isLocalEstimateComplete(tokenGap), false);
   assert.equal(pricing.hasPricingAnomaly(tokenGap), true);
 });
 

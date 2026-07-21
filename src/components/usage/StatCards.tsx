@@ -15,9 +15,8 @@ import {
   formatDurationMs,
   formatPerMinuteValue,
   formatUsd,
-  getApiCoverageDisplay,
-  hasUnknownBillingUsage,
-  isApiUsdEstimateComplete,
+  getLocalEstimateCoverageDisplay,
+  isLocalEstimateComplete,
   collectUsageDetails,
   extractTotalTokens,
   type PricingCoverage,
@@ -70,9 +69,8 @@ export function StatCards({
   });
 
   const hasPricedRequests = pricingCoverage.pricedRequests > 0;
-  const apiCoverageDisplay = getApiCoverageDisplay(pricingCoverage);
-  const hasUnknownBilling = hasUnknownBillingUsage(pricingCoverage);
-  const pricingComplete = isApiUsdEstimateComplete(pricingCoverage);
+  const localCoverageDisplay = getLocalEstimateCoverageDisplay(pricingCoverage);
+  const pricingComplete = isLocalEstimateComplete(pricingCoverage);
 
   const { tokenBreakdown, rateStats, latencyStats } = useMemo(() => {
     const empty = {
@@ -238,11 +236,11 @@ export function StatCards({
             {t('usage_stats.pricing_api_request_coverage')}:{' '}
             {loading
               ? '-'
-              : apiCoverageDisplay.requestPercent === null
+              : localCoverageDisplay.requestPercent === null
                 ? t('usage_stats.pricing_no_api_requests')
-                : `${apiCoverageDisplay.requestPercent.toFixed(1)}% (${pricingCoverage.pricedRequests}/${pricingCoverage.apiTokenUsdRequests})`}
+                : `${localCoverageDisplay.requestPercent.toFixed(1)}% (${pricingCoverage.pricedRequests}/${pricingCoverage.totalRequests})`}
           </span>
-          {!pricingComplete && (pricingCoverage.apiTokenUsdRequests > 0 || hasUnknownBilling) && (
+          {!pricingComplete && pricingCoverage.totalRequests > 0 && (
             <span className={`${styles.statMetaItem} ${styles.statSubtle}`}>
               {t('usage_stats.pricing_cost_incomplete')}
             </span>

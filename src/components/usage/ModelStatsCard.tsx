@@ -186,7 +186,7 @@ export function ModelStatsCard({ modelStats, loading, showPricing }: ModelStatsC
                         <td
                           title={
                             stat.pricingCoverage.pricedRequests <
-                            stat.pricingCoverage.apiTokenUsdRequests
+                            stat.pricingCoverage.totalRequests
                               ? t('usage_stats.pricing_cost_incomplete')
                               : undefined
                           }

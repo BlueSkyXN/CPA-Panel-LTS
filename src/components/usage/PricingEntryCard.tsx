@@ -5,9 +5,8 @@ import { IconDollarSign, IconSettings } from '@/components/ui/icons';
 import {
   formatCompactNumber,
   formatUsd,
-  getApiCoverageDisplay,
-  hasUnknownBillingUsage,
-  isApiUsdEstimateComplete,
+  getLocalEstimateCoverageDisplay,
+  isLocalEstimateComplete,
   type PricingCoverage,
 } from '@/utils/usage';
 import styles from '@/pages/UsagePage.module.scss';
@@ -19,10 +18,9 @@ export interface PricingEntryCardProps {
 
 export function PricingEntryCard({ coverage, onOpen }: PricingEntryCardProps) {
   const { t } = useTranslation();
-  const apiCoverageDisplay = getApiCoverageDisplay(coverage);
-  const requestPercent = apiCoverageDisplay.requestPercent ?? 0;
-  const hasUnknownBilling = hasUnknownBillingUsage(coverage);
-  const pricingComplete = isApiUsdEstimateComplete(coverage);
+  const localCoverageDisplay = getLocalEstimateCoverageDisplay(coverage);
+  const requestPercent = localCoverageDisplay.requestPercent ?? 0;
+  const pricingComplete = isLocalEstimateComplete(coverage);
 
   return (
     <Card className={styles.pricingEntryCard}>
@@ -53,17 +51,17 @@ export function PricingEntryCard({ coverage, onOpen }: PricingEntryCardProps) {
       <div className={styles.pricingEntryMeta}>
         <span>
           {t('usage_stats.pricing_api_models_covered', {
-            priced: coverage.apiPricedModels,
-            total: coverage.apiTokenUsdModels,
+            priced: coverage.pricedModels,
+            total: coverage.totalModels,
           })}
         </span>
         <span>
-          {apiCoverageDisplay.requestPercent === null
+          {localCoverageDisplay.requestPercent === null
             ? t('usage_stats.pricing_no_api_requests')
             : t('usage_stats.pricing_api_requests_covered', {
                 priced: coverage.pricedRequests,
-                total: coverage.apiTokenUsdRequests,
-                percent: apiCoverageDisplay.requestPercent.toFixed(1),
+                total: coverage.totalRequests,
+                percent: localCoverageDisplay.requestPercent.toFixed(1),
               })}
         </span>
         <span>
@@ -76,7 +74,7 @@ export function PricingEntryCard({ coverage, onOpen }: PricingEntryCardProps) {
             count: coverage.unknownBillingRequests,
           })}
         </span>
-        {!pricingComplete && (coverage.apiTokenUsdRequests > 0 || hasUnknownBilling) && (
+        {!pricingComplete && coverage.totalRequests > 0 && (
           <span>{t('usage_stats.pricing_cost_incomplete')}</span>
         )}
         {coverage.unknownBillingTokens > 0 && (
