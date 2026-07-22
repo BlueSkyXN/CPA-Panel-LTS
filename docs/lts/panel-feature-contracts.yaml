@@ -32,6 +32,7 @@ features:
       - src/components/providers/ProviderStatusBar.tsx
       - src/components/providers/hooks/useProviderStats.ts
       - src/services/api/usage.ts
+      - src/services/api/usageImportContract.ts
       - src/services/api/config.ts
       - src/stores/useUsageStatsStore.ts
       - src/types/usage.ts
@@ -72,6 +73,18 @@ features:
       - non_cache_read_input_tokens
       - normalizePersistedModelPrices
       - analyzeUsageImport
+      - usage_version_unsupported
+      - usage_shape_invalid
+      - usage_v1_token_contract_invalid
+      - usage_v1_cache_semantics_ambiguous
+      - usage_v2_token_contract_invalid
+      - usage_aggregate_overflow
+      - schema_version
+      - migrated_from_version
+      - v1_uncached_input_tokens_to_v2
+      - import_success_migrated_v1
+      - import_review_uncertain_identities
+      - uncertainIdentityCount
       - normalizeReasoningEffort
       - service_tier
       - request_service_tier
@@ -108,6 +121,7 @@ features:
       - npm run test:usage-pricing-integration
       - npm run test:usage
       - npm run smoke:lts
+      - npm run smoke:lts:core -- --no-write-smoke
       - npm run check:lts
       - npm run check:feature-contract
       - npm run type-check

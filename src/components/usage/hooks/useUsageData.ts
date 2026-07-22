@@ -2,6 +2,11 @@ import { createElement, useEffect, useState, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { USAGE_STATS_STALE_TIME_MS, useNotificationStore, useUsageStatsStore } from '@/stores';
 import { usageApi } from '@/services/api/usage';
+import {
+  getUsageImportErrorCode,
+  getUsageImportErrorTranslationKey,
+  isMigratedV1UsageImportReceipt,
+} from '@/services/api/usageImportContract';
 import { downloadBlob } from '@/utils/download';
 import {
   createDefaultPriceProfileV3,
@@ -128,10 +133,9 @@ export function useUsageData(): UseUsageDataReturn {
 
     const preflight = analyzeUsageImport(payload, usageSnapshot);
     if (!preflight.valid) {
+      const issue = preflight.issues[0];
       showNotification(
-        preflight.issues.includes('unsupported_legacy_token_contract')
-          ? t('usage_stats.import_unsupported_legacy_token_contract')
-          : t('usage_stats.import_invalid'),
+        issue ? t(getUsageImportErrorTranslationKey(issue)) : t('usage_stats.import_invalid'),
         'error'
       );
       return;
@@ -144,6 +148,9 @@ export function useUsageData(): UseUsageDataReturn {
       }),
       t('usage_stats.import_review_duplicates', { count: preflight.duplicateCount }),
       t('usage_stats.import_review_overlaps', { count: preflight.overlapCount }),
+      t('usage_stats.import_review_uncertain_identities', {
+        count: preflight.uncertainIdentityCount,
+      }),
     ];
 
     showConfirmation({
@@ -163,7 +170,7 @@ export function useUsageData(): UseUsageDataReturn {
               { style: { margin: 0 } },
               t('usage_stats.import_review_current_unavailable')
             )
-          : null,
+          : null
       ),
       confirmText: t('usage_stats.import_review_confirm'),
       variant: 'primary',
@@ -172,12 +179,18 @@ export function useUsageData(): UseUsageDataReturn {
         try {
           const result = await usageApi.importUsage(payload);
           showNotification(
-            t('usage_stats.import_success', {
-              added: result?.added ?? 0,
-              skipped: result?.skipped ?? 0,
-              total: result?.total_requests ?? 0,
-              failed: result?.failed_requests ?? 0,
-            }),
+            t(
+              isMigratedV1UsageImportReceipt(result)
+                ? 'usage_stats.import_success_migrated_v1'
+                : 'usage_stats.import_success',
+              {
+                added: result.added,
+                skipped: result.skipped,
+                total: result.total_requests,
+                failed: result.failed_requests,
+                schemaVersion: result.schema_version,
+              }
+            ),
             'success'
           );
           try {
@@ -190,11 +203,16 @@ export function useUsageData(): UseUsageDataReturn {
             );
           }
         } catch (err: unknown) {
-          const message = err instanceof Error ? err.message : '';
-          showNotification(
-            `${t('notification.upload_failed')}${message ? `: ${message}` : ''}`,
-            'error'
-          );
+          const code = getUsageImportErrorCode(err);
+          if (code) {
+            showNotification(t(getUsageImportErrorTranslationKey(code)), 'error');
+          } else {
+            const message = err instanceof Error ? err.message : '';
+            showNotification(
+              `${t('notification.upload_failed')}${message ? `: ${message}` : ''}`,
+              'error'
+            );
+          }
         } finally {
           setImporting(false);
         }

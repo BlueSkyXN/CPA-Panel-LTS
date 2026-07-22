@@ -81,6 +81,8 @@ class MockCoreState:
         self.oauth_excluded_status = 200
         self.oauth_model_alias_status = 200
         self.usage_payload = build_usage_payload()
+        self.usage_contract_code: str | None = None
+        self.usage_contract_legacy_receipt = False
         self.delay_next_config_response = False
         self.delayed_config_status = 200
         self.delayed_config_started = threading.Event()
@@ -986,7 +988,7 @@ class MockCoreHandler(BaseHTTPRequestHandler):
             "/v0/management/auth-files": build_auth_files_payload(),
             "/v0/management/usage": self.state.usage_payload,
             "/v0/management/usage/export": {
-                "version": 1,
+                "version": 2,
                 "usage": self.state.usage_payload["usage"],
             },
             "/v0/management/api-key-usage": build_api_key_usage_payload(),
@@ -1125,14 +1127,38 @@ class MockCoreHandler(BaseHTTPRequestHandler):
             self._send_json(self._mock_api_call_response(body))
             return
         if parsed.path == "/v0/management/usage/import":
-            self._send_json(
-                {
-                    "added": 0,
-                    "skipped": 2,
-                    "total_requests": 5,
-                    "failed_requests": 1,
-                }
-            )
+            if self.state.usage_contract_code:
+                self._send_json(
+                    {
+                        "error": "mock usage import rejection",
+                        "code": self.state.usage_contract_code,
+                    },
+                    status=400,
+                )
+                return
+            try:
+                payload = json.loads(body)
+            except json.JSONDecodeError:
+                payload = {}
+            receipt = {
+                "added": 0,
+                "skipped": 2,
+                "total_requests": 5,
+                "failed_requests": 1,
+                "schema_version": 2,
+                "future_receipt_field": {"ignored_by_panel": True},
+            }
+            if self.state.usage_contract_legacy_receipt:
+                receipt.pop("schema_version")
+                receipt.pop("future_receipt_field")
+            elif payload.get("version") == 1:
+                receipt.update(
+                    {
+                        "migrated_from_version": 1,
+                        "migration": "v1_uncached_input_tokens_to_v2",
+                    }
+                )
+            self._send_json(receipt)
             return
         self._send_json({"status": "ok"})
 
@@ -4167,24 +4193,19 @@ def run_branded_provider_visibility_smoke(
         state.include_branded_providers = True
 
 
-def run_usage_import_contract_smoke(page: Any, state: MockCoreState) -> None:
+def run_usage_contract_import_smoke(page: Any, state: MockCoreState) -> None:
     current_detail = state.usage_payload["usage"]["apis"]["POST /v1/responses"]["models"][
         "gpt-5.6-sol"
     ]["details"][-1]
-    rejected_detail = json.loads(json.dumps(current_detail))
-    rejected_tokens = rejected_detail["tokens"]
-    rejected_tokens["uncached_input_tokens"] = (
-        rejected_tokens["input_tokens"] - rejected_tokens["cache_read_tokens"]
-    )
-
-    import_payload = {
+    ambiguous_detail = json.loads(json.dumps(current_detail))
+    ambiguous_payload = {
         "version": 1,
         "usage": {
             "apis": {
                 "POST /v1/responses": {
                     "models": {
                         "gpt-5.6-sol": {
-                            "details": [rejected_detail]
+                            "details": [ambiguous_detail]
                         }
                     }
                 }
@@ -4194,33 +4215,138 @@ def run_usage_import_contract_smoke(page: Any, state: MockCoreState) -> None:
     import_route = "POST /v0/management/usage/import"
     before_posts = sum(request == import_route for request in state.requests)
 
+    uncertain_detail = json.loads(json.dumps(current_detail))
+    uncertain_detail.pop("timestamp", None)
+    uncertain_detail["tokens"] = {
+        "input_tokens": 1,
+        "output_tokens": 0,
+        "reasoning_tokens": 0,
+        "cached_tokens": 0,
+        "total_tokens": 1,
+    }
+    uncertain_payload = {
+        "version": 1,
+        "usage": {
+            "apis": {
+                "POST /v1/responses": {
+                    "models": {"gpt-5.6-sol": {"details": [uncertain_detail]}}
+                }
+            }
+        },
+    }
     page.locator('input[type="file"][accept*=".json"]').set_input_files(
         {
-            "name": "usage-import-unsupported-legacy-token-contract.json",
+            "name": "usage-import-uncertain-timestamp.json",
             "mimeType": "application/json",
-            "buffer": json.dumps(import_payload).encode("utf-8"),
+            "buffer": json.dumps(uncertain_payload).encode("utf-8"),
+        }
+    )
+    uncertain_dialog = page.get_by_role("dialog", name="Review usage import")
+    uncertain_dialog.wait_for()
+    uncertain_dialog.get_by_text(
+        "1 details without a stable timestamp were excluded from duplicate and overlap detection",
+        exact=True,
+    ).wait_for()
+    uncertain_dialog.get_by_role("button", name="Cancel", exact=True).click()
+    uncertain_dialog.wait_for(state="detached")
+    if sum(request == import_route for request in state.requests) != before_posts:
+        raise AssertionError("Uncertain timestamp review must not POST after cancellation")
+
+    released_core_detail = json.loads(json.dumps(uncertain_detail))
+    released_core_detail["timestamp"] = current_detail["timestamp"]
+    released_core_payload = {
+        "version": 1,
+        "usage": {
+            "apis": {
+                "POST /v1/responses": {
+                    "models": {"gpt-5.6-sol": {"details": [released_core_detail]}}
+                }
+            }
+        },
+    }
+    state.usage_contract_legacy_receipt = True
+    try:
+        page.locator('input[type="file"][accept*=".json"]').set_input_files(
+            {
+                "name": "usage-import-released-core-receipt.json",
+                "mimeType": "application/json",
+                "buffer": json.dumps(released_core_payload).encode("utf-8"),
+            }
+        )
+        released_dialog = page.get_by_role("dialog", name="Review usage import")
+        released_dialog.wait_for()
+        with page.expect_response(
+            lambda response: response.request.method == "POST"
+            and response.url.endswith("/v0/management/usage/import")
+        ):
+            released_dialog.get_by_role("button", name="Import anyway", exact=True).click()
+        page.get_by_text(
+            "Import complete: added 0, skipped 2, total 5, failed 1",
+            exact=True,
+        ).wait_for()
+    finally:
+        state.usage_contract_legacy_receipt = False
+    posts_after_released_core = before_posts + 1
+    if sum(request == import_route for request in state.requests) != posts_after_released_core:
+        raise AssertionError("Released Core success receipt must be accepted after exactly one POST")
+
+    page.locator('input[type="file"][accept*=".json"]').set_input_files(
+        {
+            "name": "usage-import-ambiguous-v1-cache-semantics.json",
+            "mimeType": "application/json",
+            "buffer": json.dumps(ambiguous_payload).encode("utf-8"),
         }
     )
 
     page.get_by_text(
-        "unsupported legacy token contract: uncached_input_tokens",
+        "Schema v1 cache semantics are ambiguous. Cached details require "
+        "uncached_input_tokens for a lossless migration.",
         exact=True,
     ).wait_for()
     if page.get_by_role("dialog", name="Review usage import").count() != 0:
-        raise AssertionError("Unsupported legacy token contracts must not open an import confirmation")
+        raise AssertionError("Ambiguous v1 cache semantics must not open an import confirmation")
 
-    if sum(request == import_route for request in state.requests) != before_posts:
-        raise AssertionError("Unsupported legacy token contracts must not POST usage imports")
+    if sum(request == import_route for request in state.requests) != posts_after_released_core:
+        raise AssertionError("Ambiguous v1 cache semantics must not POST usage imports")
 
-    canonical_detail = json.loads(json.dumps(current_detail))
-    canonical_payload = {
+    invalid_v2_detail = json.loads(json.dumps(current_detail))
+    del invalid_v2_detail["tokens"]["reasoning_tokens"]
+    invalid_v2_payload = {
+        "version": 2,
+        "usage": {
+            "apis": {
+                "POST /v1/responses": {
+                    "models": {"gpt-5.6-sol": {"details": [invalid_v2_detail]}}
+                }
+            }
+        },
+    }
+    page.locator('input[type="file"][accept*=".json"]').set_input_files(
+        {
+            "name": "usage-import-invalid-v2-token-contract.json",
+            "mimeType": "application/json",
+            "buffer": json.dumps(invalid_v2_payload).encode("utf-8"),
+        }
+    )
+    page.get_by_text("Invalid canonical schema v2 token contract.", exact=True).wait_for()
+    if sum(request == import_route for request in state.requests) != posts_after_released_core:
+        raise AssertionError("Invalid v2 token contracts must not POST usage imports")
+
+    migrated_detail = json.loads(json.dumps(current_detail))
+    migrated_tokens = migrated_detail["tokens"]
+    migrated_tokens["uncached_input_tokens"] = (
+        migrated_tokens["input_tokens"]
+        - migrated_tokens.get("cache_read_tokens", 0)
+        - migrated_tokens.get("cache_creation_tokens", 0)
+    )
+    migrated_payload = {
         "version": 1,
         "usage": {
             "apis": {
                 "POST /v1/responses": {
                     "models": {
                         "gpt-5.6-sol": {
-                            "details": [canonical_detail]
+                            "details": [migrated_detail]
                         }
                     }
                 }
@@ -4229,9 +4355,9 @@ def run_usage_import_contract_smoke(page: Any, state: MockCoreState) -> None:
     }
     page.locator('input[type="file"][accept*=".json"]').set_input_files(
         {
-            "name": "usage-import-canonical-token-contract.json",
+            "name": "usage-import-v1-migration.json",
             "mimeType": "application/json",
-            "buffer": json.dumps(canonical_payload).encode("utf-8"),
+            "buffer": json.dumps(migrated_payload).encode("utf-8"),
         }
     )
 
@@ -4244,8 +4370,8 @@ def run_usage_import_contract_smoke(page: Any, state: MockCoreState) -> None:
     ]:
         dialog.get_by_text(expected_text, exact=False).wait_for()
 
-    if sum(request == import_route for request in state.requests) != before_posts:
-        raise AssertionError("Canonical usage import POST occurred before confirmation")
+    if sum(request == import_route for request in state.requests) != posts_after_released_core:
+        raise AssertionError("Migratable v1 usage import POST occurred before confirmation")
 
     with page.expect_response(
         lambda response: response.request.method == "POST"
@@ -4254,18 +4380,52 @@ def run_usage_import_contract_smoke(page: Any, state: MockCoreState) -> None:
         dialog.get_by_role("button", name="Import anyway", exact=True).click()
 
     page.get_by_text(
-        "Import complete: added 0, skipped 2, total 5, failed 1",
+        "Import complete: added 0, skipped 2, total 5, failed 1. "
+        "Token contract migrated from schema v1 to v2.",
         exact=True,
     ).wait_for()
-    if sum(request == import_route for request in state.requests) != before_posts + 1:
-        raise AssertionError("Canonical usage import must POST exactly once after confirmation")
+    if sum(request == import_route for request in state.requests) != posts_after_released_core + 1:
+        raise AssertionError("Migratable v1 usage import must POST exactly once after confirmation")
 
     posted_payload = json.loads(state.request_bodies[import_route][-1])
     posted_details = posted_payload["usage"]["apis"]["POST /v1/responses"]["models"][
         "gpt-5.6-sol"
     ]["details"]
-    if posted_details != [canonical_detail]:
-        raise AssertionError("Canonical usage import was mutated before POST")
+    if posted_details != [migrated_detail]:
+        raise AssertionError("Migratable v1 usage import was mutated before POST")
+
+    state.usage_contract_code = "usage_aggregate_overflow"
+    try:
+        canonical_payload = {
+            "version": 2,
+            "usage": {
+                "apis": {
+                    "POST /v1/responses": {
+                        "models": {"gpt-5.6-sol": {"details": [current_detail]}}
+                    }
+                }
+            },
+        }
+        page.locator('input[type="file"][accept*=".json"]').set_input_files(
+            {
+                "name": "usage-import-overflow-receipt.json",
+                "mimeType": "application/json",
+                "buffer": json.dumps(canonical_payload).encode("utf-8"),
+            }
+        )
+        overflow_dialog = page.get_by_role("dialog", name="Review usage import")
+        overflow_dialog.wait_for()
+        with page.expect_response(
+            lambda response: response.request.method == "POST"
+            and response.url.endswith("/v0/management/usage/import")
+        ):
+            overflow_dialog.get_by_role("button", name="Import anyway", exact=True).click()
+        page.get_by_text(
+            "Import would overflow Core usage aggregates. No usage data was merged.",
+            exact=True,
+        ).wait_for()
+    finally:
+        state.usage_contract_code = None
 
 
 def run_plugin_runtime_mismatch_smoke(
@@ -4592,7 +4752,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
                     if not native_clock_preserved:
                         raise AssertionError("Request-event clock smoke polluted the main page clock")
                     run_usage_request_event_column_storage_smoke(context, app_url)
-                    run_usage_import_contract_smoke(page, state)
+                    run_usage_contract_import_smoke(page, state)
                 elif route == "/usage/pricing":
                     run_usage_pricing_smoke(page)
                     run_usage_pricing_empty_catalog_smoke(context, app_url)
