@@ -1,15 +1,14 @@
 import { useTranslation } from 'react-i18next';
 import { IconExternalLink } from '@/components/ui/icons';
 import {
-  OPENAI_CATALOG_AS_OF,
-  OPENAI_CATALOG_VERSION,
-  OPENAI_PRICE_CATALOG,
-  OPENAI_PRICING_SOURCE_URL,
+  PRICE_CATALOG,
+  PRICE_CATALOG_AS_OF,
+  PRICE_CATALOG_VERSION,
   formatCompactNumber,
   type PriceCatalogEntry,
   type TokenRates,
 } from '@/utils/usage';
-import { getCatalogExplicitFastRates } from './presetPricingCatalogUtils';
+import { getCatalogExplicitFastRates, getCatalogSourceLinks } from './presetPricingCatalogUtils';
 import styles from './PresetPricingCatalog.module.scss';
 
 interface CatalogBand {
@@ -99,7 +98,7 @@ export function PresetPricingCatalog() {
       className={styles.catalog}
       aria-labelledby="preset-pricing-catalog-title"
       data-testid="preset-pricing-catalog"
-      data-model-count={OPENAI_PRICE_CATALOG.length}
+      data-model-count={PRICE_CATALOG.length}
     >
       <header className={styles.header}>
         <div className={styles.heading}>
@@ -107,20 +106,15 @@ export function PresetPricingCatalog() {
           <h2 id="preset-pricing-catalog-title">{t('usage_stats.pricing_catalog_title')}</h2>
           <p>
             {t('usage_stats.pricing_catalog_description', {
-              count: OPENAI_PRICE_CATALOG.length,
-              asOf: OPENAI_CATALOG_AS_OF,
+              count: PRICE_CATALOG.length,
+              asOf: PRICE_CATALOG_AS_OF,
             })}
           </p>
         </div>
         <div className={styles.meta}>
           <div className={styles.metaBadges}>
-            <span>{OPENAI_CATALOG_VERSION}</span>
+            <span>{PRICE_CATALOG_VERSION}</span>
             <strong>{t('usage_stats.pricing_catalog_unit')}</strong>
-          </div>
-          <div className={styles.sourceLinks}>
-            <a href={OPENAI_PRICING_SOURCE_URL} target="_blank" rel="noreferrer">
-              {t('usage_stats.pricing_api_source')} <IconExternalLink size={13} />
-            </a>
           </div>
         </div>
       </header>
@@ -146,7 +140,7 @@ export function PresetPricingCatalog() {
               <th scope="col">{t('usage_stats.pricing_fast_policies')}</th>
             </tr>
           </thead>
-          {OPENAI_PRICE_CATALOG.map((entry) => {
+          {PRICE_CATALOG.map((entry) => {
             return (
               <tbody
                 key={entry.canonicalModel}
@@ -168,7 +162,6 @@ export function PresetPricingCatalog() {
                             : 'usage_stats.pricing_catalog_long_range',
                           { threshold: formatCompactNumber(band.thresholdTokens) }
                         );
-                  const modelNotesUrl = entry.pricingNotesUrl ?? entry.sourceUrl;
                   const fastPolicy = getFastPolicyPresentation(entry, band);
 
                   return (
@@ -182,10 +175,27 @@ export function PresetPricingCatalog() {
                             })}
                           </small>
                         )}
-                        <a href={modelNotesUrl} target="_blank" rel="noreferrer">
-                          {t('usage_stats.pricing_catalog_model_notes')}{' '}
-                          <IconExternalLink size={12} />
-                        </a>
+                        <small>
+                          {t('usage_stats.pricing_catalog_verified_as_of', { asOf: entry.asOf })}
+                        </small>
+                        <span className={styles.modelLinks}>
+                          {getCatalogSourceLinks(entry).map((link) => (
+                            <a
+                              key={link.kind}
+                              href={link.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              data-testid={`pricing-${link.kind}-source`}
+                            >
+                              {t(
+                                link.kind === 'official'
+                                  ? 'usage_stats.pricing_source'
+                                  : 'usage_stats.pricing_catalog_model_notes'
+                              )}{' '}
+                              <IconExternalLink size={12} />
+                            </a>
+                          ))}
+                        </span>
                       </td>
                       <td
                         className={styles.contextCell}

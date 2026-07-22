@@ -1,8 +1,11 @@
-/** Official catalog data is kept separate from the pricing engine and UI. */
+/** Official provider catalog data is kept separate from the pricing engine and UI. */
 export const PRICE_CURRENCY = 'USD' as const;
 export const OPENAI_CATALOG_AS_OF = '2026-07-20';
-export const OPENAI_CATALOG_VERSION = `openai-${OPENAI_CATALOG_AS_OF}`;
+export const ZAI_CATALOG_AS_OF = '2026-07-22';
+export const PRICE_CATALOG_AS_OF = ZAI_CATALOG_AS_OF;
+export const PRICE_CATALOG_VERSION = `api-${PRICE_CATALOG_AS_OF}`;
 export const OPENAI_PRICING_SOURCE_URL = 'https://developers.openai.com/api/docs/pricing';
+export const ZAI_PRICING_SOURCE_URL = 'https://docs.z.ai/guides/overview/pricing';
 export const LONG_CONTEXT_INPUT_TOKEN_THRESHOLD = 272_000;
 
 export interface TokenRates {
@@ -64,10 +67,10 @@ const modelPricingNotesUrl = (model: string): string =>
   `https://developers.openai.com/api/docs/models/${model}`;
 
 /**
- * Official OpenAI API rate cards confirmed on 2026-07-20. Model pricing notes
- * define the 272K long-context uplift when the aggregate table omits that row.
+ * Official provider rate cards, each carrying its own verification date and source.
+ * OpenAI model notes define the 272K long-context uplift when their aggregate table omits it.
  */
-export const OPENAI_PRICE_CATALOG: readonly PriceCatalogEntry[] = [
+export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
   {
     canonicalModel: 'gpt-5.6-sol',
     aliases: ['gpt-5.6'],
@@ -135,5 +138,16 @@ export const OPENAI_PRICE_CATALOG: readonly PriceCatalogEntry[] = [
     fast: { multiplier: 2, longSupported: false },
     sourceUrl: OPENAI_PRICING_SOURCE_URL,
     asOf: OPENAI_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'glm-5.2',
+    aliases: [],
+    currency: 'USD',
+    // Z.AI lists cached-input storage as limited-time free. Explicit zero must
+    // remain distinct from Auto, which inherits the selected Input rate.
+    standard: { short: rateCard(1.4, 0.26, 0, 4.4) },
+    sourceUrl: ZAI_PRICING_SOURCE_URL,
+    pricingNotesUrl: 'https://docs.z.ai/guides/llm/glm-5.2',
+    asOf: ZAI_CATALOG_AS_OF,
   },
 ];

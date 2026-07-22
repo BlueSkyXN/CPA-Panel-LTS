@@ -2403,10 +2403,56 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
             "gpt-5.5",
             "gpt-5.4",
             "gpt-5.4-mini",
+            "glm-5.2",
         ]:
             catalog.locator(
                 f'[data-testid="preset-pricing-model"][data-model="{model_name}"]'
             ).wait_for()
+
+        catalog_rows = catalog.locator("tbody tr")
+        for index in range(catalog_rows.count()):
+            row = catalog_rows.nth(index)
+            if row.locator('[data-testid="pricing-official-source"]').count() != 1:
+                raise AssertionError(
+                    f"Preset catalog row {index} does not expose exactly one official source"
+                )
+
+        glm_row = catalog.locator(
+            '[data-testid="preset-pricing-model"][data-model="glm-5.2"] '
+            'tr[data-context-band="short"]'
+        )
+        for label, expected_rate in [
+            ("Input", "$1.4"),
+            ("Cached input", "$0.26"),
+            ("Cache write", "$0"),
+            ("Output", "$4.4"),
+        ]:
+            actual_rate = (
+                glm_row.locator(f'td[data-label="{label}"] strong').first.text_content() or ""
+            )
+            if actual_rate != expected_rate:
+                raise AssertionError(
+                    f"GLM-5.2 {label} rate is {actual_rate!r}, expected {expected_rate!r}"
+                )
+        if "Unavailable" not in (
+            glm_row.locator('td[data-label="Fast policies"]').text_content() or ""
+        ):
+            raise AssertionError("GLM-5.2 catalog row did not expose Fast as unavailable")
+
+        glm_official = glm_row.locator('[data-testid="pricing-official-source"]')
+        if (
+            (glm_official.text_content() or "").strip() != "Official source"
+            or glm_official.get_attribute("href")
+            != "https://docs.z.ai/guides/overview/pricing"
+        ):
+            raise AssertionError("GLM-5.2 Official source does not point to the Z.AI pricing table")
+        glm_notes = glm_row.locator('[data-testid="pricing-notes-source"]')
+        if (
+            glm_notes.count() != 1
+            or (glm_notes.text_content() or "").strip() != "Model notes"
+            or glm_notes.get_attribute("href") != "https://docs.z.ai/guides/llm/glm-5.2"
+        ):
+            raise AssertionError("GLM-5.2 Model notes does not point to the model overview")
 
         long_context_cell_text = (
             catalog.locator(

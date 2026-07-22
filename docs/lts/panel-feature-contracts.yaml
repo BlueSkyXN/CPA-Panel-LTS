@@ -12,7 +12,7 @@ status_definitions:
 features:
   - id: full-usage-statistics
     status: protected
-    reason: Complete usage statistics are the primary CPA-Panel-LTS protected delta.
+    reason: Complete usage statistics are the primary CPA-Panel-LTS protected delta, including provider-sourced local pricing that preserves unsupported tiers as incomplete coverage.
     routes:
       - /usage
       - /usage/pricing
@@ -94,7 +94,10 @@ features:
       - ServiceTierEvidence
       - request_events_filter_tier
       - /usage/pricing
-      - OPENAI_PRICE_CATALOG
+      - PRICE_CATALOG
+      - glm-5.2
+      - ZAI_PRICING_SOURCE_URL
+      - getCatalogSourceLinks
       - getLocalEstimateCoverageDisplay
       - isLocalEstimateComplete
       - PRICE_PROFILE_STORAGE_KEY
@@ -109,6 +112,8 @@ features:
       - pricing_browser_notice
       - pricing_catalog_table_label
       - pricing_catalog_fast_explicit_summary
+      - pricing_catalog_verified_as_of
+      - pricing_source
       - pricing_cost_incomplete
       - reasoning_effort
       - request_events_filter_effort
