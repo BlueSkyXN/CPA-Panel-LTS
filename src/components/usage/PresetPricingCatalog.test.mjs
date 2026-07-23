@@ -52,3 +52,26 @@ test('multiplier Fast catalog cards do not masquerade as explicit rates', () => 
   };
   assert.equal(catalogUi.getCatalogExplicitFastRates(multiplierEntry, 'short'), null);
 });
+
+test('catalog rows always expose the official source and add distinct model notes', () => {
+  assert.deepEqual(catalogUi.getCatalogSourceLinks(entry(false)), [
+    { kind: 'official', url: 'https://example.invalid/pricing' },
+  ]);
+  assert.deepEqual(
+    catalogUi.getCatalogSourceLinks({
+      ...entry(false),
+      pricingNotesUrl: 'https://example.invalid/models/synthetic-explicit-fast',
+    }),
+    [
+      { kind: 'official', url: 'https://example.invalid/pricing' },
+      { kind: 'notes', url: 'https://example.invalid/models/synthetic-explicit-fast' },
+    ]
+  );
+  assert.deepEqual(
+    catalogUi.getCatalogSourceLinks({
+      ...entry(false),
+      pricingNotesUrl: 'https://example.invalid/pricing',
+    }),
+    [{ kind: 'official', url: 'https://example.invalid/pricing' }]
+  );
+});

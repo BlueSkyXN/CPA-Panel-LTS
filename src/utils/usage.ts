@@ -89,9 +89,10 @@ export type {
 } from './usage/pricing';
 export {
   OPENAI_CATALOG_AS_OF,
-  OPENAI_CATALOG_VERSION,
-  OPENAI_PRICE_CATALOG,
   OPENAI_PRICING_SOURCE_URL,
+  PRICE_CATALOG,
+  PRICE_CATALOG_AS_OF,
+  PRICE_CATALOG_VERSION,
   PRICE_PROFILE_SCHEMA_VERSION,
   aggregateCostEstimateCoverage,
   createDefaultPriceProfileV3,
@@ -110,6 +111,8 @@ export {
   resolvePriceProfile,
   restorePresetEquivalentOverrides,
   serializePriceProfileV3,
+  ZAI_CATALOG_AS_OF,
+  ZAI_PRICING_SOURCE_URL,
 } from './usage/pricing';
 export {
   LEGACY_MODEL_PRICE_STORAGE_KEY,

@@ -11,7 +11,6 @@ import {
   IconAlertTriangle,
   IconChevronLeft,
   IconDownload,
-  IconExternalLink,
   IconFileText,
   IconRefreshCw,
   IconSearch,
@@ -22,8 +21,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useNotificationStore } from '@/stores';
 import { downloadBlob } from '@/utils/download';
 import {
-  OPENAI_CATALOG_VERSION,
-  OPENAI_PRICING_SOURCE_URL,
+  PRICE_CATALOG_VERSION,
   analyzeUsagePricing,
   createDefaultPriceProfileV3,
   findCatalogEntry,
@@ -782,10 +780,7 @@ export function UsagePricingPage() {
         </div>
         <div className={styles.catalogStamp}>
           <span>{t('usage_stats.pricing_catalog_version')}</span>
-          <strong>{OPENAI_CATALOG_VERSION}</strong>
-          <a href={OPENAI_PRICING_SOURCE_URL} target="_blank" rel="noreferrer">
-            {t('usage_stats.pricing_api_source')} <IconExternalLink size={13} />
-          </a>
+          <strong>{PRICE_CATALOG_VERSION}</strong>
         </div>
       </header>
 
@@ -1018,10 +1013,7 @@ export function UsagePricingPage() {
                               : t('usage_stats.pricing_single_rate_card')}
                       </small>
                     </span>
-                    <span
-                      className={styles.usageCell}
-                      data-label={t('usage_stats.pricing_usage')}
-                    >
+                    <span className={styles.usageCell} data-label={t('usage_stats.pricing_usage')}>
                       <strong>{summary.requestCount.toLocaleString()}</strong>
                       <small>
                         {t('usage_stats.pricing_requests_covered', {

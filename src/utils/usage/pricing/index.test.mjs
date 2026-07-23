@@ -25,9 +25,9 @@ const tier = (tierName = 'std', evidence = 'effective') => ({
 const approx = (actual, expected) =>
   assert.ok(Math.abs(actual - expected) < 1e-12, `cost = ${actual}, expected ${expected}`);
 
-test('catalog is versioned, self-describing, exact, and keeps Priority long context unsupported', () => {
+test('catalog is versioned, self-describing, exact, and keeps provider rate boundaries explicit', () => {
   const sol = pricing.findCatalogEntry('gpt-5.6-sol');
-  assert.equal(pricing.OPENAI_CATALOG_AS_OF, '2026-07-20');
+  assert.equal(pricing.PRICE_CATALOG_AS_OF, '2026-07-22');
   assert.equal(sol.currency, 'USD');
   assert.deepEqual(sol.aliases, ['gpt-5.6']);
   assert.equal(sol.sourceUrl, 'https://developers.openai.com/api/docs/pricing');
@@ -43,6 +43,21 @@ test('catalog is versioned, self-describing, exact, and keeps Priority long cont
   assert.equal(pricing.findCatalogEntry('gpt-5.6-sol-preview'), null);
   assert.equal(pricing.findCatalogEntry('tenant/gpt-5.6-sol'), null);
   assert.equal(pricing.findCatalogEntry('gpt-5.6').canonicalModel, 'gpt-5.6-sol');
+
+  const glm = pricing.findCatalogEntry('glm-5.2');
+  assert.equal(glm.currency, 'USD');
+  assert.deepEqual(glm.aliases, []);
+  assert.deepEqual(glm.standard.short, {
+    input: 1.4,
+    cachedInput: 0.26,
+    cacheWrite: 0,
+    output: 4.4,
+  });
+  assert.equal(glm.standard.long, undefined);
+  assert.equal(glm.fast, undefined);
+  assert.equal(glm.sourceUrl, 'https://docs.z.ai/guides/overview/pricing');
+  assert.equal(glm.pricingNotesUrl, 'https://docs.z.ai/guides/llm/glm-5.2');
+  assert.equal(glm.asOf, '2026-07-22');
 });
 
 test('matches direct custom, canonical preset, explicit alias, and unmatched without fuzzy matching', () => {
@@ -230,6 +245,56 @@ test('the full input_tokens count switches GPT-5.5 at 271999, 272000, and 272001
   assert.equal(gpt56.rates.input, 5);
 });
 
+test('GLM-5.2 keeps official Standard rates and explicit free cache write', () => {
+  const estimate = pricing.estimateUsageCost(
+    'glm-5.2',
+    {
+      input_tokens: 1_000_000,
+      output_tokens: 1_000_000,
+      cache_read_tokens: 200_000,
+      cache_creation_tokens: 300_000,
+    },
+    undefined,
+    tier()
+  );
+
+  assert.equal(estimate.status, 'priced');
+  assert.equal(estimate.contextBand, 'short');
+  assert.deepEqual(estimate.rates, {
+    input: 1.4,
+    cachedInput: 0.26,
+    cacheWrite: 0,
+    output: 4.4,
+  });
+  approx(estimate.amount, 5.152);
+});
+
+test('GLM-5.2 Fast is unsupported and excluded from priced coverage', () => {
+  const estimate = pricing.estimateUsageCost(
+    'glm-5.2',
+    { input_tokens: 1_000_000, total_tokens: 1_000_000 },
+    undefined,
+    tier('fast', 'request')
+  );
+
+  assert.equal(estimate.status, 'unsupported');
+  assert.equal(estimate.amount, null);
+  assert.equal(estimate.rates, null);
+  assert.deepEqual(estimate.warnings, ['requestedEstimate']);
+
+  const coverage = pricing.aggregateCostEstimateCoverage([
+    { modelName: 'glm-5.2', tokenCount: 1_000_000, estimate },
+  ]);
+  assert.equal(coverage.totalRequests, 1);
+  assert.equal(coverage.pricedRequests, 0);
+  assert.equal(coverage.unsupportedRequests, 1);
+  assert.equal(coverage.totalTokens, 1_000_000);
+  assert.equal(coverage.pricedTokens, 0);
+  assert.equal(coverage.totalModels, 1);
+  assert.equal(coverage.pricedModels, 0);
+  assert.equal(coverage.estimatedAmount, 0);
+});
+
 test('Fast long context remains unsupported and evidence warnings stay explicit', () => {
   const unsupported = pricing.estimateUsageCost(
     'gpt-5.5',
@@ -393,7 +458,12 @@ test('local estimate completeness remains false when aggregate totals exceed pri
     {
       modelName: 'gpt-5.4-mini',
       tokenCount: 1_000_000,
-      estimate: pricing.estimateUsageCost('gpt-5.4-mini', { input_tokens: 1_000_000 }, undefined, tier()),
+      estimate: pricing.estimateUsageCost(
+        'gpt-5.4-mini',
+        { input_tokens: 1_000_000 },
+        undefined,
+        tier()
+      ),
     },
   ]);
   const gap = { ...complete, totalTokens: 2_000_000, pricedModels: 0, pricedModelRatio: 0 };

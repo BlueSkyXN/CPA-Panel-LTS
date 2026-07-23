@@ -7,7 +7,7 @@ import {
 import { normalizePersistedModelPrices } from '../modelPrices';
 import type { ResolvedServiceTier } from '../serviceTier';
 import {
-  OPENAI_PRICE_CATALOG,
+  PRICE_CATALOG,
   PRICE_CURRENCY,
   type FastPricing,
   type LongContextPricing,
@@ -19,10 +19,13 @@ import {
 export {
   LONG_CONTEXT_INPUT_TOKEN_THRESHOLD,
   OPENAI_CATALOG_AS_OF,
-  OPENAI_CATALOG_VERSION,
-  OPENAI_PRICE_CATALOG,
   OPENAI_PRICING_SOURCE_URL,
+  PRICE_CATALOG,
+  PRICE_CATALOG_AS_OF,
+  PRICE_CATALOG_VERSION,
   PRICE_CURRENCY,
+  ZAI_CATALOG_AS_OF,
+  ZAI_PRICING_SOURCE_URL,
 } from './catalog';
 export type {
   FastPricing,
@@ -278,10 +281,10 @@ const multiplyRates = (rates: TokenRates, multiplier: number): TokenRates => ({
 });
 
 const CATALOG_CANONICAL = new Map(
-  OPENAI_PRICE_CATALOG.map((entry) => [normalizeModelKey(entry.canonicalModel), entry])
+  PRICE_CATALOG.map((entry) => [normalizeModelKey(entry.canonicalModel), entry])
 );
 const CATALOG_ALIASES = new Map(
-  OPENAI_PRICE_CATALOG.flatMap((entry) =>
+  PRICE_CATALOG.flatMap((entry) =>
     entry.aliases.map((alias) => [normalizeModelKey(alias), entry] as const)
   )
 );
@@ -307,10 +310,7 @@ const haveEquivalentTokenRates = (left: TokenRates, right: TokenRates): boolean 
   (left.cacheWrite ?? left.input) === (right.cacheWrite ?? right.input) &&
   left.output === right.output;
 
-const isPresetEquivalentLegacyOverride = (
-  modelName: string,
-  override: PriceOverride
-): boolean => {
+const isPresetEquivalentLegacyOverride = (modelName: string, override: PriceOverride): boolean => {
   const catalog = findCatalogEntry(modelName);
   return (
     catalog !== null &&
@@ -331,9 +331,7 @@ export interface PresetOverrideRecovery {
  * explicit UI action so intentionally pinned custom rates are never discarded
  * silently.
  */
-export function restorePresetEquivalentOverrides(
-  profile: PriceProfileV3
-): PresetOverrideRecovery {
+export function restorePresetEquivalentOverrides(profile: PriceProfileV3): PresetOverrideRecovery {
   const restoredModels = Object.entries(profile.overrides)
     .filter(([modelName, override]) => isPresetEquivalentLegacyOverride(modelName, override))
     .map(([modelName]) => modelName);
@@ -614,7 +612,7 @@ export function estimateUsageCost(
   const standardRates = standardRatesForBand(resolved.standard, contextBand);
   let rates = standardRates;
   if (tier.tier === 'fast') {
-    if (contextBand === 'long' && resolved.fast?.longSupported === false) {
+    if (resolved.fast === null && !resolved.usesCustomOverride) {
       return {
         amount: null,
         status: 'unsupported',
@@ -628,8 +626,25 @@ export function estimateUsageCost(
         tokenSplit: split,
       };
     }
-    if (resolved.fast !== null) rates = resolveFastRates(resolved.fast, standardRates);
-    else if (resolved.usesCustomOverride) warnings.push('fallbackStandard');
+    if (resolved.fast === null) {
+      warnings.push('fallbackStandard');
+    } else {
+      if (contextBand === 'long' && !resolved.fast.longSupported) {
+        return {
+          amount: null,
+          status: 'unsupported',
+          modelMatch: resolved.modelMatch,
+          tier,
+          contextBand,
+          rates: null,
+          warnings,
+          modelName,
+          resolvedModel: resolved.resolvedModel,
+          tokenSplit: split,
+        };
+      }
+      rates = resolveFastRates(resolved.fast, standardRates);
+    }
   }
 
   const cacheWriteRate = resolveCacheWriteUnitPrice(
@@ -676,11 +691,7 @@ export function aggregateCostEstimateCoverage(
   >();
   const result: Omit<
     PricingCoverage,
-    | 'totalModels'
-    | 'pricedModels'
-    | 'pricedRequestRatio'
-    | 'pricedTokenRatio'
-    | 'pricedModelRatio'
+    'totalModels' | 'pricedModels' | 'pricedRequestRatio' | 'pricedTokenRatio' | 'pricedModelRatio'
   > = {
     totalRequests: 0,
     pricedRequests: 0,
