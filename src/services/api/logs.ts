@@ -46,6 +46,7 @@ export interface LogsResponse {
   latestAfter?: LogCursor;
   nextCursor?: string;
   cursorReset?: boolean;
+  replaceTrailingPartial?: boolean;
   logBackendKind: LogBackendKind;
   requestLogHomeIpById?: Record<string, string>;
   total?: number;
@@ -113,6 +114,7 @@ const normalizeCPALogs = (data: Record<string, unknown>): LogsResponse => {
     latestAfter: latestTimestamp > 0 ? latestTimestamp : undefined,
     nextCursor: stringValue(data['next-cursor']) || undefined,
     cursorReset: booleanValue(data['cursor-reset']),
+    replaceTrailingPartial: booleanValue(data['replace-trailing-partial']),
     logBackendKind: 'file',
   };
 };

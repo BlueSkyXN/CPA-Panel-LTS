@@ -29,6 +29,9 @@ jobs:
       - name: Test provider and connection contracts
         run: npm run test:providers && npm run test:auth-files && npm run test:api-client
 
+      - name: Test logs incremental merge semantics
+        run: npm run test:logs
+
       - name: Check LTS panel contract
         run: npm run check:lts
 
