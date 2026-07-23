@@ -27,7 +27,7 @@ const approx = (actual, expected) =>
 
 test('catalog is versioned, self-describing, exact, and keeps provider rate boundaries explicit', () => {
   const sol = pricing.findCatalogEntry('gpt-5.6-sol');
-  assert.equal(pricing.PRICE_CATALOG_AS_OF, '2026-07-22');
+  assert.equal(pricing.PRICE_CATALOG_AS_OF, '2026-07-23');
   assert.equal(sol.currency, 'USD');
   assert.deepEqual(sol.aliases, ['gpt-5.6']);
   assert.equal(sol.sourceUrl, 'https://developers.openai.com/api/docs/pricing');
@@ -58,6 +58,55 @@ test('catalog is versioned, self-describing, exact, and keeps provider rate boun
   assert.equal(glm.sourceUrl, 'https://docs.z.ai/guides/overview/pricing');
   assert.equal(glm.pricingNotesUrl, 'https://docs.z.ai/guides/llm/glm-5.2');
   assert.equal(glm.asOf, '2026-07-22');
+
+  for (const [modelName, rates, sourceUrl, notesUrl, aliases] of [
+    [
+      'kimi-k3',
+      { input: 3, cachedInput: 0.3, output: 15 },
+      'https://platform.kimi.ai/docs/pricing/chat-k3',
+      'https://platform.kimi.ai/docs/guide/kimi-k3-quickstart',
+      ['k3'],
+    ],
+    [
+      'kimi-k2.7-code',
+      { input: 0.95, cachedInput: 0.19, output: 4 },
+      'https://platform.kimi.ai/docs/pricing/chat-k27-code',
+      'https://platform.kimi.ai/docs/guide/kimi-k2-7-code-quickstart',
+      ['kimi-for-coding'],
+    ],
+    [
+      'kimi-k2.7-code-highspeed',
+      { input: 1.9, cachedInput: 0.38, output: 8 },
+      'https://platform.kimi.ai/docs/pricing/chat-k27-code',
+      'https://platform.kimi.ai/docs/guide/kimi-k2-7-code-quickstart',
+      ['kimi-for-coding-highspee', 'kimi-for-coding-highspeed'],
+    ],
+  ]) {
+    const entry = pricing.findCatalogEntry(modelName);
+    assert.equal(entry.currency, 'USD');
+    assert.deepEqual(entry.aliases, aliases);
+    assert.deepEqual(entry.standard.short, rates);
+    assert.equal(entry.standard.long, undefined);
+    assert.equal(entry.fast, undefined);
+    assert.equal(entry.sourceUrl, sourceUrl);
+    assert.equal(entry.pricingNotesUrl, notesUrl);
+    assert.equal(entry.asOf, '2026-07-23');
+  }
+
+  const grok = pricing.findCatalogEntry('grok-4.5');
+  assert.equal(grok.currency, 'USD');
+  assert.deepEqual(grok.aliases, ['grok-4.5-latest', 'grok-build-latest']);
+  assert.deepEqual(grok.standard.short, { input: 2, cachedInput: 0.3, output: 6 });
+  assert.deepEqual(grok.standard.long, {
+    thresholdTokens: 200_000,
+    basis: 'inputTokens',
+    appliesTo: 'entireRequest',
+    rates: { input: 4, cachedInput: 0.6, output: 12 },
+  });
+  assert.equal(grok.fast, undefined);
+  assert.equal(grok.sourceUrl, 'https://docs.x.ai/developers/models/grok-4.5');
+  assert.equal(grok.pricingNotesUrl, undefined);
+  assert.equal(grok.asOf, '2026-07-23');
 });
 
 test('matches direct custom, canonical preset, explicit alias, and unmatched without fuzzy matching', () => {
@@ -72,6 +121,19 @@ test('matches direct custom, canonical preset, explicit alias, and unmatched wit
   assert.equal(pricing.resolvePriceProfile('gpt-5.6-sol', profile).modelMatch, 'preset');
   assert.equal(pricing.resolvePriceProfile('tenant/sol', profile).modelMatch, 'alias');
   assert.equal(pricing.resolvePriceProfile('tenant/gpt-5.6-sol', profile).modelMatch, 'none');
+
+  for (const [alias, canonicalModel] of [
+    ['k3', 'kimi-k3'],
+    ['kimi-for-coding', 'kimi-k2.7-code'],
+    ['kimi-for-coding-highspee', 'kimi-k2.7-code-highspeed'],
+    ['kimi-for-coding-highspeed', 'kimi-k2.7-code-highspeed'],
+    ['grok-4.5-latest', 'grok-4.5'],
+    ['grok-build-latest', 'grok-4.5'],
+  ]) {
+    const resolved = pricing.resolvePriceProfile(alias, profile);
+    assert.equal(resolved.modelMatch, 'alias');
+    assert.equal(resolved.resolvedModel, canonicalModel);
+  }
 });
 
 test('v2 migration preserves Auto cache-write, explicit zero, and old string values', () => {
@@ -293,6 +355,68 @@ test('GLM-5.2 Fast is unsupported and excluded from priced coverage', () => {
   assert.equal(coverage.totalModels, 1);
   assert.equal(coverage.pricedModels, 0);
   assert.equal(coverage.estimatedAmount, 0);
+});
+
+test('Kimi presets map cache hit and miss rates without inventing Fast pricing', () => {
+  for (const [modelName, expectedRates, expectedAmount] of [
+    ['kimi-k3', { input: 3, cachedInput: 0.3, output: 15 }, 17.46],
+    ['kimi-k2.7-code', { input: 0.95, cachedInput: 0.19, output: 4 }, 4.798],
+    ['kimi-k2.7-code-highspeed', { input: 1.9, cachedInput: 0.38, output: 8 }, 9.596],
+  ]) {
+    const usage = {
+      input_tokens: 1_000_000,
+      output_tokens: 1_000_000,
+      cache_read_tokens: 200_000,
+      cache_creation_tokens: 300_000,
+    };
+    const standard = pricing.estimateUsageCost(modelName, usage, undefined, tier());
+    assert.equal(standard.status, 'priced');
+    assert.equal(standard.contextBand, 'short');
+    assert.deepEqual(standard.rates, expectedRates);
+    approx(standard.amount, expectedAmount);
+
+    const fast = pricing.estimateUsageCost(modelName, usage, undefined, tier('fast', 'request'));
+    assert.equal(fast.status, 'unsupported');
+    assert.equal(fast.amount, null);
+    assert.equal(fast.rates, null);
+  }
+});
+
+test('Grok 4.5 switches the entire request to long-context rates at 200K prompt tokens', () => {
+  for (const [inputTokens, contextBand, rates] of [
+    [199_999, 'short', { input: 2, cachedInput: 0.3, output: 6 }],
+    [200_000, 'long', { input: 4, cachedInput: 0.6, output: 12 }],
+    [200_001, 'long', { input: 4, cachedInput: 0.6, output: 12 }],
+  ]) {
+    const estimate = pricing.estimateUsageCost(
+      'grok-4.5',
+      { input_tokens: inputTokens, cache_read_tokens: 1_000, output_tokens: 10_000 },
+      undefined,
+      tier()
+    );
+    assert.equal(estimate.status, 'priced');
+    assert.equal(estimate.contextBand, contextBand);
+    assert.deepEqual(estimate.rates, rates);
+  }
+
+  const alias = pricing.estimateUsageCost(
+    'grok-4.5-latest',
+    { input_tokens: 1_000 },
+    undefined,
+    tier()
+  );
+  assert.equal(alias.status, 'priced');
+  assert.equal(alias.resolvedModel, 'grok-4.5');
+
+  const fast = pricing.estimateUsageCost(
+    'grok-4.5',
+    { input_tokens: 1_000 },
+    undefined,
+    tier('fast', 'request')
+  );
+  assert.equal(fast.status, 'unsupported');
+  assert.equal(fast.amount, null);
+  assert.equal(fast.rates, null);
 });
 
 test('Fast long context remains unsupported and evidence warnings stay explicit', () => {

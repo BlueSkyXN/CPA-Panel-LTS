@@ -97,6 +97,16 @@ features:
       - PRICE_CATALOG
       - glm-5.2
       - ZAI_PRICING_SOURCE_URL
+      - kimi-k3
+      - kimi-k2.7-code
+      - kimi-k2.7-code-highspeed
+      - kimi-for-coding
+      - kimi-for-coding-highspee
+      - kimi-for-coding-highspeed
+      - KIMI_PRICING_SOURCE_URL
+      - grok-4.5
+      - XAI_PRICING_SOURCE_URL
+      - XAI_LONG_CONTEXT_INPUT_TOKEN_THRESHOLD
       - getCatalogSourceLinks
       - getLocalEstimateCoverageDisplay
       - isLocalEstimateComplete

@@ -2,11 +2,16 @@
 export const PRICE_CURRENCY = 'USD' as const;
 export const OPENAI_CATALOG_AS_OF = '2026-07-20';
 export const ZAI_CATALOG_AS_OF = '2026-07-22';
-export const PRICE_CATALOG_AS_OF = ZAI_CATALOG_AS_OF;
+export const KIMI_CATALOG_AS_OF = '2026-07-23';
+export const XAI_CATALOG_AS_OF = '2026-07-23';
+export const PRICE_CATALOG_AS_OF = KIMI_CATALOG_AS_OF;
 export const PRICE_CATALOG_VERSION = `api-${PRICE_CATALOG_AS_OF}`;
 export const OPENAI_PRICING_SOURCE_URL = 'https://developers.openai.com/api/docs/pricing';
 export const ZAI_PRICING_SOURCE_URL = 'https://docs.z.ai/guides/overview/pricing';
+export const KIMI_PRICING_SOURCE_URL = 'https://platform.kimi.ai/docs/pricing/chat';
+export const XAI_PRICING_SOURCE_URL = 'https://docs.x.ai/developers/models/grok-4.5';
 export const LONG_CONTEXT_INPUT_TOKEN_THRESHOLD = 272_000;
+export const XAI_LONG_CONTEXT_INPUT_TOKEN_THRESHOLD = 200_000;
 
 export interface TokenRates {
   input: number;
@@ -56,8 +61,11 @@ const rateCard = (
   output,
 });
 
-const longCard = (rates: TokenRates): LongContextPricing => ({
-  thresholdTokens: LONG_CONTEXT_INPUT_TOKEN_THRESHOLD,
+const longCard = (
+  rates: TokenRates,
+  thresholdTokens = LONG_CONTEXT_INPUT_TOKEN_THRESHOLD
+): LongContextPricing => ({
+  thresholdTokens,
   basis: 'inputTokens',
   appliesTo: 'entireRequest',
   rates,
@@ -65,6 +73,12 @@ const longCard = (rates: TokenRates): LongContextPricing => ({
 
 const modelPricingNotesUrl = (model: string): string =>
   `https://developers.openai.com/api/docs/models/${model}`;
+
+const kimiPricingSourceUrl = (model: 'k3' | 'k27-code'): string =>
+  `${KIMI_PRICING_SOURCE_URL}-${model}`;
+
+const kimiModelNotesUrl = (model: 'k3' | 'k2-7-code'): string =>
+  `https://platform.kimi.ai/docs/guide/kimi-${model}-quickstart`;
 
 /**
  * Official provider rate cards, each carrying its own verification date and source.
@@ -149,5 +163,43 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
     sourceUrl: ZAI_PRICING_SOURCE_URL,
     pricingNotesUrl: 'https://docs.z.ai/guides/llm/glm-5.2',
     asOf: ZAI_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'kimi-k3',
+    aliases: ['k3'],
+    currency: 'USD',
+    standard: { short: rateCard(3, 0.3, undefined, 15) },
+    sourceUrl: kimiPricingSourceUrl('k3'),
+    pricingNotesUrl: kimiModelNotesUrl('k3'),
+    asOf: KIMI_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'kimi-k2.7-code',
+    aliases: ['kimi-for-coding'],
+    currency: 'USD',
+    standard: { short: rateCard(0.95, 0.19, undefined, 4) },
+    sourceUrl: kimiPricingSourceUrl('k27-code'),
+    pricingNotesUrl: kimiModelNotesUrl('k2-7-code'),
+    asOf: KIMI_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'kimi-k2.7-code-highspeed',
+    aliases: ['kimi-for-coding-highspee', 'kimi-for-coding-highspeed'],
+    currency: 'USD',
+    standard: { short: rateCard(1.9, 0.38, undefined, 8) },
+    sourceUrl: kimiPricingSourceUrl('k27-code'),
+    pricingNotesUrl: kimiModelNotesUrl('k2-7-code'),
+    asOf: KIMI_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'grok-4.5',
+    aliases: ['grok-4.5-latest', 'grok-build-latest'],
+    currency: 'USD',
+    standard: {
+      short: rateCard(2, 0.3, undefined, 6),
+      long: longCard(rateCard(4, 0.6, undefined, 12), XAI_LONG_CONTEXT_INPUT_TOKEN_THRESHOLD),
+    },
+    sourceUrl: XAI_PRICING_SOURCE_URL,
+    asOf: XAI_CATALOG_AS_OF,
   },
 ];

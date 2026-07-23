@@ -2404,6 +2404,10 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
             "gpt-5.4",
             "gpt-5.4-mini",
             "glm-5.2",
+            "kimi-k3",
+            "kimi-k2.7-code",
+            "kimi-k2.7-code-highspeed",
+            "grok-4.5",
         ]:
             catalog.locator(
                 f'[data-testid="preset-pricing-model"][data-model="{model_name}"]'
@@ -2453,6 +2457,126 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
             or glm_notes.get_attribute("href") != "https://docs.z.ai/guides/llm/glm-5.2"
         ):
             raise AssertionError("GLM-5.2 Model notes does not point to the model overview")
+
+        for model_name, expected_rates, expected_source in [
+            (
+                "kimi-k3",
+                {"Input": "$3", "Cached input": "$0.3", "Output": "$15"},
+                "https://platform.kimi.ai/docs/pricing/chat-k3",
+            ),
+            (
+                "kimi-k2.7-code",
+                {"Input": "$0.95", "Cached input": "$0.19", "Output": "$4"},
+                "https://platform.kimi.ai/docs/pricing/chat-k27-code",
+            ),
+            (
+                "kimi-k2.7-code-highspeed",
+                {"Input": "$1.9", "Cached input": "$0.38", "Output": "$8"},
+                "https://platform.kimi.ai/docs/pricing/chat-k27-code",
+            ),
+        ]:
+            kimi_row = catalog.locator(
+                f'[data-testid="preset-pricing-model"][data-model="{model_name}"] '
+                'tr[data-context-band="short"]'
+            )
+            for label, expected_rate in expected_rates.items():
+                actual_rate = (
+                    kimi_row.locator(f'td[data-label="{label}"] strong')
+                    .first.text_content()
+                    or ""
+                )
+                if actual_rate != expected_rate:
+                    raise AssertionError(
+                        f"{model_name} {label} rate is {actual_rate!r}, expected {expected_rate!r}"
+                    )
+
+            cache_write = kimi_row.locator('td[data-label="Cache write"]')
+            actual_cache_write_label = cache_write.locator("strong").text_content() or ""
+            actual_cache_write_rate = cache_write.locator("small").text_content() or ""
+            if (
+                actual_cache_write_label != "Auto / input rate"
+                or actual_cache_write_rate != expected_rates["Input"]
+            ):
+                raise AssertionError(
+                    f"{model_name} Cache write did not inherit the Cache Miss/Input rate: "
+                    f"label={actual_cache_write_label!r}, rate={actual_cache_write_rate!r}, "
+                    f"expected rate={expected_rates['Input']!r}"
+                )
+            if "Unavailable" not in (
+                kimi_row.locator('td[data-label="Fast policies"]').text_content() or ""
+            ):
+                raise AssertionError(f"{model_name} catalog row did not expose Fast as unavailable")
+            if (
+                kimi_row.locator('[data-testid="pricing-official-source"]').get_attribute("href")
+                != expected_source
+            ):
+                raise AssertionError(f"{model_name} Official source does not point to Kimi pricing")
+
+        for model_name, expected_aliases in [
+            ("kimi-k3", ["k3"]),
+            ("kimi-k2.7-code", ["kimi-for-coding"]),
+            (
+                "kimi-k2.7-code-highspeed",
+                ["kimi-for-coding-highspee", "kimi-for-coding-highspeed"],
+            ),
+        ]:
+            model_text = (
+                catalog.locator(
+                    f'[data-testid="preset-pricing-model"][data-model="{model_name}"]'
+                ).inner_text()
+                or ""
+            )
+            for alias in expected_aliases:
+                if alias not in model_text:
+                    raise AssertionError(f"{model_name} catalog row is missing alias {alias}")
+
+        grok_model = catalog.locator(
+            '[data-testid="preset-pricing-model"][data-model="grok-4.5"]'
+        )
+        grok_rows = grok_model.locator("tr")
+        if grok_rows.count() != 2:
+            raise AssertionError("Grok 4.5 catalog did not render short and long-context rows")
+        for band, expected_rates in [
+            ("short", {"Input": "$2", "Cached input": "$0.3", "Output": "$6"}),
+            ("long", {"Input": "$4", "Cached input": "$0.6", "Output": "$12"}),
+        ]:
+            grok_row = grok_model.locator(f'tr[data-context-band="{band}"]')
+            for label, expected_rate in expected_rates.items():
+                actual_rate = (
+                    grok_row.locator(f'td[data-label="{label}"] strong')
+                    .first.text_content()
+                    or ""
+                )
+                if actual_rate != expected_rate:
+                    raise AssertionError(
+                        f"Grok 4.5 {band} {label} rate is {actual_rate!r}, "
+                        f"expected {expected_rate!r}"
+                    )
+            cache_write = grok_row.locator('td[data-label="Cache write"]')
+            if (
+                (cache_write.locator("strong").text_content() or "")
+                != "Auto / input rate"
+                or (cache_write.locator("small").text_content() or "")
+                != expected_rates["Input"]
+            ):
+                raise AssertionError(
+                    f"Grok 4.5 {band} Cache write did not inherit the Input rate"
+                )
+            if "Unavailable" not in (
+                grok_row.locator('td[data-label="Fast policies"]').text_content() or ""
+            ):
+                raise AssertionError(f"Grok 4.5 {band} row did not expose Fast as unavailable")
+
+        grok_text = grok_model.inner_text()
+        if "200.0K" not in grok_text:
+            raise AssertionError("Grok 4.5 catalog did not expose the 200K pricing threshold")
+        if (
+            grok_model.locator(
+                '[data-testid="pricing-official-source"]'
+            ).first.get_attribute("href")
+            != "https://docs.x.ai/developers/models/grok-4.5"
+        ):
+            raise AssertionError("Grok 4.5 Official source does not point to xAI model pricing")
 
         long_context_cell_text = (
             catalog.locator(
