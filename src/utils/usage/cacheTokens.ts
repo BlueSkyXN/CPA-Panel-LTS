@@ -29,6 +29,13 @@ export interface UsagePriceFields {
 
 const TOKENS_PER_PRICE_UNIT = 1_000_000;
 
+const isCodexOrOpenAIReasoningSubsetModel = (modelName: string): boolean => {
+  const normalized = modelName.trim().toLowerCase();
+  return /^(?:gpt-|chatgpt-|codex-|o[134](?:-|$)|openai\/(?:gpt-|chatgpt-|codex-|o[134](?:-|$)))/.test(
+    normalized
+  );
+};
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 
@@ -79,14 +86,20 @@ export function splitUsageTokensForCost(
 
 export function calculateFallbackUsageTotalTokens(
   tokens: UsageTokenFields,
-  _modelName: string
+  modelName: string
 ): number {
   const inputTokens = toTokenCount(tokens.input_tokens);
   const outputTokens = toTokenCount(tokens.output_tokens);
   const reasoningTokens = toTokenCount(tokens.reasoning_tokens);
 
   // input_tokens is already normalized to include cache reads and writes.
-  return inputTokens + outputTokens + reasoningTokens;
+  // Codex/OpenAI output_tokens already includes reasoning_tokens; other
+  // providers keep reasoning as a separate category.
+  return (
+    inputTokens +
+    outputTokens +
+    (isCodexOrOpenAIReasoningSubsetModel(modelName) ? 0 : reasoningTokens)
+  );
 }
 
 export function resolveUsageTotalTokens(tokens: UsageTokenFields, modelName: string): number {
