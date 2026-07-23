@@ -229,8 +229,32 @@ require_file_contains src/utils/usage.ts "reasoning_effort"
 require_file_not_contains src/utils/usage.ts "UsageThinking"
 require_file_not_contains src/utils/usage.ts "normalizeUsageThinking"
 require_file_contains src/utils/usage/importPreflight.ts "analyzeUsageImport"
-require_file_contains src/utils/usage/importPreflight.ts "unsupported_legacy_token_contract"
-require_file_contains src/utils/usage/importPreflight.test.mjs "legacy uncached input token fields are rejected"
+require_file_contains src/utils/usage/importPreflight.ts "usage_version_unsupported"
+require_file_contains src/utils/usage/importPreflight.ts "usage_shape_invalid"
+require_file_contains src/utils/usage/importPreflight.ts "usage_v1_token_contract_invalid"
+require_file_contains src/utils/usage/importPreflight.ts "usage_v1_cache_semantics_ambiguous"
+require_file_contains src/utils/usage/importPreflight.ts "usage_v2_token_contract_invalid"
+require_file_contains src/utils/usage/importPreflight.ts "usage_aggregate_overflow"
+require_file_contains src/utils/usage/importPreflight.ts "uncertainIdentityCount"
+require_file_contains src/services/api/usageImportContract.ts "USAGE_IMPORT_ERROR_CODES"
+require_file_contains src/services/api/usageImportContract.ts "schema_version"
+require_file_contains src/services/api/usageImportContract.ts "migrated_from_version"
+require_file_contains src/services/api/usageImportContract.ts "v1_uncached_input_tokens_to_v2"
+require_file_contains src/components/usage/hooks/useUsageData.ts "getUsageImportErrorTranslationKey"
+require_file_contains src/components/usage/hooks/useUsageData.ts "import_success_migrated_v1"
+for locale in en zh-CN zh-TW ru; do
+  for marker in \
+    import_error_usage_version_unsupported \
+    import_error_usage_shape_invalid \
+    import_error_usage_v1_token_contract_invalid \
+    import_error_usage_v1_cache_semantics_ambiguous \
+    import_error_usage_v2_token_contract_invalid \
+    import_error_usage_aggregate_overflow; do
+    require_file_contains "src/i18n/locales/${locale}.json" "${marker}"
+  done
+  require_file_contains "src/i18n/locales/${locale}.json" "import_success_migrated_v1"
+  require_file_contains "src/i18n/locales/${locale}.json" "import_review_uncertain_identities"
+done
 require_file_contains src/utils/usage/reasoningEffort.ts "normalizeReasoningEffort"
 require_file_contains src/utils/usage/serviceTier.ts "resolveServiceTier"
 require_file_contains src/utils/usage/serviceTier.ts "ServiceTierEvidence"
@@ -316,10 +340,6 @@ require_file_not_contains src/i18n/locales/en.json "request_events_effort_max_ul
 require_file_not_contains src/i18n/locales/zh-CN.json "request_events_effort_max_ultra_wire"
 require_file_not_contains src/i18n/locales/zh-TW.json "request_events_effort_max_ultra_wire"
 require_file_not_contains src/i18n/locales/ru.json "request_events_effort_max_ultra_wire"
-require_file_contains src/i18n/locales/en.json "import_unsupported_legacy_token_contract"
-require_file_contains src/i18n/locales/zh-CN.json "import_unsupported_legacy_token_contract"
-require_file_contains src/i18n/locales/zh-TW.json "import_unsupported_legacy_token_contract"
-require_file_contains src/i18n/locales/ru.json "import_unsupported_legacy_token_contract"
 require_file_contains src/services/api/ampcode.ts "'/ampcode'"
 require_file_contains src/services/api/ampcode.ts "'/ampcode/upstream-api-keys'"
 require_file_contains src/services/api/ampcode.ts "'/ampcode/model-mappings'"
@@ -915,7 +935,13 @@ require_file_contains .github/workflows/lts-panel-contract.yml "npm run test:usa
 require_file_contains .github/workflows/lts-panel-contract.yml "npm run test:providers"
 require_file_contains .github/workflows/lts-panel-contract.yml "npm run test:auth-files"
 require_file_contains .github/workflows/lts-panel-contract.yml "npm run test:api-client"
-require_file_contains scripts/smoke-lts-panel.py "run_usage_import_contract_smoke"
+require_file_contains scripts/smoke-lts-panel.py "run_usage_contract_import_smoke"
+require_file_contains scripts/smoke-lts-panel.py "Ambiguous v1 cache semantics must not POST usage imports"
+require_file_contains scripts/smoke-lts-panel.py "Invalid v2 token contracts must not POST usage imports"
+require_file_contains scripts/smoke-lts-panel.py "Uncertain timestamp review must not POST after cancellation"
+require_file_contains scripts/smoke-lts-panel.py "Released Core success receipt must be accepted after exactly one POST"
+require_file_contains scripts/smoke-lts-panel.py "usage_aggregate_overflow"
+require_file_contains scripts/smoke-lts-panel-core.py "Core usage import returned audited v1-to-v2 migration receipt"
 require_file_contains scripts/smoke-lts-panel.py "selected raw effort"
 require_file_not_contains scripts/smoke-lts-panel.py "Max / Ultra wire"
 require_file_contains scripts/smoke-lts-panel.py "Resets"

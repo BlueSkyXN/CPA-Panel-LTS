@@ -434,7 +434,13 @@ def build_service_tier_usage_snapshot() -> dict[str, Any]:
             "request_service_tier": "priority",
             "response_service_tier": "standard",
             "effective_service_tier": "standard",
-            "tokens": {"input_tokens": 5, "output_tokens": 7, "total_tokens": 12},
+            "tokens": {
+                "input_tokens": 5,
+                "output_tokens": 7,
+                "reasoning_tokens": 0,
+                "cached_tokens": 0,
+                "total_tokens": 12,
+            },
             "failed": False,
         },
         {
@@ -444,7 +450,13 @@ def build_service_tier_usage_snapshot() -> dict[str, Any]:
             "service_tier": "auto",
             "request_service_tier": "auto",
             "effective_service_tier": "priority",
-            "tokens": {"input_tokens": 8, "output_tokens": 4, "total_tokens": 12},
+            "tokens": {
+                "input_tokens": 8,
+                "output_tokens": 4,
+                "reasoning_tokens": 0,
+                "cached_tokens": 0,
+                "total_tokens": 12,
+            },
             "failed": False,
         },
         {
@@ -454,12 +466,18 @@ def build_service_tier_usage_snapshot() -> dict[str, Any]:
             "service_tier": "priority",
             "request_service_tier": "priority",
             "response_service_tier": "future-tier",
-            "tokens": {"input_tokens": 6, "output_tokens": 3, "total_tokens": 9},
+            "tokens": {
+                "input_tokens": 6,
+                "output_tokens": 3,
+                "reasoning_tokens": 0,
+                "cached_tokens": 0,
+                "total_tokens": 9,
+            },
             "failed": False,
         },
     ]
     return {
-        "version": 1,
+        "version": 2,
         "exported_at": now.isoformat().replace("+00:00", "Z"),
         "usage": {
             "total_requests": 3,
@@ -1082,7 +1100,8 @@ def run_endpoint_smoke(api_url: str, include_plugin_store: bool, include_write_s
         get("/v0/management/usage/export"),
         "/v0/management/usage/export",
     )
-    if export_payload.get("version") != 1 or "usage" not in export_payload:
+    core_usage_version = export_payload.get("version")
+    if core_usage_version not in {1, 2} or "usage" not in export_payload:
         raise AssertionError(f"Invalid usage export payload: {export_payload!r}")
 
     seen.append("POST /v0/management/usage/import")
@@ -1092,8 +1111,13 @@ def run_endpoint_smoke(api_url: str, include_plugin_store: bool, include_write_s
     )
     if "total_requests" not in import_result:
         raise AssertionError(f"Invalid usage import result: {import_result!r}")
+    if core_usage_version == 2 and import_result.get("schema_version") != 2:
+        raise AssertionError(f"Canonical Core import omitted schema_version=2: {import_result!r}")
+    if core_usage_version == 1 and "schema_version" in import_result:
+        raise AssertionError(f"Released Core unexpectedly returned a schema receipt: {import_result!r}")
 
     tier_snapshot = build_service_tier_usage_snapshot()
+    tier_snapshot["version"] = core_usage_version
     seen.append("POST /v0/management/usage/import service-tier fixture")
     tier_import_result = assert_mapping(
         request_json(
@@ -1171,7 +1195,37 @@ def run_endpoint_smoke(api_url: str, include_plugin_store: bool, include_write_s
             "Unknown response tier must not fabricate effective_service_tier: "
             f"{unknown_detail!r}"
         )
-    seen.append("Core usage v1 round-tripped inconsistent request/response/effective tiers")
+    seen.append(
+        f"Core usage v{core_usage_version} round-tripped inconsistent "
+        "request/response/effective tiers"
+    )
+
+    if core_usage_version == 2:
+        migrated_v1 = json.loads(json.dumps(tier_snapshot))
+        migrated_v1["version"] = 1
+        migrated_tokens = migrated_v1["usage"]["apis"]["panel-core-tier-smoke"]["models"][
+            "gpt-5.4"
+        ]["details"][0]["tokens"]
+        migrated_tokens["uncached_input_tokens"] = migrated_tokens["input_tokens"]
+        seen.append("POST /v0/management/usage/import v1 migration receipt")
+        migrated_result = assert_mapping(
+            request_json(
+                api_url,
+                "/v0/management/usage/import",
+                method="POST",
+                payload=migrated_v1,
+            ),
+            "/v0/management/usage/import v1 migration receipt",
+        )
+        if (
+            migrated_result.get("schema_version") != 2
+            or migrated_result.get("migrated_from_version") != 1
+            or migrated_result.get("migration") != "v1_uncached_input_tokens_to_v2"
+        ):
+            raise AssertionError(f"Invalid v1 migration receipt: {migrated_result!r}")
+        seen.append("Core usage import returned audited v1-to-v2 migration receipt")
+    else:
+        seen.append("Released Core v1 baseline has no v1-to-v2 migration receipt")
 
     assert_mapping(get("/v0/management/api-key-usage"), "/v0/management/api-key-usage")
     assert_mapping(get("/v0/management/ampcode"), "/v0/management/ampcode")
