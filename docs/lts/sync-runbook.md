@@ -17,18 +17,18 @@ main = CPA-Panel-LTS product line
      + local downstream panel customizations
 ```
 
-## Audited upstream intake snapshot (2026-07-19)
+## Audited upstream intake snapshot (2026-07-24)
 
-Refs captured after Panel PR #28 and before publishing the 2026-07-19 intake branch:
+Refs captured after publishing Panel commit `f199ea5` and fetching all remotes with pruning:
 
-- `origin/main`: `cf76c124eeb614b58b5391a4824916cc22561c10`
-- `upstream/main`: `6a6a22af85ce8763e8898c0d8641de3137f3ffd9` (`v1.18.5`)
-- `upstream/dev`: `6a6a22af85ce8763e8898c0d8641de3137f3ffd9`
+- `origin/main`: `f199ea55dfc2281a05ea3e478fc2809b9dd687fe`
+- `upstream/main`: `3738c0b7ff21ce7e1423795a26769fff05fd81d6` (`v1.18.6`)
+- `upstream/dev`: `3738c0b7ff21ce7e1423795a26769fff05fd81d6`
 - `upstream/kimi-provider`: `f860bc81bcc507826bbced5434cf037bf77f8244`
 - merge-base: `8ed837c3d734c3970a6d6799c557bb6a6753360d`
-- `origin/main..upstream/main`: 259 commits
-- `upstream/main..origin/main`: 150 commits
-- `origin/main..upstream/dev`: 259 commits
+- `origin/main..upstream/main`: 260 commits
+- `upstream/main..origin/main`: 203 commits
+- `origin/main..upstream/dev`: 260 commits
 - `origin/main..upstream/kimi-provider`: 252 commits
 
 The raw commit counts are not the selective-port backlog. Panel PR #10, PR #16, PR #20, and PR #27 already adapted substantial upstream work without making those upstream commits ancestors of `main`, while PR #23 recorded the `v1.18.3` result as already equivalent. `upstream/dev` currently matches `upstream/main`; `upstream/kimi-provider` remains a historical review ref rather than an accepted release boundary.
@@ -61,6 +61,7 @@ Recent upstream intake:
 | Kimi versioned OpenAI URL / `f324135` | `defer` | The technical `/v1` correction belongs to the still-unaccepted Kimi workbench surface; current Panel already supports Kimi quota/auth files but has no Kimi branded workbench group | Reassess only as part of a commercial-neutral, config-detected Kimi workbench design; do not introduce the upstream affiliate constants to absorb one URL hunk. |
 | Kimi functional/theme base / `b2c8490`, `7fb5890`, `f860bc8` | `defer` | The feature reached upstream main, and `5b62fa1` fixed custom sponsor endpoint preservation, but the accepted Panel surface still does not include a Kimi workbench group and the implementation remains coupled to promotional/affiliate code | Revisit as a separate feature decision; custom endpoints must round-trip unchanged and unconfigured Kimi must stay hidden. |
 | Kimi domestic/overseas mapping / `6a6a22a` (`v1.18.5`) | `defer` | Adds `moonshot.cn`/`moonshot.ai` protocol mappings and changes the default region inside the unaccepted Kimi workbench surface | Do not port as an isolated endpoint patch. Region defaults and the new provider surface require an explicit product decision and commercial-neutral implementation. |
+| xAI paid OAuth health fallback / `3738c0b` (`v1.18.6`) | `defer` | The upstream refresh path can issue `POST https://api.x.ai/v1/chat/completions` with `grok-4.5`; this is a potentially billable write-like probe, not a quota read. Current CPA-Core-LTS auth-file list entries expose `prefix` but not the upstream classifier's `using_api`, raw JWT, or nested credential metadata, so the paid classifier cannot be adopted as-is. The upstream test also uses `bun:test`, outside this repository's npm/Node gates. | Do not cherry-pick or enable the chat probe by default. Reassess only with an explicit user-controlled paid-health action, a confirmed Core metadata contract that identifies paid credentials without exposing tokens, no retained unused account identifiers, and npm/Node plus browser-smoke coverage. Preserve the existing billing error when the optional probe is not explicitly enabled. |
 | Kimi promotion series / `e2aa494`, `6a8319d`, `339529f`, `bb48387`, `72c13c0`, `36681ce` plus affiliate hunks in `f860bc8` | `reject` | `provider-workbench` contract requires commercial-neutral, config-detected groups without registration links | Do not add recommended-provider placement, quick sign-up controls, or `?aff=cliproxyapi` registration links. |
 
 ## Maintenance rules
