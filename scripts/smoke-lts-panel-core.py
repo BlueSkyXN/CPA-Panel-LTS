@@ -1079,6 +1079,11 @@ def run_plugin_config_smoke(api_url: str) -> list[str]:
 
 
 def run_usage_v2_import_contract_smoke(api_url: str, seen: list[str]) -> None:
+    def export_state(payload: dict[str, Any]) -> dict[str, Any]:
+        # exported_at changes on every request; all other envelope and usage
+        # fields represent the state that a rejected import must preserve.
+        return {key: value for key, value in payload.items() if key != "exported_at"}
+
     migration_timestamp = (datetime.now(timezone.utc) - timedelta(minutes=4)).isoformat().replace(
         "+00:00", "Z"
     )
@@ -1136,6 +1141,10 @@ def run_usage_v2_import_contract_smoke(api_url: str, seen: list[str]) -> None:
         request_json(api_url, "/v0/management/usage/export"),
         "/v0/management/usage/export after v1 cache-creation migration",
     )
+    if migrated_export.get("version") != 2:
+        raise AssertionError(
+            f"Core v1 migration re-exported schema {migrated_export.get('version')!r}, want 2"
+        )
     migrated_usage = assert_mapping(migrated_export.get("usage"), "migrated usage")
     migrated_api = assert_mapping(
         assert_mapping(migrated_usage.get("apis"), "migrated usage apis").get(
@@ -1153,17 +1162,29 @@ def run_usage_v2_import_contract_smoke(api_url: str, seen: list[str]) -> None:
     if len(migrated_details) != 1:
         raise AssertionError(f"Core v1 migration exported unexpected details: {migrated_details!r}")
     migrated_tokens = assert_mapping(migrated_details[0].get("tokens"), "migrated tokens")
+    required_canonical_tokens = {
+        "input_tokens": 1200,
+        "output_tokens": 10,
+        "reasoning_tokens": 0,
+        "cached_tokens": 0,
+        "total_tokens": 1210,
+    }
+    missing_canonical_fields = [
+        field for field in required_canonical_tokens if field not in migrated_tokens
+    ]
     if (
-        migrated_tokens.get("input_tokens") != 1200
-        or migrated_tokens.get("cached_tokens") != 0
+        missing_canonical_fields
+        or any(
+            migrated_tokens.get(field) != expected
+            for field, expected in required_canonical_tokens.items()
+        )
         or migrated_tokens.get("cache_read_tokens", 0) != 0
         or migrated_tokens.get("cache_creation_tokens") != 1024
-        or migrated_tokens.get("total_tokens") != 1210
         or "uncached_input_tokens" in migrated_tokens
     ):
         raise AssertionError(
             "Core v1 alias migration did not export creation-only canonical tokens: "
-            f"{migrated_tokens!r}"
+            f"missing={missing_canonical_fields!r} tokens={migrated_tokens!r}"
         )
 
     duplicate_result = assert_mapping(
@@ -1177,6 +1198,12 @@ def run_usage_v2_import_contract_smoke(api_url: str, seen: list[str]) -> None:
     )
     if duplicate_result.get("added") != 0 or duplicate_result.get("skipped") != 1:
         raise AssertionError(f"Duplicate migrated usage was not skipped: {duplicate_result!r}")
+    duplicate_export = assert_mapping(
+        request_json(api_url, "/v0/management/usage/export"),
+        "/v0/management/usage/export after duplicate v1 cache-creation alias fixture",
+    )
+    if export_state(duplicate_export) != export_state(migrated_export):
+        raise AssertionError("Duplicate migrated usage mutated the Core export snapshot")
     seen.append("Core migrated the v1 cache-creation alias once and skipped its duplicate")
 
     invalid_canonical_tokens = [
@@ -1209,18 +1236,38 @@ def run_usage_v2_import_contract_smoke(api_url: str, seen: list[str]) -> None:
         },
     ]
     for index, tokens in enumerate(invalid_canonical_tokens):
+        valid_input_tokens = 20 + index
+        fixture_id = index + 1
         invalid_payload = {
             "version": 2,
             "usage": {
                 "apis": {
-                    "panel-core-invalid-v2-smoke": {
+                    f"panel-core-invalid-v2-smoke-{fixture_id}": {
                         "models": {
                             "gpt-5.6-sol": {
                                 "details": [
                                     {
-                                        "timestamp": f"2026-07-22T00:0{index + 1}:00Z",
+                                        "timestamp": f"2026-07-22T01:0{fixture_id}:00Z",
+                                        "source": f"panel-core-valid-before-invalid-{fixture_id}",
+                                        "auth_index": str(fixture_id),
+                                        "failed": False,
+                                        "tokens": {
+                                            "input_tokens": valid_input_tokens,
+                                            "output_tokens": 3,
+                                            "reasoning_tokens": 0,
+                                            "cached_tokens": 2,
+                                            "cache_read_tokens": 2,
+                                            "cache_creation_tokens": 3,
+                                            "total_tokens": valid_input_tokens + 3,
+                                        },
+                                    },
+                                    {
+                                        "timestamp": f"2026-07-22T02:0{fixture_id}:00Z",
+                                        "source": f"panel-core-invalid-v2-smoke-{fixture_id}",
+                                        "auth_index": str(fixture_id),
+                                        "failed": False,
                                         "tokens": tokens,
-                                    }
+                                    },
                                 ]
                             }
                         }
@@ -1228,6 +1275,10 @@ def run_usage_v2_import_contract_smoke(api_url: str, seen: list[str]) -> None:
                 }
             },
         }
+        before_reject = assert_mapping(
+            request_json(api_url, "/v0/management/usage/export"),
+            f"usage export before rejected canonical fixture {fixture_id}",
+        )
         rejected = assert_mapping(
             request_json(
                 api_url,
@@ -1236,15 +1287,15 @@ def run_usage_v2_import_contract_smoke(api_url: str, seen: list[str]) -> None:
                 payload=invalid_payload,
                 expected=(400,),
             ),
-            f"invalid canonical usage fixture {index}",
+            f"invalid canonical usage fixture {fixture_id}",
         )
         if rejected.get("code") != "usage_v2_token_contract_invalid":
             raise AssertionError(f"Unexpected invalid canonical response: {rejected!r}")
         after_reject = assert_mapping(
             request_json(api_url, "/v0/management/usage/export"),
-            "usage export after rejected canonical fixture",
+            f"usage export after rejected canonical fixture {fixture_id}",
         )
-        if after_reject.get("usage") != migrated_usage:
+        if export_state(after_reject) != export_state(before_reject):
             raise AssertionError("Rejected canonical usage fixture partially mutated Core state")
     seen.append("Core rejected impossible v2 token fixtures atomically with a stable code")
 
