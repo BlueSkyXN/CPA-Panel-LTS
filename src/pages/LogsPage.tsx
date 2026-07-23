@@ -31,6 +31,7 @@ import { logsApi, type LogsQuery } from '@/services/api/logs';
 import { versionApi } from '@/services/api/version';
 import { copyToClipboard } from '@/utils/clipboard';
 import { getErrorMessage } from '@/utils/helpers';
+import { mergeIncrementalLogLines } from '@/utils/logLines';
 import { downloadBlob } from '@/utils/download';
 import { MANAGEMENT_API_PREFIX } from '@/utils/constants';
 import { formatUnixTimestamp } from '@/utils/format';
@@ -73,32 +74,6 @@ const buildLogsQuery = (incremental: boolean, position: LogPosition): LogsQuery 
   }
 
   return params;
-};
-
-const findLineOverlap = (currentLines: string[], incomingLines: string[]): number => {
-  const maxOverlap = Math.min(currentLines.length, incomingLines.length);
-
-  for (let size = maxOverlap; size > 0; size -= 1) {
-    let matched = true;
-    for (let i = 0; i < size; i += 1) {
-      if (currentLines[currentLines.length - size + i] !== incomingLines[i]) {
-        matched = false;
-        break;
-      }
-    }
-    if (matched) return size;
-  }
-
-  return 0;
-};
-
-const mergeIncrementalLines = (currentLines: string[], incomingLines: string[]): string[] => {
-  if (currentLines.length === 0 || incomingLines.length === 0) {
-    return [...currentLines, ...incomingLines];
-  }
-
-  const overlap = findLineOverlap(currentLines, incomingLines);
-  return [...currentLines, ...incomingLines.slice(overlap)];
 };
 
 const getErrorPayloadText = (err: unknown): string => {
@@ -284,7 +259,11 @@ export function LogsPage() {
         // 增量更新：追加新日志并限制缓冲区大小（避免内存与渲染膨胀）
         setLogState((prev) => {
           const prevRenderedCount = prev.buffer.length - prev.visibleFrom;
-          const combined = mergeIncrementalLines(prev.buffer, newLines);
+          const combined = mergeIncrementalLogLines(
+            prev.buffer,
+            newLines,
+            data.replaceTrailingPartial
+          );
           const dropCount = Math.max(combined.length - MAX_BUFFER_LINES, 0);
           const buffer = dropCount > 0 ? combined.slice(dropCount) : combined;
           let visibleFrom = Math.max(prev.visibleFrom - dropCount, 0);
