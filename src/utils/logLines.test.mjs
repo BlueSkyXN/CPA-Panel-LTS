@@ -35,3 +35,14 @@ test('replaces an unchanged preview without duplicating the completed line', () 
     'partial',
   ]);
 });
+
+test('preserves a repeated new line after completing the trailing preview', () => {
+  assert.deepEqual(
+    mergeIncrementalLogLines(
+      ['first', 'partial'],
+      ['partial complete', 'partial complete'],
+      true
+    ),
+    ['first', 'partial complete', 'partial complete']
+  );
+});

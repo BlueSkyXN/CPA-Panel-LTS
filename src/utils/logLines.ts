@@ -24,13 +24,13 @@ export function mergeIncrementalLogLines(
     return [...currentLines, ...incomingLines];
   }
 
-  let current = currentLines;
-  let incoming = incomingLines;
   if (replaceTrailingPartial) {
-    current = [...currentLines.slice(0, -1), incomingLines[0]];
-    incoming = incomingLines.slice(1);
+    // The Core cursor already guarantees that every incoming line after the
+    // completed preview is new. Running overlap detection here would collapse
+    // legitimate consecutive log lines with identical text.
+    return [...currentLines.slice(0, -1), ...incomingLines];
   }
 
-  const overlap = findLineOverlap(current, incoming);
-  return [...current, ...incoming.slice(overlap)];
+  const overlap = findLineOverlap(currentLines, incomingLines);
+  return [...currentLines, ...incomingLines.slice(overlap)];
 }
