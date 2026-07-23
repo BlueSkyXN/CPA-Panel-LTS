@@ -120,6 +120,44 @@ test('total fallback does not add cache tokens that normalized input already con
   assert.equal(resolveUsageTotalTokens(tokens, 'any-model'), 1_211);
 });
 
+test('Codex and OpenAI fallback treats reasoning tokens as an output subset', () => {
+  const tokens = {
+    input_tokens: 100,
+    output_tokens: 20,
+    reasoning_tokens: 5,
+  };
+
+  for (const modelName of [
+    ' GPT-5.6-SOL ',
+    'chatgpt-4o-latest',
+    'codex-mini-latest',
+    'o1',
+    'o3-mini',
+    'o4',
+    'openai/gpt-5.6-sol',
+    'OPENAI/chatgpt-4o-latest',
+    'openai/codex-mini-latest',
+    'openai/o1',
+    'openai/o3-mini',
+    'openai/o4',
+  ]) {
+    assert.equal(calculateFallbackUsageTotalTokens(tokens, modelName), 120, modelName);
+  }
+
+  for (const modelName of [
+    'o2',
+    'o10',
+    'azure/gpt-5.6-sol',
+    'custom/gpt-5.6-sol',
+    'claude-sonnet-4-5',
+    'custom/interactions',
+  ]) {
+    assert.equal(calculateFallbackUsageTotalTokens(tokens, modelName), 125, modelName);
+  }
+
+  assert.equal(resolveUsageTotalTokens({ ...tokens, total_tokens: 777 }, 'gpt-5.6-sol'), 777);
+});
+
 test('explicit cache-write overrides preserve Auto and free semantics', () => {
   assert.equal(resolveCacheWriteUnitPrice('any-model', 10, 1), 10);
   assert.equal(resolveCacheWriteUnitPrice('any-model', 10, 1, 7), 7);
