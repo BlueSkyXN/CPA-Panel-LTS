@@ -127,11 +127,35 @@ test('Codex and OpenAI fallback treats reasoning tokens as an output subset', ()
     reasoning_tokens: 5,
   };
 
-  assert.equal(calculateFallbackUsageTotalTokens(tokens, 'gpt-5.6-sol'), 120);
-  assert.equal(calculateFallbackUsageTotalTokens(tokens, 'openai/gpt-5.6-sol'), 120);
-  assert.equal(calculateFallbackUsageTotalTokens(tokens, 'chatgpt-4o-latest'), 120);
-  assert.equal(calculateFallbackUsageTotalTokens(tokens, 'claude-sonnet-4-5'), 125);
-  assert.equal(calculateFallbackUsageTotalTokens(tokens, 'custom/interactions'), 125);
+  for (const modelName of [
+    ' GPT-5.6-SOL ',
+    'chatgpt-4o-latest',
+    'codex-mini-latest',
+    'o1',
+    'o3-mini',
+    'o4',
+    'openai/gpt-5.6-sol',
+    'OPENAI/chatgpt-4o-latest',
+    'openai/codex-mini-latest',
+    'openai/o1',
+    'openai/o3-mini',
+    'openai/o4',
+  ]) {
+    assert.equal(calculateFallbackUsageTotalTokens(tokens, modelName), 120, modelName);
+  }
+
+  for (const modelName of [
+    'o2',
+    'o10',
+    'azure/gpt-5.6-sol',
+    'custom/gpt-5.6-sol',
+    'claude-sonnet-4-5',
+    'custom/interactions',
+  ]) {
+    assert.equal(calculateFallbackUsageTotalTokens(tokens, modelName), 125, modelName);
+  }
+
+  assert.equal(resolveUsageTotalTokens({ ...tokens, total_tokens: 777 }, 'gpt-5.6-sol'), 777);
 });
 
 test('explicit cache-write overrides preserve Auto and free semantics', () => {
