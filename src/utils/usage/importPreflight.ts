@@ -53,6 +53,14 @@ const REQUIRED_TOKEN_FIELDS = [
 
 const OPTIONAL_TOKEN_FIELDS = ['cache_read_tokens', 'cache_creation_tokens'] as const;
 
+const V1_REQUIRED_TOKEN_FIELDS = ['input_tokens', 'output_tokens', 'total_tokens'] as const;
+
+const V1_OPTIONAL_TOKEN_FIELDS = [
+  'reasoning_tokens',
+  'cached_tokens',
+  ...OPTIONAL_TOKEN_FIELDS,
+] as const;
+
 const SNAPSHOT_INTEGER_FIELDS = [
   'total_requests',
   'success_count',
@@ -210,12 +218,15 @@ const readTokenCounts = (
   const invalidCode: UsageImportPreflightIssue =
     version === 1 ? 'usage_v1_token_contract_invalid' : 'usage_v2_token_contract_invalid';
 
-  for (const key of REQUIRED_TOKEN_FIELDS) {
+  const requiredFields = version === 1 ? V1_REQUIRED_TOKEN_FIELDS : REQUIRED_TOKEN_FIELDS;
+  const optionalFields = version === 1 ? V1_OPTIONAL_TOKEN_FIELDS : OPTIONAL_TOKEN_FIELDS;
+
+  for (const key of requiredFields) {
     if (!hasOwn(value, key) || !isNonNegativeSafeInteger(value[key])) {
       return { tokens: null, issue: invalidCode };
     }
   }
-  for (const key of OPTIONAL_TOKEN_FIELDS) {
+  for (const key of optionalFields) {
     if (hasOwn(value, key) && !isNonNegativeSafeInteger(value[key])) {
       return { tokens: null, issue: invalidCode };
     }

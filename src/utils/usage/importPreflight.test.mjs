@@ -57,20 +57,22 @@ const v2Tokens = (overrides = {}) => ({
   ...overrides,
 });
 
-const v1Payload = (...details) => ({
+const v1PayloadForModel = (modelName, ...details) => ({
   version: 1,
   usage: {
     apis: {
       'POST /v1/responses': {
         models: {
-          'gpt-5.6-sol': { details },
+          [modelName]: { details },
         },
       },
     },
   },
 });
 
-const v2Payload = (...details) => {
+const v1Payload = (...details) => v1PayloadForModel('gpt-5.6-sol', ...details);
+
+const v2PayloadForModel = (modelName, ...details) => {
   const totalTokens = details.reduce((total, item) => total + item.tokens.total_tokens, 0);
   return {
     version: 2,
@@ -84,7 +86,7 @@ const v2Payload = (...details) => {
           total_requests: details.length,
           total_tokens: totalTokens,
           models: {
-            'gpt-5.6-sol': {
+            [modelName]: {
               total_requests: details.length,
               total_tokens: totalTokens,
               details,
@@ -99,6 +101,8 @@ const v2Payload = (...details) => {
     },
   };
 };
+
+const v2Payload = (...details) => v2PayloadForModel('gpt-5.6-sol', ...details);
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
@@ -231,7 +235,46 @@ test('v1 safe matrix accepts markerless no-cache details and rejects markerless 
   }
 });
 
-test('v1 validates required fields and uncached marker bounds before canonical migration', () => {
+test('v1 treats omitted legacy zero reasoning and cached fields as zero', () => {
+  const markerless = analyzeUsageImport(
+    v1Payload(detail({ input_tokens: 10, output_tokens: 1, total_tokens: 11 }))
+  );
+  assert.equal(markerless.valid, true);
+
+  const markerBearing = v1PayloadForModel(
+    'claude-sonnet-4-5',
+    detail(
+      {
+        input_tokens: 3085,
+        output_tokens: 253,
+        cache_read_tokens: 7,
+        cache_creation_tokens: 19514,
+        uncached_input_tokens: 3085,
+        total_tokens: 22859,
+      },
+      { source: 'auths/claude.json' }
+    )
+  );
+  const canonicalCurrent = v2PayloadForModel(
+    'claude-sonnet-4-5',
+    detail(
+      v2Tokens({
+        input_tokens: 22606,
+        output_tokens: 253,
+        cached_tokens: 7,
+        cache_read_tokens: 7,
+        cache_creation_tokens: 19514,
+        total_tokens: 22859,
+      }),
+      { source: 'auths/claude.json' }
+    )
+  ).usage;
+  const projected = analyzeUsageImport(markerBearing, canonicalCurrent);
+  assert.equal(projected.valid, true);
+  assert.equal(projected.overlapCount, 1);
+});
+
+test('v1 validates legacy required fields and uncached marker bounds before canonical migration', () => {
   const valid = analyzeUsageImport(
     v1Payload(
       detail(
@@ -265,10 +308,27 @@ test('v1 validates required fields and uncached marker bounds before canonical m
     assert.deepEqual(result.issues, ['usage_v1_token_contract_invalid']);
   }
 
-  const missingField = v1Payload(detail(v1Tokens()));
-  delete missingField.usage.apis['POST /v1/responses'].models['gpt-5.6-sol'].details[0].tokens
-    .reasoning_tokens;
-  assert.deepEqual(analyzeUsageImport(missingField).issues, ['usage_v1_token_contract_invalid']);
+  for (const field of ['input_tokens', 'output_tokens', 'total_tokens']) {
+    const missingField = v1Payload(detail(v1Tokens()));
+    delete missingField.usage.apis['POST /v1/responses'].models['gpt-5.6-sol'].details[0].tokens[
+      field
+    ];
+    assert.deepEqual(analyzeUsageImport(missingField).issues, ['usage_v1_token_contract_invalid']);
+  }
+
+  for (const field of [
+    'reasoning_tokens',
+    'cached_tokens',
+    'cache_read_tokens',
+    'cache_creation_tokens',
+  ]) {
+    for (const invalid of [null, '0', -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+      const invalidOptional = v1Payload(detail(v1Tokens({ [field]: invalid })));
+      assert.deepEqual(analyzeUsageImport(invalidOptional).issues, [
+        'usage_v1_token_contract_invalid',
+      ]);
+    }
+  }
 });
 
 test('v1 released marker fixtures project to the same canonical v2 identities', () => {

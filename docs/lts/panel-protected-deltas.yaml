@@ -16,6 +16,10 @@ protected_deltas:
       - usage Zustand store
       - usage aggregation utilities
       - import/export
+      - canonical version 2 usage export compatibility
+      - safe version 1 migration, including omitted legacy zero fields and fail-closed cache ambiguity
+      - Core-compatible duplicate and overlap identity with uncertain-record disclosure
+      - invalid canonical token rejection before upload
       - request events table
       - model/API/credential breakdowns
       - cached/reasoning token breakdown
