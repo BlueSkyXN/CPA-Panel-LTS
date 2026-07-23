@@ -233,10 +233,17 @@ def request_json(
         data = json.dumps(payload).encode("utf-8")
         headers["Content-Type"] = "application/json"
     request = Request(f"{api_url}{path}", data=data, headers=headers, method=method)
-    with urlopen(request, timeout=15) as response:
-        status = response.status
-        body = response.read()
-        content_type = response.headers.get("Content-Type", "")
+    try:
+        with urlopen(request, timeout=15) as response:
+            status = response.status
+            body = response.read()
+            content_type = response.headers.get("Content-Type", "")
+    except HTTPError as exc:
+        if exc.code not in expected:
+            raise
+        status = exc.code
+        body = exc.read()
+        content_type = exc.headers.get("Content-Type", "")
     if status not in expected:
         raise AssertionError(f"{method} {path} returned {status}, expected {expected}")
     if not body:
@@ -1071,7 +1078,180 @@ def run_plugin_config_smoke(api_url: str) -> list[str]:
     return seen
 
 
-def run_endpoint_smoke(api_url: str, include_plugin_store: bool, include_write_smoke: bool) -> tuple[list[str], bool]:
+def run_usage_v2_import_contract_smoke(api_url: str, seen: list[str]) -> None:
+    migration_timestamp = (datetime.now(timezone.utc) - timedelta(minutes=4)).isoformat().replace(
+        "+00:00", "Z"
+    )
+    legacy_alias_payload = {
+        "version": 1,
+        "usage": {
+            "apis": {
+                "panel-core-v1-migration-smoke": {
+                    "models": {
+                        "gpt-5.6-sol": {
+                            "details": [
+                                {
+                                    "timestamp": migration_timestamp,
+                                    "source": "panel-core-v1-migration-smoke",
+                                    "auth_index": "0",
+                                    "failed": False,
+                                    "tokens": {
+                                        "input_tokens": 1200,
+                                        "uncached_input_tokens": 176,
+                                        "cached_tokens": 1024,
+                                        "cache_read_tokens": 0,
+                                        "cache_creation_tokens": 1024,
+                                        "output_tokens": 10,
+                                        "total_tokens": 1210,
+                                    },
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+    }
+    seen.append("POST /v0/management/usage/import v1 cache-creation alias fixture")
+    legacy_alias_result = assert_mapping(
+        request_json(
+            api_url,
+            "/v0/management/usage/import",
+            method="POST",
+            payload=legacy_alias_payload,
+        ),
+        "/v0/management/usage/import v1 cache-creation alias fixture",
+    )
+    if (
+        legacy_alias_result.get("added") != 1
+        or legacy_alias_result.get("migrated_from_version") != 1
+        or legacy_alias_result.get("schema_version") != 2
+        or legacy_alias_result.get("migration") != "v1_uncached_input_tokens_to_v2"
+    ):
+        raise AssertionError(
+            f"Core did not report the expected v1 migration receipt: {legacy_alias_result!r}"
+        )
+
+    migrated_export = assert_mapping(
+        request_json(api_url, "/v0/management/usage/export"),
+        "/v0/management/usage/export after v1 cache-creation migration",
+    )
+    migrated_usage = assert_mapping(migrated_export.get("usage"), "migrated usage")
+    migrated_api = assert_mapping(
+        assert_mapping(migrated_usage.get("apis"), "migrated usage apis").get(
+            "panel-core-v1-migration-smoke"
+        ),
+        "migrated usage API",
+    )
+    migrated_model = assert_mapping(
+        assert_mapping(migrated_api.get("models"), "migrated usage models").get(
+            "gpt-5.6-sol"
+        ),
+        "migrated usage model",
+    )
+    migrated_details = assert_list(migrated_model.get("details"), "migrated usage details")
+    if len(migrated_details) != 1:
+        raise AssertionError(f"Core v1 migration exported unexpected details: {migrated_details!r}")
+    migrated_tokens = assert_mapping(migrated_details[0].get("tokens"), "migrated tokens")
+    if (
+        migrated_tokens.get("input_tokens") != 1200
+        or migrated_tokens.get("cached_tokens") != 0
+        or migrated_tokens.get("cache_read_tokens", 0) != 0
+        or migrated_tokens.get("cache_creation_tokens") != 1024
+        or migrated_tokens.get("total_tokens") != 1210
+        or "uncached_input_tokens" in migrated_tokens
+    ):
+        raise AssertionError(
+            "Core v1 alias migration did not export creation-only canonical tokens: "
+            f"{migrated_tokens!r}"
+        )
+
+    duplicate_result = assert_mapping(
+        request_json(
+            api_url,
+            "/v0/management/usage/import",
+            method="POST",
+            payload=legacy_alias_payload,
+        ),
+        "/v0/management/usage/import duplicate v1 cache-creation alias fixture",
+    )
+    if duplicate_result.get("added") != 0 or duplicate_result.get("skipped") != 1:
+        raise AssertionError(f"Duplicate migrated usage was not skipped: {duplicate_result!r}")
+    seen.append("Core migrated the v1 cache-creation alias once and skipped its duplicate")
+
+    invalid_canonical_tokens = [
+        {
+            "input_tokens": 10,
+            "output_tokens": 0,
+            "reasoning_tokens": 0,
+            "cached_tokens": 9,
+            "cache_read_tokens": 9,
+            "cache_creation_tokens": 2,
+            "total_tokens": 10,
+        },
+        {
+            "input_tokens": 10,
+            "output_tokens": 0,
+            "reasoning_tokens": 0,
+            "cached_tokens": 9,
+            "cache_read_tokens": 0,
+            "cache_creation_tokens": 0,
+            "total_tokens": 10,
+        },
+        {
+            "input_tokens": 10,
+            "output_tokens": 1,
+            "reasoning_tokens": 0,
+            "cached_tokens": 0,
+            "cache_read_tokens": 0,
+            "cache_creation_tokens": 0,
+            "total_tokens": 10,
+        },
+    ]
+    for index, tokens in enumerate(invalid_canonical_tokens):
+        invalid_payload = {
+            "version": 2,
+            "usage": {
+                "apis": {
+                    "panel-core-invalid-v2-smoke": {
+                        "models": {
+                            "gpt-5.6-sol": {
+                                "details": [
+                                    {
+                                        "timestamp": f"2026-07-22T00:0{index + 1}:00Z",
+                                        "tokens": tokens,
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+            },
+        }
+        rejected = assert_mapping(
+            request_json(
+                api_url,
+                "/v0/management/usage/import",
+                method="POST",
+                payload=invalid_payload,
+                expected=(400,),
+            ),
+            f"invalid canonical usage fixture {index}",
+        )
+        if rejected.get("code") != "usage_v2_token_contract_invalid":
+            raise AssertionError(f"Unexpected invalid canonical response: {rejected!r}")
+        after_reject = assert_mapping(
+            request_json(api_url, "/v0/management/usage/export"),
+            "usage export after rejected canonical fixture",
+        )
+        if after_reject.get("usage") != migrated_usage:
+            raise AssertionError("Rejected canonical usage fixture partially mutated Core state")
+    seen.append("Core rejected impossible v2 token fixtures atomically with a stable code")
+
+
+def run_endpoint_smoke(
+    api_url: str, include_plugin_store: bool, include_write_smoke: bool
+) -> tuple[list[str], bool, int]:
     seen: list[str] = []
     supports_plugin = read_supports_plugin_header(api_url)
     seen.append(f"x-cpa-support-plugin={str(supports_plugin).lower()}")
@@ -1224,6 +1404,7 @@ def run_endpoint_smoke(api_url: str, include_plugin_store: bool, include_write_s
         ):
             raise AssertionError(f"Invalid v1 migration receipt: {migrated_result!r}")
         seen.append("Core usage import returned audited v1-to-v2 migration receipt")
+        run_usage_v2_import_contract_smoke(api_url, seen)
     else:
         seen.append("Released Core v1 baseline has no v1-to-v2 migration receipt")
 
@@ -1268,7 +1449,7 @@ def run_endpoint_smoke(api_url: str, include_plugin_store: bool, include_write_s
         else:
             seen.append("SKIP plugin config smoke because x-cpa-support-plugin is false")
 
-    return seen, supports_plugin
+    return seen, supports_plugin, core_usage_version
 
 
 def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
@@ -2021,6 +2202,7 @@ def run_browser_smoke(
     headed: bool,
     include_plugin_store: bool,
     supports_plugin: bool,
+    core_usage_version: int,
     logs_dir: Path,
 ) -> list[str]:
     try:
@@ -2100,23 +2282,34 @@ def run_browser_smoke(
                     )
                     events_card.wait_for()
                     rows = events_card.locator("tbody tr")
+                    expected_usage_rows = 4 if core_usage_version == 2 else 3
                     for _ in range(50):
-                        if rows.count() == 3:
+                        if rows.count() == expected_usage_rows:
                             break
                         page.wait_for_timeout(100)
-                    if rows.count() != 3:
+                    if rows.count() != expected_usage_rows:
                         raise AssertionError(
-                            f"Real Core service-tier fixture rendered {rows.count()} rows"
+                            "Real Core migration/tier fixtures rendered "
+                            f"{rows.count()} rows, want {expected_usage_rows}"
                         )
                     if events_card.get_by_text("Fast", exact=True).count() != 1:
                         raise AssertionError("Real Core effective priority did not render as Fast")
-                    if events_card.get_by_text("Std", exact=True).count() != 2:
+                    expected_std_rows = 3 if core_usage_version == 2 else 2
+                    if events_card.get_by_text("Std", exact=True).count() != expected_std_rows:
                         raise AssertionError(
                             "Real Core response standard/unknown tiers did not render as Std"
                         )
-                    events_card.get_by_label(
+                    assumed_std_badges = events_card.get_by_label(
                         "Historical or unknown tier; estimated as Std.", exact=True
-                    ).wait_for()
+                    )
+                    expected_assumed_std = 2 if core_usage_version == 2 else 1
+                    if assumed_std_badges.count() != expected_assumed_std:
+                        raise AssertionError(
+                            "Real Core migration/tier fixtures exposed "
+                            f"{assumed_std_badges.count()} assumed Std badges, "
+                            f"want {expected_assumed_std}"
+                        )
+                    assumed_std_badges.first.wait_for()
                     tier_select = events_card.get_by_label("Tier", exact=True)
                     tier_select.click()
                     page.get_by_role("option", name="Fast", exact=True).wait_for()
@@ -2131,7 +2324,8 @@ def run_browser_smoke(
                     page.locator(
                         '[data-testid="pricing-model-row"][data-model="gpt-5.4"]'
                     ).wait_for()
-                    pricing_summary.get_by_text("3 / 3 requests", exact=True).wait_for()
+                    expected_priced_requests = "4 / 4 requests" if core_usage_version == 2 else "3 / 3 requests"
+                    pricing_summary.get_by_text(expected_priced_requests, exact=True).wait_for()
                     pricing_summary.get_by_text("100.0%", exact=True).first.wait_for()
                     seen.append(
                         "BROWSER real Core pricing route estimates every matched usage record locally"
@@ -2184,7 +2378,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="cpa-panel-core-smoke-") as raw_temp:
         temp_dir = Path(raw_temp)
         with run_core(core_dir, temp_dir) as runtime:
-            seen, supports_plugin = run_endpoint_smoke(
+            seen, supports_plugin, core_usage_version = run_endpoint_smoke(
                 runtime.api_url,
                 include_plugin_store=args.include_plugin_store,
                 include_write_smoke=not args.no_write_smoke,
@@ -2200,6 +2394,7 @@ def main() -> int:
                             headed=args.headed,
                             include_plugin_store=args.include_plugin_store,
                             supports_plugin=supports_plugin,
+                            core_usage_version=core_usage_version,
                             logs_dir=runtime.logs_dir,
                         )
                     )
