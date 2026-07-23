@@ -231,7 +231,40 @@ test('v1 safe matrix accepts markerless no-cache details and rejects markerless 
   }
 });
 
-test('v1 validates required fields and uncached marker bounds before canonical migration', () => {
+test('v1 treats omitted legacy zero reasoning and cached fields as zero', () => {
+  const markerless = analyzeUsageImport(
+    v1Payload(detail({ input_tokens: 10, output_tokens: 1, total_tokens: 11 }))
+  );
+  assert.equal(markerless.valid, true);
+
+  const markerBearing = v1Payload(
+    detail({
+      input_tokens: 3085,
+      output_tokens: 253,
+      cache_read_tokens: 7,
+      cache_creation_tokens: 19514,
+      uncached_input_tokens: 3085,
+      total_tokens: 22859,
+    })
+  );
+  const canonicalCurrent = v2Payload(
+    detail(
+      v2Tokens({
+        input_tokens: 22606,
+        output_tokens: 253,
+        cached_tokens: 7,
+        cache_read_tokens: 7,
+        cache_creation_tokens: 19514,
+        total_tokens: 22859,
+      })
+    )
+  ).usage;
+  const projected = analyzeUsageImport(markerBearing, canonicalCurrent);
+  assert.equal(projected.valid, true);
+  assert.equal(projected.overlapCount, 1);
+});
+
+test('v1 validates legacy required fields and uncached marker bounds before canonical migration', () => {
   const valid = analyzeUsageImport(
     v1Payload(
       detail(
@@ -265,10 +298,15 @@ test('v1 validates required fields and uncached marker bounds before canonical m
     assert.deepEqual(result.issues, ['usage_v1_token_contract_invalid']);
   }
 
-  const missingField = v1Payload(detail(v1Tokens()));
-  delete missingField.usage.apis['POST /v1/responses'].models['gpt-5.6-sol'].details[0].tokens
-    .reasoning_tokens;
-  assert.deepEqual(analyzeUsageImport(missingField).issues, ['usage_v1_token_contract_invalid']);
+  for (const field of ['input_tokens', 'output_tokens', 'total_tokens']) {
+    const missingField = v1Payload(detail(v1Tokens()));
+    delete missingField.usage.apis['POST /v1/responses'].models['gpt-5.6-sol'].details[0].tokens[
+      field
+    ];
+    assert.deepEqual(analyzeUsageImport(missingField).issues, [
+      'usage_v1_token_contract_invalid',
+    ]);
+  }
 });
 
 test('v1 released marker fixtures project to the same canonical v2 identities', () => {
