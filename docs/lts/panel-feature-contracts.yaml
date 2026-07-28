@@ -98,6 +98,8 @@ features:
       - glm-5.2
       - ZAI_PRICING_SOURCE_URL
       - kimi-k3
+      - kimi-k3-256k
+      - k3-256k
       - kimi-k2.7-code
       - kimi-k2.7-code-highspeed
       - kimi-for-coding
@@ -107,6 +109,21 @@ features:
       - grok-4.5
       - XAI_PRICING_SOURCE_URL
       - XAI_LONG_CONTEXT_INPUT_TOKEN_THRESHOLD
+      - claude-haiku-4-5-20251001
+      - claude-haiku-4-5
+      - claude-sonnet-4-5-20250929
+      - claude-sonnet-4-5
+      - claude-sonnet-4-6
+      - claude-sonnet-5
+      - claude-opus-4-5-20251101
+      - claude-opus-4-5
+      - claude-opus-4-6
+      - claude-opus-4-7
+      - claude-opus-4-8
+      - claude-opus-5
+      - claude-fable-5
+      - ANTHROPIC_PRICING_SOURCE_URL
+      - ANTHROPIC_MODEL_IDS_SOURCE_URL
       - getCatalogSourceLinks
       - getLocalEstimateCoverageDisplay
       - isLocalEstimateComplete

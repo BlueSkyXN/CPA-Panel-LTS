@@ -2,14 +2,20 @@
 export const PRICE_CURRENCY = 'USD' as const;
 export const OPENAI_CATALOG_AS_OF = '2026-07-20';
 export const ZAI_CATALOG_AS_OF = '2026-07-22';
-export const KIMI_CATALOG_AS_OF = '2026-07-23';
+export const KIMI_CATALOG_AS_OF = '2026-07-28';
 export const XAI_CATALOG_AS_OF = '2026-07-23';
-export const PRICE_CATALOG_AS_OF = KIMI_CATALOG_AS_OF;
+export const CODEX_SPARK_CATALOG_AS_OF = '2026-07-25';
+export const ANTHROPIC_CATALOG_AS_OF = '2026-07-26';
+export const PRICE_CATALOG_AS_OF = ANTHROPIC_CATALOG_AS_OF;
 export const PRICE_CATALOG_VERSION = `api-${PRICE_CATALOG_AS_OF}`;
 export const OPENAI_PRICING_SOURCE_URL = 'https://developers.openai.com/api/docs/pricing';
 export const ZAI_PRICING_SOURCE_URL = 'https://docs.z.ai/guides/overview/pricing';
 export const KIMI_PRICING_SOURCE_URL = 'https://platform.kimi.ai/docs/pricing/chat';
 export const XAI_PRICING_SOURCE_URL = 'https://docs.x.ai/developers/models/grok-4.5';
+export const ANTHROPIC_PRICING_SOURCE_URL =
+  'https://platform.claude.com/docs/en/about-claude/pricing';
+export const ANTHROPIC_MODEL_IDS_SOURCE_URL =
+  'https://platform.claude.com/docs/en/about-claude/models/model-ids-and-versions';
 export const LONG_CONTEXT_INPUT_TOKEN_THRESHOLD = 272_000;
 export const XAI_LONG_CONTEXT_INPUT_TOKEN_THRESHOLD = 200_000;
 
@@ -154,6 +160,108 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
     asOf: OPENAI_CATALOG_AS_OF,
   },
   {
+    canonicalModel: 'gpt-5.3-codex-spark',
+    aliases: [],
+    currency: 'USD',
+    // This model is free. Use explicit zeroes so none of the token categories
+    // fall back to Auto pricing (including cache writes).
+    standard: { short: rateCard(0, 0, 0, 0) },
+    sourceUrl: OPENAI_PRICING_SOURCE_URL,
+    asOf: CODEX_SPARK_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'claude-haiku-4-5-20251001',
+    aliases: ['claude-haiku-4-5'],
+    currency: 'USD',
+    // Anthropic cacheWrite values use the requested 5-minute rate; 1-hour caching is out of scope.
+    standard: { short: rateCard(1, 0.1, 1.25, 5) },
+    sourceUrl: ANTHROPIC_PRICING_SOURCE_URL,
+    pricingNotesUrl: ANTHROPIC_MODEL_IDS_SOURCE_URL,
+    asOf: ANTHROPIC_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'claude-sonnet-4-5-20250929',
+    aliases: ['claude-sonnet-4-5'],
+    currency: 'USD',
+    standard: { short: rateCard(3, 0.3, 3.75, 15) },
+    sourceUrl: ANTHROPIC_PRICING_SOURCE_URL,
+    pricingNotesUrl: ANTHROPIC_MODEL_IDS_SOURCE_URL,
+    asOf: ANTHROPIC_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'claude-sonnet-4-6',
+    aliases: [],
+    currency: 'USD',
+    standard: { short: rateCard(3, 0.3, 3.75, 15) },
+    sourceUrl: ANTHROPIC_PRICING_SOURCE_URL,
+    pricingNotesUrl: ANTHROPIC_MODEL_IDS_SOURCE_URL,
+    asOf: ANTHROPIC_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'claude-sonnet-5',
+    aliases: [],
+    currency: 'USD',
+    // Keep the post-promotion standard rate instead of a time-dependent introductory price.
+    standard: { short: rateCard(3, 0.3, 3.75, 15) },
+    sourceUrl: ANTHROPIC_PRICING_SOURCE_URL,
+    pricingNotesUrl: ANTHROPIC_MODEL_IDS_SOURCE_URL,
+    asOf: ANTHROPIC_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'claude-opus-4-5-20251101',
+    aliases: ['claude-opus-4-5'],
+    currency: 'USD',
+    standard: { short: rateCard(5, 0.5, 6.25, 25) },
+    sourceUrl: ANTHROPIC_PRICING_SOURCE_URL,
+    pricingNotesUrl: ANTHROPIC_MODEL_IDS_SOURCE_URL,
+    asOf: ANTHROPIC_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'claude-opus-4-6',
+    aliases: [],
+    currency: 'USD',
+    standard: { short: rateCard(5, 0.5, 6.25, 25) },
+    sourceUrl: ANTHROPIC_PRICING_SOURCE_URL,
+    pricingNotesUrl: ANTHROPIC_MODEL_IDS_SOURCE_URL,
+    asOf: ANTHROPIC_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'claude-opus-4-7',
+    aliases: [],
+    currency: 'USD',
+    standard: { short: rateCard(5, 0.5, 6.25, 25) },
+    sourceUrl: ANTHROPIC_PRICING_SOURCE_URL,
+    pricingNotesUrl: ANTHROPIC_MODEL_IDS_SOURCE_URL,
+    asOf: ANTHROPIC_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'claude-opus-4-8',
+    aliases: [],
+    currency: 'USD',
+    standard: { short: rateCard(5, 0.5, 6.25, 25) },
+    sourceUrl: ANTHROPIC_PRICING_SOURCE_URL,
+    pricingNotesUrl: ANTHROPIC_MODEL_IDS_SOURCE_URL,
+    asOf: ANTHROPIC_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'claude-opus-5',
+    aliases: [],
+    currency: 'USD',
+    standard: { short: rateCard(5, 0.5, 6.25, 25) },
+    sourceUrl: ANTHROPIC_PRICING_SOURCE_URL,
+    pricingNotesUrl: ANTHROPIC_MODEL_IDS_SOURCE_URL,
+    asOf: ANTHROPIC_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'claude-fable-5',
+    aliases: [],
+    currency: 'USD',
+    standard: { short: rateCard(10, 1, 12.5, 50) },
+    sourceUrl: ANTHROPIC_PRICING_SOURCE_URL,
+    pricingNotesUrl: ANTHROPIC_MODEL_IDS_SOURCE_URL,
+    asOf: ANTHROPIC_CATALOG_AS_OF,
+  },
+  {
     canonicalModel: 'glm-5.2',
     aliases: [],
     currency: 'USD',
@@ -164,11 +272,23 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
     pricingNotesUrl: 'https://docs.z.ai/guides/llm/glm-5.2',
     asOf: ZAI_CATALOG_AS_OF,
   },
+  // Kimi keeps one flat rate per model id. Do not add long-context bands for the
+  // same Kimi model; reduced-context SKUs such as kimi-k3-256k are separate models.
   {
     canonicalModel: 'kimi-k3',
     aliases: ['k3'],
     currency: 'USD',
     standard: { short: rateCard(3, 0.3, undefined, 15) },
+    sourceUrl: kimiPricingSourceUrl('k3'),
+    pricingNotesUrl: kimiModelNotesUrl('k3'),
+    asOf: KIMI_CATALOG_AS_OF,
+  },
+  {
+    // Half of kimi-k3 because this SKU trims context and drops video; not a context band of k3.
+    canonicalModel: 'kimi-k3-256k',
+    aliases: ['k3-256k'],
+    currency: 'USD',
+    standard: { short: rateCard(1.5, 0.15, undefined, 7.5) },
     sourceUrl: kimiPricingSourceUrl('k3'),
     pricingNotesUrl: kimiModelNotesUrl('k3'),
     asOf: KIMI_CATALOG_AS_OF,

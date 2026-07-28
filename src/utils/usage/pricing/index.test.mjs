@@ -27,7 +27,7 @@ const approx = (actual, expected) =>
 
 test('catalog is versioned, self-describing, exact, and keeps provider rate boundaries explicit', () => {
   const sol = pricing.findCatalogEntry('gpt-5.6-sol');
-  assert.equal(pricing.PRICE_CATALOG_AS_OF, '2026-07-23');
+  assert.equal(pricing.PRICE_CATALOG_AS_OF, '2026-07-26');
   assert.equal(sol.currency, 'USD');
   assert.deepEqual(sol.aliases, ['gpt-5.6']);
   assert.equal(sol.sourceUrl, 'https://developers.openai.com/api/docs/pricing');
@@ -68,6 +68,13 @@ test('catalog is versioned, self-describing, exact, and keeps provider rate boun
       ['k3'],
     ],
     [
+      'kimi-k3-256k',
+      { input: 1.5, cachedInput: 0.15, output: 7.5 },
+      'https://platform.kimi.ai/docs/pricing/chat-k3',
+      'https://platform.kimi.ai/docs/guide/kimi-k3-quickstart',
+      ['k3-256k'],
+    ],
+    [
       'kimi-k2.7-code',
       { input: 0.95, cachedInput: 0.19, output: 4 },
       'https://platform.kimi.ai/docs/pricing/chat-k27-code',
@@ -90,7 +97,7 @@ test('catalog is versioned, self-describing, exact, and keeps provider rate boun
     assert.equal(entry.fast, undefined);
     assert.equal(entry.sourceUrl, sourceUrl);
     assert.equal(entry.pricingNotesUrl, notesUrl);
-    assert.equal(entry.asOf, '2026-07-23');
+    assert.equal(entry.asOf, '2026-07-28');
   }
 
   const grok = pricing.findCatalogEntry('grok-4.5');
@@ -109,6 +116,111 @@ test('catalog is versioned, self-describing, exact, and keeps provider rate boun
   assert.equal(grok.asOf, '2026-07-23');
 });
 
+test('GPT-5.3 Codex Spark is a free preset across every billable token category', () => {
+  const spark = pricing.findCatalogEntry('gpt-5.3-codex-spark');
+  assert.equal(spark.currency, 'USD');
+  assert.deepEqual(spark.standard.short, {
+    input: 0,
+    cachedInput: 0,
+    cacheWrite: 0,
+    output: 0,
+  });
+
+  const estimate = pricing.estimateUsageCost(
+    'gpt-5.3-codex-spark',
+    {
+      input_tokens: 1_000_000,
+      output_tokens: 1_000_000,
+      cache_read_tokens: 200_000,
+      cache_creation_tokens: 300_000,
+    },
+    undefined,
+    tier()
+  );
+  assert.equal(estimate.status, 'priced');
+  assert.equal(estimate.amount, 0);
+  assert.deepEqual(estimate.rates, spark.standard.short);
+});
+
+test('Claude 4.5+ presets use official standard rates, exact aliases, and 5-minute cache writes', () => {
+  const sourceUrl = 'https://platform.claude.com/docs/en/about-claude/pricing';
+  const notesUrl = 'https://platform.claude.com/docs/en/about-claude/models/model-ids-and-versions';
+  const models = [
+    ['claude-haiku-4-5-20251001', ['claude-haiku-4-5'], [1, 0.1, 1.25, 5]],
+    ['claude-sonnet-4-5-20250929', ['claude-sonnet-4-5'], [3, 0.3, 3.75, 15]],
+    ['claude-sonnet-4-6', [], [3, 0.3, 3.75, 15]],
+    ['claude-sonnet-5', [], [3, 0.3, 3.75, 15]],
+    ['claude-opus-4-5-20251101', ['claude-opus-4-5'], [5, 0.5, 6.25, 25]],
+    ['claude-opus-4-6', [], [5, 0.5, 6.25, 25]],
+    ['claude-opus-4-7', [], [5, 0.5, 6.25, 25]],
+    ['claude-opus-4-8', [], [5, 0.5, 6.25, 25]],
+    ['claude-opus-5', [], [5, 0.5, 6.25, 25]],
+    ['claude-fable-5', [], [10, 1, 12.5, 50]],
+  ];
+
+  for (const [modelName, aliases, [input, cachedInput, cacheWrite, output]] of models) {
+    const entry = pricing.findCatalogEntry(modelName);
+    assert.equal(entry.canonicalModel, modelName);
+    assert.deepEqual(entry.aliases, aliases);
+    assert.deepEqual(entry.standard.short, { input, cachedInput, cacheWrite, output });
+    assert.equal(entry.standard.long, undefined);
+    assert.equal(entry.fast, undefined);
+    assert.equal(entry.sourceUrl, sourceUrl);
+    assert.equal(entry.pricingNotesUrl, notesUrl);
+    assert.equal(entry.asOf, '2026-07-26');
+
+    for (const alias of aliases) {
+      assert.equal(pricing.findCatalogEntry(alias).canonicalModel, modelName);
+    }
+  }
+
+  assert.equal(pricing.findCatalogEntry('tenant/claude-sonnet-4-6'), null);
+});
+
+test('Claude 4.6+ keeps one standard rate card across the full 1M context window', () => {
+  for (const [modelName, inputRate] of [
+    ['claude-sonnet-4-6', 3],
+    ['claude-sonnet-5', 3],
+    ['claude-opus-4-6', 5],
+    ['claude-opus-4-7', 5],
+    ['claude-opus-4-8', 5],
+    ['claude-opus-5', 5],
+    ['claude-fable-5', 10],
+  ]) {
+    const estimate = pricing.estimateUsageCost(
+      modelName,
+      { input_tokens: 900_000 },
+      undefined,
+      tier()
+    );
+    assert.equal(estimate.status, 'priced');
+    assert.equal(estimate.contextBand, 'short');
+    approx(estimate.amount, inputRate * 0.9);
+  }
+});
+
+test('Claude cost estimates apply cache hit and explicit 5-minute cache write rates', () => {
+  const estimate = pricing.estimateUsageCost(
+    'claude-sonnet-4-6',
+    {
+      input_tokens: 1_000_000,
+      output_tokens: 1_000_000,
+      cache_read_tokens: 200_000,
+      cache_creation_tokens: 300_000,
+    },
+    undefined,
+    tier()
+  );
+  assert.equal(estimate.status, 'priced');
+  assert.deepEqual(estimate.rates, {
+    input: 3,
+    cachedInput: 0.3,
+    cacheWrite: 3.75,
+    output: 15,
+  });
+  approx(estimate.amount, 17.685);
+});
+
 test('matches direct custom, canonical preset, explicit alias, and unmatched without fuzzy matching', () => {
   const profile = {
     ...pricing.createDefaultPriceProfileV3(),
@@ -124,6 +236,7 @@ test('matches direct custom, canonical preset, explicit alias, and unmatched wit
 
   for (const [alias, canonicalModel] of [
     ['k3', 'kimi-k3'],
+    ['k3-256k', 'kimi-k3-256k'],
     ['kimi-for-coding', 'kimi-k2.7-code'],
     ['kimi-for-coding-highspee', 'kimi-k2.7-code-highspeed'],
     ['kimi-for-coding-highspeed', 'kimi-k2.7-code-highspeed'],
@@ -360,6 +473,7 @@ test('GLM-5.2 Fast is unsupported and excluded from priced coverage', () => {
 test('Kimi presets map cache hit and miss rates without inventing Fast pricing', () => {
   for (const [modelName, expectedRates, expectedAmount] of [
     ['kimi-k3', { input: 3, cachedInput: 0.3, output: 15 }, 17.46],
+    ['kimi-k3-256k', { input: 1.5, cachedInput: 0.15, output: 7.5 }, 8.73],
     ['kimi-k2.7-code', { input: 0.95, cachedInput: 0.19, output: 4 }, 4.798],
     ['kimi-k2.7-code-highspeed', { input: 1.9, cachedInput: 0.38, output: 8 }, 9.596],
   ]) {

@@ -2405,9 +2405,20 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
             "gpt-5.4-mini",
             "glm-5.2",
             "kimi-k3",
+            "kimi-k3-256k",
             "kimi-k2.7-code",
             "kimi-k2.7-code-highspeed",
             "grok-4.5",
+            "claude-haiku-4-5-20251001",
+            "claude-sonnet-4-5-20250929",
+            "claude-sonnet-4-6",
+            "claude-sonnet-5",
+            "claude-opus-4-5-20251101",
+            "claude-opus-4-6",
+            "claude-opus-4-7",
+            "claude-opus-4-8",
+            "claude-opus-5",
+            "claude-fable-5",
         ]:
             catalog.locator(
                 f'[data-testid="preset-pricing-model"][data-model="{model_name}"]'
@@ -2465,6 +2476,11 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
                 "https://platform.kimi.ai/docs/pricing/chat-k3",
             ),
             (
+                "kimi-k3-256k",
+                {"Input": "$1.5", "Cached input": "$0.15", "Output": "$7.5"},
+                "https://platform.kimi.ai/docs/pricing/chat-k3",
+            ),
+            (
                 "kimi-k2.7-code",
                 {"Input": "$0.95", "Cached input": "$0.19", "Output": "$4"},
                 "https://platform.kimi.ai/docs/pricing/chat-k27-code",
@@ -2514,6 +2530,7 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
 
         for model_name, expected_aliases in [
             ("kimi-k3", ["k3"]),
+            ("kimi-k3-256k", ["k3-256k"]),
             ("kimi-k2.7-code", ["kimi-for-coding"]),
             (
                 "kimi-k2.7-code-highspeed",
@@ -2529,6 +2546,99 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
             for alias in expected_aliases:
                 if alias not in model_text:
                     raise AssertionError(f"{model_name} catalog row is missing alias {alias}")
+
+        anthropic_source = "https://platform.claude.com/docs/en/about-claude/pricing"
+        anthropic_notes = (
+            "https://platform.claude.com/docs/en/about-claude/models/"
+            "model-ids-and-versions"
+        )
+        for model_name, expected_aliases, expected_rates in [
+            (
+                "claude-haiku-4-5-20251001",
+                ["claude-haiku-4-5"],
+                {"Input": "$1", "Cached input": "$0.1", "Cache write": "$1.25", "Output": "$5"},
+            ),
+            (
+                "claude-sonnet-4-5-20250929",
+                ["claude-sonnet-4-5"],
+                {"Input": "$3", "Cached input": "$0.3", "Cache write": "$3.75", "Output": "$15"},
+            ),
+            (
+                "claude-sonnet-4-6",
+                [],
+                {"Input": "$3", "Cached input": "$0.3", "Cache write": "$3.75", "Output": "$15"},
+            ),
+            (
+                "claude-sonnet-5",
+                [],
+                {"Input": "$3", "Cached input": "$0.3", "Cache write": "$3.75", "Output": "$15"},
+            ),
+            (
+                "claude-opus-4-5-20251101",
+                ["claude-opus-4-5"],
+                {"Input": "$5", "Cached input": "$0.5", "Cache write": "$6.25", "Output": "$25"},
+            ),
+            (
+                "claude-opus-4-6",
+                [],
+                {"Input": "$5", "Cached input": "$0.5", "Cache write": "$6.25", "Output": "$25"},
+            ),
+            (
+                "claude-opus-4-7",
+                [],
+                {"Input": "$5", "Cached input": "$0.5", "Cache write": "$6.25", "Output": "$25"},
+            ),
+            (
+                "claude-opus-4-8",
+                [],
+                {"Input": "$5", "Cached input": "$0.5", "Cache write": "$6.25", "Output": "$25"},
+            ),
+            (
+                "claude-opus-5",
+                [],
+                {"Input": "$5", "Cached input": "$0.5", "Cache write": "$6.25", "Output": "$25"},
+            ),
+            (
+                "claude-fable-5",
+                [],
+                {"Input": "$10", "Cached input": "$1", "Cache write": "$12.5", "Output": "$50"},
+            ),
+        ]:
+            claude_model = catalog.locator(
+                f'[data-testid="preset-pricing-model"][data-model="{model_name}"]'
+            )
+            if claude_model.locator("tr").count() != 1:
+                raise AssertionError(f"{model_name} must expose one standard rate card")
+            claude_row = claude_model.locator('tr[data-context-band="short"]')
+            for label, expected_rate in expected_rates.items():
+                actual_rate = (
+                    claude_row.locator(f'td[data-label="{label}"] strong').text_content()
+                    or ""
+                )
+                if actual_rate != expected_rate:
+                    raise AssertionError(
+                        f"{model_name} {label} rate is {actual_rate!r}, expected {expected_rate!r}"
+                    )
+            if "Unavailable" not in (
+                claude_row.locator('td[data-label="Fast policies"]').text_content() or ""
+            ):
+                raise AssertionError(f"{model_name} catalog row did not keep Fast unavailable")
+            model_text = claude_model.inner_text() or ""
+            for alias in expected_aliases:
+                if alias not in model_text:
+                    raise AssertionError(f"{model_name} catalog row is missing alias {alias}")
+            if (
+                claude_model.locator('[data-testid="pricing-official-source"]').get_attribute(
+                    "href"
+                )
+                != anthropic_source
+            ):
+                raise AssertionError(f"{model_name} Official source does not point to Anthropic")
+            if (
+                claude_model.locator('[data-testid="pricing-notes-source"]').get_attribute("href")
+                != anthropic_notes
+            ):
+                raise AssertionError(f"{model_name} Model notes do not point to Anthropic IDs")
 
         grok_model = catalog.locator(
             '[data-testid="preset-pricing-model"][data-model="grok-4.5"]'
