@@ -269,6 +269,18 @@ function toInt(value: unknown): number | null {
 
 type KimiRowLabel = Pick<KimiQuotaRow, 'label' | 'labelKey' | 'labelParams'>;
 
+function formatKimiResetDuration(totalMinutes: number): string {
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h`;
+  if (minutes > 0) return `${minutes}m`;
+  return '<1m';
+}
+
 function kimiResetHint(data: Record<string, unknown>): string | undefined {
   const absoluteKeys = ['reset_at', 'resetAt', 'reset_time', 'resetTime'];
   for (const key of absoluteKeys) {
@@ -282,12 +294,7 @@ function kimiResetHint(data: Record<string, unknown>): string | undefined {
         const delta = date.getTime() - now;
         if (delta <= 0) return undefined;
         const totalMinutes = Math.floor(delta / 60000);
-        const hours = Math.floor(totalMinutes / 60);
-        const minutes = totalMinutes % 60;
-        if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
-        if (hours > 0) return `${hours}h`;
-        if (minutes > 0) return `${minutes}m`;
-        return '<1m';
+        return formatKimiResetDuration(totalMinutes);
       } catch {
         continue;
       }
@@ -298,12 +305,8 @@ function kimiResetHint(data: Record<string, unknown>): string | undefined {
   for (const key of relativeKeys) {
     const raw = toInt(data[key]);
     if (raw !== null && raw > 0) {
-      const hours = Math.floor(raw / 3600);
-      const minutes = Math.floor((raw % 3600) / 60);
-      if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
-      if (hours > 0) return `${hours}h`;
-      if (minutes > 0) return `${minutes}m`;
-      return '<1m';
+      const totalMinutes = Math.floor(raw / 60);
+      return formatKimiResetDuration(totalMinutes);
     }
   }
 
@@ -385,16 +388,6 @@ function toKimiUsageRow(
 export function buildKimiQuotaRows(payload: KimiUsagePayload): KimiQuotaRow[] {
   const rows: KimiQuotaRow[] = [];
 
-  const usage = payload.usage;
-  if (usage && typeof usage === 'object') {
-    const summary = toKimiUsageRow(usage as Record<string, unknown>, {
-      labelKey: 'kimi_quota.weekly_limit',
-    });
-    if (summary) {
-      rows.push({ id: 'summary', ...summary });
-    }
-  }
-
   const limits = payload.limits;
   if (Array.isArray(limits)) {
     limits.forEach((item, idx) => {
@@ -406,6 +399,16 @@ export function buildKimiQuotaRows(payload: KimiUsagePayload): KimiQuotaRow[] {
         rows.push({ id: `limit-${idx}`, ...row });
       }
     });
+  }
+
+  const usage = payload.usage;
+  if (usage && typeof usage === 'object') {
+    const summary = toKimiUsageRow(usage as Record<string, unknown>, {
+      labelKey: 'kimi_quota.weekly_limit',
+    });
+    if (summary) {
+      rows.push({ id: 'summary', ...summary });
+    }
   }
 
   return rows;
