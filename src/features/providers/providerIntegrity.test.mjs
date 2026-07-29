@@ -11,16 +11,25 @@ const vite = await createServer({
   server: { middlewareMode: true },
 });
 
-const [transformers, providers, adapters, code0, fennoAI, qiniuCloud, sponsorDefinitions] =
-  await Promise.all([
-    vite.ssrLoadModule('/src/services/api/transformers.ts'),
-    vite.ssrLoadModule('/src/services/api/providers.ts'),
-    vite.ssrLoadModule('/src/features/providers/adapters.ts'),
-    vite.ssrLoadModule('/src/features/providers/code0.ts'),
-    vite.ssrLoadModule('/src/features/providers/fennoAI.ts'),
-    vite.ssrLoadModule('/src/features/providers/qiniuCloud.ts'),
-    vite.ssrLoadModule('/src/features/providers/sponsorDefinitions.ts'),
-  ]);
+const [
+  transformers,
+  providers,
+  adapters,
+  code0,
+  fennoAI,
+  qiniuCloud,
+  sponsorDefinitions,
+  claudeApi,
+] = await Promise.all([
+  vite.ssrLoadModule('/src/services/api/transformers.ts'),
+  vite.ssrLoadModule('/src/services/api/providers.ts'),
+  vite.ssrLoadModule('/src/features/providers/adapters.ts'),
+  vite.ssrLoadModule('/src/features/providers/code0.ts'),
+  vite.ssrLoadModule('/src/features/providers/fennoAI.ts'),
+  vite.ssrLoadModule('/src/features/providers/qiniuCloud.ts'),
+  vite.ssrLoadModule('/src/features/providers/sponsorDefinitions.ts'),
+  vite.ssrLoadModule('/src/features/providers/claudeApi.ts'),
+]);
 
 test.after(async () => {
   await vite.close();
@@ -96,4 +105,19 @@ test('deletes sponsor OpenAI entries by unique descending source index', () => {
   };
 
   assert.deepEqual(sponsorDefinitions.getSponsorOpenAIDeleteIndices(raw), [5, 2]);
+});
+
+test('recognizes the current and legacy ClaudeAPI gateways without affiliate metadata', () => {
+  assert.equal(claudeApi.CLAUDE_API_BASE_URL, 'https://gw.apito.ai');
+  assert.equal(claudeApi.CLAUDE_API_LEGACY_BASE_URL, 'https://gw.claudeapi.com');
+  assert.equal(claudeApi.isClaudeApiProvider({ baseUrl: 'https://gw.apito.ai/' }), true);
+  assert.equal(claudeApi.isClaudeApiProvider({ baseUrl: 'HTTPS://GW.CLAUDEAPI.COM' }), true);
+  assert.equal(
+    claudeApi.isClaudeApiProvider({ baseUrl: 'https://custom-claude.example.test' }),
+    false
+  );
+  assert.equal(
+    Object.keys(claudeApi).some((key) => key.toLowerCase().includes('affiliate')),
+    false
+  );
 });
