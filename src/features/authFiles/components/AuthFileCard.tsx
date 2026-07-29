@@ -30,9 +30,11 @@ import {
   formatModified,
   getAuthFileIcon,
   getAuthFileStatusMessage,
+  getThemeSurfaceIconBackground,
   getTypeColor,
   getTypeLabel,
   isRuntimeOnlyAuthFile,
+  isThemeSurfaceIconProvider,
   normalizeProviderKey,
   parsePriorityValue,
   type QuotaProviderType,
@@ -104,6 +106,8 @@ export function AuthFileCard(props: AuthFileCardProps) {
   const typeColor = getTypeColor(providerKey, resolvedTheme);
   const typeLabel = getTypeLabel(t, providerKey);
   const providerIcon = getAuthFileIcon(providerKey, resolvedTheme);
+  // 与 AI 提供商界面一致：Kimi 图标底座随主题切换颜色
+  const useThemeSurfaceIcon = isThemeSurfaceIconProvider(providerKey);
 
   const quotaType =
     quotaFilterType && resolveQuotaType(file) === quotaFilterType ? quotaFilterType : null;
@@ -173,11 +177,18 @@ export function AuthFileCard(props: AuthFileCardProps) {
             )}
             <div
               className={styles.providerAvatar}
-              style={{
-                backgroundColor: typeColor.bg,
-                color: typeColor.text,
-                ...(typeColor.border ? { border: typeColor.border } : {}),
-              }}
+              style={
+                useThemeSurfaceIcon
+                  ? {
+                      backgroundColor: getThemeSurfaceIconBackground(resolvedTheme),
+                      color: typeColor.text,
+                    }
+                  : {
+                      backgroundColor: typeColor.bg,
+                      color: typeColor.text,
+                      ...(typeColor.border ? { border: typeColor.border } : {}),
+                    }
+              }
             >
               {providerIcon ? (
                 <img src={providerIcon} alt="" className={styles.providerAvatarImage} />

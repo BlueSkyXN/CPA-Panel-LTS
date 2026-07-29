@@ -31,10 +31,12 @@ import {
   QUOTA_PROVIDER_TYPES,
   clampCardPageSize,
   getAuthFileIcon,
+  getThemeSurfaceIconBackground,
   getTypeColor,
   getTypeLabel,
   hasAuthFileStatusMessage,
   isRuntimeOnlyAuthFile,
+  isThemeSurfaceIconProvider,
   normalizeProviderKey,
   parsePriorityValue,
   type QuotaProviderType,
@@ -626,7 +628,18 @@ export function AuthFilesPage() {
                     <IconFilterAll className={styles.filterAllIcon} size={16} />
                   </span>
                 ) : (
-                  <span className={styles.filterTagIconWrap}>
+                  <span
+                    className={styles.filterTagIconWrap}
+                    style={
+                      // 与 AI 提供商界面一致：Kimi 图标底座随主题切换颜色
+                      isThemeSurfaceIconProvider(type)
+                        ? {
+                            background: getThemeSurfaceIconBackground(resolvedTheme),
+                            borderColor: 'transparent',
+                          }
+                        : undefined
+                    }
+                  >
                     {iconSrc ? (
                       <img src={iconSrc} alt="" className={styles.filterTagIcon} />
                     ) : (
