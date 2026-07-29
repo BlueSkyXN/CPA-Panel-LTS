@@ -64,6 +64,51 @@ Recent upstream intake:
 | xAI paid OAuth health fallback / `3738c0b` (`v1.18.6`) | `defer` | The upstream refresh path can issue `POST https://api.x.ai/v1/chat/completions` with `grok-4.5`; this is a potentially billable write-like probe, not a quota read. Current CPA-Core-LTS auth-file list entries expose `prefix` but not the upstream classifier's `using_api`, raw JWT, or nested credential metadata, so the paid classifier cannot be adopted as-is. The upstream test also uses `bun:test`, outside this repository's npm/Node gates. | Do not cherry-pick or enable the chat probe by default. Reassess only with an explicit user-controlled paid-health action, a confirmed Core metadata contract that identifies paid credentials without exposing tokens, no retained unused account identifiers, and npm/Node plus browser-smoke coverage. Preserve the existing billing error when the optional probe is not explicitly enabled. |
 | Kimi promotion series / `e2aa494`, `6a8319d`, `339529f`, `bb48387`, `72c13c0`, `36681ce` plus affiliate hunks in `f860bc8` | `reject` | `provider-workbench` contract requires commercial-neutral, config-detected groups without registration links | Do not add recommended-provider placement, quick sign-up controls, or `?aff=cliproxyapi` registration links. |
 
+## Audited seven-day intake snapshot (2026-07-30)
+
+Refs were re-fetched with pruning after the accepted ports were merged:
+
+- `origin/main`: `8546513f8880cd6409dccc2abb3e0edc16bbdc2a`
+- `upstream/main`: `1708314bc7a27e0ad9ef86b083e28e4e00aceeb1` (`v1.20.0`)
+- `upstream/dev`: `51b034dd914719c3bd6b5ab0eb64bc8b103ca0d4`
+- Review window: commits on `upstream/main` since `2026-07-23T00:00:00+08:00`
+- Canonical non-merge commits reviewed: 21
+- Decisions: 2 `direct-port`, 6 `adapt-port`, 3 `reject`, 10 `defer`
+
+Accepted ports were delivered in three independently validated PRs:
+
+- PR #47 / merge `6f1bad7803bd7ac51f7b39f94d86284567eecde5`: localized Plugin Store and provider URL CSS fixes.
+- PR #48 / merge `d10cf1a240b6ea7d07510e0b12378433774f50ce`: Kimi/Fable quota and Kimi auth-file theme adaptation with npm/Node regression coverage.
+- PR #49 / merge `8546513f8880cd6409dccc2abb3e0edc16bbdc2a`: Management API error parsing and ClaudeAPI current/legacy gateway adaptation without promotional metadata.
+
+Every accepted PR passed `npm run check:lts`, `npm run validate:lts`, `npm run smoke:lts`, and `npm run smoke:lts:core -- --no-write-smoke` before merge. PR-head CI passed for the exact reviewed SHA. Publishing a release or deploying the merged panel remained outside this intake.
+
+| Upstream commit | Classification | Panel evidence | Decision |
+|---|---|---|---|
+| `3447a0bd582dae34ac08b172b546ca53c87d4084` | `adapt-port` | PR #48 / `7d1d3ba` | Show Kimi detail windows before the weekly summary; replace the upstream Bun test with the repository's npm/Node+Vite regression test. |
+| `f2be3bb5da3db60a8862dd7f27cdbf761b61fb5e` | `reject` | LTS visual config and current CPA-Core-LTS still expose `codex.identity-confuse` | Do not remove a downstream Core config surface that remains supported and user-configurable. |
+| `e677a68c4d35eee7082929837b4cd46a3fa0cb36` | `adapt-port` | PR #49 / `ff2d905` | Prefer the human-readable Management API `message`, retain the stable machine code as `apiCode`, and preserve connection-generation isolation so a delayed 401 cannot log out a newer connection. |
+| `aef7ff09913321e4ee94e0f4daabc05a13451a30` | `defer` | Sidebar series review | This begins a multi-commit navigation redesign. Reassess the complete series against `/usage`, plugin capability gating, downstream routes, responsive behavior, and badge semantics instead of porting its first layout step alone. |
+| `4d081359b9f1a7313e8f52385d0b7dc939a658d4` | `defer` | Sidebar/auth-file series review | Auth-file events, navigation badges, tooltip accessibility, and locale changes span shared state and LTS routes; require a dedicated integrated port and browser acceptance. |
+| `55903260183964fa084a985c248a4112023497d0` | `defer` | Sidebar series review | The color-token hunk is coupled to the unaccepted sidebar layout sequence and should be reviewed with that complete visual direction. |
+| `05631cfb4396214bb57e02345b296b117e7eff5f` | `adapt-port` | PR #48 / `7d1d3ba` | Apply only Kimi light/dark theme-surface behavior while retaining LTS auth-file quota/status integration and existing provider visibility. |
+| `7793321b189be64e23326c6e140b07ee4689a337` | `defer` | AuthFiles diff review | The large page redesign deletes the current status-filter surface and overlaps downstream quota/cache/write guards; evaluate as a standalone product change, not a maintenance fix. |
+| `b24f3069be19cb94a7a42efeadef3a0d8b411260` | `adapt-port` | PR #49 / `ff2d905` | Use `gw.apito.ai` as the current ClaudeAPI gateway and keep `gw.claudeapi.com` as legacy detection; omit registration and affiliate metadata. |
+| `1d7bc0d1902e68308606a92443b6415023232e63` | `defer` | Auth-file write-path and current Core review | The manual refresh action mutates `expired` through `/auth-files/fields`; accept only after provider-specific refresh semantics, disabled/runtime-only behavior, concurrent writes, and authenticated browser coverage are reviewed as one feature. |
+| `458e5e144bb9422a270c7df30e7b36d206839fa2` | `direct-port` | PR #47 / `53ca3b7` | Localized Plugin Store card grid and badge wrapping; no route, API, plugin gate, or usage impact. |
+| `cf3c6174440b669a60139b4aca48a8cb25ef11d5` | `defer` | Sidebar series review | The nav-group cleanup assumes the preceding unaccepted sidebar structure; do not port it independently. |
+| `0a2be7dc57bcf08313c91689a3a6c847ed9f5f7a` | `reject` | Current CPA-Core-LTS Home client/runtime and Panel Home smoke | Removing Home detection would break an actively retained runtime compatibility path. |
+| `21af57620b45f5e159e5450bc7e702498b664639` | `reject` | Current Home log payload/cursor implementation and browser smoke | Keep Home request-log payload, cursor, pagination, and download compatibility while Core retains Home. |
+| `310fbff060006694a6a827beec4d92e361fd0a0a` | `direct-port` | PR #47 / `c531596` | Localized responsive ellipsis for long provider base URLs; no data or mutation behavior changes. |
+| `ba02883736221a977a7206c69fe0979d4d0f81c1` | `adapt-port` | PR #48 / `7d1d3ba` | Format Kimi reset durations over 24 hours as `Xd Yh` while preserving sub-day and `<1m` behavior under Node regression tests. |
+| `38f98975f8c30dc6b016527fc503583b8b82bb8a` | `defer` | Dashboard rewrite diff review | This is a new dashboard architecture with more than 3,000 changed lines and new metrics/state assumptions; it needs a separate LTS product and performance review. |
+| `a9eb14b92920245eb25364a526ea40f3ea32047a` | `defer` | Dashboard series review | Real-time metrics, live-wire components, theme variables, and animation changes depend on the unaccepted dashboard rewrite. |
+| `50c3b9fb3b3de8068393ba86f2615d7f5e1a46ad` | `adapt-port` | PR #48 / `7d1d3ba` | Parse modern Claude Fable `weekly_scoped` limits, prefer the active valid candidate, keep the legacy `iguana_necktie` fallback, and suppress duplicates. |
+| `0f87214e262a683d2b3ea291b5a16ee4469d22d7` | `defer` | Dashboard series review | Animation and chart responsiveness changes have no safe standalone target before the dashboard rewrite is accepted. |
+| `1708314bc7a27e0ad9ef86b083e28e4e00aceeb1` | `defer` | Dashboard series review | Ambient positioning and wash effects are follow-up CSS for the deferred dashboard architecture. |
+
+`upstream/dev` has one additional watchlist commit, `51b034dd914719c3bd6b5ab0eb64bc8b103ca0d4`, which adds `applicableAvailableCount` to shared Codex quota structures. It remains `defer`: it is not on `upstream/main`, and CPA-Panel-LTS owns additional Codex quota/reset-credit classification in `src/lts/codexQuota/`. Reassess only after the upstream behavior stabilizes and can be compared against the sidecar's selection and availability semantics.
+
 ## Maintenance rules
 
 Use protected selective-port:
