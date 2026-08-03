@@ -11,9 +11,20 @@ const vite = await createServer({
   server: { middlewareMode: true },
 });
 
-const [{ buildKimiQuotaRows }, { buildClaudeQuotaWindows }, authFileConstants] = await Promise.all([
+const [
+  { buildKimiQuotaRows },
+  { buildClaudeQuotaWindows },
+  {
+    buildCodexAnalyticsRange,
+    classifyCodexLeaderboardPayloadForAccount,
+    codexTeamLeaderboardCacheKey,
+    selectCodexDailyUsageDays,
+  },
+  authFileConstants,
+] = await Promise.all([
   vite.ssrLoadModule('/src/utils/quota/builders.ts'),
   vite.ssrLoadModule('/src/components/quota/quotaConfigs.ts'),
+  vite.ssrLoadModule('/src/lts/codexQuota/config.ts'),
   vite.ssrLoadModule('/src/features/authFiles/constants.ts'),
 ]);
 
@@ -54,6 +65,130 @@ test('formats Kimi reset durations longer than one day as days and hours', () =>
   assert.equal(resetHint(168 * 3600), '7d 0h');
   assert.equal(resetHint(5 * 3600 + 30 * 60), '5h 30m');
   assert.equal(resetHint(59), '<1m');
+});
+
+test('slices one Codex daily payload into exact rolling ranges before aggregation', () => {
+  const payload = {
+    data: [
+      { date: '2026-06-16', totals: { credits: 1000, text_total_tokens: 1000 } },
+      { date: '2026-06-15', totals: { credits: 7, text_total_tokens: 70 } },
+      { date: '2025-06-20', totals: { credits: 100, text_total_tokens: 100 } },
+      { date: '2026-03-18', totals: { credits: 3, text_total_tokens: 30 } },
+      { date: '2026-05-17', totals: { credits: 4, text_total_tokens: 40 } },
+      { date: '2025-06-21', totals: { credits: 1, text_total_tokens: 10 } },
+      { date: '2026-06-01', totals: { credits: 5, text_total_tokens: 50 } },
+      { date: '2026-03-17', totals: { credits: 2, text_total_tokens: 20 } },
+      { date: '2026-06-11', totals: { credits: 6, text_total_tokens: 60 } },
+    ],
+  };
+
+  assert.deepEqual(
+    selectCodexDailyUsageDays(payload, '2026-05-17', '2026-06-16').map((day) => day.date),
+    ['2026-05-17', '2026-06-01', '2026-06-11', '2026-06-15']
+  );
+
+  const rolling90 = buildCodexAnalyticsRange(
+    payload,
+    'rolling-90',
+    'codex_quota.analytics_rolling_days',
+    '2026-03-18',
+    '2026-06-16'
+  );
+  assert.deepEqual(
+    {
+      returnedDays: rolling90.returnedDays,
+      firstDate: rolling90.firstDate,
+      lastDate: rolling90.lastDate,
+      credits: rolling90.credits,
+      usd: rolling90.usd,
+      tokens: rolling90.tokens,
+    },
+    {
+      returnedDays: 5,
+      firstDate: '2026-03-18',
+      lastDate: '2026-06-15',
+      credits: 25,
+      usd: 1,
+      tokens: 250,
+    }
+  );
+});
+
+test('rejects malformed and duplicate Codex daily buckets instead of double counting them', () => {
+  assert.throws(
+    () =>
+      selectCodexDailyUsageDays(
+        { data: [{ date: '2026-02-30', totals: { credits: 1 } }] },
+        '2026-01-01',
+        '2027-01-01'
+      ),
+    /invalid date/
+  );
+  assert.throws(
+    () =>
+      selectCodexDailyUsageDays(
+        {
+          data: [
+            { date: '2026-06-15', totals: { credits: 1 } },
+            { date: '2026-06-15', totals: { credits: 2 } },
+          ],
+        },
+        '2026-01-01',
+        '2027-01-01'
+      ),
+    /duplicate date 2026-06-15/
+  );
+});
+
+test('isolates Team leaderboard cache keys by auth index', () => {
+  const first = codexTeamLeaderboardCacheKey('auth-a', 'team-same', '2026-06-01', '2026-06-15');
+  const second = codexTeamLeaderboardCacheKey('auth-b', 'team-same', '2026-06-01', '2026-06-15');
+  assert.notEqual(first, second);
+});
+
+test('fails closed for incomplete or ambiguous Team leaderboard identity', () => {
+  const accountEmail = 'current@example.test';
+  const current = { email: accountEmail, credits: 2 };
+  const other = { email: 'other@example.test', credits: 4 };
+
+  assert.equal(
+    classifyCodexLeaderboardPayloadForAccount({ total_users: 2, data: [current, other] }, null)
+      .status,
+    'missing-account-email'
+  );
+  assert.equal(
+    classifyCodexLeaderboardPayloadForAccount(
+      { total_users: 3, data: [current, other] },
+      accountEmail
+    ).status,
+    'incomplete'
+  );
+  assert.equal(
+    classifyCodexLeaderboardPayloadForAccount(
+      { total_users: 2, has_more: true, data: [current, other] },
+      accountEmail
+    ).status,
+    'incomplete'
+  );
+  assert.equal(
+    classifyCodexLeaderboardPayloadForAccount({ total_users: 1, data: [other] }, accountEmail)
+      .status,
+    'user-missing'
+  );
+  assert.equal(
+    classifyCodexLeaderboardPayloadForAccount(
+      { total_users: 2, data: [current, { ...current }] },
+      accountEmail
+    ).status,
+    'user-ambiguous'
+  );
+  assert.equal(
+    classifyCodexLeaderboardPayloadForAccount(
+      { total_users: 2, data: [current, other] },
+      accountEmail
+    ).status,
+    'ok'
+  );
 });
 
 test('builds the modern Claude Fable quota without duplicating the legacy field', () => {

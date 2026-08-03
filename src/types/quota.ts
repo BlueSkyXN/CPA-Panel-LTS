@@ -217,6 +217,12 @@ export interface CodexUsageLeaderboardPayload {
   data?: CodexUsageLeaderboardRow[];
   total_users?: number | string;
   totalUsers?: number | string;
+  has_more?: boolean;
+  hasMore?: boolean;
+  next_page?: number | string | null;
+  nextPage?: number | string | null;
+  next_cursor?: string | null;
+  nextCursor?: string | null;
 }
 
 // Claude API payload types
@@ -342,7 +348,12 @@ export interface CodexQuotaWindow {
   resetLabel: string;
 }
 
-export type CodexAnalyticsRangeId = 'since-reset' | 'month-to-date' | 'rolling';
+export type CodexAnalyticsRangeId =
+  | 'since-reset'
+  | 'month-to-date'
+  | 'rolling'
+  | 'rolling-90'
+  | 'rolling-360';
 
 export interface CodexAnalyticsClientSummary {
   clientId: string;

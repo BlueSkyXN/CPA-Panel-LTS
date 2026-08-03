@@ -999,6 +999,20 @@ require_file_contains scripts/smoke-lts-panel.py "codex-smoke-auth"
 require_file_contains scripts/smoke-lts-panel.py "xai-smoke-auth"
 require_file_contains scripts/smoke-lts-panel.py "assert_api_call_url_seen"
 require_file_contains scripts/smoke-lts-panel.py "daily-workspace-usage-counts"
+require_file_contains scripts/smoke-lts-panel.py "Last 360 days"
+require_file_contains scripts/smoke-lts-panel.py "assert_codex_daily_workspace_fetch"
+require_file_contains scripts/smoke-lts-panel.py "usage-leaderboard"
+require_file_contains scripts/smoke-lts-panel.py "codex-team-smoke-auth"
+require_file_contains src/lts/codexQuota/config.ts "CODEX_ANALYTICS_HISTORY_DAYS"
+require_file_contains src/lts/codexQuota/config.ts "CODEX_ROLLING_RANGE_DAYS"
+require_file_contains src/lts/codexQuota/config.ts "codexTeamLeaderboardCacheKey"
+require_file_contains src/lts/codexQuota/config.ts "classifyCodexLeaderboardPayloadForAccount"
+require_file_contains src/lts/i18n/en.lts.json "team_analytics_incomplete"
+require_file_contains src/utils/quota/upstreamQuotaPort.test.mjs "duplicate date"
+require_file_contains scripts/codex-quota-compass.user.js "daily-analytics-integrity"
+require_file_contains scripts/codex-quota-compass.user.js "team-leaderboard-integrity"
+require_file_contains src/lts/codexQuota/config.ts "rolling-90"
+require_file_contains src/lts/codexQuota/config.ts "rolling-360"
 require_file_contains scripts/smoke-lts-panel.py "rate-limit-reset-credits/consume"
 require_file_contains scripts/smoke-lts-panel.py "cli-chat-proxy.grok.com/v1/billing"
 require_file_contains scripts/smoke-lts-panel-core.py "MANAGEMENT_PASSWORD"
@@ -1100,6 +1114,13 @@ if (failures.length > 0) {
 NODE
 then
   fail "missing Codex quota or remote cloud connect locale keys"
+fi
+
+if ! node --check scripts/chatgpt-quota-helper.js >/dev/null; then
+  fail "ChatGPT quota helper userscript has invalid JavaScript syntax"
+fi
+if ! node --check scripts/codex-quota-compass.user.js >/dev/null; then
+  fail "Codex quota compass userscript has invalid JavaScript syntax"
 fi
 
 for lockfile in bun.lock yarn.lock pnpm-lock.yaml; do

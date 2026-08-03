@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Codex Quota Compass
 // @namespace    https://github.com/BlueSkyXN/CPA-Panel-LTS
-// @version      0.1.14
+// @version      0.1.15
 // @description  在 ChatGPT Codex Cloud 页面直接查看 Codex 额度窗口、周额度估算和 daily analytics 汇总。
 // @author       BlueSkyXN
 // @match        https://chatgpt.com/codex/cloud*
@@ -628,16 +628,38 @@
     }
   };
 
+  const validatedDailyUsageDays = (payload) => {
+    const seenDates = new Set();
+    return (payload?.data ?? []).map((day) => {
+      const date = typeof day?.date === 'string' ? day.date : '';
+      const parsed = /^\d{4}-\d{2}-\d{2}$/.test(date) ? utcDateMs(date) : Number.NaN;
+      if (!Number.isFinite(parsed) || ymdUtc(parsed) !== date) {
+        throw createTypedError(
+          'Daily analytics 返回了无效日期，已停止汇总以避免错误计费。',
+          'daily-analytics-integrity'
+        );
+      }
+      if (seenDates.has(date)) {
+        throw createTypedError(
+          `Daily analytics 返回了重复日期 ${date}，已停止汇总以避免重复计费。`,
+          'daily-analytics-integrity'
+        );
+      }
+      seenDates.add(date);
+      return day;
+    });
+  };
+
   const sortedDays = (payload) =>
-    (payload?.data ?? [])
+    validatedDailyUsageDays(payload)
       .slice()
       .sort((left, right) => String(left.date ?? '').localeCompare(String(right.date ?? '')));
 
   const sliceDailyUsagePayload = (payload, startDate, endDateExclusive) => ({
     ...payload,
-    data: (payload?.data ?? []).filter((day) => {
-      const date = normalizeString(day?.date);
-      return date && date >= startDate && date < endDateExclusive;
+    data: validatedDailyUsageDays(payload).filter((day) => {
+      const date = day.date;
+      return date >= startDate && date < endDateExclusive;
     }),
   });
 
@@ -752,6 +774,53 @@
     return rows.find((row) => normalizeString(row.email)?.toLowerCase() === normalizedEmail) || null;
   };
 
+  const assertCompleteLeaderboardForCurrentUser = (payload, currentEmail) => {
+    const normalizedEmail = normalizeString(currentEmail)?.toLowerCase();
+    if (!normalizedEmail) {
+      throw createTypedError(
+        'Team 用量排行榜缺少当前账号邮箱，无法可靠选择个人用量。',
+        'team-leaderboard-integrity'
+      );
+    }
+
+    const rows = Array.isArray(payload?.data) ? payload.data : [];
+    const totalUsers = normalizeNumber(payload?.total_users ?? payload?.totalUsers);
+    const nextPage = normalizeNumber(payload?.next_page ?? payload?.nextPage);
+    const hasContinuation =
+      payload?.has_more === true ||
+      payload?.hasMore === true ||
+      (nextPage !== null && nextPage > 0) ||
+      Boolean(normalizeString(payload?.next_cursor ?? payload?.nextCursor));
+    if (
+      hasContinuation ||
+      totalUsers === null ||
+      !Number.isInteger(totalUsers) ||
+      totalUsers < 0 ||
+      totalUsers !== rows.length
+    ) {
+      throw createTypedError(
+        `Team 用量排行榜只返回了 ${rows.length}/${totalUsers ?? '?'} 人，已停止展示不完整的 workspace 汇总。`,
+        'team-leaderboard-integrity'
+      );
+    }
+
+    const matchedRows = rows.filter(
+      (row) => normalizeString(row.email)?.toLowerCase() === normalizedEmail
+    );
+    if (matchedRows.length === 0) {
+      throw createTypedError(
+        `Team 用量排行榜没有找到当前邮箱 ${currentEmail} 的记录。`,
+        'team-leaderboard-integrity'
+      );
+    }
+    if (matchedRows.length > 1) {
+      throw createTypedError(
+        `Team 用量排行榜包含多条 ${currentEmail} 记录，无法可靠选择个人用量。`,
+        'team-leaderboard-integrity'
+      );
+    }
+  };
+
   const buildLeaderboardRange = (payload, id, label, startDate, endDateInclusive, currentEmail) => {
     const rows = (payload?.data ?? []).slice().sort((left, right) => {
       const leftRank = normalizeNumber(left.rank) ?? Number.MAX_SAFE_INTEGER;
@@ -761,23 +830,16 @@
     });
 
     let credits = 0;
-    let tokens = 0;
-    let threads = 0;
-    let turns = 0;
-
     for (const row of rows) {
       credits += num(row.credits);
-      tokens += num(row.text_tokens ?? row.textTokens);
-      threads += num(row.n_threads ?? row.nThreads);
-      turns += num(row.n_turns ?? row.nTurns);
     }
 
     const totalUsers = num(payload?.total_users ?? payload?.totalUsers) || rows.length;
     const currentUser = pickLeaderboardUserRow(rows, currentEmail);
-    const selectedCredits = currentUser ? num(currentUser.credits) : credits;
-    const selectedTokens = currentUser ? num(currentUser.text_tokens ?? currentUser.textTokens) : tokens;
-    const selectedThreads = currentUser ? num(currentUser.n_threads ?? currentUser.nThreads) : threads;
-    const selectedTurns = currentUser ? num(currentUser.n_turns ?? currentUser.nTurns) : turns;
+    const selectedCredits = num(currentUser?.credits);
+    const selectedTokens = num(currentUser?.text_tokens ?? currentUser?.textTokens);
+    const selectedThreads = num(currentUser?.n_threads ?? currentUser?.nThreads);
+    const selectedTurns = num(currentUser?.n_turns ?? currentUser?.nTurns);
 
     return {
       id,
@@ -970,7 +1032,7 @@
     if (!normalizeString(currentEmail)) {
       throw createTypedError(
         'Team 用量排行榜需要当前账号邮箱，但 /backend-api/me 和 /usage 都没有返回邮箱。',
-        'team-leaderboard-missing-email'
+        'team-leaderboard-integrity'
       );
     }
 
@@ -980,6 +1042,10 @@
       fetchUsageLeaderboard(headers, dates.monthStartDate, dates.endDateInclusive),
       fetchUsageLeaderboard(headers, dates.rollingStartDate, dates.endDateInclusive),
     ]);
+
+    assertCompleteLeaderboardForCurrentUser(sinceResetPayload, currentEmail);
+    assertCompleteLeaderboardForCurrentUser(monthPayload, currentEmail);
+    assertCompleteLeaderboardForCurrentUser(rollingPayload, currentEmail);
 
     const sinceResetRange = buildLeaderboardRange(
       sinceResetPayload,
@@ -1007,13 +1073,6 @@
     );
     const ranges = [sinceResetRange, monthRange, rollingRange];
 
-    if (!ranges.some((range) => range.matchedUserFound)) {
-      throw createTypedError(
-        `Team 用量排行榜没有找到当前邮箱 ${currentEmail} 的记录。`,
-        'team-leaderboard-missing-user'
-      );
-    }
-
     return {
       dateBucket: 'UTC',
       source: 'team-leaderboard',
@@ -1035,6 +1094,9 @@
       };
     } catch (error) {
       leaderboardError = errorMessage(error);
+      if (error && typeof error === 'object' && error.type === 'team-leaderboard-integrity') {
+        throw error;
+      }
     }
 
     try {
@@ -1048,7 +1110,7 @@
           source: 'daily-workspace-fallback',
           fallbackReason: leaderboardError,
         },
-        warning: `${leaderboardError} 已回退到 daily analytics；Team 子号或非 owner/admin 账号可能看不到 workspace 排行榜。`,
+        warning: `${leaderboardError} 改为展示 daily Workspace 汇总回退；该数据不是个人用量。`,
       };
     } catch (fallbackError) {
       throw new Error(
@@ -1292,7 +1354,7 @@
 
   const analyticsSourceLabel = (source) => {
     if (source === 'team-leaderboard') return 'Team 用量排行榜';
-    if (source === 'daily-workspace-fallback') return 'Daily analytics（排行榜回退）';
+    if (source === 'daily-workspace-fallback') return 'Workspace 汇总（日桶回退）';
     return 'Daily analytics';
   };
 
