@@ -1009,6 +1009,8 @@ require_file_contains src/lts/codexQuota/config.ts "codexTeamLeaderboardCacheKey
 require_file_contains src/lts/codexQuota/config.ts "classifyCodexLeaderboardPayloadForAccount"
 require_file_contains src/lts/i18n/en.lts.json "team_analytics_incomplete"
 require_file_contains src/utils/quota/upstreamQuotaPort.test.mjs "duplicate date"
+require_file_contains scripts/codex-quota-compass.user.js "daily-analytics-integrity"
+require_file_contains scripts/codex-quota-compass.user.js "team-leaderboard-integrity"
 require_file_contains src/lts/codexQuota/config.ts "rolling-90"
 require_file_contains src/lts/codexQuota/config.ts "rolling-360"
 require_file_contains scripts/smoke-lts-panel.py "rate-limit-reset-credits/consume"
@@ -1112,6 +1114,13 @@ if (failures.length > 0) {
 NODE
 then
   fail "missing Codex quota or remote cloud connect locale keys"
+fi
+
+if ! node --check scripts/chatgpt-quota-helper.js >/dev/null; then
+  fail "ChatGPT quota helper userscript has invalid JavaScript syntax"
+fi
+if ! node --check scripts/codex-quota-compass.user.js >/dev/null; then
+  fail "Codex quota compass userscript has invalid JavaScript syntax"
 fi
 
 for lockfile in bun.lock yarn.lock pnpm-lock.yaml; do

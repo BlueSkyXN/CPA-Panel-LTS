@@ -703,7 +703,7 @@ features:
 
   - id: quota-management
     status: shared
-    reason: Quota surfaces include LTS Codex quota helpers and accepted xAI/Grok quota support.
+    reason: Quota surfaces include LTS Codex quota helpers, companion ChatGPT userscripts, and accepted xAI/Grok quota support.
     routes:
       - /quota
     panel_files:
@@ -717,6 +717,8 @@ features:
       - src/types/quota.ts
       - src/lts/codexQuota/
       - src/i18n/locales/
+      - scripts/chatgpt-quota-helper.js
+      - scripts/codex-quota-compass.user.js
       - scripts/smoke-lts-panel.py
     core_endpoints:
       - /v0/management/api-call
@@ -745,6 +747,8 @@ features:
       - classifyCodexLeaderboardPayloadForAccount
       - team_analytics_incomplete
       - duplicate date
+      - daily-analytics-integrity
+      - team-leaderboard-integrity
       - rolling-90
       - rolling-360
       - Last 360 days
@@ -770,3 +774,5 @@ features:
       - credits_unit
     validation:
       - npm run smoke:lts
+      - node --check scripts/chatgpt-quota-helper.js
+      - node --check scripts/codex-quota-compass.user.js
