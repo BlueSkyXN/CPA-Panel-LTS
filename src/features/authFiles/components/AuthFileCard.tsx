@@ -33,6 +33,7 @@ import {
   getThemeSurfaceIconBackground,
   getTypeColor,
   getTypeLabel,
+  hasAuthFileStatusWarning,
   isRuntimeOnlyAuthFile,
   isThemeSurfaceIconProvider,
   normalizeProviderKey,
@@ -43,8 +44,6 @@ import {
 import type { AuthFileStatusBarData } from '@/features/authFiles/hooks/useAuthFilesStatusBarCache';
 import { AuthFileQuotaSection } from '@/features/authFiles/components/AuthFileQuotaSection';
 import styles from '@/pages/AuthFilesPage.module.scss';
-
-const HEALTHY_STATUS_MESSAGES = new Set(['ok', 'healthy', 'ready', 'success', 'available']);
 
 export type AuthFileCardProps = {
   file: AuthFileItem;
@@ -135,8 +134,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
     (authIndexKey && statusBarCache.get(authIndexKey)) ||
     statusBarDataFromRecentRequests(recentBuckets);
   const rawStatusMessage = getAuthFileStatusMessage(file);
-  const hasStatusWarning =
-    Boolean(rawStatusMessage) && !HEALTHY_STATUS_MESSAGES.has(rawStatusMessage.toLowerCase());
+  const hasStatusWarning = hasAuthFileStatusWarning(file);
 
   const priorityValue = parsePriorityValue(file.priority ?? file['priority']);
   const noteValue = typeof file.note === 'string' ? file.note.trim() : '';

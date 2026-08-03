@@ -33,8 +33,13 @@ export interface AuthFileItem {
   statusMessage?: string;
   lastRefresh?: string | number;
   modified?: number;
+  priority?: number;
+  note?: string;
   success?: unknown;
   failed?: unknown;
+  /** API 边界从 success / failed 原始字段归一化得到的累计计数。 */
+  successCount?: number;
+  failureCount?: number;
   recent_requests?: RecentRequestBucket[];
   recentRequests?: RecentRequestBucket[];
   [key: string]: unknown;

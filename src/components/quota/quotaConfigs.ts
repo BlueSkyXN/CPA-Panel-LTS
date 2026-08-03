@@ -1022,7 +1022,15 @@ const renderKimiItems = (
     const rowLabel = row.labelKey
       ? t(row.labelKey, (row.labelParams ?? {}) as Record<string, string | number>)
       : (row.label ?? '');
-    const resetLabel = formatKimiResetHint(t, row.resetHint);
+    const resetHint = formatKimiResetHint(t, row.resetHint);
+    const absoluteReset =
+      row.resetAtMs !== null && row.resetAtMs !== undefined
+        ? formatQuotaResetTime(new Date(row.resetAtMs).toISOString())
+        : '-';
+    const resetAtLabel =
+      absoluteReset !== '-' ? t('kimi_quota.reset_at', { time: absoluteReset }) : '';
+    const resetLabel =
+      resetAtLabel && resetHint ? `${resetAtLabel} · ${resetHint}` : resetAtLabel || resetHint;
 
     return h(
       'div',

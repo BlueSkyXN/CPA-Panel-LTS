@@ -177,9 +177,10 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
   const singleRefreshInFlightRef = useRef<Set<string>>(new Set());
 
   const handleRefresh = useCallback(() => {
+    if (resettingQuotaName !== null) return;
     pendingQuotaRefreshRef.current = true;
     void triggerHeaderRefresh();
-  }, []);
+  }, [resettingQuotaName]);
 
   useEffect(() => {
     const wasLoading = prevFilesLoadingRef.current;
@@ -347,7 +348,7 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
             size="sm"
             className={styles.refreshAllButton}
             onClick={handleRefresh}
-            disabled={disabled || isRefreshing}
+            disabled={disabled || isRefreshing || resettingQuotaName !== null}
             loading={isRefreshing}
             title={t('quota_management.refresh_all_credentials')}
             aria-label={t('quota_management.refresh_all_credentials')}
@@ -374,13 +375,13 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
               const showResetQuotaAction =
                 itemQuota !== undefined && Boolean(config.canResetQuota?.(itemQuota));
               const resetQuotaAction =
-                config.resetQuota && showResetQuotaAction ? (
-                  {
-                    disabled: !canUseQuotaAction || isResettingQuota,
-                    loading: isResettingQuota,
-                    onClick: () => resetQuotaForFile(item),
-                  }
-                ) : undefined;
+                config.resetQuota && showResetQuotaAction
+                  ? {
+                      disabled: !canUseQuotaAction || isResettingQuota,
+                      loading: isResettingQuota,
+                      onClick: () => resetQuotaForFile(item),
+                    }
+                  : undefined;
 
               return (
                 <QuotaCard

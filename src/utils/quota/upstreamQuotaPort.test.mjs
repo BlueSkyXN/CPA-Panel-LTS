@@ -12,7 +12,7 @@ const vite = await createServer({
 });
 
 const [
-  { buildKimiQuotaRows },
+  { buildKimiQuotaRows, mergeXaiBillingSummaries },
   { buildClaudeQuotaWindows },
   {
     buildCodexAnalyticsRange,
@@ -21,11 +21,17 @@ const [
     selectCodexDailyUsageDays,
   },
   authFileConstants,
+  { invalidateAuthFileDerivedCaches },
+  { useQuotaStore },
+  { normalizeAuthFilesResponse },
 ] = await Promise.all([
   vite.ssrLoadModule('/src/utils/quota/builders.ts'),
   vite.ssrLoadModule('/src/components/quota/quotaConfigs.ts'),
   vite.ssrLoadModule('/src/lts/codexQuota/config.ts'),
   vite.ssrLoadModule('/src/features/authFiles/constants.ts'),
+  vite.ssrLoadModule('/src/features/authFiles/cacheInvalidation.ts'),
+  vite.ssrLoadModule('/src/stores/useQuotaStore.ts'),
+  vite.ssrLoadModule('/src/services/api/authFiles.ts'),
 ]);
 
 test.after(async () => {
@@ -65,6 +71,115 @@ test('formats Kimi reset durations longer than one day as days and hours', () =>
   assert.equal(resetHint(168 * 3600), '7d 0h');
   assert.equal(resetHint(5 * 3600 + 30 * 60), '5h 30m');
   assert.equal(resetHint(59), '<1m');
+});
+
+test('normalizes Kimi protobuf week units and retains the concrete reset instant', () => {
+  const resetAt = '2099-08-03T12:34:56.000Z';
+  const rows = buildKimiQuotaRows({
+    limits: [
+      {
+        detail: { used: 1, limit: 10, reset_at: resetAt },
+        window: { duration: 1, time_unit: 'TIME_UNIT_WEEK' },
+      },
+    ],
+  });
+
+  assert.equal(rows[0]?.labelParams?.duration, '1w');
+  assert.equal(rows[0]?.resetAtMs, Date.parse(resetAt));
+});
+
+test('keeps xAI period type and dates from one endpoint', () => {
+  const weekly = {
+    periodType: 'weekly',
+    usagePercent: 25,
+    periodStart: '2026-08-01T00:00:00Z',
+    periodEnd: undefined,
+    productUsage: [],
+    monthlyLimitCents: null,
+    usedCents: null,
+    includedUsedCents: null,
+    onDemandCapCents: null,
+    onDemandUsedCents: null,
+    onDemandUsedPercent: null,
+    usedPercent: null,
+  };
+  const monthly = {
+    ...weekly,
+    periodType: 'monthly',
+    periodStart: '2026-08-01T00:00:00Z',
+    periodEnd: '2026-09-01T00:00:00Z',
+    monthlyLimitCents: 2000,
+  };
+
+  const merged = mergeXaiBillingSummaries(weekly, monthly);
+  assert.equal(merged?.periodType, 'weekly');
+  assert.equal(merged?.periodStart, weekly.periodStart);
+  assert.equal(merged?.periodEnd, undefined);
+});
+
+test('treats disabled credentials separately from actionable problem states', () => {
+  const { isProblemAuthFile } = authFileConstants;
+  assert.equal(isProblemAuthFile({ name: 'disabled', disabled: true, status: 'error' }), false);
+  assert.equal(
+    isProblemAuthFile({ name: 'status-disabled', status: 'disabled', unavailable: true }),
+    false
+  );
+  assert.equal(isProblemAuthFile({ name: 'unavailable', unavailable: true }), true);
+  assert.equal(isProblemAuthFile({ name: 'error', status: 'error' }), true);
+  assert.equal(isProblemAuthFile({ name: 'healthy', statusMessage: 'healthy' }), false);
+  assert.equal(isProblemAuthFile({ name: 'warning', statusMessage: 'token expired' }), true);
+});
+
+test('invalidates model and quota caches together after auth-file mutation', () => {
+  let invalidatedNames = null;
+  useQuotaStore.getState().setKimiQuota({
+    'auth.json': { status: 'idle', rows: [] },
+  });
+  const before = useQuotaStore.getState().cacheGeneration;
+
+  invalidateAuthFileDerivedCaches(
+    (names) => {
+      invalidatedNames = names;
+    },
+    ['auth.json']
+  );
+
+  assert.deepEqual(invalidatedNames, ['auth.json']);
+  assert.equal(useQuotaStore.getState().cacheGeneration, before + 1);
+  assert.deepEqual(useQuotaStore.getState().kimiQuota, {});
+});
+
+test('normalizes auth-file boundary fields without dropping raw provider data', () => {
+  const normalized = normalizeAuthFilesResponse({
+    files: [
+      {
+        name: 'auth.json',
+        runtime_only: 'true',
+        auth_index: 42,
+        status_message: ' ready ',
+        recent_requests: [{ time: '10:00-10:10', success: '2', failed: 1 }],
+        success: '3',
+        failed: 2,
+        priority: '7',
+        note: ' test note ',
+        modtime: '2026-08-03T00:00:00Z',
+        provider_specific: { retained: true },
+      },
+    ],
+  });
+
+  const file = normalized.files[0];
+  assert.equal(file.runtimeOnly, true);
+  assert.equal(file.authIndex, '42');
+  assert.equal(file.statusMessage, 'ready');
+  assert.equal(file.successCount, 3);
+  assert.equal(file.failureCount, 2);
+  assert.equal(file.priority, 7);
+  assert.equal(file.note, 'test note');
+  assert.equal(file.modified, Date.parse('2026-08-03T00:00:00Z'));
+  assert.deepEqual(file.recentRequests, [{ time: '10:00-10:10', success: 2, failed: 1 }]);
+  assert.deepEqual(file.provider_specific, { retained: true });
+  assert.equal(file.status_message, ' ready ');
 });
 
 test('slices one Codex daily payload into exact rolling ranges before aggregation', () => {

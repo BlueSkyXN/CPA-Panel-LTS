@@ -731,7 +731,8 @@
     "weekly_limit": "週限額",
     "limit_window": "{{duration}} 限額",
     "limit_index": "限額 #{{index}}",
-    "reset_hint": "{{hint}} 後重置"
+    "reset_hint": "{{hint}} 後重置",
+    "reset_at": "{{time}} 重置"
   },
   "xai_quota": {
     "title": "Grok 配額",
