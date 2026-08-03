@@ -27,7 +27,7 @@ const approx = (actual, expected) =>
 
 test('catalog is versioned, self-describing, exact, and keeps provider rate boundaries explicit', () => {
   const sol = pricing.findCatalogEntry('gpt-5.6-sol');
-  assert.equal(pricing.PRICE_CATALOG_AS_OF, '2026-07-26');
+  assert.equal(pricing.PRICE_CATALOG_AS_OF, '2026-07-31');
   assert.equal(sol.currency, 'USD');
   assert.deepEqual(sol.aliases, ['gpt-5.6']);
   assert.equal(sol.sourceUrl, 'https://developers.openai.com/api/docs/pricing');
@@ -36,6 +36,34 @@ test('catalog is versioned, self-describing, exact, and keeps provider rate boun
   assert.equal(sol.standard.long.appliesTo, 'entireRequest');
   assert.equal(sol.fast.multiplier, 2);
   assert.equal(sol.fast.longSupported, false);
+  const terra = pricing.findCatalogEntry('gpt-5.6-terra');
+  assert.deepEqual(terra.standard.short, {
+    input: 2,
+    cachedInput: 0.2,
+    cacheWrite: 2.5,
+    output: 12,
+  });
+  assert.deepEqual(terra.standard.long.rates, {
+    input: 4,
+    cachedInput: 0.4,
+    cacheWrite: 5,
+    output: 18,
+  });
+  assert.equal(terra.asOf, '2026-07-31');
+  const luna = pricing.findCatalogEntry('gpt-5.6-luna');
+  assert.deepEqual(luna.standard.short, {
+    input: 0.2,
+    cachedInput: 0.02,
+    cacheWrite: 0.25,
+    output: 1.2,
+  });
+  assert.deepEqual(luna.standard.long.rates, {
+    input: 0.4,
+    cachedInput: 0.04,
+    cacheWrite: 0.5,
+    output: 1.8,
+  });
+  assert.equal(luna.asOf, '2026-07-31');
   const gpt55 = pricing.findCatalogEntry('gpt-5.5');
   assert.equal(gpt55.standard.long.basis, 'inputTokens');
   assert.equal(gpt55.standard.long.appliesTo, 'entireRequest');
@@ -417,7 +445,7 @@ test('the full input_tokens count switches GPT-5.5 at 271999, 272000, and 272001
     tier()
   );
   assert.equal(gpt56.contextBand, 'long');
-  assert.equal(gpt56.rates.input, 5);
+  assert.equal(gpt56.rates.input, 4);
 });
 
 test('GLM-5.2 keeps official Standard rates and explicit free cache write', () => {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Codex Quota Compass
 // @namespace    https://github.com/BlueSkyXN/CPA-Panel-LTS
-// @version      0.1.7
+// @version      0.1.14
 // @description  在 ChatGPT Codex Cloud 页面直接查看 Codex 额度窗口、周额度估算和 daily analytics 汇总。
 // @author       BlueSkyXN
 // @match        https://chatgpt.com/codex/cloud*
@@ -18,6 +18,7 @@
 
   const CONFIG = {
     AUTO_LOAD: true,
+    ANALYTICS_FETCH_DAYS: 360,
     ROLLING_DAYS: 30,
     USD_PER_CREDIT: 40 / 1000,
 
@@ -632,6 +633,14 @@
       .slice()
       .sort((left, right) => String(left.date ?? '').localeCompare(String(right.date ?? '')));
 
+  const sliceDailyUsagePayload = (payload, startDate, endDateExclusive) => ({
+    ...payload,
+    data: (payload?.data ?? []).filter((day) => {
+      const date = normalizeString(day?.date);
+      return date && date >= startDate && date < endDateExclusive;
+    }),
+  });
+
   const buildClientSummary = (days) => {
     const clients = new Map();
     for (const day of days) {
@@ -875,6 +884,7 @@
       sinceResetStartDate: ymdUtc(timing.windowStartMs),
       monthStartDate: firstDayOfMonthUtc(apiNowMs),
       rollingStartDate: ymdUtc(apiNowMs - (CONFIG.ROLLING_DAYS - 1) * DAY_MS),
+      historyStartDate: ymdUtc(apiNowMs - (CONFIG.ANALYTICS_FETCH_DAYS - 1) * DAY_MS),
     };
   };
 
@@ -890,11 +900,26 @@
 
   const fetchDailyAnalyticsRanges = async (headers, weeklyWindow, timing) => {
     const dates = buildAnalyticsDates(timing);
-    const [sinceResetPayload, monthPayload, rollingPayload] = await Promise.all([
-      fetchDailyUsage(headers, dates.sinceResetStartDate, dates.endDateExclusive),
-      fetchDailyUsage(headers, dates.monthStartDate, dates.endDateExclusive),
-      fetchDailyUsage(headers, dates.rollingStartDate, dates.endDateExclusive),
-    ]);
+    const historyPayload = await fetchDailyUsage(
+      headers,
+      dates.historyStartDate,
+      dates.endDateExclusive
+    );
+    const sinceResetPayload = sliceDailyUsagePayload(
+      historyPayload,
+      dates.sinceResetStartDate,
+      dates.endDateExclusive
+    );
+    const monthPayload = sliceDailyUsagePayload(
+      historyPayload,
+      dates.monthStartDate,
+      dates.endDateExclusive
+    );
+    const rollingPayload = sliceDailyUsagePayload(
+      historyPayload,
+      dates.rollingStartDate,
+      dates.endDateExclusive
+    );
 
     const sinceResetRange = buildAnalyticsRange(
       sinceResetPayload,
@@ -917,10 +942,19 @@
       dates.rollingStartDate,
       dates.endDateExclusive
     );
+    const historyRange = buildAnalyticsRange(
+      historyPayload,
+      'history',
+      `近 ${CONFIG.ANALYTICS_FETCH_DAYS} 天`,
+      dates.historyStartDate,
+      dates.endDateExclusive
+    );
 
     return {
       dateBucket: 'UTC',
       source: 'daily-workspace',
+      requestCount: 1,
+      fetchWindowDays: CONFIG.ANALYTICS_FETCH_DAYS,
       ...buildAnalyticsTimeLabels(timing),
       weeklyEstimate: buildWeeklyEstimate(
         weeklyWindow,
@@ -928,7 +962,7 @@
         sinceResetPayload,
         dates.sinceResetStartDate
       ),
-      ranges: [sinceResetRange, monthRange, rollingRange],
+      ranges: [sinceResetRange, monthRange, rollingRange, historyRange],
     };
   };
 
@@ -983,6 +1017,8 @@
     return {
       dateBucket: 'UTC',
       source: 'team-leaderboard',
+      requestCount: 3,
+      fetchWindowDays: null,
       ...buildAnalyticsTimeLabels(timing),
       weeklyEstimate: buildWeeklyEstimateFromRange(weeklyWindow, sinceResetRange),
       ranges,
@@ -1112,14 +1148,14 @@
   const renderProgress = (percent) => {
     const normalized = percent === null || percent === undefined ? 0 : clamp(percent, 0, 100);
     return `
-      <div class="cqc-progress">
+      <div class="cqc-progress" role="progressbar" aria-label="剩余额度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(normalized)}">
         <div class="cqc-progress-fill ${progressClass(percent)}" style="width:${Math.round(normalized)}%"></div>
       </div>
     `;
   };
 
-  const metricCard = (label, value, hint = '') => `
-    <div class="cqc-metric">
+  const renderKpi = (label, value, hint = '', tone = 'neutral') => `
+    <div class="cqc-kpi ${tone}">
       <span>${escapeHtml(label)}</span>
       <strong>${escapeHtml(value)}</strong>
       ${hint ? `<small>${escapeHtml(hint)}</small>` : ''}
@@ -1128,7 +1164,8 @@
 
   const renderFact = (label, value, title = '') => `
     <span${title ? ` title="${escapeHtml(title)}"` : ''}>
-      ${escapeHtml(label)}：${escapeHtml(value)}
+      <b>${escapeHtml(label)}</b>
+      <em>${escapeHtml(value)}</em>
     </span>
   `;
 
@@ -1139,15 +1176,19 @@
         : `${Math.round(windowInfo.remainingPercent)}%`;
     const usedLabel =
       windowInfo.usedPercent === null || windowInfo.usedPercent === undefined
-        ? 'unknown'
-        : `${formatNumber(windowInfo.usedPercent, 2)}% used`;
+        ? '已用未知'
+        : `已用 ${formatNumber(windowInfo.usedPercent, 2)}%`;
+    const resetInText =
+      windowInfo.resetInLabel && windowInfo.resetInLabel !== '-'
+        ? `${windowInfo.resetInLabel}后重置`
+        : '重置时间未知';
 
     return `
       <div class="cqc-window">
         <div class="cqc-window-main">
           <div>
             <div class="cqc-window-title">${escapeHtml(windowInfo.label)}</div>
-            <div class="cqc-window-sub">${escapeHtml(usedLabel)} · reset in ${escapeHtml(windowInfo.resetInLabel)}</div>
+            <div class="cqc-window-sub">${escapeHtml(usedLabel)} · ${escapeHtml(resetInText)}</div>
           </div>
           <div class="cqc-window-meta">
             <strong>${escapeHtml(remainingLabel)}</strong>
@@ -1190,6 +1231,7 @@
     }
     const recent = days.slice(-14).reverse();
     return `
+      <div class="cqc-table-note">最近 ${recent.length} 个有数据日期</div>
       <div class="cqc-table">
         <div class="cqc-table-head">
           <span>Date</span><span>Credits</span><span>USD</span><span>Turns</span>
@@ -1219,31 +1261,39 @@
     const detailSummary = isLeaderboard ? 'Team 用户排行' : '客户端与最近每日明细';
 
     return `
-      <div class="cqc-range">
+      <article class="cqc-range${range.id === 'history' ? ' history' : ''}">
         <div class="cqc-range-header">
           <div>
             <strong>${escapeHtml(range.label)}</strong>
             <span>${escapeHtml(rangeDateLabel(range))}</span>
           </div>
-          <em>${escapeHtml(range.returnedDays)} buckets</em>
+          <em>${escapeHtml(range.returnedDays)} 个日期桶</em>
         </div>
-        <div class="cqc-range-grid">
-          ${metricCard(creditsLabel, `${formatNumber(range.credits, 2)}`, creditsHint)}
-          ${metricCard('Tokens', formatInteger(range.tokens), `${formatInteger(range.turns)} turns`)}
+        <div class="cqc-range-metrics">
+          <div>
+            <span>${escapeHtml(creditsLabel)}</span>
+            <strong>${formatNumber(range.credits, 2)}</strong>
+            <small>${escapeHtml(creditsHint)}</small>
+          </div>
+          <div>
+            <span>Tokens</span>
+            <strong>${formatInteger(range.tokens)}</strong>
+            <small>${formatInteger(range.turns)} turns</small>
+          </div>
         </div>
         <details>
           <summary>${escapeHtml(detailSummary)}</summary>
           ${renderClientRows(range.topClients)}
           ${renderDailyRows(range.days)}
         </details>
-      </div>
+      </article>
     `;
   };
 
   const analyticsSourceLabel = (source) => {
-    if (source === 'team-leaderboard') return 'Team usage leaderboard';
-    if (source === 'daily-workspace-fallback') return 'Daily workspace analytics (fallback)';
-    return 'Daily workspace analytics';
+    if (source === 'team-leaderboard') return 'Team 用量排行榜';
+    if (source === 'daily-workspace-fallback') return 'Daily analytics（排行榜回退）';
+    return 'Daily analytics';
   };
 
   const teamRoleLabel = (result) => {
@@ -1262,6 +1312,11 @@
     const weeklyWindow = result.windows.find((item) => item.id === 'codex-weekly');
     const fiveHourWindow = result.windows.find((item) => item.id === 'codex-five-hour');
     const weeklyEstimate = result.analytics?.weeklyEstimate ?? null;
+    const historyRange = result.analytics?.ranges?.find((range) => range.id === 'history') ?? null;
+    const remainingLabel = (windowInfo) =>
+      windowInfo?.remainingPercent === null || windowInfo?.remainingPercent === undefined
+        ? '--'
+        : `${Math.round(windowInfo.remainingPercent)}%`;
     const resetCreditsLabel =
       result.rateLimitResetCreditsAvailableCount === null ||
       result.rateLimitResetCreditsAvailableCount === undefined
@@ -1270,61 +1325,53 @@
     const resetCreditExpiryMs = normalizeResetCreditExpiryMs(result.rateLimitResetCreditExpiresAt);
     const resetCreditsHint =
       resetCreditExpiryMs !== null
-        ? `expires ${formatLocalDateTime(resetCreditExpiryMs)}`
+        ? `${formatLocalDateTime(resetCreditExpiryMs)} 过期`
         : result.resetCreditsSource === 'usage'
-          ? 'from /usage'
+          ? '来自 /usage'
           : result.resetCreditsSource === 'standalone'
-            ? 'from reset credits API'
+            ? '来自 resets API'
             : result.resetCreditsError
               ? '查询失败'
               : '';
-    const summary = [
-      metricCard('Plan', getPlanLabel(result.planType), result.userEmail || ''),
-      metricCard('Manual resets', resetCreditsLabel, resetCreditsHint),
-      metricCard(
-        '7 天剩余',
-        weeklyWindow?.remainingPercent === null || weeklyWindow?.remainingPercent === undefined
-          ? '--'
-          : `${Math.round(weeklyWindow.remainingPercent)}%`,
-        weeklyWindow ? `reset ${weeklyWindow.resetLabel}` : ''
-      ),
-      metricCard(
-        '5 小时剩余',
-        fiveHourWindow?.remainingPercent === null || fiveHourWindow?.remainingPercent === undefined
-          ? '--'
-          : `${Math.round(fiveHourWindow.remainingPercent)}%`,
-        fiveHourWindow ? `reset ${fiveHourWindow.resetLabel}` : ''
-      ),
-      metricCard(
-        '周额度估算',
-        weeklyEstimate ? `${formatInteger(weeklyEstimate.totalCreditsWithResetDay)} credits` : '--',
-        weeklyEstimate ? `${formatUsd(weeklyEstimate.totalUsdWithResetDay)}` : ''
-      ),
-    ].join('');
+    const coverageBlock = historyRange
+      ? `
+        <div class="cqc-coverage">
+          <div>
+            <span>实际数据覆盖</span>
+            <strong>${escapeHtml(historyRange.firstDate || '暂无')} → ${escapeHtml(historyRange.lastDate || '暂无')}</strong>
+          </div>
+          <div>
+            <span>有效日期</span>
+            <strong>${formatInteger(historyRange.returnedDays)}</strong>
+            <em>/ ${formatInteger(result.analytics.fetchWindowDays)} 天查询窗口</em>
+          </div>
+        </div>
+      `
+      : '';
 
     const weeklyEstimateBlock = weeklyEstimate
       ? result.analytics?.source === 'team-leaderboard'
         ? `
-        <div class="cqc-estimate">
-          <div>
+        <div class="cqc-estimate single">
+          <div class="cqc-estimate-item">
             <span>Team 当前用户</span>
             <strong>${formatNumber(weeklyEstimate.totalCreditsWithResetDay, 2)} credits</strong>
-            <em>${formatUsd(weeklyEstimate.totalUsdWithResetDay)} total · remaining ${formatNumber(weeklyEstimate.remainingCreditsWithResetDay, 2)}</em>
+            <em>${formatUsd(weeklyEstimate.totalUsdWithResetDay)} 总额 · 剩余 ${formatNumber(weeklyEstimate.remainingCreditsWithResetDay, 2)}</em>
           </div>
           <p>基于 Team usage leaderboard 中当前邮箱的 credits 和 7 天 used_percent 反推；leaderboard 按日期范围聚合，不能拆分重置日。</p>
         </div>
       `
         : `
         <div class="cqc-estimate">
-          <div>
+          <div class="cqc-estimate-item">
             <span>包含重置日</span>
             <strong>${formatNumber(weeklyEstimate.totalCreditsWithResetDay, 2)} credits</strong>
-            <em>${formatUsd(weeklyEstimate.totalUsdWithResetDay)} total · remaining ${formatNumber(weeklyEstimate.remainingCreditsWithResetDay, 2)}</em>
+            <em>${formatUsd(weeklyEstimate.totalUsdWithResetDay)} 总额 · 剩余 ${formatNumber(weeklyEstimate.remainingCreditsWithResetDay, 2)}</em>
           </div>
-          <div>
+          <div class="cqc-estimate-item">
             <span>排除重置日</span>
             <strong>${formatNumber(weeklyEstimate.totalCreditsWithoutResetDay, 2)} credits</strong>
-            <em>${formatUsd(weeklyEstimate.totalUsdWithoutResetDay)} total · remaining ${formatNumber(weeklyEstimate.remainingCreditsWithoutResetDay, 2)}</em>
+            <em>${formatUsd(weeklyEstimate.totalUsdWithoutResetDay)} 总额 · 剩余 ${formatNumber(weeklyEstimate.remainingCreditsWithoutResetDay, 2)}</em>
           </div>
           <p>daily analytics 只能按天聚合，真实值通常介于两种口径之间；used_percent 表示已用比例。</p>
         </div>
@@ -1332,54 +1379,79 @@
       : '<div class="cqc-muted">暂无周额度反推数据。</div>';
 
     return `
-      <div class="cqc-summary">${summary}</div>
-
-      <section>
-        <h3>限制窗口</h3>
-        <div class="cqc-window-list">
-          ${
-            result.windows.length > 0
-              ? result.windows.map(renderWindowRow).join('')
-              : '<div class="cqc-muted">未返回限制窗口。</div>'
-          }
+      <div class="cqc-overview">
+        <div class="cqc-identity">
+          <div class="cqc-plan-row">
+            <strong>${escapeHtml(getPlanLabel(result.planType))}</strong>
+            <span class="cqc-account" title="${escapeHtml(result.userEmail || '')}">${escapeHtml(result.userEmail || '未返回账号')}</span>
+          </div>
+          <div class="cqc-utility-row">
+            <span><b>手动重置</b>${escapeHtml(resetCreditsLabel)}</span>
+            ${resetCreditsHint ? `<span title="${escapeHtml(resetCreditsHint)}">${escapeHtml(resetCreditsHint)}</span>` : ''}
+          </div>
         </div>
-        ${
-          result.resetCreditsError
-            ? `<div class="cqc-warning">Manual resets 查询失败：${escapeHtml(result.resetCreditsError)}</div>`
-            : ''
-        }
-      </section>
-
-      <section>
-        <h3>周额度估算</h3>
-        ${weeklyEstimateBlock}
-      </section>
-
-      <section>
-        <h3>Daily Analytics</h3>
-        <div class="cqc-facts">
-          ${renderFact('日期桶', result.analytics?.dateBucket ?? 'UTC', 'daily analytics 按 UTC 日期桶聚合')}
-          ${renderFact('来源', analyticsSourceLabel(result.analytics?.source))}
-          ${renderFact('当前账号', result.meInfo?.name && result.userEmail ? `${result.meInfo.name} <${result.userEmail}>` : result.userEmail || '-')}
-          ${renderFact('Team role', teamRoleLabel(result), result.meError ? `me error: ${result.meError}` : '')}
-          ${renderFact('用户时区', result.analytics?.userTimeZone ?? getUserTimeZone())}
-          ${renderFact('后端当前', result.analytics?.backendNowLabel ?? '-', result.analytics?.backendNowUtcLabel ? `UTC: ${result.analytics.backendNowUtcLabel}` : '')}
-          ${renderFact('窗口开始', result.analytics?.windowStartLabel ?? '-', result.analytics?.windowStartUtcLabel ? `UTC: ${result.analytics.windowStartUtcLabel}` : '')}
-          ${renderFact('下次重置', result.analytics?.resetAtLabel ?? '-', result.analytics?.resetAtUtcLabel ? `UTC: ${result.analytics.resetAtUtcLabel}` : '')}
+        <div class="cqc-overview-kpis">
+          ${renderKpi('7 天剩余', remainingLabel(weeklyWindow), weeklyWindow ? `重置 ${weeklyWindow.resetLabel}` : '', progressClass(weeklyWindow?.remainingPercent))}
+          ${renderKpi('5 小时剩余', remainingLabel(fiveHourWindow), fiveHourWindow ? `重置 ${fiveHourWindow.resetLabel}` : '', progressClass(fiveHourWindow?.remainingPercent))}
+          ${renderKpi('周额度估算', weeklyEstimate ? `${formatInteger(weeklyEstimate.totalCreditsWithResetDay)}` : '--', weeklyEstimate ? `${formatUsd(weeklyEstimate.totalUsdWithResetDay)} · credits` : '', 'accent')}
         </div>
-        ${
-          result.analyticsError
-            ? `<div class="cqc-warning">${escapeHtml(result.analyticsError)}</div>`
-            : ''
-        }
+        <div class="cqc-signal-rail">
+          <span>7 天可用容量</span>
+          ${renderProgress(weeklyWindow?.remainingPercent)}
+          <strong>${escapeHtml(remainingLabel(weeklyWindow))}</strong>
+        </div>
+      </div>
+
+      ${result.resetCreditsError ? `<div class="cqc-warning">Manual resets 查询失败：${escapeHtml(result.resetCreditsError)}</div>` : ''}
+
+      <div class="cqc-primary-grid">
+        <section class="cqc-section-card">
+          <div class="cqc-section-head">
+            <h3>限制窗口</h3>
+            <em>剩余额度与重置时间</em>
+          </div>
+          <div class="cqc-window-list">
+            ${result.windows.length > 0 ? result.windows.map(renderWindowRow).join('') : '<div class="cqc-muted">未返回限制窗口。</div>'}
+          </div>
+        </section>
+
+        <section class="cqc-section-card">
+          <div class="cqc-section-head">
+            <h3>周额度估算</h3>
+            <em>按当前使用比例反推</em>
+          </div>
+          ${weeklyEstimateBlock}
+        </section>
+      </div>
+
+      <section class="cqc-analytics-section">
+        <div class="cqc-section-head">
+          <h3>用量分析</h3>
+          <em>${escapeHtml(analyticsSourceLabel(result.analytics?.source))}</em>
+        </div>
+        ${coverageBlock}
+        ${result.analyticsError ? `<div class="cqc-warning">${escapeHtml(result.analyticsError)}</div>` : ''}
         <div class="cqc-ranges">
           ${(result.analytics?.ranges ?? []).map(renderRange).join('')}
         </div>
+        <details class="cqc-runtime">
+          <summary>运行与时间信息</summary>
+          <div class="cqc-facts">
+            ${renderFact('日期桶', result.analytics?.dateBucket ?? 'UTC', 'daily analytics 按 UTC 日期桶聚合')}
+            ${renderFact('数据来源', `${analyticsSourceLabel(result.analytics?.source)}${result.analytics?.requestCount ? ` · ${result.analytics.requestCount} 次请求` : ''}`)}
+            ${renderFact('当前账号', result.meInfo?.name && result.userEmail ? `${result.meInfo.name} <${result.userEmail}>` : result.userEmail || '-')}
+            ${renderFact('Team role', teamRoleLabel(result), result.meError ? `me error: ${result.meError}` : '')}
+            ${renderFact('用户时区', result.analytics?.userTimeZone ?? getUserTimeZone())}
+            ${renderFact('后端当前', result.analytics?.backendNowLabel ?? '-', result.analytics?.backendNowUtcLabel ? `UTC: ${result.analytics.backendNowUtcLabel}` : '')}
+            ${renderFact('窗口开始', result.analytics?.windowStartLabel ?? '-', result.analytics?.windowStartUtcLabel ? `UTC: ${result.analytics.windowStartUtcLabel}` : '')}
+            ${renderFact('下次重置', result.analytics?.resetAtLabel ?? '-', result.analytics?.resetAtUtcLabel ? `UTC: ${result.analytics.resetAtUtcLabel}` : '')}
+          </div>
+        </details>
       </section>
 
       <footer class="cqc-footer">
         <span>更新于 ${escapeHtml(formatLocalDateTime(Date.parse(result.fetchedAt)))}</span>
-        <span>token: ${escapeHtml(result.tokenSource)}${result.hasAccountHeader ? ' · account header' : ''}</span>
+        <span>会话 ${escapeHtml(result.tokenSource)}${result.hasAccountHeader ? ' · account header' : ''}</span>
       </footer>
     `;
   };
@@ -1410,7 +1482,7 @@
     if (!button) return;
     button.setAttribute('aria-expanded', state.panelOpen ? 'true' : 'false');
     if (state.loading) {
-      button.textContent = 'Codex Quota · loading';
+      button.textContent = 'Codex 额度 · 加载中';
       return;
     }
     if (state.result) {
@@ -1419,14 +1491,14 @@
         button.textContent = `Codex 7d ${Math.round(weeklyWindow.remainingPercent)}%`;
         return;
       }
-      button.textContent = 'Codex Quota · ready';
+      button.textContent = 'Codex 额度 · 就绪';
       return;
     }
     if (state.error) {
-      button.textContent = 'Codex Quota · error';
+      button.textContent = 'Codex 额度 · 失败';
       return;
     }
-    button.textContent = 'Codex Quota';
+    button.textContent = 'Codex 额度';
   };
 
   const render = (shadow) => {
@@ -1514,27 +1586,79 @@
   const css = `
     :host {
       color-scheme: light dark;
-      --cqc-bg: rgba(255, 255, 255, 0.98);
-      --cqc-elevated: #ffffff;
-      --cqc-text: #1d2329;
-      --cqc-muted: #667085;
-      --cqc-border: rgba(15, 23, 42, 0.12);
-      --cqc-shadow: 0 16px 50px rgba(15, 23, 42, 0.22);
-      --cqc-blue: #2563eb;
-      --cqc-green: #10b981;
-      --cqc-amber: #d97706;
-      --cqc-red: #dc2626;
-      --cqc-purple: #6d5bd0;
-      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --cqc-panel: rgba(245, 245, 247, 0.86);
+      --cqc-surface: #ffffff;
+      --cqc-surface-subtle: #f5f5f7;
+      --cqc-text: #1d1d1f;
+      --cqc-muted: #6e6e73;
+      --cqc-faint: #a1a1a6;
+      --cqc-border: rgba(0, 0, 0, 0.07);
+      --cqc-border-strong: rgba(0, 0, 0, 0.12);
+      --cqc-shadow: 0 24px 70px rgba(0, 0, 0, 0.14), 0 2px 10px rgba(0, 0, 0, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+      --cqc-accent: #007aff;
+      --cqc-accent-soft: rgba(0, 122, 255, 0.08);
+      --cqc-accent-grad: linear-gradient(135deg, #007aff, #bf5af2 42%, #ff375f 72%, #ff9500);
+      --cqc-grad-high: linear-gradient(90deg, #007aff, #5e5ce6 55%, #64d2ff);
+      --cqc-grad-medium: linear-gradient(90deg, #ff9500, #ffbf47);
+      --cqc-grad-low: linear-gradient(90deg, #ff3b30, #ff6482);
+      --cqc-amber: #ff9500;
+      --cqc-amber-soft: rgba(255, 149, 0, 0.12);
+      --cqc-red: #ff3b30;
+      --cqc-red-soft: rgba(255, 59, 48, 0.10);
+      --cqc-track: rgba(0, 0, 0, 0.08);
+      --cqc-track-inset: inset 0 1px 2px rgba(0, 0, 0, 0.08);
+      --cqc-glow-high: 0 0 10px rgba(0, 122, 255, 0.34);
+      --cqc-glow-medium: 0 0 10px rgba(255, 149, 0, 0.34);
+      --cqc-glow-low: 0 0 10px rgba(255, 59, 48, 0.32);
+      --cqc-table-head: rgba(0, 0, 0, 0.035);
+      --cqc-toggle-shadow: 0 10px 26px rgba(191, 90, 242, 0.32), 0 2px 8px rgba(0, 122, 255, 0.20);
+      font-family: ui-sans-serif, system-ui, -apple-system, "SF Pro Text", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-variant-numeric: tabular-nums;
+    }
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+    }
+    button {
+      font: inherit;
+    }
+    @keyframes cqc-aurora {
+      from {
+        background-position: 0% 50%;
+      }
+      to {
+        background-position: 100% 50%;
+      }
     }
     @media (prefers-color-scheme: dark) {
       :host {
-        --cqc-bg: rgba(18, 24, 33, 0.98);
-        --cqc-elevated: #1d2633;
-        --cqc-text: #eef2f7;
-        --cqc-muted: #a6b0bf;
-        --cqc-border: rgba(226, 232, 240, 0.14);
-        --cqc-shadow: 0 18px 56px rgba(0, 0, 0, 0.42);
+        --cqc-panel: rgba(28, 28, 30, 0.82);
+        --cqc-surface: rgba(44, 44, 46, 0.72);
+        --cqc-surface-subtle: rgba(58, 58, 60, 0.55);
+        --cqc-text: #f5f5f7;
+        --cqc-muted: #98989d;
+        --cqc-faint: #6e6e73;
+        --cqc-border: rgba(255, 255, 255, 0.09);
+        --cqc-border-strong: rgba(255, 255, 255, 0.16);
+        --cqc-shadow: 0 24px 80px rgba(0, 0, 0, 0.56), 0 2px 12px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+        --cqc-accent: #0a84ff;
+        --cqc-accent-soft: rgba(10, 132, 255, 0.16);
+        --cqc-accent-grad: linear-gradient(135deg, #0a84ff, #bf5af2 42%, #ff375f 72%, #ff9f0a);
+        --cqc-grad-high: linear-gradient(90deg, #0a84ff, #7d7aff 55%, #64d2ff);
+        --cqc-grad-medium: linear-gradient(90deg, #ff9f0a, #ffd60a);
+        --cqc-grad-low: linear-gradient(90deg, #ff453a, #ff6482);
+        --cqc-amber: #ff9f0a;
+        --cqc-amber-soft: rgba(255, 159, 10, 0.14);
+        --cqc-red: #ff453a;
+        --cqc-red-soft: rgba(255, 69, 58, 0.14);
+        --cqc-track: rgba(255, 255, 255, 0.12);
+        --cqc-track-inset: inset 0 1px 2px rgba(0, 0, 0, 0.38);
+        --cqc-glow-high: 0 0 12px rgba(10, 132, 255, 0.46);
+        --cqc-glow-medium: 0 0 12px rgba(255, 159, 10, 0.36);
+        --cqc-glow-low: 0 0 12px rgba(255, 69, 58, 0.40);
+        --cqc-table-head: rgba(255, 255, 255, 0.05);
+        --cqc-toggle-shadow: 0 10px 28px rgba(0, 0, 0, 0.45), 0 0 26px rgba(191, 90, 242, 0.30);
       }
     }
     .cqc-toggle {
@@ -1542,32 +1666,53 @@
       right: 20px;
       bottom: 20px;
       z-index: 2147483646;
-      min-width: 132px;
-      height: 42px;
-      border: 1px solid var(--cqc-border);
+      min-width: 136px;
+      height: 38px;
+      border: 0;
       border-radius: 999px;
-      background: var(--cqc-bg);
-      color: var(--cqc-text);
-      box-shadow: var(--cqc-shadow);
+      background: var(--cqc-accent-grad);
+      background-size: 220% 220%;
+      animation: cqc-aurora 9s ease-in-out infinite alternate;
+      color: #ffffff;
+      box-shadow: var(--cqc-toggle-shadow);
       cursor: pointer;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 700;
-      padding: 0 16px;
+      letter-spacing: 0.01em;
+      padding: 0 15px;
+      transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
+    }
+    .cqc-toggle::before {
+      content: '';
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      margin-right: 8px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.95);
+      box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.25);
+      vertical-align: 1px;
+    }
+    .cqc-toggle:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.06);
     }
     .cqc-panel {
       position: fixed;
       right: 20px;
-      bottom: 74px;
+      bottom: 70px;
       z-index: 2147483646;
-      width: min(720px, calc(100vw - 32px));
-      max-height: min(760px, calc(100vh - 104px));
+      width: min(880px, calc(100vw - 32px));
+      max-height: min(840px, calc(100vh - 96px));
       display: flex;
       flex-direction: column;
-      background: var(--cqc-bg);
+      background: var(--cqc-panel);
       color: var(--cqc-text);
       border: 1px solid var(--cqc-border);
-      border-radius: 14px;
+      border-radius: 22px;
       box-shadow: var(--cqc-shadow);
+      backdrop-filter: blur(30px) saturate(1.8);
+      -webkit-backdrop-filter: blur(30px) saturate(1.8);
       overflow: hidden;
       contain: layout paint style;
     }
@@ -1579,9 +1724,9 @@
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      padding: 14px 16px;
+      min-height: 56px;
+      padding: 10px 14px 10px 18px;
       border-bottom: 1px solid var(--cqc-border);
-      background: var(--cqc-elevated);
     }
     .cqc-title {
       display: flex;
@@ -1590,34 +1735,45 @@
       min-width: 0;
     }
     .cqc-title strong {
-      font-size: 15px;
+      font-size: 14px;
       line-height: 1.25;
+      letter-spacing: -0.01em;
     }
     .cqc-title span {
       color: var(--cqc-muted);
-      font-size: 12px;
+      font-size: 10.5px;
     }
     .cqc-actions {
       display: flex;
-      gap: 8px;
+      gap: 6px;
       flex-wrap: wrap;
       justify-content: flex-end;
     }
     .cqc-action {
-      height: 32px;
+      height: 30px;
       border: 1px solid var(--cqc-border);
-      border-radius: 8px;
+      border-radius: 999px;
       background: transparent;
       color: var(--cqc-text);
       cursor: pointer;
-      padding: 0 10px;
-      font-size: 12px;
-      font-weight: 650;
+      padding: 0 13px;
+      font-size: 11.5px;
+      font-weight: 600;
+      transition: background 140ms ease, border-color 140ms ease;
     }
     .cqc-action.primary {
       color: #fff;
-      background: var(--cqc-blue);
-      border-color: var(--cqc-blue);
+      background: var(--cqc-accent);
+      border-color: transparent;
+    }
+    .cqc-action:not(:disabled):hover {
+      border-color: var(--cqc-accent);
+      background: var(--cqc-accent-soft);
+    }
+    .cqc-action.primary:not(:disabled):hover {
+      color: #fff;
+      background: var(--cqc-accent);
+      filter: brightness(1.07);
     }
     .cqc-action:disabled {
       cursor: not-allowed;
@@ -1627,67 +1783,204 @@
       overflow: auto;
       padding: 16px;
       overscroll-behavior: contain;
+      scrollbar-gutter: stable;
     }
     .cqc-loading,
     .cqc-muted {
       color: var(--cqc-muted);
-      font-size: 13px;
-      padding: 14px;
-    }
-    .cqc-summary,
-    .cqc-range-grid {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 10px;
-    }
-    .cqc-summary {
-      grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
-    }
-    .cqc-metric {
-      min-width: 0;
-      background: var(--cqc-elevated);
-      border: 1px solid var(--cqc-border);
-      border-radius: 10px;
-      padding: 10px;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-    .cqc-metric span,
-    .cqc-metric small {
-      color: var(--cqc-muted);
-      font-size: 11px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .cqc-metric strong {
-      font-size: 18px;
-      line-height: 1.2;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    section {
-      margin-top: 18px;
+      font-size: 12px;
+      padding: 18px 16px;
     }
     h3 {
-      margin: 0 0 10px;
-      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin: 0;
+      font-size: 13px;
       line-height: 1.25;
+      letter-spacing: -0.01em;
+    }
+    h3::before {
+      content: '';
+      flex: 0 0 auto;
+      width: 3px;
+      height: 11px;
+      border-radius: 2px;
+      background: color-mix(in srgb, var(--cqc-text) 78%, transparent);
+    }
+    .cqc-overview {
+      position: relative;
+      display: grid;
+      grid-template-columns: minmax(190px, 0.85fr) minmax(0, 2.15fr);
+      gap: 14px 18px;
+      padding: 16px;
+      overflow: hidden;
+      background:
+        radial-gradient(130% 150% at 0% 0%, var(--cqc-accent-soft), transparent 55%),
+        var(--cqc-surface);
+      border: 1px solid var(--cqc-border);
+      border-radius: 18px;
+    }
+    .cqc-overview::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: var(--cqc-accent-grad);
+      background-size: 220% 220%;
+      animation: cqc-aurora 9s ease-in-out infinite alternate;
+    }
+    .cqc-identity {
+      min-width: 0;
+      padding-right: 14px;
+      border-right: 1px solid var(--cqc-border);
+    }
+    .cqc-plan-row {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      min-width: 0;
+    }
+    .cqc-plan-row strong {
+      flex: 0 0 auto;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--cqc-accent);
+      color: #ffffff;
+      font-size: 12.5px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      line-height: 1.3;
+    }
+    .cqc-account {
+      min-width: 0;
+      overflow: hidden;
+      color: var(--cqc-muted);
+      font-size: 11.5px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .cqc-utility-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 12px;
+    }
+    .cqc-utility-row span {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-width: 0;
+      max-width: 100%;
+      padding: 3px 7px;
+      overflow: hidden;
+      border: 1px solid var(--cqc-border);
+      border-radius: 8px;
+      color: var(--cqc-muted);
+      font-size: 10px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .cqc-utility-row b {
+      color: var(--cqc-text);
+    }
+    .cqc-overview-kpis {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .cqc-kpi {
+      min-width: 0;
+      padding: 3px 10px 5px;
+      border-left: 2px solid var(--cqc-border-strong);
+    }
+    .cqc-kpi.high {
+      border-left-color: var(--cqc-accent);
+    }
+    .cqc-kpi.medium {
+      border-left-color: var(--cqc-amber);
+    }
+    .cqc-kpi.low {
+      border-left-color: var(--cqc-red);
+    }
+    .cqc-kpi.accent {
+      border-left-color: var(--cqc-accent);
+    }
+    .cqc-kpi span,
+    .cqc-kpi small {
+      display: block;
+      min-width: 0;
+      overflow: hidden;
+      color: var(--cqc-muted);
+      font-size: 10.5px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .cqc-kpi strong {
+      display: block;
+      margin: 4px 0 3px;
+      overflow: hidden;
+      font-size: 20px;
+      line-height: 1;
+      letter-spacing: -0.05em;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .cqc-signal-rail {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: auto minmax(120px, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      color: var(--cqc-muted);
+      font-size: 10.5px;
+    }
+    .cqc-signal-rail strong {
+      color: var(--cqc-text);
+      font-size: 11.5px;
+    }
+    .cqc-primary-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .cqc-section-card,
+    .cqc-analytics-section {
+      min-width: 0;
+      padding: 14px;
+      background: var(--cqc-surface);
+      border: 1px solid var(--cqc-border);
+      border-radius: 16px;
+    }
+    .cqc-analytics-section {
+      margin-top: 12px;
+    }
+    .cqc-section-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .cqc-section-head em {
+      color: var(--cqc-faint);
+      font-size: 10.5px;
+      font-style: normal;
+      text-align: right;
     }
     .cqc-window-list,
     .cqc-ranges {
       display: grid;
       gap: 10px;
     }
-    .cqc-window,
-    .cqc-range,
-    .cqc-estimate {
-      background: var(--cqc-elevated);
+    .cqc-window {
+      background: var(--cqc-surface-subtle);
       border: 1px solid var(--cqc-border);
-      border-radius: 10px;
-      padding: 12px;
+      border-radius: 14px;
+      padding: 10px 12px;
       contain: content;
     }
     .cqc-window-main,
@@ -1695,11 +1988,11 @@
       display: flex;
       align-items: flex-start;
       justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 10px;
+      gap: 9px;
+      margin-bottom: 7px;
     }
     .cqc-window-title {
-      font-size: 13px;
+      font-size: 11.5px;
       font-weight: 700;
     }
     .cqc-window-sub,
@@ -1708,7 +2001,7 @@
     .cqc-facts,
     .cqc-footer {
       color: var(--cqc-muted);
-      font-size: 12px;
+      font-size: 10.5px;
     }
     .cqc-window-meta {
       display: flex;
@@ -1718,17 +2011,17 @@
       white-space: nowrap;
     }
     .cqc-window-meta strong {
-      font-size: 16px;
+      font-size: 14px;
     }
     .cqc-window-meta span {
       color: var(--cqc-muted);
-      font-size: 11px;
+      font-size: 10px;
     }
     .cqc-progress {
-      height: 8px;
-      overflow: hidden;
+      height: 7px;
       border-radius: 999px;
-      background: rgba(148, 163, 184, 0.25);
+      background: var(--cqc-track);
+      box-shadow: var(--cqc-track-inset);
     }
     .cqc-progress-fill {
       height: 100%;
@@ -1736,78 +2029,182 @@
       transition: width 180ms ease;
     }
     .cqc-progress-fill.high {
-      background: var(--cqc-green);
+      background: var(--cqc-grad-high);
+      box-shadow: var(--cqc-glow-high);
     }
     .cqc-progress-fill.medium {
-      background: var(--cqc-amber);
+      background: var(--cqc-grad-medium);
+      box-shadow: var(--cqc-glow-medium);
     }
     .cqc-progress-fill.low {
-      background: var(--cqc-red);
+      background: var(--cqc-grad-low);
+      box-shadow: var(--cqc-glow-low);
     }
     .cqc-estimate {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
+      gap: 8px;
     }
-    .cqc-estimate div {
+    .cqc-estimate.single {
+      grid-template-columns: 1fr;
+    }
+    .cqc-estimate-item {
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 3px;
       min-width: 0;
+      padding: 10px 12px;
+      background: var(--cqc-surface-subtle);
+      border: 1px solid var(--cqc-border);
+      border-radius: 14px;
     }
     .cqc-estimate span,
     .cqc-estimate em,
     .cqc-estimate p {
       color: var(--cqc-muted);
-      font-size: 12px;
+      font-size: 10.5px;
       font-style: normal;
     }
     .cqc-estimate strong {
-      font-size: 16px;
+      overflow: hidden;
+      font-size: 13px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .cqc-estimate p {
       grid-column: 1 / -1;
       margin: 0;
-      line-height: 1.45;
+      padding: 8px 10px;
+      background: var(--cqc-surface-subtle);
+      border: 1px solid var(--cqc-border);
+      border-radius: 12px;
+      line-height: 1.5;
     }
-    .cqc-facts {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px 14px;
+    .cqc-coverage {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
       margin-bottom: 10px;
+      padding: 10px 12px;
+      background: var(--cqc-surface-subtle);
+      border: 1px solid var(--cqc-border);
+      border-radius: 14px;
+    }
+    .cqc-coverage div {
+      min-width: 0;
+    }
+    .cqc-coverage span,
+    .cqc-coverage em {
+      display: block;
+      color: var(--cqc-muted);
+      font-size: 10px;
+      font-style: normal;
+    }
+    .cqc-coverage strong {
+      display: inline-block;
+      max-width: 100%;
+      margin-top: 2px;
+      overflow: hidden;
+      font-size: 11.5px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .cqc-ranges {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .cqc-range {
+      min-width: 0;
+      align-self: start;
+      padding: 12px;
+      background: var(--cqc-surface-subtle);
+      border: 1px solid var(--cqc-border);
+      border-radius: 14px;
+      contain: content;
+    }
+    .cqc-range.history .cqc-range-header strong::before {
+      content: '';
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      margin-right: 6px;
+      border-radius: 2px;
+      background: var(--cqc-accent-grad);
+      vertical-align: 1px;
     }
     .cqc-range-header strong {
       display: block;
       margin-bottom: 2px;
-      font-size: 13px;
+      font-size: 11.5px;
+    }
+    .cqc-range-header span,
+    .cqc-range-header em {
+      color: var(--cqc-muted);
+      font-size: 10px;
+      font-style: normal;
+    }
+    .cqc-range-metrics {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .cqc-range-metrics > div {
+      min-width: 0;
+      padding-top: 7px;
+      border-top: 1px solid var(--cqc-border);
+    }
+    .cqc-range-metrics span,
+    .cqc-range-metrics small {
+      display: block;
+      overflow: hidden;
+      color: var(--cqc-muted);
+      font-size: 10px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .cqc-range-metrics strong {
+      display: block;
+      margin: 3px 0 2px;
+      overflow: hidden;
+      font-size: 14px;
+      letter-spacing: -0.035em;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     details {
       margin-top: 10px;
     }
     summary {
       cursor: pointer;
-      color: var(--cqc-purple);
-      font-size: 12px;
-      font-weight: 700;
+      color: var(--cqc-accent);
+      font-size: 10.5px;
+      font-weight: 600;
+    }
+    summary::marker {
+      color: var(--cqc-faint);
+    }
+    .cqc-table-note {
+      margin-top: 8px;
+      color: var(--cqc-faint);
+      font-size: 10px;
     }
     .cqc-table {
-      margin-top: 10px;
+      margin-top: 6px;
       border: 1px solid var(--cqc-border);
-      border-radius: 8px;
+      border-radius: 12px;
       overflow: hidden;
-      font-size: 12px;
+      font-size: 10px;
     }
     .cqc-table-head,
     .cqc-table-row {
       display: grid;
-      grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(64px, 0.55fr));
-      gap: 8px;
-      padding: 8px 10px;
+      grid-template-columns: minmax(0, 1.35fr) repeat(3, minmax(48px, 0.55fr));
+      gap: 6px;
+      padding: 6px 8px;
       align-items: center;
     }
     .cqc-table-head {
       color: var(--cqc-muted);
-      background: rgba(148, 163, 184, 0.12);
+      background: var(--cqc-table-head);
       font-weight: 700;
     }
     .cqc-table-row + .cqc-table-row {
@@ -1821,58 +2218,154 @@
     }
     .cqc-warning,
     .cqc-error {
-      border: 1px solid rgba(217, 119, 6, 0.35);
-      background: rgba(217, 119, 6, 0.10);
+      border: 1px solid color-mix(in srgb, var(--cqc-amber) 40%, transparent);
+      background: var(--cqc-amber-soft);
       border-radius: 10px;
-      padding: 10px;
+      padding: 9px 12px;
       color: var(--cqc-text);
-      font-size: 12px;
-      line-height: 1.45;
-      margin-bottom: 10px;
+      font-size: 10.5px;
+      line-height: 1.5;
+      margin-top: 10px;
     }
     .cqc-error {
-      border-color: rgba(220, 38, 38, 0.35);
-      background: rgba(220, 38, 38, 0.10);
+      border-color: color-mix(in srgb, var(--cqc-red) 40%, transparent);
+      background: var(--cqc-red-soft);
     }
     .cqc-error pre {
       white-space: pre-wrap;
       overflow-wrap: anywhere;
       margin: 8px 0;
-      font-size: 12px;
+      font-size: 10.5px;
+    }
+    .cqc-runtime {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--cqc-border);
+    }
+    .cqc-facts {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .cqc-facts > span {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 7px;
+      min-width: 0;
+      padding: 6px 8px;
+      background: var(--cqc-surface-subtle);
+      border-radius: 10px;
+      font-size: 10px;
+    }
+    .cqc-facts b {
+      color: var(--cqc-muted);
+    }
+    .cqc-facts em {
+      min-width: 0;
+      overflow: hidden;
+      color: var(--cqc-text);
+      font-style: normal;
+      text-align: right;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .cqc-footer {
       display: flex;
       justify-content: space-between;
       gap: 10px;
-      margin-top: 18px;
-      padding-top: 12px;
-      border-top: 1px solid var(--cqc-border);
+      margin-top: 12px;
+      padding: 0 2px;
+      color: var(--cqc-faint);
+      font-size: 10px;
     }
-    @media (max-width: 640px) {
+    .cqc-toggle:focus-visible,
+    .cqc-action:focus-visible,
+    summary:focus-visible {
+      outline: 2px solid var(--cqc-accent);
+      outline-offset: 2px;
+    }
+    @media (max-width: 760px) {
       .cqc-panel {
         right: 8px;
         bottom: 62px;
         width: calc(100vw - 16px);
+        max-height: calc(100dvh - 76px);
       }
       .cqc-toggle {
         right: 8px;
         bottom: 10px;
       }
+      .cqc-overview {
+        grid-template-columns: 1fr;
+      }
+      .cqc-identity {
+        padding: 0 0 10px;
+        border-right: 0;
+        border-bottom: 1px solid var(--cqc-border);
+      }
+      .cqc-primary-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    @media (max-width: 520px) {
+      .cqc-panel {
+        border-radius: 14px;
+      }
       .cqc-header {
         align-items: flex-start;
-        flex-direction: column;
       }
-      .cqc-actions {
-        justify-content: flex-start;
+      .cqc-title span {
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
-      .cqc-summary,
-      .cqc-range-grid,
-      .cqc-estimate {
+      .cqc-action {
+        padding: 0 7px;
+      }
+      .cqc-body {
+        padding: 9px;
+      }
+      .cqc-overview-kpis {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .cqc-kpi.accent {
+        grid-column: 1 / -1;
+      }
+      .cqc-signal-rail {
+        grid-template-columns: 1fr auto;
+      }
+      .cqc-signal-rail > span {
+        display: none;
+      }
+      .cqc-estimate,
+      .cqc-ranges,
+      .cqc-facts {
+        grid-template-columns: 1fr;
+      }
+      .cqc-coverage {
+        grid-template-columns: 1fr;
+        gap: 6px;
       }
       .cqc-table-head,
       .cqc-table-row {
-        grid-template-columns: minmax(0, 1.1fr) repeat(3, minmax(48px, 0.55fr));
+        grid-template-columns: minmax(0, 1.05fr) repeat(3, minmax(44px, 0.55fr));
+      }
+      .cqc-footer {
+        flex-direction: column;
+        gap: 2px;
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .cqc-toggle,
+      .cqc-action,
+      .cqc-progress-fill {
+        transition: none;
+      }
+      .cqc-toggle,
+      .cqc-overview::before {
+        animation: none;
       }
     }
   `;
@@ -1886,12 +2379,12 @@
     const shadow = host.attachShadow({ mode: 'open' });
     shadow.innerHTML = `
       <style>${css}</style>
-      <button class="cqc-toggle" type="button" title="打开 Codex quota 面板">Codex Quota</button>
-      <aside class="cqc-panel" hidden>
+      <button class="cqc-toggle" type="button" title="打开 Codex quota 面板" aria-controls="cqc-panel">Codex Quota</button>
+      <aside class="cqc-panel" id="cqc-panel" aria-label="Codex quota 与用量分析" hidden>
         <div class="cqc-header">
           <div class="cqc-title">
             <strong>Codex Quota Compass</strong>
-            <span class="cqc-status">未加载</span>
+            <span class="cqc-status" aria-live="polite">未加载</span>
           </div>
           <div class="cqc-actions">
             <button class="cqc-action primary cqc-refresh" type="button">刷新</button>
