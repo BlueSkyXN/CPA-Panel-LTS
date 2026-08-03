@@ -1,12 +1,12 @@
 /** Official provider catalog data is kept separate from the pricing engine and UI. */
 export const PRICE_CURRENCY = 'USD' as const;
-export const OPENAI_CATALOG_AS_OF = '2026-07-20';
+export const OPENAI_CATALOG_AS_OF = '2026-07-31';
 export const ZAI_CATALOG_AS_OF = '2026-07-22';
 export const KIMI_CATALOG_AS_OF = '2026-07-28';
 export const XAI_CATALOG_AS_OF = '2026-07-23';
 export const CODEX_SPARK_CATALOG_AS_OF = '2026-07-25';
 export const ANTHROPIC_CATALOG_AS_OF = '2026-07-26';
-export const PRICE_CATALOG_AS_OF = ANTHROPIC_CATALOG_AS_OF;
+export const PRICE_CATALOG_AS_OF = OPENAI_CATALOG_AS_OF;
 export const PRICE_CATALOG_VERSION = `api-${PRICE_CATALOG_AS_OF}`;
 export const OPENAI_PRICING_SOURCE_URL = 'https://developers.openai.com/api/docs/pricing';
 export const ZAI_PRICING_SOURCE_URL = 'https://docs.z.ai/guides/overview/pricing';
@@ -106,8 +106,8 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
     aliases: [],
     currency: 'USD',
     standard: {
-      short: rateCard(2.5, 0.25, 3.125, 15),
-      long: longCard(rateCard(5, 0.5, 6.25, 22.5)),
+      short: rateCard(2, 0.2, 2.5, 12),
+      long: longCard(rateCard(4, 0.4, 5, 18)),
     },
     fast: { multiplier: 2, longSupported: false },
     sourceUrl: OPENAI_PRICING_SOURCE_URL,
@@ -118,7 +118,10 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
     canonicalModel: 'gpt-5.6-luna',
     aliases: [],
     currency: 'USD',
-    standard: { short: rateCard(1, 0.1, 1.25, 6), long: longCard(rateCard(2, 0.2, 2.5, 9)) },
+    standard: {
+      short: rateCard(0.2, 0.02, 0.25, 1.2),
+      long: longCard(rateCard(0.4, 0.04, 0.5, 1.8)),
+    },
     fast: { multiplier: 2, longSupported: false },
     sourceUrl: OPENAI_PRICING_SOURCE_URL,
     pricingNotesUrl: modelPricingNotesUrl('gpt-5.6-luna'),
