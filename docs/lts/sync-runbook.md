@@ -107,7 +107,89 @@ Every accepted PR passed `npm run check:lts`, `npm run validate:lts`, `npm run s
 | `0f87214e262a683d2b3ea291b5a16ee4469d22d7` | `defer` | Dashboard series review | Animation and chart responsiveness changes have no safe standalone target before the dashboard rewrite is accepted. |
 | `1708314bc7a27e0ad9ef86b083e28e4e00aceeb1` | `defer` | Dashboard series review | Ambient positioning and wash effects are follow-up CSS for the deferred dashboard architecture. |
 
-`upstream/dev` has one additional watchlist commit, `51b034dd914719c3bd6b5ab0eb64bc8b103ca0d4`, which adds `applicableAvailableCount` to shared Codex quota structures. It remains `defer`: it is not on `upstream/main`, and CPA-Panel-LTS owns additional Codex quota/reset-credit classification in `src/lts/codexQuota/`. Reassess only after the upstream behavior stabilizes and can be compared against the sidecar's selection and availability semantics.
+The earlier `upstream/dev` watchlist commit `51b034dd914719c3bd6b5ab0eb64bc8b103ca0d4` is now on `upstream/main` and is reassessed in the next snapshot. It remains `defer`: CPA-Panel-LTS owns additional Codex quota/reset-credit classification in `src/lts/codexQuota/`, so its selection and availability semantics must be compared with the sidecar before porting.
+
+## Audited seven-day intake snapshot (2026-08-03)
+
+Refs were fetched after Core v7.2.116, Panel pricing, and the 360-day Codex analytics PRs were merged:
+
+- `origin/main`: `a60570ca8ec9d3d5a1184491cf9b7c01e76e4e72`
+- previous audited boundary: `1708314bc7a27e0ad9ef86b083e28e4e00aceeb1` (`v1.20.0`)
+- `upstream/main`: `30478c539c1f06649ac78deebeff6cfc227bbe22` (`v1.21.4`)
+- canonical first-parent non-merge commits reviewed: 56
+- raw upstream diff: 180 files, 18,426 insertions, 8,505 deletions
+- decisions: 1 `direct-port`, 11 `adapt-port`, 6 `already-equivalent`, 1 `reject`, 37 `defer`
+
+The accepted subset is deliberately architecture-neutral: auth-file boundary normalization and stale-request/cache guards, xAI/Kimi quota parser correctness, reset/refresh exclusion, and the standalone Sheet focus fix. The AuthFiles/Vault rewrite, WRR/excluded-model/Interactions contracts, and the quota redesign/timeline series remain deferred. Full usage statistics, the old LTS quota host, npm/package-lock, all downstream Codex sidecars, and `management.html` remain unchanged.
+
+Dependency chains reviewed as units rather than isolated hunks:
+
+- AuthFiles: `dbe7094 -> 20c0cb8 -> b9c3fbb -> cc13476 -> 0a181ba -> 29b1b9b`
+- WRR: `8faaa39 -> 90971e8`
+- Excluded models: `afd7da0 -> 20bb855 -> 4abd41f -> 826ea3c`
+- Quota redesign: `572da18 -> 9ecd89b -> 54af5fb -> 46ffeba -> 1705246 -> ... -> 30478c5`
+
+| Upstream commit | Classification | LTS evidence and decision |
+|---|---|---|
+| `51b034dd914719c3bd6b5ab0eb64bc8b103ca0d4` | `defer` | Codex `applicableAvailableCount` 与 LTS `src/lts/codexQuota/` 的 reset-credit 分类不等价；待 sidecar/API 一起审。 |
+| `22cf825d071ac9cc835fe422dae87acd2fded3a2` | `defer` | 共享 motion hooks 依赖未接纳的 Dashboard 系列，当前 LTS 没有直接目标。 |
+| `b62dbefda80f81fabaff189f931ce77583efab59` | `defer` | QuotaCard/AuthFiles 样式与错误 resolver 大重排依赖新 quota 架构，不能覆盖 LTS 宿主。 |
+| `dbe7094e8cb3152e9f9422fb942fd5b0107af98d` | `adapt-port` | 已在 `authFiles.ts` 保留 raw 字段并归一化 camelCase、recent requests、计数和 Blob download；Node regression 覆盖。 |
+| `20c0cb865e5572757ae01fa4e3d5ca7d0af16389` | `adapt-port` | 已适配到旧页面 hooks：后台刷新、stale list request、batch download、model/quota cache invalidation；未引入新 AuthFiles 架构。 |
+| `b9c3fbbb77fc686251290d5d7d5434a038460857` | `defer` | AuthFiles card/quota/sheet/batch componentization 是大结构迁移，会穿过现有 LTS quota/OAuth 集成。 |
+| `cc13476844e4328cf1f1a973d548e019ccd371ff` | `defer` | Vault header、pulse、provider tabs 重建并删除旧页面；需独立产品/浏览器验收。 |
+| `0a181ba6616ca67a17f42659f0816f706a5c39f5` | `defer` | 依赖未接纳的 Vault/Pulse 结构及 i18n 删除，不能单独移植。 |
+| `29b1b9bb4812a8e3b475f34794f736013bd73947` | `defer` | 仅是未接纳 VaultHeader 的后续整理，当前 LTS 无对应组件。 |
+| `3c8eba30274b315e702ac76108f40ae378027577` | `adapt-port` | 已统一 `isProblemAuthFile`：disabled 独立，error/unavailable/非健康 message 才进入问题筛选和批量删除；有 Node regression。 |
+| `966a2918d53e9bb272e61b77ceef8c85c8eea69a` | `adapt-port` | 已使 auth-file 上传/删除/字段保存同步失效 model 与 generation-protected quota caches；有 Node regression。 |
+| `840df32f16a6b67da455f1676494da31d031f16d` | `adapt-port` | 已给 model modal 增加 request ID、全局/单文件 cache version 和 close invalidation，旧响应不能覆盖新 modal。 |
+| `b76037ac7cb4860926c25ff92eb2ef485f6cf938` | `adapt-port` | 已让只有最新 list request 清 loading/refreshing，mutation 失效时主动收口状态。 |
+| `c9636a3c543c564ca9b59fd5d9b3c22da1970969` | `adapt-port` | 已增加同步 `uploadPendingRef`，阻止 React 状态提交前的重复上传。 |
+| `6360b52d1827dfa647172d8aafcb6f195dbd01ac` | `already-equivalent` | 当前 `AuthFilesPage.module.scss` 已覆盖 header/action/pagination/quota 的 mobile wrapping；不复制新路径 CSS。 |
+| `9524cc7f32a3d227a71540e169b0a7b1545dbdc9` | `defer` | Codex Pro 20x badge/animation 依赖新 quota/AuthFiles 视觉架构，不是 correctness port。 |
+| `8faaa395346624258408b442a5d4923f3b0e1fc8` | `defer` | WRR strategy/credential weight 跨 Core schema、visual config 和写入并发，需跨仓库专项。 |
+| `90971e8f6a573e800dc8909c350285bf2f1c2396` | `defer` | 依赖 WRR Core contract 与新 AuthFiles UI，不能只接 weight 控件。 |
+| `530b585bd0b72448bc576e970b0f2c6f1f55df11` | `defer` | Interactions provider surface 需要当前 CPA-Core-LTS Management/API contract；本批次不新增 provider 产品面。 |
+| `fe93db0941de406c336d0db8a4a12f9ebd8959bd` | `already-equivalent` | LTS `CODEX_CONFIG.canResetQuota` 已按 total available reset credits 显示 reset action。 |
+| `6cda18a85235e7f047d8584d93480319c10e1942` | `defer` | 9524cc7 的视觉 follow-up，依赖未接纳 quota redesign。 |
+| `13a22da08224930fd50a07e4497540469764b988` | `defer` | 当前 LTS 无上游 `features/dashboard/.heroPeriod` 结构。 |
+| `afd7da059d9749773127163eb42236694ad801f8` | `defer` | LTS 已有不同的 OAuth excluded-model contract；新 per-auth/global rules 需与 Core 一起审。 |
+| `20bb8559d476efb5cc3707d68bb8c74ed2a79375` | `defer` | 依赖 afd7da0 的 excluded-model backend/UI contract。 |
+| `4abd41f947bccae528acba7a4be67c074a802aa9` | `defer` | 依赖前两段 excluded-model 新模块；不替换现有 OAuth excluded 页面。 |
+| `826ea3c0d0bdd6409a0a2703ada90faaf5aede2d` | `already-equivalent` | docs-only consolidation note，无运行时行为可移植。 |
+| `7345e99059f66810c921529b33d7d82d2946af89` | `already-equivalent` | test-only helper extraction；当前 LTS plan tier 行为无缺口，不为镜像 ancestry 新增代码。 |
+| `572da189bc4e8997efa09f3acaffad317dc79e4c` | `defer` | Provider quota data layer 大拆分与 LTS `quotaConfigs` + Codex sidecar 架构不同。 |
+| `9ecd89b1367e4494bcd672da40bb04e7fc0fd917` | `defer` | Typed JSX quota bodies 依赖 572da18，直接替换会破坏 LTS renderer/styles。 |
+| `54af5fb3e3cb1943cff8c93599d8963b4839a1ed` | `defer` | 新 quota feature shell 是未路由的大功能，需整体评估。 |
+| `46ffeba5ddd7f2dc846353b33909ed21ef14654e` | `defer` | 将 `/quota` 切到新 shell 并删除旧实现，会直接切断 LTS quota integration。 |
+| `1705246ed1ca68286c146adf08539ffa26d3db53` | `defer` | 新 quota shell 的 motion follow-up，不可独立。 |
+| `fb6d94788b77e75cd46bf3e4008dbba369413a22` | `reject` | 删除的 view-mode/too-many-files i18n 仍被 LTS `QuotaSection.tsx` 使用，移植会产生缺失文案。 |
+| `66d24c053c36998c1ffade24c7fb507e0eb6d306` | `adapt-port` | 已在旧 `QuotaSection` 阻止 reset 期间的单卡/全量 refresh 并禁用 refresh button。 |
+| `31afcffd99e486e46b2080b7465cbaf717ee1e1c` | `defer` | 上游修的是新 Antigravity countdown component；LTS 当前显示稳定 absolute reset timestamp，无同一 hook target。 |
+| `ea107fded08688eeb96c1269b036216d434eded1` | `defer` | Quota timeline/reset instant 是新 quota 架构的大功能。 |
+| `01ab01d388fdcd918cc4d16d75b922844027af2a` | `defer` | 仅是 timeline 的 5h window follow-up。 |
+| `ea0652c51cdf388651538b3e143da2afec8c6099` | `adapt-port` | 已在旧 xAI builder 原子选择 period type/start/end，避免 weekly 类型借用 monthly rollover；Node regression 覆盖。 |
+| `66d52992e8ead5ed0f442936d875a4932e715768` | `defer` | 依赖 timeline state model，旧 LTS 无对应 stale usage fill。 |
+| `f3713c53825b3e3ae6d0212b4dc82c444353520e` | `defer` | 新 QuotaPage pagination contract 与 LTS AuthFiles/Quota 分页不同。 |
+| `7c072c4ab4266453f526b56505335698ac87c122` | `defer` | AuthFiles identity/search 大改跨现有筛选、分页、quota 和 OAuth。 |
+| `8038469a2da13b7e3cc9fbd5a4aa3dc1ced0996a` | `defer` | QuotaTimeline empty state/zoom follow-up，无旧架构 target。 |
+| `b2bd48e58b8bc5d79e47e40b974a853112d38854` | `adapt-port` | 已在旧 Kimi builder 支持 singular/plural、`TIME_UNIT_*`、snake/camel unit 和 week；Node regression 覆盖。 |
+| `7976b16f6c2fb957a050c0593e571c59dc836f9b` | `defer` | LMU AI 同时带 provider、sponsor/affiliate surface，缺少 Core contract 且业务决策未授权。 |
+| `6394584b99d245a055f977acf1d2da2eab346302` | `defer` | disable-cooling 跨 Core auth mutation/schema，需跨仓库写入验收。 |
+| `648a3d4af4dced499e7f544a953a717b8d417605` | `direct-port` | 已原样移植 Sheet body scroll reset 与 `focus({preventScroll:true})`；不触及 protected seam。 |
+| `b1aefecf94b3ba0efe41463821fd56d44ee9e21e` | `defer` | 依赖未接纳的 ExcludedModelsPanel。 |
+| `285d9e6753111d30dfcf54d3c225119ade7ed3c1` | `defer` | Manual reset credit timeline 行为与 LTS Codex reset-credit sidecar 不同。 |
+| `ddabc99e24cc5fdc59d47ce4de9ef2811c939e89` | `defer` | shared minute clock/relative-time 绑定新 quota bodies；不为视觉增强重构全部旧 renderer。 |
+| `3eb9f3cc712983212a6d92520e6c1c7a2dc54d51` | `already-equivalent` | LTS Codex reset-credit expiry 已用 browser-local `Date`/`toLocaleString`。 |
+| `0272e9b455cb38343d835f83ba26c9f7b508e580` | `defer` | 所有 absolute dates 的 relative label 依赖新 QuotaResetLabel，不扩大本批次 UI 范围。 |
+| `c277ad353ca8d437de6ed04f5a1600f6a9414296` | `defer` | recovery highlight 依赖统一 resetSchedule contract，旧 LTS 无该抽象。 |
+| `001e1308cfa52d893a91ab73487ef7c1cdff64f6` | `defer` | soonest-recovery sort 依赖新 QuotaPage state。 |
+| `f50f9b0f643aacbbb3b699b8853e00a268387992` | `already-equivalent` | test-only Timeline prop，LTS 无 Timeline 运行时。 |
+| `afee40ec2310878833831ff70757e6e73a04a5f5` | `defer` | urgent-final-hour emphasis 依赖 recovery/timeline 系列。 |
+| `30478c539c1f06649ac78deebeff6cfc227bbe22` | `adapt-port` | 已在旧 Kimi rows 保留 concrete reset instant，并显示 absolute local time + relative hint；Node regression 覆盖。 |
+
+Accepted code was validated with the repository's npm/Node regression path, TypeScript checker, ESLint, LTS contract/build, mock browser smoke, and the read-only local Core smoke before merge. Publishing a tag, GitHub release, or `management.html` asset remains a separate explicitly authorized action.
+
 
 ## Maintenance rules
 
