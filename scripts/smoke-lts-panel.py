@@ -572,6 +572,23 @@ def build_auth_files_payload() -> dict[str, Any]:
                 },
             },
             {
+                "name": "codex-team-smoke.json",
+                "type": "codex",
+                "provider": "codex",
+                "source": "file",
+                "path": "/tmp/codex-team-smoke.json",
+                "auth_index": "codex-team-smoke-auth",
+                "email": "codex-team-smoke@example.test",
+                "runtime_only": False,
+                "disabled": False,
+                "modtime": 1781517600,
+                "id_token": {
+                    "chatgpt_account_id": "team-acct-smoke",
+                    "plan_type": "team",
+                    "email": "codex-team-smoke@example.test",
+                },
+            },
+            {
                 "name": "xai-smoke.json",
                 "type": "xai",
                 "provider": "xai",
@@ -772,32 +789,93 @@ def build_codex_quota_usage_payload() -> dict[str, Any]:
     }
 
 
-def build_codex_daily_usage_payload() -> dict[str, Any]:
+def build_codex_team_quota_usage_payload() -> dict[str, Any]:
+    payload = build_codex_quota_usage_payload()
+    payload.update(
+        {
+            "user_id": "team-user-smoke",
+            "account_id": "team-acct-smoke",
+            "email": "codex-team-smoke@example.test",
+            "plan_type": "team",
+        }
+    )
+    return payload
+
+
+def build_codex_team_leaderboard_payload() -> dict[str, Any]:
     return {
+        "total_users": 2,
         "data": [
             {
-                "date": "2026-06-16",
-                "totals": {
-                    "credits": 3.25,
-                    "threads": 2,
-                    "turns": 7,
-                    "users": 1,
-                    "cached_text_input_tokens": 1000,
-                    "uncached_text_input_tokens": 2000,
-                    "text_output_tokens": 500,
-                },
-                "clients": [
-                    {
-                        "client_id": "codex-cli",
-                        "credits": 3.25,
-                        "threads": 2,
-                        "turns": 7,
-                        "cached_text_input_tokens": 1000,
-                        "uncached_text_input_tokens": 2000,
-                        "text_output_tokens": 500,
-                    }
-                ],
-            }
+                "rank": 1,
+                "name": "Team Current User",
+                "email": "codex-team-smoke@example.test",
+                "credits": 3.25,
+                "n_threads": 2,
+                "n_turns": 7,
+                "text_tokens": 600,
+            },
+            {
+                "rank": 2,
+                "name": "Team Other User",
+                "email": "other-team-smoke@example.test",
+                "credits": 4.75,
+                "n_threads": 3,
+                "n_turns": 8,
+                "text_tokens": 800,
+            },
+        ],
+    }
+
+
+def build_codex_daily_usage_payload() -> dict[str, Any]:
+    def bucket(
+        date: str,
+        credits: float,
+        *,
+        threads: int = 1,
+        turns: int = 2,
+        users: int = 1,
+    ) -> dict[str, Any]:
+        return {
+            "date": date,
+            "totals": {
+                "credits": credits,
+                "threads": threads,
+                "turns": turns,
+                "users": users,
+                "cached_text_input_tokens": threads * 100,
+                "uncached_text_input_tokens": threads * 200,
+                "text_output_tokens": turns * 100,
+            },
+            "clients": [
+                {
+                    "client_id": "codex-cli",
+                    "credits": credits,
+                    "threads": threads,
+                    "turns": turns,
+                    "cached_text_input_tokens": threads * 100,
+                    "uncached_text_input_tokens": threads * 200,
+                    "text_output_tokens": turns * 100,
+                }
+            ],
+        }
+
+    return {
+        "data": [
+            # The mock secondary window makes backend ``now`` 2026-06-15 and
+            # the daily request end date exclusive 2026-06-16. Keep one
+            # out-of-range bucket on each side so the smoke catches inclusive
+            # end-date regressions as well as a truncated 360-day history.
+            bucket("2025-06-20", 99),
+            bucket("2025-06-21", 1.25),
+            bucket("2025-12-01", 2.75),
+            bucket("2026-03-18", 4),
+            bucket("2026-05-17", 3),
+            bucket("2026-06-01", 1.75),
+            bucket("2026-06-11", 0.5),
+            bucket("2026-06-15", 2.75, threads=2, turns=7),
+            bucket("2026-06-16", 99),
         ]
     }
 
@@ -1169,13 +1247,18 @@ class MockCoreHandler(BaseHTTPRequestHandler):
             return build_api_call_result({"error": "invalid api-call payload"}, status_code=400)
 
         url = str(payload.get("url") or "")
+        auth_index = str(payload.get("authIndex") or "")
         if "rate-limit-reset-credits/consume" in url:
             return build_api_call_result({"status": "ok"})
+        if "usage-leaderboard" in url:
+            return build_api_call_result(build_codex_team_leaderboard_payload())
         if "daily-workspace-usage-counts" in url:
             return build_api_call_result(build_codex_daily_usage_payload())
         if "backend-api/codex/remote/control/environments" in url:
             return build_api_call_result(build_codex_remote_cloud_connect_environments_payload())
         if url == "https://chatgpt.com/backend-api/wham/usage":
+            if auth_index == "codex-team-smoke-auth":
+                return build_api_call_result(build_codex_team_quota_usage_payload())
             return build_api_call_result(build_codex_quota_usage_payload())
         if url == "https://cli-chat-proxy.grok.com/v1/billing?format=credits":
             return build_api_call_result(build_xai_weekly_billing_payload())
@@ -1481,6 +1564,41 @@ def assert_api_call_url_seen(state: MockCoreState, needle: str, description: str
             f"Expected /api-call URL matching {description} ({needle!r}); "
             f"saw {payloads!r}"
         )
+
+
+def codex_daily_workspace_api_call_payloads(state: MockCoreState) -> list[dict[str, Any]]:
+    payloads = parse_json_bodies(state, "POST", "/v0/management/api-call")
+    return [
+        payload
+        for payload in payloads
+        if isinstance(payload, dict)
+        and "daily-workspace-usage-counts" in str(payload.get("url") or "")
+    ]
+
+
+def codex_team_leaderboard_api_call_payloads(state: MockCoreState) -> list[dict[str, Any]]:
+    payloads = parse_json_bodies(state, "POST", "/v0/management/api-call")
+    return [
+        payload
+        for payload in payloads
+        if isinstance(payload, dict) and "usage-leaderboard" in str(payload.get("url") or "")
+    ]
+
+
+def assert_codex_daily_workspace_fetch(
+    state: MockCoreState,
+    before_count: int,
+    expected_delta: int,
+    description: str,
+) -> int:
+    payloads = codex_daily_workspace_api_call_payloads(state)
+    actual_delta = len(payloads) - before_count
+    if actual_delta != expected_delta:
+        raise AssertionError(
+            f"{description} must issue exactly {expected_delta} daily-workspace-usage-counts "
+            f"request(s), saw delta={actual_delta} (total={len(payloads)})"
+        )
+    return len(payloads)
 
 
 def assert_api_call_exact_url_seen(state: MockCoreState, url: str, description: str) -> None:
@@ -2197,7 +2315,7 @@ def run_home_logs_runtime_smoke(page: Any, app_url: str, state: MockCoreState) -
         state.runtime_kind = "cpa"
 
 
-def run_quota_runtime_smoke(page: Any, app_url: str) -> None:
+def run_quota_runtime_smoke(page: Any, app_url: str, state: MockCoreState) -> None:
     page.goto(f"{app_url}?route=quota-runtime#/quota", wait_until="domcontentloaded")
     page.wait_for_function("() => window.location.hash.endsWith('/quota')")
     page.get_by_text("Quota Management", exact=False).first.wait_for()
@@ -2206,6 +2324,7 @@ def run_quota_runtime_smoke(page: Any, app_url: str) -> None:
         "xpath=ancestor::div[contains(@class, 'fileCard')][1]"
     )
     codex_card.wait_for()
+    daily_before_refresh = len(codex_daily_workspace_api_call_payloads(state))
     with page.expect_response(
         lambda response: response.request.method == "POST"
         and response.url.endswith("/v0/management/api-call")
@@ -2232,6 +2351,31 @@ def run_quota_runtime_smoke(page: Any, app_url: str) -> None:
     codex_card.locator("details[open]").first.wait_for()
     codex_card.get_by_text("Deep Usage", exact=False).first.wait_for()
 
+    def assert_daily_range(label: str, credits: str, date_range: str) -> None:
+        range_card = codex_card.get_by_text(label, exact=True).locator(
+            "xpath=ancestor::div[contains(@class, 'codexUsageRange') "
+            "and not(contains(@class, 'codexUsageRangeHeader'))][1]"
+        )
+        range_card.wait_for()
+        range_text = range_card.inner_text()
+        for expected in [f"{credits} credits", date_range]:
+            if expected not in range_text:
+                raise AssertionError(
+                    f"Codex {label} range must contain {expected!r}; saw {range_text!r}"
+                )
+
+    assert_daily_range("Since last reset", "3.25", "2026-06-11 - 2026-06-15")
+    assert_daily_range("Calendar month", "5", "2026-06-01 - 2026-06-15")
+    assert_daily_range("Last 30 days", "8", "2026-05-17 - 2026-06-15")
+    assert_daily_range("Last 90 days", "12", "2026-03-18 - 2026-06-15")
+    assert_daily_range("Last 360 days", "16", "2025-06-21 - 2026-06-15")
+    daily_after_refresh = assert_codex_daily_workspace_fetch(
+        state,
+        daily_before_refresh,
+        1,
+        "ordinary Codex quota refresh",
+    )
+
     codex_card.get_by_role("button", name="Details").click()
     reset_action_details = page.get_by_role("dialog", name="Manual reset details")
     reset_action_details.get_by_text("RateLimitResetCredit_smoke", exact=False).wait_for()
@@ -2247,6 +2391,59 @@ def run_quota_runtime_smoke(page: Any, app_url: str) -> None:
     ):
         second_confirm.get_by_role("button", name="Reset quota now").click()
     page.wait_for_function("() => document.querySelectorAll('[role=\"dialog\"]').length === 0")
+    daily_after_reset = assert_codex_daily_workspace_fetch(
+        state,
+        daily_after_refresh,
+        1,
+        "Codex reset refresh",
+    )
+    if daily_after_reset - daily_before_refresh != 2:
+        raise AssertionError(
+            "The initial Codex fetch plus the reset refresh must issue exactly two "
+            "daily-workspace-usage-counts requests"
+        )
+
+    team_card = page.get_by_text("codex-team-smoke.json", exact=True).locator(
+        "xpath=ancestor::div[contains(@class, 'fileCard')][1]"
+    )
+    team_card.wait_for()
+    team_leaderboard_before = len(codex_team_leaderboard_api_call_payloads(state))
+    with page.expect_response(
+        lambda response: response.request.method == "POST"
+        and response.url.endswith("/v0/management/api-call")
+    ):
+        team_card.get_by_role("button", name="Click here to refresh quota").click()
+    team_card.get_by_text("Team", exact=True).wait_for()
+    team_card.get_by_text("Usage details", exact=True).click()
+    team_card.locator("details[open]").first.wait_for()
+    team_card.get_by_text("Deep Usage", exact=False).first.wait_for()
+
+    def assert_team_range(label: str, date_range: str) -> None:
+        range_card = team_card.get_by_text(label, exact=True).locator(
+            "xpath=ancestor::div[contains(@class, 'codexUsageRange') "
+            "and not(contains(@class, 'codexUsageRangeHeader'))][1]"
+        )
+        range_card.wait_for()
+        range_text = range_card.inner_text()
+        for expected in ["3.25 credits", "8 credits", date_range]:
+            if expected not in range_text:
+                raise AssertionError(
+                    f"Team Codex {label} range must contain {expected!r}; saw {range_text!r}"
+                )
+
+    assert_team_range("Since last reset", "2026-06-11 - 2026-06-15")
+    assert_team_range("Calendar month", "2026-06-01 - 2026-06-15")
+    assert_team_range("Last 30 days", "2026-05-17 - 2026-06-15")
+    if team_card.get_by_text("Last 90 days", exact=True).count() != 0:
+        raise AssertionError("Team leaderboard must retain exactly three analytics ranges")
+    if team_card.get_by_text("Last 360 days", exact=True).count() != 0:
+        raise AssertionError("Team leaderboard must not use the ordinary 360-day range set")
+    team_leaderboard_after = len(codex_team_leaderboard_api_call_payloads(state))
+    if team_leaderboard_after - team_leaderboard_before != 3:
+        raise AssertionError(
+            "Team leaderboard analytics must retain three date-range requests, "
+            f"saw delta={team_leaderboard_after - team_leaderboard_before}"
+        )
 
     xai_card = page.get_by_text("xai-smoke.json", exact=True).locator(
         "xpath=ancestor::div[contains(@class, 'fileCard')][1]"
@@ -5307,7 +5504,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
                     "Visual config did not reload disable-image-generation: passthrough"
                 )
 
-            run_quota_runtime_smoke(page, app_url)
+            run_quota_runtime_smoke(page, app_url, state)
             run_remote_cloud_connect_runtime_smoke(page, app_url)
             run_logs_runtime_smoke(page, app_url)
             run_home_logs_runtime_smoke(page, app_url, state)
@@ -5469,6 +5666,25 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
     )
     assert_api_call_url_seen(
         state,
+        "usage-leaderboard",
+        "Codex Team leaderboard analytics",
+    )
+    daily_payloads = codex_daily_workspace_api_call_payloads(state)
+    if len(daily_payloads) < 2:
+        raise AssertionError(
+            "Codex ordinary refresh plus reset must leave at least two daily analytics requests"
+        )
+    expected_daily_query = (
+        "start_date=2025-06-21&end_date=2026-06-16&group_by=day"
+    )
+    for payload in daily_payloads:
+        if expected_daily_query not in str(payload.get("url") or ""):
+            raise AssertionError(
+                "Codex daily analytics must request one 360-day history window with an "
+                f"exclusive end date; saw {payload.get('url')!r}"
+            )
+    assert_api_call_url_seen(
+        state,
         "rate-limit-reset-credits/consume",
         "Codex reset credit consume",
     )
@@ -5502,6 +5718,12 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
         "backend-api/wham/usage",
         "codex-smoke-auth",
         "Codex quota usage",
+    )
+    assert_api_call_auth_seen(
+        state,
+        "usage-leaderboard",
+        "codex-team-smoke-auth",
+        "Codex Team leaderboard analytics",
     )
     assert_api_call_auth_seen(
         state,

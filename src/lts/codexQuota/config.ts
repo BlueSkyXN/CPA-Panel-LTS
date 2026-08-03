@@ -66,6 +66,7 @@ const CODEX_MIN_MONTH_SECONDS = 28 * 24 * 60 * 60;
 const CODEX_MAX_MONTH_SECONDS = 31 * 24 * 60 * 60;
 const CODEX_DAY_MS = 24 * 60 * 60 * 1000;
 const CODEX_TOP_CLIENT_LIMIT = 3;
+const CODEX_ANALYTICS_HISTORY_DAYS = 360;
 const CODEX_TEAM_PERMISSION_STATUSES = new Set([401, 403]);
 const CODEX_TEAM_LEADERBOARD_CACHE_TTL_MS = 2 * 60 * 1000;
 const CODEX_TEAM_LEADERBOARD_CACHE_WAIT_MS = 2200;
@@ -81,6 +82,12 @@ const codexTeamLeaderboardCache = new Map<
     payload: CodexUsageLeaderboardPayload;
   }
 >();
+
+const CODEX_ROLLING_RANGE_DAYS: Partial<Record<CodexAnalyticsRange['id'], number>> = {
+  rolling: CODEX_ANALYTICS_ROLLING_DAYS,
+  'rolling-90': 90,
+  'rolling-360': CODEX_ANALYTICS_HISTORY_DAYS,
+};
 
 const getCodexWindowSeconds = (window?: CodexUsageWindow | null): number | null => {
   if (!window) return null;
@@ -380,16 +387,26 @@ const buildCodexClientSummary = (days: CodexDailyUsageDay[]): CodexAnalyticsRang
     .slice(0, CODEX_TOP_CLIENT_LIMIT);
 };
 
-const buildCodexAnalyticsRange = (
+export const selectCodexDailyUsageDays = (
+  payload: CodexDailyUsagePayload,
+  startDate: string,
+  endDateExclusive: string
+): CodexDailyUsageDay[] =>
+  (payload.data ?? [])
+    .filter((day) => {
+      const date = normalizeStringValue(day.date);
+      return date !== null && date >= startDate && date < endDateExclusive;
+    })
+    .sort((left, right) => String(left.date ?? '').localeCompare(String(right.date ?? '')));
+
+export const buildCodexAnalyticsRange = (
   payload: CodexDailyUsagePayload,
   id: CodexAnalyticsRange['id'],
   labelKey: string,
   startDate: string,
   endDateExclusive: string
 ): CodexAnalyticsRange => {
-  const days = (payload.data ?? [])
-    .slice()
-    .sort((left, right) => String(left.date ?? '').localeCompare(String(right.date ?? '')));
+  const days = selectCodexDailyUsageDays(payload, startDate, endDateExclusive);
 
   let credits = 0;
   let cachedInputTokens = 0;
@@ -825,49 +842,53 @@ const fetchCodexAnalytics = async (
   const rollingStartDate = codexYmdUtc(
     apiNowMs - (CODEX_ANALYTICS_ROLLING_DAYS - 1) * CODEX_DAY_MS
   );
+  const rolling90StartDate = codexYmdUtc(apiNowMs - (90 - 1) * CODEX_DAY_MS);
+  const historyStartDate = codexYmdUtc(
+    apiNowMs - (CODEX_ANALYTICS_HISTORY_DAYS - 1) * CODEX_DAY_MS
+  );
 
   try {
-    const sinceResetPayload = await fetchCodexDailyUsage(
+    const historyPayload = await fetchCodexDailyUsage(
       authIndex,
       requestHeader,
-      sinceResetStartDate,
-      endDateExclusive,
-      t
-    );
-    const monthPayload = await fetchCodexDailyUsage(
-      authIndex,
-      requestHeader,
-      monthStartDate,
-      endDateExclusive,
-      t
-    );
-    const rollingPayload = await fetchCodexDailyUsage(
-      authIndex,
-      requestHeader,
-      rollingStartDate,
+      historyStartDate,
       endDateExclusive,
       t
     );
 
     const sinceResetRange = buildCodexAnalyticsRange(
-      sinceResetPayload,
+      historyPayload,
       'since-reset',
       'codex_quota.analytics_since_reset',
       sinceResetStartDate,
       endDateExclusive
     );
     const monthRange = buildCodexAnalyticsRange(
-      monthPayload,
+      historyPayload,
       'month-to-date',
       'codex_quota.analytics_month_to_date',
       monthStartDate,
       endDateExclusive
     );
     const rollingRange = buildCodexAnalyticsRange(
-      rollingPayload,
+      historyPayload,
       'rolling',
       'codex_quota.analytics_rolling_days',
       rollingStartDate,
+      endDateExclusive
+    );
+    const rolling90Range = buildCodexAnalyticsRange(
+      historyPayload,
+      'rolling-90',
+      'codex_quota.analytics_rolling_days',
+      rolling90StartDate,
+      endDateExclusive
+    );
+    const rolling360Range = buildCodexAnalyticsRange(
+      historyPayload,
+      'rolling-360',
+      'codex_quota.analytics_rolling_days',
+      historyStartDate,
       endDateExclusive
     );
 
@@ -880,10 +901,10 @@ const fetchCodexAnalytics = async (
       weeklyEstimate: buildCodexWeeklyEstimate(
         weeklyWindow,
         sinceResetRange,
-        sinceResetPayload,
+        historyPayload,
         sinceResetStartDate
       ),
-      ranges: [sinceResetRange, monthRange, rollingRange],
+      ranges: [sinceResetRange, monthRange, rollingRange, rolling90Range, rolling360Range],
     };
   } catch (err: unknown) {
     throw new Error(resolveCodexRequestErrorMessage(err, planType, 'analytics', t));
@@ -1545,9 +1566,10 @@ const renderCodexItems = (
           'div',
           { className: styleMap.codexUsageRanges },
           ...analytics.ranges.map((range) => {
+            const rollingDays = CODEX_ROLLING_RANGE_DAYS[range.id];
             const rangeLabel =
-              range.id === 'rolling'
-                ? t(range.labelKey, { days: CODEX_ANALYTICS_ROLLING_DAYS })
+              rollingDays !== undefined
+                ? t(range.labelKey, { days: rollingDays })
                 : t(range.labelKey);
             const dateLabel = formatCodexAnalyticsDateRange(range);
             const isLeaderboardRange = range.leaderboardTotalCredits !== undefined;

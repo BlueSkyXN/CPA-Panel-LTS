@@ -735,8 +735,16 @@ features:
       - clearQuotaCache
       - run_quota_runtime_smoke
       - codex-smoke-auth
+      - codex-team-smoke-auth
       - xai-smoke-auth
       - daily-workspace-usage-counts
+      - usage-leaderboard
+      - CODEX_ANALYTICS_HISTORY_DAYS
+      - CODEX_ROLLING_RANGE_DAYS
+      - rolling-90
+      - rolling-360
+      - Last 360 days
+      - assert_codex_daily_workspace_fetch
       - rate-limit-reset-credits
       - rate-limit-reset-credits/consume
       - cli-chat-proxy.grok.com/v1/billing

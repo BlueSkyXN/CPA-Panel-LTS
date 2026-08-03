@@ -342,7 +342,12 @@ export interface CodexQuotaWindow {
   resetLabel: string;
 }
 
-export type CodexAnalyticsRangeId = 'since-reset' | 'month-to-date' | 'rolling';
+export type CodexAnalyticsRangeId =
+  | 'since-reset'
+  | 'month-to-date'
+  | 'rolling'
+  | 'rolling-90'
+  | 'rolling-360';
 
 export interface CodexAnalyticsClientSummary {
   clientId: string;
