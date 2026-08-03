@@ -128,7 +128,9 @@ export function buildGeminiCliQuotaBuckets(
       const remainingFraction = preferred
         ? preferred.remainingFraction
         : bucket.fallbackRemainingFraction;
-      const remainingAmount = preferred ? preferred.remainingAmount : bucket.fallbackRemainingAmount;
+      const remainingAmount = preferred
+        ? preferred.remainingAmount
+        : bucket.fallbackRemainingAmount;
       const resetTime = preferred ? preferred.resetTime : bucket.fallbackResetTime;
       return {
         id: bucket.id,
@@ -232,10 +234,7 @@ export function buildAntigravityQuotaGroups(
     };
   };
 
-  const appendGroup = (
-    id: string,
-    overrideResetTime?: string
-  ): AntigravityQuotaGroup | null => {
+  const appendGroup = (id: string, overrideResetTime?: string): AntigravityQuotaGroup | null => {
     const definition = definitions.get(id);
     if (!definition) return null;
     const group = buildGroup(definition, overrideResetTime);
@@ -281,46 +280,76 @@ function formatKimiResetDuration(totalMinutes: number): string {
   return '<1m';
 }
 
-function kimiResetHint(data: Record<string, unknown>): string | undefined {
-  const absoluteKeys = ['reset_at', 'resetAt', 'reset_time', 'resetTime'];
-  for (const key of absoluteKeys) {
+function kimiAbsoluteResetMs(data: Record<string, unknown>): number | null {
+  for (const key of ['reset_at', 'resetAt', 'reset_time', 'resetTime']) {
     const raw = data[key];
-    if (typeof raw === 'string' && raw.trim()) {
-      try {
-        const truncated = raw.replace(/(\.\d{6})\d+/, '$1');
-        const date = new Date(truncated);
-        if (Number.isNaN(date.getTime())) continue;
-        const now = Date.now();
-        const delta = date.getTime() - now;
-        if (delta <= 0) return undefined;
-        const totalMinutes = Math.floor(delta / 60000);
-        return formatKimiResetDuration(totalMinutes);
-      } catch {
-        continue;
-      }
+    if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) {
+      return raw < 1e12 ? raw * 1000 : raw;
     }
+    if (typeof raw !== 'string' || !raw.trim()) continue;
+    const trimmed = raw.trim();
+    const numeric = Number(trimmed);
+    if (Number.isFinite(numeric) && numeric > 0) {
+      return numeric < 1e12 ? numeric * 1000 : numeric;
+    }
+    const parsed = new Date(trimmed.replace(/(\.\d{6})\d+/, '$1')).getTime();
+    if (!Number.isNaN(parsed)) return parsed;
   }
 
-  const relativeKeys = ['reset_in', 'resetIn', 'ttl'];
-  for (const key of relativeKeys) {
-    const raw = toInt(data[key]);
-    if (raw !== null && raw > 0) {
-      const totalMinutes = Math.floor(raw / 60);
-      return formatKimiResetDuration(totalMinutes);
+  return null;
+}
+
+function kimiResetMs(data: Record<string, unknown>): number | null {
+  const absolute = kimiAbsoluteResetMs(data);
+  if (absolute !== null) return absolute;
+  for (const key of ['reset_in', 'resetIn', 'ttl']) {
+    const seconds = toInt(data[key]);
+    if (seconds !== null && seconds > 0) return Date.now() + seconds * 1000;
+  }
+  return null;
+}
+
+function kimiResetHint(data: Record<string, unknown>): string | undefined {
+  const absolute = kimiAbsoluteResetMs(data);
+  if (absolute !== null) {
+    const delta = absolute - Date.now();
+    if (delta <= 0) return undefined;
+    return formatKimiResetDuration(Math.floor(delta / 60000));
+  }
+  for (const key of ['reset_in', 'resetIn', 'ttl']) {
+    const seconds = toInt(data[key]);
+    if (seconds !== null && seconds > 0) {
+      return formatKimiResetDuration(Math.floor(seconds / 60));
     }
   }
-
   return undefined;
 }
 
+type KimiTimeUnit = 'second' | 'minute' | 'hour' | 'day' | 'week';
+
+function normalizeKimiTimeUnit(rawTimeUnit: unknown): KimiTimeUnit | null {
+  const unit =
+    typeof rawTimeUnit === 'string'
+      ? rawTimeUnit
+          .trim()
+          .toUpperCase()
+          .replace(/^TIME_UNIT_/, '')
+      : '';
+  if (unit === 'SECONDS' || unit === 'SECOND') return 'second';
+  if (!unit || unit === 'MINUTES' || unit === 'MINUTE') return 'minute';
+  if (unit === 'HOURS' || unit === 'HOUR') return 'hour';
+  if (unit === 'DAYS' || unit === 'DAY') return 'day';
+  if (unit === 'WEEKS' || unit === 'WEEK') return 'week';
+  return null;
+}
+
 function kimiDurationToken(duration: number, rawTimeUnit: unknown): string {
-  const unit = typeof rawTimeUnit === 'string' ? rawTimeUnit.trim().toUpperCase() : '';
-  if (unit === 'MINUTES') {
-    return duration % 60 === 0 ? `${duration / 60}h` : `${duration}m`;
-  }
-  if (unit === 'HOURS') return `${duration}h`;
-  if (unit === 'DAYS') return `${duration}d`;
-  return `${duration}s`;
+  const unit = normalizeKimiTimeUnit(rawTimeUnit);
+  if (unit === 'second') return `${duration}s`;
+  if (unit === 'hour') return `${duration}h`;
+  if (unit === 'day') return `${duration}d`;
+  if (unit === 'week') return `${duration}w`;
+  return duration % 60 === 0 ? `${duration / 60}h` : `${duration}m`;
 }
 
 function kimiLimitLabel(
@@ -340,8 +369,11 @@ function kimiLimitLabel(
     toInt((detail as Record<string, unknown>).duration);
   const timeUnit =
     (window as Record<string, unknown>).timeUnit ??
+    (window as Record<string, unknown>).time_unit ??
     (item as Record<string, unknown>).timeUnit ??
-    (detail as Record<string, unknown>).timeUnit;
+    (item as Record<string, unknown>).time_unit ??
+    (detail as Record<string, unknown>).timeUnit ??
+    (detail as Record<string, unknown>).time_unit;
 
   if (duration !== null && duration > 0) {
     return {
@@ -363,7 +395,9 @@ function kimiLimitLabel(
 function toKimiUsageRow(
   data: Record<string, unknown>,
   fallbackLabel: KimiRowLabel
-): (KimiRowLabel & { used: number; limit: number; resetHint?: string }) | null {
+):
+  | (KimiRowLabel & { used: number; limit: number; resetHint?: string; resetAtMs?: number | null })
+  | null {
   const limit = toInt(data.limit);
   let used = toInt(data.used);
   if (used === null) {
@@ -382,6 +416,7 @@ function toKimiUsageRow(
     used: used ?? 0,
     limit: limit ?? 0,
     resetHint: kimiResetHint(data),
+    resetAtMs: kimiResetMs(data),
   };
 }
 
@@ -391,8 +426,12 @@ export function buildKimiQuotaRows(payload: KimiUsagePayload): KimiQuotaRow[] {
   const limits = payload.limits;
   if (Array.isArray(limits)) {
     limits.forEach((item, idx) => {
-      const detail = (item.detail && typeof item.detail === 'object' ? item.detail : item) as KimiUsageDetail | KimiLimitItem;
-      const window = (item.window && typeof item.window === 'object' ? item.window : {}) as KimiLimitWindow;
+      const detail = (item.detail && typeof item.detail === 'object' ? item.detail : item) as
+        | KimiUsageDetail
+        | KimiLimitItem;
+      const window = (
+        item.window && typeof item.window === 'object' ? item.window : {}
+      ) as KimiLimitWindow;
       const fallbackLabel = kimiLimitLabel(item, detail, window, idx);
       const row = toKimiUsageRow(detail as Record<string, unknown>, fallbackLabel);
       if (row) {
@@ -550,12 +589,20 @@ export function mergeXaiBillingSummaries(
 ): XaiBillingSummary | null {
   if (!primary) return fallback;
   if (!fallback) return primary;
+  // Weekly and monthly endpoints describe different clocks. Keep the selected
+  // period type and its dates from the same response instead of mixing fields.
+  const periodSummary =
+    primary.periodType !== 'unknown'
+      ? primary
+      : fallback.periodType !== 'unknown'
+        ? fallback
+        : primary;
 
   return {
-    periodType: primary.periodType !== 'unknown' ? primary.periodType : fallback.periodType,
+    periodType: periodSummary.periodType,
     usagePercent: primary.usagePercent ?? fallback.usagePercent,
-    periodStart: primary.periodStart ?? fallback.periodStart,
-    periodEnd: primary.periodEnd ?? fallback.periodEnd,
+    periodStart: periodSummary.periodStart,
+    periodEnd: periodSummary.periodEnd,
     productUsage: primary.productUsage.length > 0 ? primary.productUsage : fallback.productUsage,
     monthlyLimitCents: primary.monthlyLimitCents ?? fallback.monthlyLimitCents,
     usedCents: primary.usedCents ?? fallback.usedCents,

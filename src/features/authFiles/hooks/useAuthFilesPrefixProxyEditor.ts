@@ -62,6 +62,7 @@ export type PrefixProxyEditorState = {
 export type UseAuthFilesPrefixProxyEditorOptions = {
   disableControls: boolean;
   loadFiles: () => Promise<void>;
+  onFileMutated?: (name: string) => void;
 };
 
 export type UseAuthFilesPrefixProxyEditorResult = {
@@ -350,7 +351,7 @@ const buildPrefixProxyUpdatedText = (
 export function useAuthFilesPrefixProxyEditor(
   options: UseAuthFilesPrefixProxyEditorOptions
 ): UseAuthFilesPrefixProxyEditorResult {
-  const { disableControls, loadFiles } = options;
+  const { disableControls, loadFiles, onFileMutated } = options;
   const { t } = useTranslation();
   const showNotification = useNotificationStore((state) => state.showNotification);
 
@@ -548,6 +549,7 @@ export function useAuthFilesPrefixProxyEditor(
 
     try {
       await authFilesApi.patchFields(name, payload);
+      onFileMutated?.(name);
       showNotification(t('auth_files.prefix_proxy_saved_success', { name }), 'success');
       await loadFiles();
       setPrefixProxyEditor(null);

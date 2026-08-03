@@ -34,7 +34,7 @@ import {
   getThemeSurfaceIconBackground,
   getTypeColor,
   getTypeLabel,
-  hasAuthFileStatusMessage,
+  isProblemAuthFile,
   isRuntimeOnlyAuthFile,
   isThemeSurfaceIconProvider,
   normalizeProviderKey,
@@ -47,6 +47,7 @@ import { AuthFileModelsModal } from '@/features/authFiles/components/AuthFileMod
 import { AuthFilesPrefixProxyEditorModal } from '@/features/authFiles/components/AuthFilesPrefixProxyEditorModal';
 import { OAuthExcludedCard } from '@/features/authFiles/components/OAuthExcludedCard';
 import { OAuthModelAliasCard } from '@/features/authFiles/components/OAuthModelAliasCard';
+import { invalidateAuthFileDerivedCaches } from '@/features/authFiles/cacheInvalidation';
 import {
   CodexRemoteCloudConnectEnvironmentsModal,
   areCodexRemoteCloudConnectEnvironmentSummariesEqual,
@@ -76,8 +77,7 @@ const BATCH_BAR_HIDDEN_TRANSFORM = 'translateX(-50%) translateY(56px)';
 const DEFAULT_REGULAR_PAGE_SIZE = 9;
 const DEFAULT_COMPACT_PAGE_SIZE = 12;
 
-const escapeWildcardSearchSegment = (value: string) =>
-  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const escapeWildcardSearchSegment = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const buildWildcardSearch = (value: string): RegExp | null => {
   if (!value.includes('*')) return null;
@@ -118,10 +118,28 @@ export function AuthFilesPage() {
   const selectionCountRef = useRef(0);
 
   const {
+    modelsModalOpen,
+    modelsLoading,
+    modelsList,
+    modelsFileName,
+    modelsFileType,
+    modelsError,
+    showModels,
+    closeModelsModal,
+    invalidateModels,
+  } = useAuthFilesModels();
+
+  const invalidateDerivedCaches = useCallback(
+    (names?: string[]) => invalidateAuthFileDerivedCaches(invalidateModels, names),
+    [invalidateModels]
+  );
+
+  const {
     files,
     selectedFiles,
     selectionCount,
     loading,
+    refreshing,
     error,
     uploading,
     deleting,
@@ -143,7 +161,7 @@ export function AuthFilesPage() {
     batchDownload,
     batchSetStatus,
     batchDelete,
-  } = useAuthFilesData();
+  } = useAuthFilesData({ onFilesMutated: invalidateDerivedCaches });
 
   const statusBarCache = useAuthFilesStatusBarCache(files);
 
@@ -165,17 +183,6 @@ export function AuthFilesPage() {
   } = useAuthFilesOauth({ viewMode, files });
 
   const {
-    modelsModalOpen,
-    modelsLoading,
-    modelsList,
-    modelsFileName,
-    modelsFileType,
-    modelsError,
-    showModels,
-    closeModelsModal,
-  } = useAuthFilesModels();
-
-  const {
     prefixProxyEditor,
     prefixProxyUpdatedText,
     prefixProxyDirty,
@@ -186,6 +193,7 @@ export function AuthFilesPage() {
   } = useAuthFilesPrefixProxyEditor({
     disableControls: connectionStatus !== 'connected',
     loadFiles,
+    onFileMutated: (name) => invalidateDerivedCaches([name]),
   });
 
   const {
@@ -237,10 +245,7 @@ export function AuthFilesPage() {
       if (typeof persisted.disabledOnly === 'boolean') {
         setDisabledOnly(persisted.disabledOnly);
       }
-      if (
-        typeof persistedCompactMode !== 'boolean' &&
-        typeof persisted.compactMode === 'boolean'
-      ) {
+      if (typeof persistedCompactMode !== 'boolean' && typeof persisted.compactMode === 'boolean') {
         setCompactMode(persisted.compactMode);
       }
       if (typeof persisted.search === 'string') {
@@ -256,11 +261,11 @@ export function AuthFilesPage() {
       const regularPageSize =
         typeof persisted.regularPageSize === 'number' && Number.isFinite(persisted.regularPageSize)
           ? clampCardPageSize(persisted.regularPageSize)
-          : legacyPageSize ?? DEFAULT_REGULAR_PAGE_SIZE;
+          : (legacyPageSize ?? DEFAULT_REGULAR_PAGE_SIZE);
       const compactPageSize =
         typeof persisted.compactPageSize === 'number' && Number.isFinite(persisted.compactPageSize)
           ? clampCardPageSize(persisted.compactPageSize)
-          : legacyPageSize ?? DEFAULT_COMPACT_PAGE_SIZE;
+          : (legacyPageSize ?? DEFAULT_COMPACT_PAGE_SIZE);
       setPageSizeByMode({
         regular: regularPageSize,
         compact: compactPageSize,
@@ -375,7 +380,7 @@ export function AuthFilesPage() {
 
   useInterval(
     () => {
-      void loadFiles().catch(() => {});
+      void loadFiles({ background: true }).catch(() => {});
     },
     isCurrentLayer ? 240_000 : null
   );
@@ -392,7 +397,7 @@ export function AuthFilesPage() {
   const filesMatchingStatusFilters = useMemo(
     () =>
       files.filter((file) => {
-        if (problemOnly && !hasAuthFileStatusMessage(file)) return false;
+        if (problemOnly && !isProblemAuthFile(file)) return false;
         if (disabledOnly && file.disabled !== true) return false;
         return true;
       }),
@@ -693,7 +698,13 @@ export function AuthFilesPage() {
         title={titleNode}
         extra={
           <div className={styles.headerActions}>
-            <Button variant="secondary" size="sm" onClick={handleHeaderRefresh} disabled={loading}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleHeaderRefresh}
+              disabled={loading || refreshing}
+              loading={loading || refreshing}
+            >
               {t('common.refresh')}
             </Button>
             <Button

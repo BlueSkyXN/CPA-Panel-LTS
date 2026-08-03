@@ -6,6 +6,11 @@ import { apiClient } from './client';
 import type { AuthFilesResponse } from '@/types/authFile';
 import type { OAuthModelAliasEntry } from '@/types';
 import { normalizeOAuthProviderKey } from '@/utils/providerKeys';
+import {
+  normalizeRecentRequestAuthIndex,
+  normalizeRecentRequestBuckets,
+  normalizeUsageTotal,
+} from '@/utils/recentRequests';
 import { parseTimestampMs } from '@/utils/timestamp';
 
 type StatusError = { status?: number };
@@ -155,7 +160,11 @@ const readDateField = (entry: AuthFileEntry): number => {
   return 0;
 };
 
-const isRuntimeOnlyEntry = (entry: AuthFileEntry): boolean => entry['runtime_only'] === true;
+const isRuntimeOnlyEntry = (entry: AuthFileEntry): boolean => {
+  const raw = entry['runtime_only'] ?? entry.runtimeOnly;
+  if (typeof raw === 'boolean') return raw;
+  return typeof raw === 'string' && raw.trim().toLowerCase() === 'true';
+};
 
 const hasMeaningfulValue = (value: unknown): boolean => {
   if (value == null) return false;
@@ -208,7 +217,41 @@ const mergeAuthFileEntries = (entries: AuthFileEntry[]): AuthFileEntry => {
   return merged;
 };
 
-const dedupeAuthFilesResponse = (payload: AuthFilesResponse): AuthFilesResponse => {
+const INTEGER_STRING_PATTERN = /^[+-]?\d+$/;
+
+const readPriorityField = (value: unknown): number | undefined => {
+  if (typeof value === 'number') return Number.isInteger(value) ? value : undefined;
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed || !INTEGER_STRING_PATTERN.test(trimmed)) return undefined;
+  const parsed = Number.parseInt(trimmed, 10);
+  return Number.isSafeInteger(parsed) ? parsed : undefined;
+};
+
+/** Preserve raw provider fields while exposing stable camelCase fields to the UI. */
+const normalizeAuthFileEntry = (entry: AuthFileEntry): AuthFileEntry => {
+  const declaredStatusMessage =
+    typeof entry.statusMessage === 'string' ? entry.statusMessage.trim() : '';
+  const statusMessage = readTextField(entry, 'status_message') || declaredStatusMessage;
+  const note = readTextField(entry, 'note');
+  const modified = readDateField(entry);
+  const priority = readPriorityField(entry['priority']);
+
+  return {
+    ...entry,
+    runtimeOnly: isRuntimeOnlyEntry(entry),
+    authIndex: normalizeRecentRequestAuthIndex(entry['auth_index'] ?? entry.authIndex),
+    recentRequests: normalizeRecentRequestBuckets(entry.recent_requests ?? entry.recentRequests),
+    successCount: normalizeUsageTotal(entry.success),
+    failureCount: normalizeUsageTotal(entry.failed),
+    ...(statusMessage ? { statusMessage } : {}),
+    ...(modified > 0 ? { modified } : {}),
+    ...(priority !== undefined ? { priority } : {}),
+    ...(note ? { note } : {}),
+  };
+};
+
+export const normalizeAuthFilesResponse = (payload: AuthFilesResponse): AuthFilesResponse => {
   const files = Array.isArray(payload?.files) ? payload.files : [];
   const grouped = new Map<string, AuthFileEntry[]>();
 
@@ -223,7 +266,9 @@ const dedupeAuthFilesResponse = (payload: AuthFilesResponse): AuthFilesResponse 
     grouped.set(key, [entry]);
   });
 
-  const normalizedFiles = Array.from(grouped.values()).map(mergeAuthFileEntries);
+  const normalizedFiles = Array.from(grouped.values()).map((entries) =>
+    normalizeAuthFileEntry(mergeAuthFileEntries(entries))
+  );
   normalizedFiles.sort((left, right) =>
     readTextField(left, 'name').localeCompare(readTextField(right, 'name'), undefined, {
       sensitivity: 'accent',
@@ -367,7 +412,8 @@ export const serializeOauthModelAliases = (
 const OAUTH_MODEL_ALIAS_ENDPOINT = '/oauth-model-alias';
 
 export const authFilesApi = {
-  list: async () => dedupeAuthFilesResponse(await apiClient.get<AuthFilesResponse>('/auth-files')),
+  list: async () =>
+    normalizeAuthFilesResponse(await apiClient.get<AuthFilesResponse>('/auth-files')),
 
   setStatus: (name: string, disabled: boolean) =>
     apiClient.patch<AuthFileStatusResponse>('/auth-files/status', { name, disabled }),
@@ -407,14 +453,18 @@ export const authFilesApi = {
 
   deleteAll: () => apiClient.delete('/auth-files', { params: { all: true } }),
 
-  downloadText: async (name: string): Promise<string> => {
+  download: async (name: string): Promise<Blob> => {
     const response = await apiClient.getRaw(
       `/auth-files/download?name=${encodeURIComponent(name)}`,
       {
         responseType: 'blob',
       }
     );
-    const blob = response.data as Blob;
+    return response.data as Blob;
+  },
+
+  downloadText: async (name: string): Promise<string> => {
+    const blob = await authFilesApi.download(name);
     return blob.text();
   },
 

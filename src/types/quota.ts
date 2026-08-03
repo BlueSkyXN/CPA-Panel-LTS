@@ -451,6 +451,7 @@ export interface KimiUsageDetail {
 export interface KimiLimitWindow {
   duration?: number;
   timeUnit?: string;
+  time_unit?: string;
 }
 
 export interface KimiLimitItem {
@@ -464,6 +465,7 @@ export interface KimiLimitItem {
   remaining?: number;
   duration?: number;
   timeUnit?: string;
+  time_unit?: string;
   resetAt?: string;
   reset_at?: string;
   resetIn?: number;
@@ -484,6 +486,7 @@ export interface KimiQuotaRow {
   used: number;
   limit: number;
   resetHint?: string;
+  resetAtMs?: number | null;
 }
 
 export interface KimiQuotaState {
