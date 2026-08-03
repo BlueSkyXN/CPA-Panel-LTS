@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         ChatGPT Quota Helper
 // @namespace    https://github.com/BlueSkyXN/CPA-Panel-LTS
-// @version      1.2.6
+// @version      1.2.8
 // @author       BlueSkyXN
-// @description  在 chatgpt.com 实时显示 DR / Agent / Codex 5h / Codex 7d 配额：折叠式面板、状态指示灯、自动与手动刷新。
+// @description  在 chatgpt.com 实时显示 DR / Image / Codex 5h / Codex 7d 配额：折叠式面板、状态指示灯、自动与手动刷新。
 // @match        https://chatgpt.com/*
 // @run-at       document-start
 // @grant        none
@@ -48,7 +48,7 @@
   const PAGE_ISSUE_CONFIRM_THRESHOLD = 2;
 
   // 指示灯阈值
-  const DR_AGENT_LOW = 5;        // DR / Agent 剩余 < 5 视为低水位
+  const DR_IMAGE_LOW = 5;        // DR / Image 剩余 < 5 视为低水位
   const CODEX_LOW_PERCENT = 20;  // Codex 剩余百分比 < 20% 视为低水位
 
   // 不在这些路径前缀下挂载面板（chatgpt.com 是 SPA，这里在脚本内部判断而非 @exclude）
@@ -58,7 +58,7 @@
 
   const state = {
     dr: null,
-    agent: null,
+    image: null,
     codex5h: null,
     codex7d: null,
     codexError: '',
@@ -834,37 +834,38 @@
     style.textContent = `
       .cqh-panel {
         position: fixed;
-        right: 14px;
+        right: 16px;
         top: 72px;
         z-index: 100;
         box-sizing: border-box;
 
-        min-width: 130px;
-        max-width: min(240px, calc(100vw - 28px));
-        padding: 8px 12px;
+        min-width: 140px;
+        max-width: min(260px, calc(100vw - 32px));
+        padding: 9px 13px;
 
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
         font-size: 12px;
-        line-height: 1.4;
+        line-height: 1.45;
 
-        color: rgba(20, 20, 20, 0.86);
-        background: rgba(255, 255, 255, 0.78);
-        border: 1px solid rgba(0, 0, 0, 0.08);
-        border-radius: 10px;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
+        color: rgba(23, 32, 51, 0.88);
+        background: rgba(255, 255, 255, 0.86);
+        border: 1px solid rgba(26, 35, 51, 0.10);
+        border-radius: 12px;
+        box-shadow: 0 8px 28px rgba(15, 23, 42, 0.12), 0 2px 8px rgba(15, 23, 42, 0.06);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
 
-        opacity: 0.85;
-        max-height: 36px;
+        opacity: 0.92;
+        max-height: 38px;
         overflow: hidden;
-        transition: opacity 0.18s ease, max-height 0.22s ease;
+        transition: opacity 0.18s ease, max-height 0.24s ease, box-shadow 0.18s ease;
       }
 
       .cqh-panel:hover,
       .cqh-panel.cqh-expanded {
         opacity: 1;
-        max-height: 360px;
+        max-height: 400px;
+        box-shadow: 0 12px 36px rgba(15, 23, 42, 0.16), 0 2px 8px rgba(15, 23, 42, 0.08);
       }
 
       .cqh-summary {
@@ -873,23 +874,24 @@
         gap: 8px;
         cursor: pointer;
         white-space: nowrap;
-        font-weight: 600;
+        font-weight: 650;
         font-size: 12px;
         user-select: none;
       }
 
       .cqh-indicator {
-        width: 10px;
-        height: 10px;
+        width: 9px;
+        height: 9px;
         border-radius: 50%;
         flex-shrink: 0;
         background: #94a3b8;
-        transition: background-color 0.2s ease;
+        box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.18);
+        transition: background-color 0.2s ease, box-shadow 0.2s ease;
       }
 
-      .cqh-indicator.cqh-ok   { background: #10b981; }
-      .cqh-indicator.cqh-warn { background: #f59e0b; }
-      .cqh-indicator.cqh-bad  { background: #ef4444; }
+      .cqh-indicator.cqh-ok   { background: #0d9b75; box-shadow: 0 0 0 3px rgba(13, 155, 117, 0.16); }
+      .cqh-indicator.cqh-warn { background: #c97910; box-shadow: 0 0 0 3px rgba(201, 121, 16, 0.16); }
+      .cqh-indicator.cqh-bad  { background: #d64b5d; box-shadow: 0 0 0 3px rgba(214, 75, 93, 0.16); }
 
       .cqh-panel.cqh-loading .cqh-indicator {
         animation: cqh-pulse 1s ease-in-out infinite;
@@ -913,31 +915,37 @@
       }
 
       .cqh-details {
-        margin-top: 8px;
-        padding-top: 8px;
-        border-top: 1px dashed rgba(0, 0, 0, 0.10);
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid rgba(26, 35, 51, 0.08);
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: 6px;
       }
 
       .cqh-row {
         display: flex;
-        align-items: center;
+        align-items: baseline;
         justify-content: space-between;
         gap: 12px;
         white-space: nowrap;
         min-width: 0;
       }
 
+      .cqh-row[hidden] {
+        display: none;
+      }
+
       .cqh-row-label {
         font-weight: 600;
-        color: rgba(71, 85, 105, 0.95);
+        font-size: 11.5px;
+        color: rgba(95, 107, 127, 0.95);
         min-width: 56px;
       }
 
       .cqh-row-value {
         font-variant-numeric: tabular-nums;
+        font-size: 12px;
         text-align: right;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -945,15 +953,15 @@
       }
 
       .cqh-footer {
-        margin-top: 8px;
-        padding-top: 6px;
-        border-top: 1px dashed rgba(0, 0, 0, 0.06);
+        margin-top: 10px;
+        padding-top: 8px;
+        border-top: 1px solid rgba(26, 35, 51, 0.08);
         display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-        gap: 4px;
-        color: rgba(100, 116, 139, 0.95);
-        font-size: 11px;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        color: rgba(139, 148, 165, 0.95);
+        font-size: 10.5px;
       }
 
       .cqh-footer-actions {
@@ -964,14 +972,16 @@
 
       .cqh-action {
         appearance: none;
-        border: 1px solid rgba(0, 0, 0, 0.08);
+        border: 1px solid rgba(26, 35, 51, 0.12);
         background: transparent;
         cursor: pointer;
-        color: #2563eb;
+        color: #335cff;
         font-size: 11px;
-        padding: 2px 8px;
-        border-radius: 6px;
-        line-height: 1.4;
+        font-weight: 600;
+        padding: 2px 9px;
+        border-radius: 7px;
+        line-height: 1.45;
+        transition: background 0.15s ease, border-color 0.15s ease;
       }
 
       .cqh-action[hidden] {
@@ -979,7 +989,8 @@
       }
 
       .cqh-action:hover:not(:disabled) {
-        background: rgba(37, 99, 235, 0.08);
+        background: rgba(51, 92, 255, 0.08);
+        border-color: rgba(51, 92, 255, 0.35);
       }
 
       .cqh-action:disabled {
@@ -988,41 +999,56 @@
       }
 
       .cqh-row-value.cqh-error-text {
-        color: #dc2626;
+        color: #d64b5d;
       }
 
       .cqh-error-line {
-        margin-top: 4px;
-        color: #dc2626;
+        margin-top: 2px;
+        padding: 6px 8px;
+        background: rgba(214, 75, 93, 0.08);
+        border-radius: 7px;
+        color: #c43d4e;
         font-size: 11px;
-        line-height: 1.4;
+        line-height: 1.45;
         white-space: normal;
         word-break: break-all;
       }
 
       @media (prefers-color-scheme: dark) {
         .cqh-panel {
-          color: rgba(229, 231, 235, 0.92);
-          background: rgba(28, 28, 28, 0.78);
-          border-color: rgba(255, 255, 255, 0.08);
-          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.30);
+          color: rgba(240, 244, 251, 0.92);
+          background: rgba(23, 28, 38, 0.86);
+          border-color: rgba(226, 232, 240, 0.10);
+          box-shadow: 0 8px 28px rgba(0, 0, 0, 0.42), 0 2px 8px rgba(0, 0, 0, 0.28);
+        }
+        .cqh-panel:hover,
+        .cqh-panel.cqh-expanded {
+          box-shadow: 0 12px 36px rgba(0, 0, 0, 0.50), 0 2px 8px rgba(0, 0, 0, 0.32);
         }
         .cqh-details {
-          border-top-color: rgba(255, 255, 255, 0.10);
+          border-top-color: rgba(226, 232, 240, 0.10);
         }
         .cqh-footer {
-          border-top-color: rgba(255, 255, 255, 0.06);
-          color: rgba(148, 163, 184, 0.95);
+          border-top-color: rgba(226, 232, 240, 0.10);
+          color: rgba(125, 134, 152, 0.95);
         }
         .cqh-row-label {
-          color: rgba(148, 163, 184, 0.95);
+          color: rgba(163, 173, 190, 0.95);
         }
         .cqh-action {
-          color: #60a5fa;
-          border-color: rgba(255, 255, 255, 0.10);
+          color: #6f8cff;
+          border-color: rgba(226, 232, 240, 0.14);
         }
         .cqh-action:hover:not(:disabled) {
-          background: rgba(96, 165, 250, 0.10);
+          background: rgba(111, 140, 255, 0.12);
+          border-color: rgba(111, 140, 255, 0.40);
+        }
+        .cqh-row-value.cqh-error-text {
+          color: #f07182;
+        }
+        .cqh-error-line {
+          background: rgba(240, 113, 130, 0.10);
+          color: #f07182;
         }
       }
     `;
@@ -1052,10 +1078,10 @@
           <span class="cqh-row-value" data-cqh="dr">-</span>
         </div>
         <div class="cqh-row">
-          <span class="cqh-row-label">Agent</span>
-          <span class="cqh-row-value" data-cqh="agent">-</span>
+          <span class="cqh-row-label">Image</span>
+          <span class="cqh-row-value" data-cqh="image">-</span>
         </div>
-        <div class="cqh-row">
+        <div class="cqh-row" data-cqh-row="codex5h" hidden>
           <span class="cqh-row-label">Codex5H</span>
           <span class="cqh-row-value" data-cqh="codex5h">-</span>
         </div>
@@ -1065,11 +1091,11 @@
         </div>
         <div class="cqh-error-line" data-cqh="error-line" hidden></div>
         <div class="cqh-footer">
+          <span data-cqh="updated">未更新</span>
           <span class="cqh-footer-actions">
             <button type="button" class="cqh-action cqh-recover" data-cqh="recover" hidden>恢复</button>
             <button type="button" class="cqh-action cqh-refresh" data-cqh="refresh">刷新</button>
           </span>
-          <span data-cqh="updated">未更新</span>
         </div>
       </div>
     `;
@@ -1101,26 +1127,26 @@
     if (state.pageIssue || state.codexAutoPaused) return 'cqh-warn';
 
     // 首次加载、什么数据都没有：保持中性灰
-    if (!state.lastUpdated && !state.dr && !state.agent) {
+    if (!state.lastUpdated && !state.dr && !state.image) {
       if (state.codexError) return 'cqh-warn';
       return '';
     }
 
     const drRemaining = normalizeNumber(state.dr?.remaining);
-    const agentRemaining = normalizeNumber(state.agent?.remaining);
+    const imageRemaining = normalizeNumber(state.image?.remaining);
     const codex5hPct = state.codex5h?.remainingPercent ?? null;
     const codex7dPct = state.codex7d?.remainingPercent ?? null;
 
     const anyZero =
       drRemaining === 0 ||
-      agentRemaining === 0 ||
+      imageRemaining === 0 ||
       codex5hPct === 0 ||
       codex7dPct === 0;
     if (anyZero) return 'cqh-bad';
 
     const anyLow =
-      (drRemaining !== null && drRemaining < DR_AGENT_LOW) ||
-      (agentRemaining !== null && agentRemaining < DR_AGENT_LOW) ||
+      (drRemaining !== null && drRemaining < DR_IMAGE_LOW) ||
+      (imageRemaining !== null && imageRemaining < DR_IMAGE_LOW) ||
       (codex5hPct !== null && codex5hPct < CODEX_LOW_PERCENT) ||
       (codex7dPct !== null && codex7dPct < CODEX_LOW_PERCENT);
     if (anyLow) return 'cqh-warn';
@@ -1129,7 +1155,7 @@
   }
 
   function buildSummaryText() {
-    if (!state.lastUpdated && !state.dr && !state.agent) {
+    if (!state.lastUpdated && !state.dr && !state.image) {
       if (state.pageIssue) return '需恢复';
       if (state.codexLoading) return '加载中…';
       if (state.codexError) return '错误';
@@ -1139,17 +1165,18 @@
 
     const drText = state.dr ? `DR${formatRemaining(state.dr.remaining)}` : 'DR-';
 
-    const codex5hText =
-      state.codex5h?.remainingPercent !== null && state.codex5h?.remainingPercent !== undefined
-        ? formatPercent(state.codex5h.remainingPercent)
-        : '-';
-
     const codex7dText =
       state.codex7d?.remainingPercent !== null && state.codex7d?.remainingPercent !== undefined
         ? formatPercent(state.codex7d.remainingPercent)
         : '-';
 
-    return `${drText}｜${codex5hText}｜${codex7dText}`;
+    const parts = [drText];
+    if (state.codex5h?.remainingPercent !== null && state.codex5h?.remainingPercent !== undefined) {
+      parts.push(formatPercent(state.codex5h.remainingPercent));
+    }
+    parts.push(codex7dText);
+
+    return parts.join('｜');
   }
 
   function buildStatusLineText() {
@@ -1210,16 +1237,18 @@
       drCell.textContent = '等待对话';
     }
 
-    // 详情：Agent
-    const agentCell = panel.querySelector('[data-cqh="agent"]');
-    if (state.agent) {
-      agentCell.textContent = `${formatRemaining(state.agent.remaining)} (${formatIsoReset(state.agent.reset_after)})`;
+    // 详情：Image
+    const imageCell = panel.querySelector('[data-cqh="image"]');
+    if (state.image) {
+      imageCell.textContent = `${formatRemaining(state.image.remaining)} (${formatIsoReset(state.image.reset_after)})`;
     } else {
-      agentCell.textContent = '等待对话';
+      imageCell.textContent = '等待对话';
     }
 
     // 详情：Codex 5H
+    const codex5hRow = panel.querySelector('[data-cqh-row="codex5h"]');
     const codex5hCell = panel.querySelector('[data-cqh="codex5h"]');
+    codex5hRow.hidden = !state.codex5h;
     codex5hCell.classList.remove('cqh-error-text');
     if (state.codex5h) {
       codex5hCell.textContent = `${formatPercent(state.codex5h.remainingPercent)} (${formatWindowReset(state.codex5h)})`;
@@ -1481,16 +1510,18 @@
     if (!Array.isArray(data.limits_progress)) return;
 
     const dr = getLimit(data, 'deep_research');
+    const image = getLimit(data, 'image_gen');
 
-    const agent =
-      getLimit(data, 'odyssey') ||
-      getLimit(data, 'agent') ||
-      getLimit(data, 'agent_mode');
+    // 旧 Agent 限额当前不再由 conversation/init 返回，先保留名称供后续兼容参考。
+    // const agent =
+    //   getLimit(data, 'odyssey') ||
+    //   getLimit(data, 'agent') ||
+    //   getLimit(data, 'agent_mode');
 
-    if (!dr && !agent) return;
+    if (!dr && !image) return;
 
     state.dr = dr;
-    state.agent = agent;
+    state.image = image;
 
     capturedConversationInitOnce = true;
     renderPanel();
