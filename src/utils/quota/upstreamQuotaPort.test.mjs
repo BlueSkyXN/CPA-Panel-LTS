@@ -14,7 +14,12 @@ const vite = await createServer({
 const [
   { buildKimiQuotaRows },
   { buildClaudeQuotaWindows },
-  { buildCodexAnalyticsRange, selectCodexDailyUsageDays },
+  {
+    buildCodexAnalyticsRange,
+    classifyCodexLeaderboardPayloadForAccount,
+    codexTeamLeaderboardCacheKey,
+    selectCodexDailyUsageDays,
+  },
   authFileConstants,
 ] = await Promise.all([
   vite.ssrLoadModule('/src/utils/quota/builders.ts'),
@@ -74,7 +79,6 @@ test('slices one Codex daily payload into exact rolling ranges before aggregatio
       { date: '2026-06-01', totals: { credits: 5, text_total_tokens: 50 } },
       { date: '2026-03-17', totals: { credits: 2, text_total_tokens: 20 } },
       { date: '2026-06-11', totals: { credits: 6, text_total_tokens: 60 } },
-      { date: '', totals: { credits: 2000, text_total_tokens: 2000 } },
     ],
   };
 
@@ -107,6 +111,83 @@ test('slices one Codex daily payload into exact rolling ranges before aggregatio
       usd: 1,
       tokens: 250,
     }
+  );
+});
+
+test('rejects malformed and duplicate Codex daily buckets instead of double counting them', () => {
+  assert.throws(
+    () =>
+      selectCodexDailyUsageDays(
+        { data: [{ date: '2026-02-30', totals: { credits: 1 } }] },
+        '2026-01-01',
+        '2027-01-01'
+      ),
+    /invalid date/
+  );
+  assert.throws(
+    () =>
+      selectCodexDailyUsageDays(
+        {
+          data: [
+            { date: '2026-06-15', totals: { credits: 1 } },
+            { date: '2026-06-15', totals: { credits: 2 } },
+          ],
+        },
+        '2026-01-01',
+        '2027-01-01'
+      ),
+    /duplicate date 2026-06-15/
+  );
+});
+
+test('isolates Team leaderboard cache keys by auth index', () => {
+  const first = codexTeamLeaderboardCacheKey('auth-a', 'team-same', '2026-06-01', '2026-06-15');
+  const second = codexTeamLeaderboardCacheKey('auth-b', 'team-same', '2026-06-01', '2026-06-15');
+  assert.notEqual(first, second);
+});
+
+test('fails closed for incomplete or ambiguous Team leaderboard identity', () => {
+  const accountEmail = 'current@example.test';
+  const current = { email: accountEmail, credits: 2 };
+  const other = { email: 'other@example.test', credits: 4 };
+
+  assert.equal(
+    classifyCodexLeaderboardPayloadForAccount({ total_users: 2, data: [current, other] }, null)
+      .status,
+    'missing-account-email'
+  );
+  assert.equal(
+    classifyCodexLeaderboardPayloadForAccount(
+      { total_users: 3, data: [current, other] },
+      accountEmail
+    ).status,
+    'incomplete'
+  );
+  assert.equal(
+    classifyCodexLeaderboardPayloadForAccount(
+      { total_users: 2, has_more: true, data: [current, other] },
+      accountEmail
+    ).status,
+    'incomplete'
+  );
+  assert.equal(
+    classifyCodexLeaderboardPayloadForAccount({ total_users: 1, data: [other] }, accountEmail)
+      .status,
+    'user-missing'
+  );
+  assert.equal(
+    classifyCodexLeaderboardPayloadForAccount(
+      { total_users: 2, data: [current, { ...current }] },
+      accountEmail
+    ).status,
+    'user-ambiguous'
+  );
+  assert.equal(
+    classifyCodexLeaderboardPayloadForAccount(
+      { total_users: 2, data: [current, other] },
+      accountEmail
+    ).status,
+    'ok'
   );
 });
 

@@ -217,6 +217,12 @@ export interface CodexUsageLeaderboardPayload {
   data?: CodexUsageLeaderboardRow[];
   total_users?: number | string;
   totalUsers?: number | string;
+  has_more?: boolean;
+  hasMore?: boolean;
+  next_page?: number | string | null;
+  nextPage?: number | string | null;
+  next_cursor?: string | null;
+  nextCursor?: string | null;
 }
 
 // Claude API payload types

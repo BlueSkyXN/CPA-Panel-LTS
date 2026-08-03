@@ -391,13 +391,28 @@ export const selectCodexDailyUsageDays = (
   payload: CodexDailyUsagePayload,
   startDate: string,
   endDateExclusive: string
-): CodexDailyUsageDay[] =>
-  (payload.data ?? [])
+): CodexDailyUsageDay[] => {
+  const seenDates = new Set<string>();
+  const days = (payload.data ?? []).map((day) => {
+    const date = typeof day.date === 'string' ? day.date : '';
+    const parsed = /^\d{4}-\d{2}-\d{2}$/.test(date) ? codexDateToUtcMs(date) : Number.NaN;
+    if (!Number.isFinite(parsed) || codexYmdUtc(parsed) !== date) {
+      throw new Error('Codex daily usage payload contains an invalid date');
+    }
+    if (seenDates.has(date)) {
+      throw new Error(`Codex daily usage payload contains duplicate date ${date}`);
+    }
+    seenDates.add(date);
+    return day;
+  });
+
+  return days
     .filter((day) => {
-      const date = normalizeStringValue(day.date);
-      return date !== null && date >= startDate && date < endDateExclusive;
+      const date = day.date as string;
+      return date >= startDate && date < endDateExclusive;
     })
     .sort((left, right) => String(left.date ?? '').localeCompare(String(right.date ?? '')));
+};
 
 export const buildCodexAnalyticsRange = (
   payload: CodexDailyUsagePayload,
@@ -472,22 +487,30 @@ const codexInclusiveWindowDays = (startDate: string, endDateInclusive: string): 
   return Math.max(1, Math.round((endMs - startMs) / CODEX_DAY_MS) + 1);
 };
 
-const codexTeamLeaderboardCacheKey = (
+export const codexTeamLeaderboardCacheKey = (
+  authIndex: string,
   teamAccountId: string,
   startDate: string,
   endDateInclusive: string
 ): string =>
   [
+    authIndex,
     teamAccountId,
     startDate,
     endDateInclusive,
     codexInclusiveWindowDays(startDate, endDateInclusive),
   ].join('::');
 
-const readCodexTeamLeaderboardCache = (cacheKey: string): CodexUsageLeaderboardPayload | null => {
+const readCodexTeamLeaderboardCache = (
+  cacheKey: string,
+  authIndex: string
+): CodexUsageLeaderboardPayload | null => {
   const cached = codexTeamLeaderboardCache.get(cacheKey);
   if (!cached) return null;
-  if (Date.now() - cached.fetchedAt > CODEX_TEAM_LEADERBOARD_CACHE_TTL_MS) {
+  if (
+    cached.sourceAuthIndex !== authIndex ||
+    Date.now() - cached.fetchedAt > CODEX_TEAM_LEADERBOARD_CACHE_TTL_MS
+  ) {
     codexTeamLeaderboardCache.delete(cacheKey);
     return null;
   }
@@ -495,17 +518,18 @@ const readCodexTeamLeaderboardCache = (cacheKey: string): CodexUsageLeaderboardP
 };
 
 const waitForCodexTeamLeaderboardCache = async (
-  cacheKey: string
+  cacheKey: string,
+  authIndex: string
 ): Promise<CodexUsageLeaderboardPayload | null> => {
   const startedAt = Date.now();
   while (Date.now() - startedAt < CODEX_TEAM_LEADERBOARD_CACHE_WAIT_MS) {
-    const cached = readCodexTeamLeaderboardCache(cacheKey);
+    const cached = readCodexTeamLeaderboardCache(cacheKey, authIndex);
     if (cached) return cached;
     await new Promise((resolve) =>
       window.setTimeout(resolve, CODEX_TEAM_LEADERBOARD_CACHE_POLL_MS)
     );
   }
-  return readCodexTeamLeaderboardCache(cacheKey);
+  return readCodexTeamLeaderboardCache(cacheKey, authIndex);
 };
 
 const codexLeaderboardUserLabel = (row: CodexUsageLeaderboardRow): string => {
@@ -527,6 +551,81 @@ const pickCodexLeaderboardUserRow = (
   );
 };
 
+type CodexLeaderboardPayloadStatus =
+  | 'ok'
+  | 'missing-account-email'
+  | 'incomplete'
+  | 'user-missing'
+  | 'user-ambiguous';
+
+export const classifyCodexLeaderboardPayloadForAccount = (
+  payload: CodexUsageLeaderboardPayload,
+  accountEmail: string | null
+): {
+  status: CodexLeaderboardPayloadStatus;
+  returnedUsers: number;
+  totalUsers: number | null;
+  matchedUsers: number;
+} => {
+  const rows = Array.isArray(payload.data) ? payload.data : [];
+  const normalizedEmail = normalizeStringValue(accountEmail)?.toLowerCase() ?? null;
+  const totalUsers = normalizeNumberValue(payload.total_users ?? payload.totalUsers);
+  const nextPage = normalizeNumberValue(payload.next_page ?? payload.nextPage);
+  const hasContinuation =
+    payload.has_more === true ||
+    payload.hasMore === true ||
+    (nextPage !== null && nextPage > 0) ||
+    normalizeStringValue(payload.next_cursor ?? payload.nextCursor) !== null;
+
+  if (!normalizedEmail) {
+    return {
+      status: 'missing-account-email',
+      returnedUsers: rows.length,
+      totalUsers,
+      matchedUsers: 0,
+    };
+  }
+
+  const matchedUsers = rows.filter(
+    (row) => normalizeStringValue(row.email)?.toLowerCase() === normalizedEmail
+  ).length;
+  const completeTotal =
+    totalUsers !== null &&
+    Number.isInteger(totalUsers) &&
+    totalUsers >= 0 &&
+    totalUsers === rows.length;
+  if (hasContinuation || !completeTotal) {
+    return {
+      status: 'incomplete',
+      returnedUsers: rows.length,
+      totalUsers,
+      matchedUsers,
+    };
+  }
+  if (matchedUsers === 0) {
+    return {
+      status: 'user-missing',
+      returnedUsers: rows.length,
+      totalUsers,
+      matchedUsers,
+    };
+  }
+  if (matchedUsers > 1) {
+    return {
+      status: 'user-ambiguous',
+      returnedUsers: rows.length,
+      totalUsers,
+      matchedUsers,
+    };
+  }
+  return {
+    status: 'ok',
+    returnedUsers: rows.length,
+    totalUsers,
+    matchedUsers,
+  };
+};
+
 const buildCodexLeaderboardRange = (
   payload: CodexUsageLeaderboardPayload,
   id: CodexAnalyticsRange['id'],
@@ -543,29 +642,17 @@ const buildCodexLeaderboardRange = (
   });
 
   let credits = 0;
-  let tokens = 0;
-  let threads = 0;
-  let turns = 0;
 
   for (const row of rows) {
     credits += metricNumber(row.credits);
-    tokens += metricNumber(row.text_tokens ?? row.textTokens);
-    threads += metricNumber(row.n_threads ?? row.nThreads);
-    turns += metricNumber(row.n_turns ?? row.nTurns);
   }
 
   const totalUsers = metricNumber(payload.total_users ?? payload.totalUsers) || rows.length;
   const currentUser = pickCodexLeaderboardUserRow(rows, accountEmail);
-  const selectedCredits = currentUser ? metricNumber(currentUser.credits) : credits;
-  const selectedTokens = currentUser
-    ? metricNumber(currentUser.text_tokens ?? currentUser.textTokens)
-    : tokens;
-  const selectedThreads = currentUser
-    ? metricNumber(currentUser.n_threads ?? currentUser.nThreads)
-    : threads;
-  const selectedTurns = currentUser
-    ? metricNumber(currentUser.n_turns ?? currentUser.nTurns)
-    : turns;
+  const selectedCredits = metricNumber(currentUser?.credits);
+  const selectedTokens = metricNumber(currentUser?.text_tokens ?? currentUser?.textTokens);
+  const selectedThreads = metricNumber(currentUser?.n_threads ?? currentUser?.nThreads);
+  const selectedTurns = metricNumber(currentUser?.n_turns ?? currentUser?.nTurns);
 
   return {
     id,
@@ -723,8 +810,13 @@ const fetchCodexUsageLeaderboard = async (
   endDateInclusive: string,
   t: TFunction
 ): Promise<CodexUsageLeaderboardPayload> => {
-  const cacheKey = codexTeamLeaderboardCacheKey(teamAccountId, startDate, endDateInclusive);
-  const cached = readCodexTeamLeaderboardCache(cacheKey);
+  const cacheKey = codexTeamLeaderboardCacheKey(
+    authIndex,
+    teamAccountId,
+    startDate,
+    endDateInclusive
+  );
+  const cached = readCodexTeamLeaderboardCache(cacheKey, authIndex);
   if (cached) return cached;
 
   const query = new URLSearchParams({
@@ -747,7 +839,7 @@ const fetchCodexUsageLeaderboard = async (
 
   if (result.statusCode < 200 || result.statusCode >= 300) {
     if (CODEX_TEAM_PERMISSION_STATUSES.has(result.statusCode)) {
-      const delayedCached = await waitForCodexTeamLeaderboardCache(cacheKey);
+      const delayedCached = await waitForCodexTeamLeaderboardCache(cacheKey, authIndex);
       if (delayedCached) return delayedCached;
       throw createStatusError(t('codex_quota.team_analytics_permission_denied'), result.statusCode);
     }
@@ -819,6 +911,39 @@ const resolveCodexRequestErrorMessage = (
   if (status !== undefined && status >= 500) return t('codex_quota.upstream_unavailable');
 
   return getErrorMessage(err, t('common.unknown_error'));
+};
+
+class CodexTeamAnalyticsIntegrityError extends Error {}
+
+const assertCodexLeaderboardPayloadForAccount = (
+  payload: CodexUsageLeaderboardPayload,
+  accountEmail: string | null,
+  t: TFunction
+): void => {
+  const result = classifyCodexLeaderboardPayloadForAccount(payload, accountEmail);
+  if (result.status === 'ok') return;
+
+  if (result.status === 'missing-account-email') {
+    throw new CodexTeamAnalyticsIntegrityError(
+      t('codex_quota.team_analytics_account_email_missing')
+    );
+  }
+  if (result.status === 'incomplete') {
+    throw new CodexTeamAnalyticsIntegrityError(
+      t('codex_quota.team_analytics_incomplete', {
+        returned: result.returnedUsers,
+        total: result.totalUsers ?? '?',
+      })
+    );
+  }
+  if (result.status === 'user-ambiguous') {
+    throw new CodexTeamAnalyticsIntegrityError(
+      t('codex_quota.team_analytics_user_ambiguous', { email: accountEmail ?? '-' })
+    );
+  }
+  throw new CodexTeamAnalyticsIntegrityError(
+    t('codex_quota.team_analytics_user_missing', { email: accountEmail ?? '-' })
+  );
 };
 
 const fetchCodexAnalytics = async (
@@ -919,6 +1044,12 @@ const fetchCodexTeamAnalytics = async (
   accountEmail: string | null,
   t: TFunction
 ): Promise<CodexAnalyticsState> => {
+  if (!normalizeStringValue(accountEmail)) {
+    throw new CodexTeamAnalyticsIntegrityError(
+      t('codex_quota.team_analytics_account_email_missing')
+    );
+  }
+
   const rateLimit = usagePayload.rate_limit ?? usagePayload.rateLimit ?? null;
   const weeklyWindow = pickCodexClassifiedWindows(rateLimit).weeklyWindow;
   const timing = getCodexWindowTiming(weeklyWindow);
@@ -961,6 +1092,10 @@ const fetchCodexTeamAnalytics = async (
     ),
   ]);
 
+  assertCodexLeaderboardPayloadForAccount(sinceResetPayload, accountEmail, t);
+  assertCodexLeaderboardPayloadForAccount(monthPayload, accountEmail, t);
+  assertCodexLeaderboardPayloadForAccount(rollingPayload, accountEmail, t);
+
   const sinceResetRange = buildCodexLeaderboardRange(
     sinceResetPayload,
     'since-reset',
@@ -986,10 +1121,6 @@ const fetchCodexTeamAnalytics = async (
     accountEmail
   );
   const ranges = [sinceResetRange, monthRange, rollingRange];
-
-  if (accountEmail && !ranges.some((range) => range.matchedUserFound)) {
-    throw new Error(t('codex_quota.team_analytics_user_missing', { email: accountEmail }));
-  }
 
   return {
     dateBucket: 'UTC',
@@ -1026,6 +1157,12 @@ const fetchCodexTeamAnalyticsWithFallback = async (
     };
   } catch (err: unknown) {
     leaderboardError = err instanceof Error ? err.message : t('common.unknown_error');
+    if (err instanceof CodexTeamAnalyticsIntegrityError) {
+      return {
+        analytics: null,
+        analyticsError: leaderboardError,
+      };
+    }
   }
 
   try {
@@ -1117,14 +1254,10 @@ const fetchCodexQuota = async (
         rateLimitResetCredits.length < rateLimitResetCreditsAvailableCount))
   ) {
     try {
-      const resetCreditInfo = await fetchCodexRateLimitResetCredits(
-        authIndex,
-        requestHeader
-      );
+      const resetCreditInfo = await fetchCodexRateLimitResetCredits(authIndex, requestHeader);
       rateLimitResetCreditsAvailableCount =
         resetCreditInfo.availableCount ?? rateLimitResetCreditsAvailableCount;
-      rateLimitResetCreditExpiresAt =
-        resetCreditInfo.expiresAt ?? rateLimitResetCreditExpiresAt;
+      rateLimitResetCreditExpiresAt = resetCreditInfo.expiresAt ?? rateLimitResetCreditExpiresAt;
       rateLimitResetCredits = resetCreditInfo.credits;
     } catch {
       rateLimitResetCreditsAvailableCount = rateLimitResetCreditsAvailableCount ?? null;
