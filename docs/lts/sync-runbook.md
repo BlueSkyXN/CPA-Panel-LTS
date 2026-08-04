@@ -101,11 +101,11 @@ Every accepted PR passed `npm run check:lts`, `npm run validate:lts`, `npm run s
 | `21af57620b45f5e159e5450bc7e702498b664639` | `reject` | Current Home log payload/cursor implementation and browser smoke | Keep Home request-log payload, cursor, pagination, and download compatibility while Core retains Home. |
 | `310fbff060006694a6a827beec4d92e361fd0a0a` | `direct-port` | PR #47 / `c531596` | Localized responsive ellipsis for long provider base URLs; no data or mutation behavior changes. |
 | `ba02883736221a977a7206c69fe0979d4d0f81c1` | `adapt-port` | PR #48 / `7d1d3ba` | Format Kimi reset durations over 24 hours as `Xd Yh` while preserving sub-day and `<1m` behavior under Node regression tests. |
-| `38f98975f8c30dc6b016527fc503583b8b82bb8a` | `accept-port` | `codex/upstream-dashboard-visual-port` | Dashboard rewrite accepted as the phase-1 visual port: data layer verified to depend only on `recentRequests`/config/auth-files (not removed usage stats); ampcode provider counting kept via `countAmpcodeConfig`; feature contract and guard markers updated to the new paths. |
-| `a9eb14b92920245eb25364a526ea40f3ea32047a` | `accept-port` | `codex/upstream-dashboard-visual-port` | Real-time metrics, live-wire components, theme variables, and animation changes ported together with the dashboard rewrite. |
+| `38f98975f8c30dc6b016527fc503583b8b82bb8a` | `accept-port` | PR #54 | Dashboard rewrite accepted as the phase-1 visual port: data layer verified to depend only on `recentRequests`/config/auth-files (not removed usage stats); ampcode provider counting kept via `countAmpcodeConfig`; feature contract and guard markers updated to the new paths. |
+| `a9eb14b92920245eb25364a526ea40f3ea32047a` | `accept-port` | PR #54 | Real-time metrics, live-wire components, theme variables, and animation changes ported together with the dashboard rewrite. |
 | `50c3b9fb3b3de8068393ba86f2615d7f5e1a46ad` | `adapt-port` | PR #48 / `7d1d3ba` | Parse modern Claude Fable `weekly_scoped` limits, prefer the active valid candidate, keep the legacy `iguana_necktie` fallback, and suppress duplicates. |
-| `0f87214e262a683d2b3ea291b5a16ee4469d22d7` | `accept-port` | `codex/upstream-dashboard-visual-port` | Animation and chart responsiveness changes included in the accepted dashboard port. |
-| `1708314bc7a27e0ad9ef86b083e28e4e00aceeb1` | `accept-port` | `codex/upstream-dashboard-visual-port` | Ambient positioning and wash effects included in the accepted dashboard port. |
+| `0f87214e262a683d2b3ea291b5a16ee4469d22d7` | `accept-port` | PR #54 | Animation and chart responsiveness changes included in the accepted dashboard port. |
+| `1708314bc7a27e0ad9ef86b083e28e4e00aceeb1` | `accept-port` | PR #54 | Ambient positioning and wash effects included in the accepted dashboard port. |
 
 The earlier `upstream/dev` watchlist commit `51b034dd914719c3bd6b5ab0eb64bc8b103ca0d4` is now on `upstream/main` and is reassessed in the next snapshot. It remains `defer`: CPA-Panel-LTS owns additional Codex quota/reset-credit classification in `src/lts/codexQuota/`, so its selection and availability semantics must be compared with the sidecar before porting.
 
@@ -132,7 +132,7 @@ Dependency chains reviewed as units rather than isolated hunks:
 | Upstream commit | Classification | LTS evidence and decision |
 |---|---|---|
 | `51b034dd914719c3bd6b5ab0eb64bc8b103ca0d4` | `defer` | Codex `applicableAvailableCount` 与 LTS `src/lts/codexQuota/` 的 reset-credit 分类不等价；待 sidecar/API 一起审。 |
-| `22cf825d071ac9cc835fe422dae87acd2fded3a2` | `accept-port` | `codex/upstream-dashboard-visual-port`：共享 motion hooks（`src/hooks/motion.ts`）随 Dashboard 移植一并接纳；`useCountUp` 的 effect 内同步 setState 按 LTS lint 规则改为 rAF 调度。 |
+| `22cf825d071ac9cc835fe422dae87acd2fded3a2` | `accept-port` | PR #54：共享 motion hooks（`src/hooks/motion.ts`）随 Dashboard 移植一并接纳；`useCountUp` 的 effect 内同步 setState 按 LTS lint 规则改为 rAF 调度。 |
 | `b62dbefda80f81fabaff189f931ce77583efab59` | `defer` | QuotaCard/AuthFiles 样式与错误 resolver 大重排依赖新 quota 架构，不能覆盖 LTS 宿主。 |
 | `dbe7094e8cb3152e9f9422fb942fd5b0107af98d` | `adapt-port` | 已在 `authFiles.ts` 保留 raw 字段并归一化 camelCase、recent requests、计数和 Blob download；Node regression 覆盖。 |
 | `20c0cb865e5572757ae01fa4e3d5ca7d0af16389` | `adapt-port` | 已适配到旧页面 hooks：后台刷新、stale list request、batch download、model/quota cache invalidation；未引入新 AuthFiles 架构。 |
@@ -152,7 +152,7 @@ Dependency chains reviewed as units rather than isolated hunks:
 | `530b585bd0b72448bc576e970b0f2c6f1f55df11` | `defer` | Interactions provider surface 需要当前 CPA-Core-LTS Management/API contract；本批次不新增 provider 产品面。 |
 | `fe93db0941de406c336d0db8a4a12f9ebd8959bd` | `already-equivalent` | LTS `CODEX_CONFIG.canResetQuota` 已按 total available reset credits 显示 reset action。 |
 | `6cda18a85235e7f047d8584d93480319c10e1942` | `defer` | 9524cc7 的视觉 follow-up，依赖未接纳 quota redesign。 |
-| `13a22da08224930fd50a07e4497540469764b988` | `accept-port` | `codex/upstream-dashboard-visual-port`：`features/dashboard/.heroPeriod` 随 Dashboard 移植一并落地。 |
+| `13a22da08224930fd50a07e4497540469764b988` | `accept-port` | PR #54：`features/dashboard/.heroPeriod` 随 Dashboard 移植一并落地。 |
 | `afd7da059d9749773127163eb42236694ad801f8` | `defer` | LTS 已有不同的 OAuth excluded-model contract；新 per-auth/global rules 需与 Core 一起审。 |
 | `20bb8559d476efb5cc3707d68bb8c74ed2a79375` | `defer` | 依赖 afd7da0 的 excluded-model backend/UI contract。 |
 | `4abd41f947bccae528acba7a4be67c074a802aa9` | `defer` | 依赖前两段 excluded-model 新模块；不替换现有 OAuth excluded 页面。 |
