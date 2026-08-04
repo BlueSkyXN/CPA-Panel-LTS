@@ -161,13 +161,15 @@ features:
 
   - id: dashboard-overview
     status: shared
-    reason: Dashboard provider counts must derive from cached config without dropping LTS-maintained providers or presenting load failures as real zero counts.
+    reason: Dashboard provider counts must derive from cached config without dropping LTS-maintained providers (including ampcode) or presenting load failures as real zero counts. The upstream visual rewrite (features/dashboard + shared motion hooks) was ported on top of the LTS data contract.
     routes:
       - /
       - /dashboard
     panel_files:
-      - src/pages/DashboardPage.tsx
-      - src/pages/DashboardPage.module.scss
+      - src/features/dashboard/DashboardPage.tsx
+      - src/features/dashboard/dashboard.module.scss
+      - src/features/dashboard/hooks/useDashboardOverview.ts
+      - src/hooks/motion.ts
       - src/hooks/useApiKeysForModels.ts
       - src/services/api/config.ts
       - src/services/api/authFiles.ts
@@ -175,7 +177,7 @@ features:
       - src/stores/useConfigStore.ts
       - src/stores/useModelsStore.ts
       - src/types/ampcode.ts
-      - src/utils/dashboard.ts
+      - src/utils/recentRequests.ts
       - src/i18n/locales/
     core_endpoints:
       - /v0/management/config
@@ -187,8 +189,8 @@ features:
       - countAmpcodeConfig
       - config.ampcode
       - modelsApi.fetchModels
-      - getDashboardModelsStatValue
-      - 'A:{{ampcode}}'
+      - useProviderRecentRequests
+      - 'modelsError ? null : models.length'
 
   - id: provider-stable-lts-page
     status: protected

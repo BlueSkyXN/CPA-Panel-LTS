@@ -5181,7 +5181,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             run_sidebar_navigation_smoke(page)
 
             route_checks = [
-                ("/", "System Overview", None),
+                ("/", "Where to go from here", None),
                 ("/config", "Config Panel", None),
                 ("/auth-files", "Auth Files Management", None),
                 ("/oauth", "OAuth Login", None),
@@ -5248,8 +5248,8 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
 
             page.goto(f"{app_url}?route=dashboard#/", wait_until="domcontentloaded")
             page.wait_for_function("() => window.location.hash.endsWith('/')")
-            page.get_by_text("A:1", exact=False).first.wait_for()
-            page.get_by_text("X:1", exact=False).first.wait_for()
+            page.get_by_text("Provider keys", exact=False).first.wait_for()
+            page.get_by_text("Credential status", exact=False).first.wait_for()
 
             page.goto(f"{app_url}?route=workbench-toggle#/ai-providers/workbench", wait_until="domcontentloaded")
             page.wait_for_function("() => window.location.hash.endsWith('/ai-providers/workbench')")

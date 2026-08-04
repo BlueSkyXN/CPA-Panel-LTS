@@ -61,9 +61,10 @@ require_repo_not_contains() {
 
 for path in \
   src/router/MainRoutes.tsx \
-  src/pages/DashboardPage.tsx \
-  src/pages/DashboardPage.module.scss \
-  src/utils/dashboard.ts \
+  src/features/dashboard/DashboardPage.tsx \
+  src/features/dashboard/dashboard.module.scss \
+  src/features/dashboard/hooks/useDashboardOverview.ts \
+  src/hooks/motion.ts \
   src/pages/UsagePage.tsx \
   src/pages/UsagePage.module.scss \
   src/pages/UsagePricingPage.tsx \
@@ -892,17 +893,13 @@ require_file_contains src/stores/useQuotaStore.ts "commitIfQuotaCacheCurrent"
 require_file_contains src/stores/useAuthStore.ts "clearQuotaCache"
 require_file_contains src/stores/useQuotaStore.ts "setXaiQuota"
 require_file_contains src/types/quota.ts "XaiQuotaState"
-require_file_contains src/pages/DashboardPage.tsx "useConfigStore"
-require_file_contains src/pages/DashboardPage.tsx "fetchConfig"
-require_file_contains src/pages/DashboardPage.tsx "countAmpcodeConfig"
-require_file_contains src/pages/DashboardPage.tsx "config.ampcode"
-require_file_contains src/pages/DashboardPage.tsx "ampcode: providerStats.ampcode"
-require_file_contains src/utils/dashboard.ts "getDashboardModelsStatValue"
+require_file_contains src/features/dashboard/hooks/useDashboardOverview.ts "useConfigStore"
+require_file_contains src/features/dashboard/hooks/useDashboardOverview.ts "fetchConfig"
+require_file_contains src/features/dashboard/hooks/useDashboardOverview.ts "countAmpcodeConfig"
+require_file_contains src/features/dashboard/hooks/useDashboardOverview.ts "config.ampcode"
+require_file_contains src/features/dashboard/hooks/useDashboardOverview.ts "useProviderRecentRequests"
+require_file_contains src/features/dashboard/hooks/useDashboardOverview.ts "modelsError ? null : models.length"
 require_file_contains src/stores/useModelsStore.ts "modelsApi.fetchModels"
-require_file_contains src/i18n/locales/en.json "A:{{ampcode}}"
-require_file_contains src/i18n/locales/zh-CN.json "A:{{ampcode}}"
-require_file_contains src/i18n/locales/zh-TW.json "A:{{ampcode}}"
-require_file_contains src/i18n/locales/ru.json "A:{{ampcode}}"
 require_file_contains src/features/providers/descriptors.ts "claudeApi"
 require_file_contains src/features/providers/descriptors.ts "code0"
 require_file_contains src/features/providers/descriptors.ts "fennoAI"
