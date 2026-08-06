@@ -1450,6 +1450,7 @@
     "status_loaded_short": "Loaded",
     "status_dirty": "Unsaved changes",
     "status_dirty_short": "Unsaved",
+    "meta_errors": "{{count}} validation errors",
     "status_disconnected": "Connect to the server to load the configuration",
     "status_disconnected_short": "Disconnected",
     "status_load_failed": "Load failed",
@@ -1782,7 +1783,15 @@
         "input_placeholder": "Paste your API key",
         "input_hint": "This only modifies the local config file content, it will not sync to the API Key Management interface",
         "error_empty": "Please enter an API key",
-        "error_invalid": "API key contains invalid characters"
+        "error_invalid": "API key contains invalid characters",
+        "strength": {
+          "label": "API key strength",
+          "empty": "Not entered",
+          "weak": "Weak",
+          "fair": "Fair",
+          "good": "Good",
+          "strong": "Strong"
+        }
       },
       "payload_rules": {
         "rule": "Rule",

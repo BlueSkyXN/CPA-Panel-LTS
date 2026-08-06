@@ -648,6 +648,13 @@ export function VisualConfigEditor({
       fields.reduce((total, field) => total + (validationErrors?.[field] ? 1 : 0), 0),
     [validationErrors]
   );
+  const getAccessibleNavigationLabel = useCallback(
+    (title: string, errorCount: number) =>
+      errorCount > 0
+        ? `${title}, ${t('config_management.meta_errors', { count: errorCount })}`
+        : title,
+    [t]
+  );
 
   const systemSections = useMemo<SystemSection[]>(
     () => [
@@ -938,6 +945,7 @@ export function VisualConfigEditor({
               className={`${styles.navButton} ${isActive ? styles.navButtonActive : ''}`}
               aria-controls={section.id}
               aria-current={isActive ? 'true' : undefined}
+              aria-label={getAccessibleNavigationLabel(section.title, section.errorCount)}
               onClick={() => handleSectionJump(section.id)}
             >
               <span className={styles.navIndex}>{String(index + 1).padStart(2, '0')}</span>
@@ -972,6 +980,10 @@ export function VisualConfigEditor({
                       }`}
                       aria-controls={subsection.targetId}
                       aria-current={isSubsectionActive ? 'true' : undefined}
+                      aria-label={getAccessibleNavigationLabel(
+                        subsection.title,
+                        subsection.errorCount
+                      )}
                       onClick={() => handleSubsectionJump(section.id, subsection)}
                     >
                       <span className={styles.navSubIndicator} aria-hidden="true" />
@@ -1011,6 +1023,7 @@ export function VisualConfigEditor({
             className={`${styles.systemTab} ${isActive ? styles.systemTabActive : ''}`}
             aria-selected={isActive}
             aria-controls={`system-panel-${section.id}`}
+            aria-label={getAccessibleNavigationLabel(section.title, section.errorCount)}
             onClick={() => handleSystemSectionChange(section.id)}
             onKeyDown={(event) => handleSystemTabKeyDown(event, index)}
           >

@@ -210,6 +210,31 @@ No additional product-code port is required beyond the already-recorded adaptati
 | `e36de500`, `3ee7fce9`, `3785d759`, `3c91d573`, `c21d4aeb`, `d8f74ae5`, `a4f7bb20` | `reject` | The cleanup chain deletes API/config/store/auth/quota/style/locale behavior still referenced by the LTS usage, Home, quota, OAuth, plugin, and sidecar surfaces; the package change also introduces `bun.lock`. Do not copy the chain or migrate away from npm/package-lock. |
 | `066d25fe`, `e43df69c`, `82bb41ce`, `9d3e82e9`, `2201fe1c` | `defer` | Orphan/icon cleanup has no product payoff; Code0/ClaudeAPI quick-fill is a separate provider UX choice; the bundled ESLint/provider-sort/secure-storage/log-scroller refactor must be split before review because LTS retains Home log behavior. None is required for current correctness. |
 
+## Post-closeout v1.22.0 intake (2026-08-06)
+
+Upstream published a new release after the earlier same-day closeout, so refs were fetched again before final repository cleanup:
+
+- previous audited boundary: `30478c539c1f06649ac78deebeff6cfc227bbe22` (`v1.21.4`)
+- `upstream/main`: `0eeb747cdc7903834fee00ce9f9254c23b162be9` (`v1.22.0`)
+- `origin/main` at intake start: `bdd4a69b93d018efd14b7955abd483c11624bf52`
+- canonical delta: 11 non-merge commits, 66 files, 7,001 insertions, and 4,955 deletions
+- decisions: 4 `adapt-port`, 2 `already-equivalent`, 5 `defer`
+
+The release is dominated by a replacement Config page. That rewrite cannot be copied over LTS: its field registry omits downstream Core surfaces including `codex.abnormal-reasoning-retry`, `transient-error-cooldown-seconds`, `enable-gemini-cli-endpoint`, and the existing LTS payload/config preservation markers, then deletes the current editor files that implement them. The accepted subset therefore stays on the existing LTS Config architecture and ports only independent behavior.
+
+| Upstream commit | Classification | LTS evidence and decision |
+|---|---|---|
+| `c2feeac1`, `40749f00`, `77ec68bd`, `38ee01c0` | `defer` | Treat the feature shell, section migration, document orchestration, route switch, and legacy-editor deletion as one dependency chain. A future port must first map every `VisualConfigValues` leaf and protected marker, preserve source/visual concurrent-save behavior, keep plugin store sources and downstream Codex retry controls, then pass authenticated browser write smoke. Do not copy the new route or delete the current editor piecemeal. |
+| `00f34bc3` | `adapt-port` | Commit `b1b05ca88b74a3a65cea1db9a7b6c40129130889` ports the independent `Collapsible` easing and `prefers-reduced-motion` behavior. Styles that target only the deferred Config feature remain with that chain. |
+| `437fa820` | `already-equivalent` | Existing LTS commits `3308307` and `5469945` already switch invalid YAML to source mode while leaving the Visual tab available; `handleTabChange('visual')` reparses the repaired source before switching back. |
+| `c7fe030c` | `already-equivalent` | The current LTS page has one action-bar status surface, derived from the same connection/loading/error/validation/dirty state; it has no separate redesigned header metadata state that can diverge. |
+| `125cdbd8` | `adapt-port` | Commit `b1b05ca88b74a3a65cea1db9a7b6c40129130889` adds localized validation counts to the accessible names of the existing section, subsection, and system-tab navigation. LTS does not show per-section dirty dots, so it does not announce a state that is not visually represented. |
+| `6e550fbe` | `defer` | This changes the new page's explicit Discard action to restore its captured server snapshot. The current LTS control is intentionally Reload and fetches the latest server YAML after confirmation; adding a second Discard action belongs with the deferred page/navigation product change. |
+| `cfa8f616` | `adapt-port` | Commit `b1b05ca88b74a3a65cea1db9a7b6c40129130889` replaces the 17-character modulo generator with 48 uniformly distributed base62 characters after `sk-`, using rejection sampling and Node/Vite regressions. No API, YAML shape, or saved-key validation changes. |
+| `0eeb747c` | `adapt-port` | Commit `b1b05ca88b74a3a65cea1db9a7b6c40129130889` adds the advisory strength meter to the existing LTS API-key modal, keeps it non-blocking, covers all four active locales and accessible progress semantics, and corrects partial-period detection in the upstream heuristic. |
+
+The accepted code passed `npm run validate:lts` and `npm run smoke:lts`. A real-Core smoke was not required because this subset does not add or mutate a Management API field or YAML schema. Publishing a tag, release, or `management.html` asset remains outside this intake.
+
 The 2026-08-06 LTS navigation fix (`a8eee1b`, merged by PR #55) is an LTS-owned partial adaptation only: it restores the Logs entry and exposes Provider Workbench without importing the upstream sidebar event/badge/layout series. The complete upstream sidebar series remains deferred until auth-file events, responsive layout, `/usage`, and plugin capability behavior are reviewed together.
 
 Open upstream PRs were reviewed separately because they are not represented by `upstream/main` history:

@@ -496,6 +496,8 @@ features:
       - src/services/api/config.ts
       - src/services/api/configFile.ts
       - src/types/visualConfig.ts
+      - src/utils/apiKey.ts
+      - src/utils/apiKeyStrength.ts
       - scripts/smoke-lts-panel.py
       - scripts/smoke-lts-panel-core.py
     core_endpoints:
@@ -523,6 +525,14 @@ features:
       - dirtyFields.has('host')
       - integer_range_1_3600
       - concurrent-managed-smoke
+      - generateSecureApiKey
+      - MAX_UNBIASED_BYTE
+      - ApiKeyStrengthMeter
+      - evaluateApiKeyStrength
+      - meta_errors
+    validation:
+      - npm run test:config
+      - npm run smoke:lts
 
   - id: codex-abnormal-reasoning-retry-config
     status: lts-maintained

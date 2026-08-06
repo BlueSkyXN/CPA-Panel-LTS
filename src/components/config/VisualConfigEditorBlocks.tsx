@@ -24,8 +24,10 @@ import {
   VISUAL_CONFIG_PAYLOAD_VALUE_TYPE_OPTIONS,
   VISUAL_CONFIG_PROTOCOL_OPTIONS,
 } from '@/hooks/useVisualConfig';
+import { generateSecureApiKey } from '@/utils/apiKey';
 import { maskApiKey } from '@/utils/format';
 import { isValidApiKeyCharset } from '@/utils/validation';
+import { ApiKeyStrengthMeter } from './ApiKeyStrengthMeter';
 
 /** Minimum character count before the expand/collapse toggle appears. */
 const EXPAND_THRESHOLD = 30;
@@ -229,13 +231,6 @@ export const ApiKeysCardEditor = memo(function ApiKeysCardEditor({
   const [inputValue, setInputValue] = useState('');
   const [formError, setFormError] = useState('');
 
-  function generateSecureApiKey(): string {
-    const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    const array = new Uint8Array(17);
-    crypto.getRandomValues(array);
-    return 'sk-' + Array.from(array, (b) => charset[b % charset.length]).join('');
-  }
-
   const openAddModal = () => {
     setEditingApiKeyId(null);
     setInputValue('');
@@ -408,6 +403,7 @@ export const ApiKeysCardEditor = memo(function ApiKeysCardEditor({
               {t('config_management.visual.api_keys.generate')}
             </Button>
           </div>
+          <ApiKeyStrengthMeter value={inputValue} />
           <div id={apiKeyHintId} className="hint">
             {t('config_management.visual.api_keys.input_hint')}
           </div>
