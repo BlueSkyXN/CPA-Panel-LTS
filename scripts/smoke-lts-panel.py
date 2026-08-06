@@ -77,6 +77,7 @@ class MockCoreState:
         self.plugin_endpoint_available = True
         self.plugins_config_enabled = True
         self.include_branded_providers = True
+        self.logging_to_file = True
         self.plugin_enabled = True
         self.oauth_excluded_status = 200
         self.oauth_model_alias_status = 200
@@ -117,6 +118,7 @@ def build_recent_buckets() -> list[dict[str, Any]]:
 def build_config_payload(
     include_branded_providers: bool = True,
     plugins_enabled: bool = True,
+    logging_to_file: bool = True,
 ) -> dict[str, Any]:
     claude_api_keys = [
         {
@@ -215,7 +217,7 @@ def build_config_payload(
         "debug": False,
         "usage-statistics-enabled": True,
         "request-log": True,
-        "logging-to-file": True,
+        "logging-to-file": logging_to_file,
         "transient-error-cooldown-seconds": 30,
         "routing": {"strategy": "round-robin"},
         "api-keys": ["mgmt-key-1"],
@@ -1018,6 +1020,7 @@ class MockCoreHandler(BaseHTTPRequestHandler):
         config_payload = build_config_payload(
             include_branded_providers=self.state.include_branded_providers,
             plugins_enabled=self.state.plugins_config_enabled,
+            logging_to_file=self.state.logging_to_file,
         )
 
         if path == "/v0/management/config" and self.state.delay_next_config_response:
@@ -5041,7 +5044,7 @@ def run_plugin_runtime_mismatch_smoke(
         state.plugins_config_enabled = True
 
 
-def run_sidebar_navigation_smoke(page: Any) -> None:
+def run_sidebar_navigation_smoke(page: Any, state: MockCoreState) -> None:
     navigation = page.get_by_role("navigation", name="Primary navigation")
     navigation.wait_for()
 
@@ -5049,6 +5052,45 @@ def run_sidebar_navigation_smoke(page: Any) -> None:
         navigation.locator(
             ".nav-group-label", has_text=re.compile(f"^{re.escape(group_label)}$")
         ).wait_for()
+
+    state.logging_to_file = False
+    try:
+        with page.expect_response(
+            lambda response: response.request.method == "GET"
+            and response.url.endswith("/v0/management/config")
+        ):
+            page.reload(wait_until="domcontentloaded")
+        page.get_by_text("System Overview", exact=False).first.wait_for()
+        navigation = page.get_by_role("navigation", name="Primary navigation")
+        if navigation.get_by_role("link", name="Logs Viewer", exact=True).count() != 1:
+            raise AssertionError(
+                "Logs navigation disappeared when logging-to-file was disabled"
+            )
+    finally:
+        state.logging_to_file = True
+        with page.expect_response(
+            lambda response: response.request.method == "GET"
+            and response.url.endswith("/v0/management/config")
+        ):
+            page.reload(wait_until="domcontentloaded")
+        page.get_by_text("System Overview", exact=False).first.wait_for()
+        navigation = page.get_by_role("navigation", name="Primary navigation")
+
+    providers_drawer = navigation.get_by_role("button", name="AI Providers", exact=True)
+    if providers_drawer.count() != 1:
+        raise AssertionError("AI Providers navigation did not expose the Workbench drawer")
+    if providers_drawer.get_attribute("aria-expanded") != "false":
+        raise AssertionError("AI Providers drawer must start collapsed away from Provider routes")
+    providers_drawer.click()
+    workbench_link = navigation.get_by_role("link", name="Provider Workbench", exact=True)
+    workbench_link.wait_for()
+    workbench_link.click()
+    page.wait_for_function("() => window.location.hash.endsWith('/ai-providers/workbench')")
+    if providers_drawer.get_attribute("aria-expanded") != "true":
+        raise AssertionError("Active Provider Workbench did not keep its drawer open")
+    providers_drawer.click()
+    if providers_drawer.get_attribute("aria-expanded") != "false":
+        raise AssertionError("Active AI Providers drawer could not be manually collapsed")
 
     usage_drawer = navigation.get_by_role("button", name="Usage Statistics", exact=True)
     if usage_drawer.get_attribute("aria-expanded") != "false":
@@ -5178,7 +5220,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
                 raise AssertionError("Remember password checkbox did not become checked")
             page.get_by_role("button", name=re.compile("Login|Connect", re.I)).click()
             page.wait_for_url(re.compile(r".*/#/$"), timeout=20_000)
-            run_sidebar_navigation_smoke(page)
+            run_sidebar_navigation_smoke(page, state)
 
             route_checks = [
                 ("/", "Where to go from here", None),
