@@ -102,7 +102,11 @@ test('renders the strength tier as an accessible progress bar', () => {
 
   assert.match(markup, new RegExp(`aria-valuenow="${API_KEY_STRENGTH_SEGMENTS}"`));
   assert.match(markup, new RegExp(`aria-valuemax="${API_KEY_STRENGTH_SEGMENTS}"`));
-  assert.match(markup, /aria-valuetext="Strong"/);
+  assert.ok(
+    markup.includes(
+      `aria-valuetext="${i18n.t('config_management.visual.api_keys.strength.strong')}"`
+    )
+  );
   assert.equal(markup.match(/data-filled="true"/g)?.length, API_KEY_STRENGTH_SEGMENTS);
 });
 
