@@ -514,11 +514,21 @@ export function MainLayout() {
       label: t('nav_groups.gateway'),
       items: [
         {
-          kind: 'link',
+          kind: 'drawer',
+          id: 'ai-providers',
           path: '/ai-providers',
           label: t('nav.ai_providers'),
           meta: t('nav_meta.ai_providers'),
           icon: sidebarIcons.aiProviders,
+          children: [
+            {
+              kind: 'link',
+              path: '/ai-providers/workbench',
+              label: t('nav.provider_workbench'),
+              icon: <span className="nav-sub-dot" aria-hidden="true" />,
+              end: true,
+            },
+          ],
         },
         {
           kind: 'link',
@@ -564,17 +574,13 @@ export function MainLayout() {
             },
           ],
         },
-        ...(config?.loggingToFile
-          ? [
-              {
-                kind: 'link' as const,
-                path: '/logs',
-                label: t('nav.logs'),
-                meta: t('nav_meta.logs'),
-                icon: sidebarIcons.logs,
-              },
-            ]
-          : []),
+        {
+          kind: 'link',
+          path: '/logs',
+          label: t('nav.logs'),
+          meta: t('nav_meta.logs'),
+          icon: sidebarIcons.logs,
+        },
       ],
     },
     {

@@ -113,6 +113,7 @@
     "basic_settings": "Основные настройки",
     "api_keys": "API ключи",
     "ai_providers": "Поставщики AI",
+    "provider_workbench": "Рабочая область поставщиков",
     "auth_files": "Файлы аутентификации",
     "oauth": "OAuth вход",
     "quota_management": "Управление квотами",
