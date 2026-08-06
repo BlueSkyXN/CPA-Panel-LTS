@@ -2266,7 +2266,7 @@ def run_browser_smoke(
         ) from exc
 
     route_checks = [
-        ("/", "System Overview", None),
+        ("/", "Where to go from here", None),
         ("/config", "Config Panel", None),
         ("/auth-files", "Auth Files Management", None),
         ("/oauth", "OAuth Login", None),

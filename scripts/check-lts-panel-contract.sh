@@ -898,8 +898,12 @@ require_file_contains src/features/dashboard/hooks/useDashboardOverview.ts "fetc
 require_file_contains src/features/dashboard/hooks/useDashboardOverview.ts "countAmpcodeConfig"
 require_file_contains src/features/dashboard/hooks/useDashboardOverview.ts "config.ampcode"
 require_file_contains src/features/dashboard/hooks/useDashboardOverview.ts "useProviderRecentRequests"
+require_file_contains src/features/dashboard/hooks/useDashboardOverview.ts "summarizeProviderTraffic"
 require_file_contains src/features/dashboard/hooks/useDashboardOverview.ts "modelsError ? null : models.length"
+require_file_contains src/features/dashboard/dashboardMetrics.test.mjs "keeps provider totals scoped to the same recent buckets"
 require_file_contains src/stores/useModelsStore.ts "modelsApi.fetchModels"
+require_file_contains scripts/smoke-lts-panel.py '"Where to go from here"'
+require_file_contains scripts/smoke-lts-panel-core.py '"Where to go from here"'
 require_file_contains src/features/providers/descriptors.ts "claudeApi"
 require_file_contains src/features/providers/descriptors.ts "code0"
 require_file_contains src/features/providers/descriptors.ts "fennoAI"
@@ -955,6 +959,7 @@ require_file_contains package.json "\"test:usage-cache\""
 require_file_contains package.json '"test:usage-prices"'
 require_file_contains package.json '"test:usage-import"'
 require_file_contains package.json '"test:usage-effort"'
+require_file_contains package.json '"test:dashboard"'
 require_file_contains package.json '"test:provider-xai"'
 require_file_contains package.json '"test:provider-integrity"'
 require_file_contains package.json '"test:provider-recent"'
@@ -963,10 +968,12 @@ require_file_contains package.json '"test:auth-files"'
 require_file_contains package.json '"test:api-client"'
 require_file_contains package.json '"test:usage"'
 require_file_contains package.json '"validate:lts": "npm run test:usage'
+require_file_contains package.json 'npm run test:dashboard'
 require_file_contains package.json 'npm run test:providers'
 require_file_contains package.json 'npm run test:auth-files'
 require_file_contains package.json 'npm run test:api-client'
 require_file_contains .github/workflows/lts-panel-contract.yml "npm run test:usage"
+require_file_contains .github/workflows/lts-panel-contract.yml "npm run test:dashboard"
 require_file_contains .github/workflows/lts-panel-contract.yml "npm run test:providers"
 require_file_contains .github/workflows/lts-panel-contract.yml "npm run test:auth-files"
 require_file_contains .github/workflows/lts-panel-contract.yml "npm run test:api-client"

@@ -169,8 +169,11 @@ features:
       - src/features/dashboard/DashboardPage.tsx
       - src/features/dashboard/dashboard.module.scss
       - src/features/dashboard/hooks/useDashboardOverview.ts
+      - src/features/dashboard/dashboardMetrics.test.mjs
       - src/hooks/motion.ts
       - src/hooks/useApiKeysForModels.ts
+      - src/components/providers/hooks/useProviderRecentRequests.ts
+      - src/services/api/apiKeyUsage.ts
       - src/services/api/config.ts
       - src/services/api/authFiles.ts
       - src/services/api/models.ts
@@ -179,9 +182,12 @@ features:
       - src/types/ampcode.ts
       - src/utils/recentRequests.ts
       - src/i18n/locales/
+      - scripts/smoke-lts-panel.py
+      - scripts/smoke-lts-panel-core.py
     core_endpoints:
       - /v0/management/config
       - /v0/management/auth-files
+      - /v0/management/api-key-usage
       - /v1/models
     required_markers:
       - useConfigStore
@@ -190,7 +196,14 @@ features:
       - config.ampcode
       - modelsApi.fetchModels
       - useProviderRecentRequests
+      - summarizeProviderTraffic
       - 'modelsError ? null : models.length'
+      - Where to go from here
+    validation:
+      - npm run test:dashboard
+      - npm run check:lts
+      - npm run smoke:lts
+      - npm run smoke:lts:core -- --no-write-smoke
 
   - id: provider-stable-lts-page
     status: protected

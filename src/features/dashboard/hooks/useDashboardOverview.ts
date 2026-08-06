@@ -6,6 +6,7 @@ import { useProviderRecentRequests } from '@/components/providers/hooks/useProvi
 import {
   mergeRecentRequestBucketGroups,
   normalizeRecentRequestUsageEntry,
+  sumRecentRequests,
   type RecentRequestBucket,
 } from '@/utils/recentRequests';
 import type { AmpcodeConfig, Config } from '@/types';
@@ -85,8 +86,6 @@ const buildTrafficWindow = (bucketGroups: RecentRequestBucket[][]): TrafficWindo
 
 interface ProviderAccumulator {
   credentials: number;
-  success: number;
-  failure: number;
   bucketGroups: RecentRequestBucket[][];
 }
 
@@ -104,10 +103,23 @@ const countAmpcodeConfig = (value: AmpcodeConfig | undefined): number => {
 
 const createAccumulator = (): ProviderAccumulator => ({
   credentials: 0,
-  success: 0,
-  failure: 0,
   bucketGroups: [],
 });
+
+/** Provider fleet totals must use the same rolling buckets shown by the traffic chart. */
+export const summarizeProviderTraffic = (bucketGroups: RecentRequestBucket[][]) => {
+  const buckets = mergeRecentRequestBucketGroups(bucketGroups);
+  const { success, failure } = sumRecentRequests(buckets);
+  const total = success + failure;
+
+  return {
+    buckets,
+    success,
+    failure,
+    total,
+    successRate: total > 0 ? (success / total) * 100 : null,
+  };
+};
 
 export const getProviderKeyCounts = (config: Config) => ({
   gemini: config.geminiApiKeys?.length ?? 0,
@@ -210,8 +222,6 @@ export function useDashboardOverview() {
           apiKeysFromUsage.add(apiKey);
         }
         accumulator.credentials += 1;
-        accumulator.success += entry.success;
-        accumulator.failure += entry.failed;
         if (entry.recentRequests.length > 0) {
           accumulator.bucketGroups.push(entry.recentRequests);
           allBucketGroups.push(entry.recentRequests);
@@ -232,8 +242,6 @@ export function useDashboardOverview() {
       const accumulator = accumulatorFor(providerIdOfAuthFile(file));
       const entry = normalizeRecentRequestUsageEntry(file);
       accumulator.credentials += 1;
-      accumulator.success += entry.success;
-      accumulator.failure += entry.failed;
       if (entry.recentRequests.length > 0) {
         accumulator.bucketGroups.push(entry.recentRequests);
         allBucketGroups.push(entry.recentRequests);
@@ -242,15 +250,11 @@ export function useDashboardOverview() {
 
     const providerRows: ProviderTraffic[] = Array.from(accumulators.entries())
       .map(([id, accumulator]) => {
-        const total = accumulator.success + accumulator.failure;
+        const summary = summarizeProviderTraffic(accumulator.bucketGroups);
         return {
           id,
           credentials: accumulator.credentials,
-          success: accumulator.success,
-          failure: accumulator.failure,
-          total,
-          successRate: total > 0 ? (accumulator.success / total) * 100 : null,
-          buckets: mergeRecentRequestBucketGroups(accumulator.bucketGroups),
+          ...summary,
         };
       })
       .sort(

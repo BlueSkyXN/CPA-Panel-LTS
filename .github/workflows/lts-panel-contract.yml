@@ -26,6 +26,9 @@ jobs:
       - name: Test usage compatibility semantics
         run: npm run test:usage
 
+      - name: Test dashboard metrics
+        run: npm run test:dashboard
+
       - name: Test provider and connection contracts
         run: npm run test:providers && npm run test:auth-files && npm run test:api-client
 
