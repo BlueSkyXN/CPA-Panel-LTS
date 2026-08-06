@@ -1269,6 +1269,52 @@
   }
 }
 
+.strengthMeter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.strengthTrack {
+  display: flex;
+  gap: 6px;
+}
+
+.strengthSegment {
+  flex: 1;
+  height: 4px;
+  overflow: hidden;
+  border-radius: $radius-full;
+  background: color-mix(in srgb, var(--strength-color) 16%, transparent);
+  transition: background-color var(--dur-hover, 200ms) var(--ease-out-strong, ease-out);
+}
+
+.strengthSegmentFill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--strength-color);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition:
+    transform var(--dur-press, 160ms) var(--ease-out-strong, ease-out),
+    background-color var(--dur-hover, 200ms) var(--ease-out-strong, ease-out);
+
+  &[data-filled='true'] {
+    transform: scaleX(1);
+    transition-delay: var(--segment-delay, 0ms);
+  }
+}
+
+.strengthLabel {
+  min-height: 16px;
+  color: var(--strength-color);
+  font-size: 12px;
+  line-height: 16px;
+  transition: color var(--dur-hover, 200ms) var(--ease-out-strong, ease-out);
+}
+
 @media (max-width: 900px) {
   .payloadRuleModelRow,
   .payloadRuleModelRowProtocolFirst,
@@ -1363,8 +1409,13 @@
 
   .navButton,
   .systemTab,
-  .expandableToggle {
+  .expandableToggle,
+  .strengthSegmentFill {
     transition: none;
+  }
+
+  .strengthSegmentFill[data-filled='true'] {
+    transition-delay: 0ms;
   }
 }
 

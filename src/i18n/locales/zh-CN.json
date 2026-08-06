@@ -1450,6 +1450,7 @@
     "status_loaded_short": "已加载",
     "status_dirty": "有未保存的更改",
     "status_dirty_short": "未保存",
+    "meta_errors": "{{count}} 项校验错误",
     "status_disconnected": "请先连接服务器以加载配置",
     "status_disconnected_short": "未连接",
     "status_load_failed": "加载失败",
@@ -1782,7 +1783,15 @@
         "input_placeholder": "粘贴你的 API 密钥",
         "input_hint": "此处仅修改本地配置文件内容，不会自动同步到 API 密钥管理接口",
         "error_empty": "请输入 API 密钥",
-        "error_invalid": "API 密钥包含无效字符"
+        "error_invalid": "API 密钥包含无效字符",
+        "strength": {
+          "label": "API 密钥强度",
+          "empty": "待输入",
+          "weak": "弱",
+          "fair": "一般",
+          "good": "良好",
+          "strong": "很强"
+        }
       },
       "payload_rules": {
         "rule": "规则",
