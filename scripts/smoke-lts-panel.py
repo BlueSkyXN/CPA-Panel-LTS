@@ -5060,7 +5060,7 @@ def run_sidebar_navigation_smoke(page: Any, state: MockCoreState) -> None:
             and response.url.endswith("/v0/management/config")
         ):
             page.reload(wait_until="domcontentloaded")
-        page.get_by_text("System Overview", exact=False).first.wait_for()
+        page.get_by_text("Where to go from here", exact=False).first.wait_for()
         navigation = page.get_by_role("navigation", name="Primary navigation")
         if navigation.get_by_role("link", name="Logs Viewer", exact=True).count() != 1:
             raise AssertionError(
@@ -5073,7 +5073,7 @@ def run_sidebar_navigation_smoke(page: Any, state: MockCoreState) -> None:
             and response.url.endswith("/v0/management/config")
         ):
             page.reload(wait_until="domcontentloaded")
-        page.get_by_text("System Overview", exact=False).first.wait_for()
+        page.get_by_text("Where to go from here", exact=False).first.wait_for()
         navigation = page.get_by_role("navigation", name="Primary navigation")
 
     providers_drawer = navigation.get_by_role("button", name="AI Providers", exact=True)
@@ -5223,7 +5223,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             run_sidebar_navigation_smoke(page, state)
 
             route_checks = [
-                ("/", "System Overview", None),
+                ("/", "Where to go from here", None),
                 ("/config", "Config Panel", None),
                 ("/auth-files", "Auth Files Management", None),
                 ("/oauth", "OAuth Login", None),
@@ -5290,8 +5290,8 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
 
             page.goto(f"{app_url}?route=dashboard#/", wait_until="domcontentloaded")
             page.wait_for_function("() => window.location.hash.endsWith('/')")
-            page.get_by_text("A:1", exact=False).first.wait_for()
-            page.get_by_text("X:1", exact=False).first.wait_for()
+            page.get_by_text("Provider keys", exact=False).first.wait_for()
+            page.get_by_text("Credential status", exact=False).first.wait_for()
 
             page.goto(f"{app_url}?route=workbench-toggle#/ai-providers/workbench", wait_until="domcontentloaded")
             page.wait_for_function("() => window.location.hash.endsWith('/ai-providers/workbench')")
