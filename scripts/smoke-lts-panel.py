@@ -5060,7 +5060,7 @@ def run_sidebar_navigation_smoke(page: Any, state: MockCoreState) -> None:
             and response.url.endswith("/v0/management/config")
         ):
             page.reload(wait_until="domcontentloaded")
-        page.get_by_text("System Overview", exact=False).first.wait_for()
+        page.get_by_text("Where to go from here", exact=False).first.wait_for()
         navigation = page.get_by_role("navigation", name="Primary navigation")
         if navigation.get_by_role("link", name="Logs Viewer", exact=True).count() != 1:
             raise AssertionError(
@@ -5073,7 +5073,7 @@ def run_sidebar_navigation_smoke(page: Any, state: MockCoreState) -> None:
             and response.url.endswith("/v0/management/config")
         ):
             page.reload(wait_until="domcontentloaded")
-        page.get_by_text("System Overview", exact=False).first.wait_for()
+        page.get_by_text("Where to go from here", exact=False).first.wait_for()
         navigation = page.get_by_role("navigation", name="Primary navigation")
 
     providers_drawer = navigation.get_by_role("button", name="AI Providers", exact=True)

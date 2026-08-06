@@ -903,6 +903,7 @@ require_file_contains src/features/dashboard/hooks/useDashboardOverview.ts "mode
 require_file_contains src/features/dashboard/dashboardMetrics.test.mjs "keeps provider totals scoped to the same recent buckets"
 require_file_contains src/stores/useModelsStore.ts "modelsApi.fetchModels"
 require_file_contains scripts/smoke-lts-panel.py '"Where to go from here"'
+require_file_not_contains scripts/smoke-lts-panel.py '"System Overview"'
 require_file_contains scripts/smoke-lts-panel-core.py '"Where to go from here"'
 require_file_contains src/features/providers/descriptors.ts "claudeApi"
 require_file_contains src/features/providers/descriptors.ts "code0"
