@@ -154,6 +154,14 @@ def build_config_payload(
                     "alias": "mock-model",
                     "display-name": "Mock Model",
                     "test-model": "mock-model",
+                    "thinking": {
+                        "levels": ["low", "vendor-custom"],
+                        "min": 128,
+                        "max": 32768,
+                        "zero_allowed": True,
+                        "dynamic_allowed": True,
+                        "x-lts-thinking-note": "keep-thinking",
+                    },
                     "x-lts-model-note": "keep-model",
                 },
                 {
@@ -1763,6 +1771,29 @@ def assert_provider_mutation_payloads(state: MockCoreState) -> None:
             if isinstance(item, dict)
         ),
         "updated model display-name",
+    )
+    assert_payload_match(
+        state,
+        "PUT",
+        "/v0/management/openai-compatibility",
+        lambda payload: any(
+            item.get("name") == "OpenRouter"
+            and any(
+                isinstance(model, dict)
+                and model.get("name") == "openai/mock-model"
+                and model.get("thinking")
+                == {
+                    "levels": ["low", "high", "max", "vendor-custom"],
+                    "min": 128,
+                    "max": 32768,
+                    "x-lts-thinking-note": "keep-thinking",
+                }
+                for model in item.get("models", [])
+            )
+            for item in payload
+            if isinstance(item, dict)
+        ),
+        "updated standard thinking levels without dropping advanced config",
     )
     assert_payload_match(
         state,
@@ -5417,6 +5448,71 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
                 raise AssertionError("Workbench changed legacy displayName routing alias semantics")
             if display_name_inputs.nth(2).input_value() or display_name_inputs.nth(3).input_value():
                 raise AssertionError("Workbench misread legacy routing aliases as display names")
+            first_model = display_name_inputs.first.locator(
+                "xpath=ancestor::div[contains(@class, 'modelEntry')][1]"
+            )
+            first_model.get_by_role("button", name="Expand", exact=True).click()
+            expected_initial_thinking = {
+                "Disable thinking": True,
+                "Low": True,
+                "Automatic": True,
+            }
+            for label, expected_checked in expected_initial_thinking.items():
+                if first_model.get_by_role(
+                    "checkbox", name=label, exact=True
+                ).is_checked() is not expected_checked:
+                    raise AssertionError(
+                        f"Workbench did not parse existing thinking level {label!r}"
+                    )
+            first_model.get_by_role(
+                "checkbox", name="Disable thinking", exact=True
+            ).set_checked(False, force=True)
+            first_model.get_by_role("checkbox", name="Automatic", exact=True).set_checked(
+                False, force=True
+            )
+            first_model.get_by_role("checkbox", name="High", exact=True).set_checked(
+                True, force=True
+            )
+            first_model.get_by_role("checkbox", name="Maximum", exact=True).set_checked(
+                True, force=True
+            )
+            first_model.get_by_text("Advanced thinking JSON", exact=True).click()
+            thinking_textarea = first_model.locator("textarea")
+            updated_thinking = json.loads(thinking_textarea.input_value())
+            if updated_thinking != {
+                "levels": ["low", "high", "max", "vendor-custom"],
+                "min": 128,
+                "max": 32768,
+                "x-lts-thinking-note": "keep-thinking",
+            }:
+                raise AssertionError(
+                    "Workbench thinking selector dropped advanced config: "
+                    f"{updated_thinking!r}"
+                )
+            thinking_textarea.fill("{")
+            first_model.get_by_text(
+                "Enter a valid JSON object before changing standard levels.", exact=True
+            ).wait_for()
+            if not first_model.get_by_role(
+                "checkbox", name="High", exact=True
+            ).is_disabled():
+                raise AssertionError("Invalid advanced thinking JSON did not disable level edits")
+            thinking_textarea.fill(json.dumps(updated_thinking))
+            first_model.get_by_text(
+                "Enter a valid JSON object before changing standard levels.", exact=True
+            ).wait_for(state="detached")
+            if not first_model.get_by_role(
+                "checkbox", name="High", exact=True
+            ).is_checked():
+                raise AssertionError("Thinking levels did not recover after fixing advanced JSON")
+            second_model = display_name_inputs.nth(1).locator(
+                "xpath=ancestor::div[contains(@class, 'modelEntry')][1]"
+            )
+            second_model.get_by_role("button", name="Expand", exact=True).click()
+            second_model.get_by_text(
+                "Not explicitly configured. Core currently defaults to low, medium, and high.",
+                exact=True,
+            ).wait_for()
             display_name_inputs.first.fill("Updated Mock Model")
             display_name_inputs.nth(1).fill("")
             with page.expect_response(

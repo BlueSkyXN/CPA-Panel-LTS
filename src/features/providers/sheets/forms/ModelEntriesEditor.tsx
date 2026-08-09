@@ -1,6 +1,15 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Collapsible } from '@/components/ui/Collapsible';
+import { SelectionCheckbox } from '@/components/ui/SelectionCheckbox';
 import { IconChevronDown, IconPlus, IconX } from '@/components/ui/icons';
+import {
+  parseThinkingJson,
+  readThinkingLevels,
+  THINKING_LEVELS,
+  type ThinkingLevel,
+  updateThinkingLevelsJson,
+} from '../../thinkingLevels';
 import type { ModelEntryInput } from '../../types';
 import styles from './sharedForm.module.scss';
 
@@ -53,6 +62,24 @@ export function ModelEntriesEditor({
       {visible.map((entry, idx) => {
         const expanded = extendedOptions && expandedIdx === idx;
         const hasThinking = (entry.thinkingJson ?? '').trim().length > 0;
+        let thinkingConfig: Record<string, unknown> | undefined;
+        let thinkingJsonInvalid = false;
+        try {
+          thinkingConfig = parseThinkingJson(entry.thinkingJson);
+        } catch {
+          thinkingJsonInvalid = true;
+        }
+        const thinkingLevels = readThinkingLevels(thinkingConfig);
+        const toggleThinkingLevel = (level: ThinkingLevel) => {
+          const nextLevels = thinkingLevels.includes(level)
+            ? thinkingLevels.filter((item) => item !== level)
+            : THINKING_LEVELS.filter(
+                (item) => item === level || thinkingLevels.includes(item)
+              );
+          onUpdate(idx, {
+            thinkingJson: updateThinkingLevelsJson(entry.thinkingJson, nextLevels),
+          });
+        };
         return (
           <div key={idx} className={styles.modelEntry}>
             <div className={styles.modelAliasRow}>
@@ -136,23 +163,63 @@ export function ModelEntriesEditor({
                     <small>{t('providersPage.form.modelImageHint')}</small>
                   </span>
                 </label>
-                <div className={styles.field}>
-                  <label className={styles.label}>
+                <fieldset className={styles.thinkingFieldset}>
+                  <legend className={styles.label}>
                     {t('providersPage.form.thinkingConfig')}
                     <span className={styles.labelHint}>
                       {' '}
                       · {t('providersPage.form.thinkingConfigHint')}
                     </span>
-                  </label>
+                  </legend>
+                  <div className={styles.thinkingLevelGrid}>
+                    {THINKING_LEVELS.map((level) => (
+                      <SelectionCheckbox
+                        key={level}
+                        checked={thinkingLevels.includes(level)}
+                        disabled={mutating || thinkingJsonInvalid}
+                        onChange={() => toggleThinkingLevel(level)}
+                        ariaLabel={t(`providersPage.form.thinkingLevels.${level}`)}
+                        className={`${styles.thinkingLevelOption} ${
+                          thinkingLevels.includes(level)
+                            ? styles.thinkingLevelOptionSelected
+                            : ''
+                        }`}
+                        labelClassName={styles.thinkingLevelLabel}
+                        label={
+                          <>
+                            <span>{t(`providersPage.form.thinkingLevels.${level}`)}</span>
+                            <code>{level}</code>
+                          </>
+                        }
+                      />
+                    ))}
+                  </div>
+                  {!thinkingConfig && !thinkingJsonInvalid && entry.image !== true ? (
+                    <p className={styles.thinkingDefaultHint}>
+                      {t('providersPage.form.thinkingDefaultHint')}
+                    </p>
+                  ) : null}
+                  {thinkingJsonInvalid ? (
+                    <p className={styles.thinkingError} role="alert">
+                      {t('providersPage.form.thinkingInvalidJson')}
+                    </p>
+                  ) : null}
+                </fieldset>
+                <Collapsible
+                  label={t('providersPage.form.thinkingAdvanced')}
+                  hint={t('providersPage.form.thinkingAdvancedHint')}
+                  className={styles.thinkingAdvanced}
+                >
                   <textarea
                     className={styles.textarea}
-                    rows={4}
+                    rows={6}
                     value={entry.thinkingJson ?? ''}
                     onChange={(e) => onUpdate(idx, { thinkingJson: e.target.value })}
                     disabled={mutating}
-                    placeholder={'{"levels":["low","medium","high"]}'}
+                    aria-invalid={thinkingJsonInvalid}
+                    placeholder={'{"levels":["low","high","max"]}'}
                   />
-                </div>
+                </Collapsible>
               </div>
             ) : null}
           </div>

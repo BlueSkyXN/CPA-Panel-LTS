@@ -20,6 +20,7 @@ const [
   qiniuCloud,
   sponsorDefinitions,
   claudeApi,
+  thinkingLevels,
 ] = await Promise.all([
   vite.ssrLoadModule('/src/services/api/transformers.ts'),
   vite.ssrLoadModule('/src/services/api/providers.ts'),
@@ -29,6 +30,7 @@ const [
   vite.ssrLoadModule('/src/features/providers/qiniuCloud.ts'),
   vite.ssrLoadModule('/src/features/providers/sponsorDefinitions.ts'),
   vite.ssrLoadModule('/src/features/providers/claudeApi.ts'),
+  vite.ssrLoadModule('/src/features/providers/thinkingLevels.ts'),
 ]);
 
 test.after(async () => {
@@ -120,4 +122,56 @@ test('recognizes the current and legacy ClaudeAPI gateways without affiliate met
     Object.keys(claudeApi).some((key) => key.toLowerCase().includes('affiliate')),
     false
   );
+});
+
+test('updates standard thinking levels without dropping advanced config', () => {
+  assert.deepEqual(thinkingLevels.THINKING_LEVELS, [
+    'none',
+    'minimal',
+    'low',
+    'medium',
+    'high',
+    'xhigh',
+    'max',
+    'auto',
+  ]);
+
+  const existing = {
+    levels: ['LOW', 'vendor-custom'],
+    min: 128,
+    max: 32768,
+    zero_allowed: true,
+    dynamic_allowed: true,
+    'future-field': { enabled: true },
+  };
+  assert.deepEqual(thinkingLevels.readThinkingLevels(existing), ['none', 'low', 'auto']);
+
+  assert.deepEqual(thinkingLevels.mergeThinkingLevels(existing, ['low', 'high', 'max']), {
+    levels: ['low', 'high', 'max', 'vendor-custom'],
+    min: 128,
+    max: 32768,
+    'future-field': { enabled: true },
+  });
+
+  assert.deepEqual(thinkingLevels.mergeThinkingLevels(existing, []), {
+    levels: ['vendor-custom'],
+    min: 128,
+    max: 32768,
+    'future-field': { enabled: true },
+  });
+  assert.equal(thinkingLevels.mergeThinkingLevels({ levels: ['low'] }, []), undefined);
+});
+
+test('keeps thinking JSON as the editor source of truth', () => {
+  const updated = thinkingLevels.updateThinkingLevelsJson(
+    JSON.stringify({ levels: ['low'], custom: 'keep' }),
+    ['low', 'high', 'max']
+  );
+  assert.deepEqual(JSON.parse(updated), {
+    levels: ['low', 'high', 'max'],
+    custom: 'keep',
+  });
+  assert.equal(thinkingLevels.updateThinkingLevelsJson('', []), '');
+  assert.throws(() => thinkingLevels.parseThinkingJson('[]'), /JSON object/);
+  assert.throws(() => thinkingLevels.parseThinkingJson('{'), SyntaxError);
 });
