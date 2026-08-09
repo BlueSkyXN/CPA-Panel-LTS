@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Codex Quota Compass
 // @namespace    https://github.com/BlueSkyXN/CPA-Panel-LTS
-// @version      0.1.15
+// @version      0.1.20
 // @description  在 ChatGPT Codex Cloud 页面直接查看 Codex 额度窗口、周额度估算和 daily analytics 汇总。
 // @author       BlueSkyXN
 // @match        https://chatgpt.com/codex/cloud*
@@ -21,6 +21,8 @@
     ANALYTICS_FETCH_DAYS: 360,
     ROLLING_DAYS: 30,
     USD_PER_CREDIT: 40 / 1000,
+    // 默认不在面板中显示完整邮箱；邮箱仍用于 Team leaderboard 匹配。
+    SHOW_ACCOUNT_EMAIL: false,
 
     // 仅在自动 session 取不到 access token 时，才建议在自己电脑临时填写。
     // 不要把填过 token 的脚本、截图或导出结果发给别人。
@@ -33,6 +35,9 @@
     ME_PATH: '/backend-api/me',
     SESSION_PATH: '/api/auth/session',
   };
+
+  // 与 metadata 的 @version 保持同步；userscript 在 @grant none 下没有 GM_info。
+  const APP_VERSION = '0.1.20';
 
   const DAY_MS = 24 * 60 * 60 * 1000;
   const FIVE_HOUR_SECONDS = 5 * 60 * 60;
@@ -79,6 +84,9 @@
     return null;
   };
 
+  const displayEmail = (email) =>
+    CONFIG.SHOW_ACCOUNT_EMAIL ? normalizeString(email) : null;
+
   const normalizePlanType = (value) => {
     const normalized = normalizeString(value);
     return normalized ? normalized.toLowerCase() : null;
@@ -97,6 +105,23 @@
 
   const formatInteger = (value) => new Intl.NumberFormat(undefined).format(Math.round(num(value)));
   const formatUsd = (value) => `$${num(value).toFixed(2)}`;
+
+  const formatCompact = (value) =>
+    new Intl.NumberFormat(undefined, {
+      notation: 'compact',
+      maximumFractionDigits: 1,
+    }).format(num(value));
+
+  const formatPercent = (ratio, digits = 1) =>
+    ratio === null || ratio === undefined ? '--' : `${(num(ratio) * 100).toFixed(digits)}%`;
+
+  const cacheHitRatio = (cached, uncached) => {
+    const input = num(cached) + num(uncached);
+    return input > 0 ? num(cached) / input : null;
+  };
+
+  const usdPerMillionTokens = (usd, tokens) =>
+    num(tokens) > 0 ? (num(usd) / num(tokens)) * 1e6 : null;
 
   const ymdUtc = (ms) => new Date(ms).toISOString().slice(0, 10);
 
@@ -753,6 +778,12 @@
           credits: round(dayCredits, 6),
           usd: round(dayCredits * CONFIG.USD_PER_CREDIT, 2),
           tokens: Math.round(tokenTotal(totals)),
+          cachedInputTokens: Math.round(
+            num(totals.cached_text_input_tokens ?? totals.cachedTextInputTokens)
+          ),
+          uncachedInputTokens: Math.round(
+            num(totals.uncached_text_input_tokens ?? totals.uncachedTextInputTokens)
+          ),
           threads: Math.round(num(totals.threads)),
           turns: Math.round(num(totals.turns)),
         };
@@ -764,8 +795,10 @@
     const email = normalizeString(row.email);
     const name = normalizeString(row.name);
     const userId = normalizeString(row.user_id ?? row.userId);
-    if (name && email) return `${name} <${email}>`;
-    return email || name || userId || 'UNKNOWN';
+    const visibleEmail = displayEmail(email);
+    if (name && visibleEmail) return `${name} <${visibleEmail}>`;
+    if (CONFIG.SHOW_ACCOUNT_EMAIL) return visibleEmail || name || userId || 'UNKNOWN';
+    return name || '用户';
   };
 
   const pickLeaderboardUserRow = (rows, currentEmail) => {
@@ -809,13 +842,13 @@
     );
     if (matchedRows.length === 0) {
       throw createTypedError(
-        `Team 用量排行榜没有找到当前邮箱 ${currentEmail} 的记录。`,
+        'Team 用量排行榜没有找到当前账号的记录。',
         'team-leaderboard-integrity'
       );
     }
     if (matchedRows.length > 1) {
       throw createTypedError(
-        `Team 用量排行榜包含多条 ${currentEmail} 记录，无法可靠选择个人用量。`,
+        'Team 用量排行榜包含多条当前账号记录，无法可靠选择个人用量。',
         'team-leaderboard-integrity'
       );
     }
@@ -862,10 +895,12 @@
       leaderboardTotalUsd: round(credits * CONFIG.USD_PER_CREDIT, 2),
       matchedEmail: normalizeString(currentEmail),
       matchedUserFound: Boolean(currentUser),
-      topClients: rows.slice(0, TOP_CLIENT_LIMIT).map((row) => {
+      topClients: rows.slice(0, TOP_CLIENT_LIMIT).map((row, index) => {
         const rowCredits = num(row.credits);
         return {
-          clientId: leaderboardUserLabel(row),
+          clientId: CONFIG.SHOW_ACCOUNT_EMAIL
+            ? leaderboardUserLabel(row)
+            : normalizeString(row.name) || `用户 ${index + 1}`,
           credits: round(rowCredits, 6),
           usd: round(rowCredits * CONFIG.USD_PER_CREDIT, 2),
           tokens: Math.round(num(row.text_tokens ?? row.textTokens)),
@@ -1294,9 +1329,9 @@
     const recent = days.slice(-14).reverse();
     return `
       <div class="cqc-table-note">最近 ${recent.length} 个有数据日期</div>
-      <div class="cqc-table">
+      <div class="cqc-table cqc-table-daily">
         <div class="cqc-table-head">
-          <span>Date</span><span>Credits</span><span>USD</span><span>Turns</span>
+          <span>Date</span><span>Credits</span><span>USD</span><span>Tokens</span><span>缓存</span>
         </div>
         ${recent
           .map(
@@ -1305,12 +1340,211 @@
                 <span>${escapeHtml(day.date)}</span>
                 <span>${formatNumber(day.credits, 2)}</span>
                 <span>${formatUsd(day.usd)}</span>
-                <span>${formatInteger(day.turns)}</span>
+                <span>${formatCompact(day.tokens)}</span>
+                <span>${formatPercent(cacheHitRatio(day.cachedInputTokens, day.uncachedInputTokens))}</span>
               </div>
             `
           )
           .join('')}
       </div>
+    `;
+  };
+
+  const buildDailyUsageSeries = (range) => {
+    if (!range?.startDate || !range?.endDateExclusive) return [];
+    const startMs = Date.parse(`${range.startDate}T00:00:00Z`);
+    const endMs = Date.parse(`${range.endDateExclusive}T00:00:00Z`);
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return [];
+
+    const creditsByDate = new Map();
+    for (const day of range.days ?? []) {
+      if (day.date) creditsByDate.set(day.date, num(day.credits));
+    }
+
+    const values = [];
+    for (let ms = startMs; ms < endMs; ms += DAY_MS) {
+      const date = ymdUtc(ms);
+      values.push({ date, credits: creditsByDate.get(date) ?? 0 });
+    }
+    return values;
+  };
+
+  const buildUsageHeatScale = (dayValues) => {
+    const nonzero = dayValues
+      .map((item) => num(item.credits))
+      .filter((value) => value > 0)
+      .sort((left, right) => left - right);
+    const maxValue = nonzero[nonzero.length - 1] ?? 0;
+    if (maxValue <= 0) {
+      return { thresholds: null, maxValue: 0, mode: 'empty', nonzeroDays: 0 };
+    }
+
+    if (nonzero.length < 4) {
+      return {
+        thresholds: [maxValue * 0.25, maxValue * 0.5, maxValue * 0.75],
+        maxValue,
+        mode: 'linear',
+        nonzeroDays: nonzero.length,
+      };
+    }
+
+    const quantile = (p) =>
+      nonzero[Math.min(nonzero.length - 1, Math.floor(p * nonzero.length))];
+    return {
+      thresholds: [quantile(0.5), quantile(0.75), quantile(0.9)],
+      maxValue,
+      mode: 'percentile',
+      nonzeroDays: nonzero.length,
+    };
+  };
+
+  const usageHeatLevel = (credits, scale) => {
+    const value = num(credits);
+    if (value <= 0) return 0;
+    if (!scale?.thresholds) {
+      return scale?.maxValue > 0
+        ? clamp(Math.ceil((value / scale.maxValue) * 4), 1, 4)
+        : 0;
+    }
+    if (value <= scale.thresholds[0]) return 1;
+    if (value <= scale.thresholds[1]) return 2;
+    if (value <= scale.thresholds[2]) return 3;
+    return 4;
+  };
+
+  const heatScaleDescription = (scale) => {
+    if (!scale?.thresholds) return '当前窗口没有非零 credits；全部显示为 0 档。';
+    const [low, medium, high] = scale.thresholds;
+    if (scale.mode === 'linear') {
+      return `非零样本不足 4 天，按最大值等比分级：25% ${formatNumber(low, 2)} · 50% ${formatNumber(medium, 2)} · 75% ${formatNumber(high, 2)} credits`;
+    }
+    return `非零日动态门槛：P50 ${formatNumber(low, 2)} · P75 ${formatNumber(medium, 2)} · P90 ${formatNumber(high, 2)} credits`;
+  };
+
+  const HEAT_WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+
+  const bindHeatmapTooltip = (shadow) => {
+    const tip = shadow.querySelector('.cqc-tip');
+    if (!tip) return;
+    const tipTitle = tip.querySelector('strong');
+    const tipText = tip.querySelector('.cqc-tip-text');
+    const tipDot = tip.querySelector('.cqc-tip-dot');
+
+    const hideTip = () => {
+      tip.hidden = true;
+    };
+
+    const showTip = (cell) => {
+      const date = cell.dataset.date;
+      if (!date) return;
+      const level = Number(cell.dataset.level ?? 0);
+      const credits = num(cell.dataset.credits);
+      const dow = new Date(`${date}T00:00:00Z`).getUTCDay();
+      tipTitle.textContent = `${date} · ${HEAT_WEEKDAYS[dow]}`;
+      tipText.textContent = `${formatNumber(credits, 2)} credits · ${level === 0 ? '0 档' : `强度 L${level}`}`;
+      tipDot.className = `cqc-tip-dot level-${level}`;
+
+      tip.hidden = false;
+      const rect = cell.getBoundingClientRect();
+      const tipRect = tip.getBoundingClientRect();
+      const left = clamp(
+        rect.left + rect.width / 2 - tipRect.width / 2,
+        6,
+        Math.max(6, window.innerWidth - tipRect.width - 6)
+      );
+      let top = rect.top - tipRect.height - 7;
+      if (top < 4) top = rect.bottom + 7;
+      tip.style.left = `${Math.round(left)}px`;
+      tip.style.top = `${Math.round(top)}px`;
+    };
+
+    shadow.addEventListener('mouseover', (event) => {
+      const cell =
+        event.target instanceof Element
+          ? event.target.closest('.cqc-heatmap-cell[data-date]')
+          : null;
+      if (cell && shadow.contains(cell)) {
+        showTip(cell);
+      } else {
+        hideTip();
+      }
+    });
+    shadow.addEventListener('scroll', hideTip, { capture: true, passive: true });
+    window.addEventListener('scroll', hideTip, { capture: true, passive: true });
+    window.addEventListener('resize', hideTip, { passive: true });
+  };
+
+  const renderUsageHeatmap = (range) => {
+    const dayValues = buildDailyUsageSeries(range);
+    if (dayValues.length === 0) return '';
+
+    const scale = buildUsageHeatScale(dayValues);
+    const startDow = new Date(`${dayValues[0].date}T00:00:00Z`).getUTCDay();
+    const columns = Math.ceil((startDow + dayValues.length) / 7);
+    const leadingCells = Array.from(
+      { length: startDow },
+      () => '<span class="cqc-heatmap-cell placeholder" aria-hidden="true"></span>'
+    ).join('');
+    const monthMarkers = [];
+    let lastMonth = '';
+    dayValues.forEach((item, index) => {
+      const month = item.date.slice(0, 7);
+      if (month === lastMonth) return;
+      lastMonth = month;
+      monthMarkers.push({
+        column: Math.floor((startDow + index) / 7) + 1,
+        label: `${Number(item.date.slice(5, 7))}月`,
+      });
+    });
+
+    const cells = dayValues
+      .map((item) => {
+        const level = usageHeatLevel(item.credits, scale);
+        return `<span class="cqc-heatmap-cell level-${level}" data-date="${item.date}" data-credits="${item.credits}" data-level="${level}" aria-hidden="true"></span>`;
+      })
+      .join('');
+    const thresholdDescription = heatScaleDescription(scale);
+
+    return `
+      <section class="cqc-heatmap-card">
+        <div class="cqc-heatmap-head">
+          <div>
+            <strong>近 ${formatInteger(dayValues.length)} 天日用量</strong>
+            <span>Credits · UTC 日期桶</span>
+          </div>
+          <em>5 档（含 0 档）</em>
+        </div>
+        <div
+          class="cqc-heatmap-scroll"
+          role="img"
+          tabindex="0"
+          aria-label="${escapeHtml(`近 ${dayValues.length} 天日用量点阵图。${thresholdDescription}`)}"
+        >
+          <div class="cqc-heatmap-inner" style="--cqc-heatmap-columns:${columns}">
+            <div class="cqc-heatmap-months" aria-hidden="true">
+              ${monthMarkers
+                .map(
+                  (marker) =>
+                    `<span style="grid-column:${marker.column} / span ${Math.min(4, columns - marker.column + 1)}">${escapeHtml(marker.label)}</span>`
+                )
+                .join('')}
+            </div>
+            <div class="cqc-heatmap-grid" aria-hidden="true">${leadingCells}${cells}</div>
+          </div>
+        </div>
+        <div class="cqc-heatmap-meta">
+          <span>${escapeHtml(thresholdDescription)}</span>
+          <div class="cqc-heatmap-legend" aria-label="颜色从少到多，共 5 档">
+            <span>少</span>
+            ${Array.from(
+              { length: 5 },
+              (_, level) =>
+                `<i class="cqc-heatmap-cell level-${level}" title="${level === 0 ? '0 credits' : `强度 L${level}`}" aria-hidden="true"></i>`
+            ).join('')}
+            <span>多</span>
+          </div>
+        </div>
+      </section>
     `;
   };
 
@@ -1321,6 +1555,17 @@
       ? `${formatUsd(range.usd)} · workspace ${formatNumber(range.leaderboardTotalCredits, 2)}`
       : `${formatUsd(range.usd)}`;
     const detailSummary = isLeaderboard ? 'Team 用户排行' : '客户端与最近每日明细';
+    const cacheRatio = cacheHitRatio(range.cachedInputTokens, range.uncachedInputTokens);
+    const cacheHint =
+      cacheRatio === null
+        ? '数据源无缓存明细'
+        : `cached ${formatCompact(range.cachedInputTokens)}`;
+    const inputTokens = range.cachedInputTokens + range.uncachedInputTokens;
+    const tokenSplitHint =
+      inputTokens > 0 || range.outputTokens > 0
+        ? `input ${formatCompact(inputTokens)} · output ${formatCompact(range.outputTokens)}`
+        : '数据源无输入/输出明细';
+    const usdPerMillion = usdPerMillionTokens(range.usd, range.tokens);
 
     return `
       <article class="cqc-range${range.id === 'history' ? ' history' : ''}">
@@ -1341,6 +1586,16 @@
             <span>Tokens</span>
             <strong>${formatInteger(range.tokens)}</strong>
             <small>${formatInteger(range.turns)} turns</small>
+          </div>
+          <div>
+            <span>缓存命中率</span>
+            <strong>${formatPercent(cacheRatio)}</strong>
+            <small>${escapeHtml(cacheHint)}</small>
+          </div>
+          <div>
+            <span>混合成本</span>
+            <strong>${usdPerMillion === null ? '--' : `$${num(usdPerMillion).toFixed(4)}`}</strong>
+            <small>${escapeHtml(tokenSplitHint)}</small>
           </div>
         </div>
         <details>
@@ -1375,6 +1630,13 @@
     const fiveHourWindow = result.windows.find((item) => item.id === 'codex-five-hour');
     const weeklyEstimate = result.analytics?.weeklyEstimate ?? null;
     const historyRange = result.analytics?.ranges?.find((range) => range.id === 'history') ?? null;
+    const heatmapBlock = historyRange ? renderUsageHeatmap(historyRange) : '';
+    const visibleEmail = displayEmail(result.userEmail);
+    const currentAccountLabel = visibleEmail
+      ? result.meInfo?.name
+        ? `${result.meInfo.name} <${visibleEmail}>`
+        : visibleEmail
+      : result.meInfo?.name || (result.userEmail ? '邮箱已隐藏' : '-');
     const remainingLabel = (windowInfo) =>
       windowInfo?.remainingPercent === null || windowInfo?.remainingPercent === undefined
         ? '--'
@@ -1445,7 +1707,7 @@
         <div class="cqc-identity">
           <div class="cqc-plan-row">
             <strong>${escapeHtml(getPlanLabel(result.planType))}</strong>
-            <span class="cqc-account" title="${escapeHtml(result.userEmail || '')}">${escapeHtml(result.userEmail || '未返回账号')}</span>
+            ${visibleEmail ? `<span class="cqc-account" title="${escapeHtml(visibleEmail)}">${escapeHtml(visibleEmail)}</span>` : ''}
           </div>
           <div class="cqc-utility-row">
             <span><b>手动重置</b>${escapeHtml(resetCreditsLabel)}</span>
@@ -1493,6 +1755,7 @@
         </div>
         ${coverageBlock}
         ${result.analyticsError ? `<div class="cqc-warning">${escapeHtml(result.analyticsError)}</div>` : ''}
+        ${heatmapBlock}
         <div class="cqc-ranges">
           ${(result.analytics?.ranges ?? []).map(renderRange).join('')}
         </div>
@@ -1501,7 +1764,7 @@
           <div class="cqc-facts">
             ${renderFact('日期桶', result.analytics?.dateBucket ?? 'UTC', 'daily analytics 按 UTC 日期桶聚合')}
             ${renderFact('数据来源', `${analyticsSourceLabel(result.analytics?.source)}${result.analytics?.requestCount ? ` · ${result.analytics.requestCount} 次请求` : ''}`)}
-            ${renderFact('当前账号', result.meInfo?.name && result.userEmail ? `${result.meInfo.name} <${result.userEmail}>` : result.userEmail || '-')}
+            ${renderFact('当前账号', currentAccountLabel)}
             ${renderFact('Team role', teamRoleLabel(result), result.meError ? `me error: ${result.meError}` : '')}
             ${renderFact('用户时区', result.analytics?.userTimeZone ?? getUserTimeZone())}
             ${renderFact('后端当前', result.analytics?.backendNowLabel ?? '-', result.analytics?.backendNowUtcLabel ? `UTC: ${result.analytics.backendNowUtcLabel}` : '')}
@@ -1569,10 +1832,12 @@
     const body = shadow.querySelector('.cqc-body');
     const status = shadow.querySelector('.cqc-status');
     const exportButton = shadow.querySelector('.cqc-export');
-    if (!panel || !body || !status || !exportButton) return;
+    const shareButton = shadow.querySelector('.cqc-share');
+    if (!panel || !body || !status || !exportButton || !shareButton) return;
 
     panel.hidden = !state.panelOpen;
     exportButton.disabled = !state.result;
+    shareButton.disabled = !state.result;
     status.textContent = resolveStatusText();
 
     if (!state.panelOpen) {
@@ -1645,6 +1910,656 @@
     }, 1000);
   };
 
+  // ===== SHARE CARD MODULE START =====
+  // 分享卡片：从 state.result 提取数据，用 Canvas 2D 手工绘制竖版战报卡并导出 PNG。
+  // 该模块复用上方的格式化和日用量分级助手，绘制逻辑保持自包含，便于提取到独立 harness 做视觉验证。
+
+  const SHARE_CARD_FONT =
+    'ui-sans-serif, system-ui, -apple-system, "SF Pro Text", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif';
+  const SHARE_CARD_WIDTH = 750;
+  const SHARE_CARD_PAD = 40;
+  const SHARE_CARD_SCALE = 2;
+  const SHARE_CARD_GAP = 14;
+
+  const SHARE_CARD_THEMES = {
+    dark: {
+      bg: '#101013',
+      glow1: 'rgba(191, 90, 242, 0.18)',
+      glow2: 'rgba(0, 122, 255, 0.15)',
+      glow3: 'rgba(255, 55, 95, 0.10)',
+      surface: 'rgba(255, 255, 255, 0.045)',
+      surfaceBorder: 'rgba(255, 255, 255, 0.09)',
+      text: '#f5f5f7',
+      muted: '#a1a1a6',
+      faint: '#6e6e73',
+      accent: '#0a84ff',
+      accentSoft: 'rgba(10, 132, 255, 0.16)',
+      track: 'rgba(255, 255, 255, 0.10)',
+      ringTrack: 'rgba(255, 255, 255, 0.10)',
+      heat: ['rgba(255, 255, 255, 0.055)', '#0c3a63', '#0a6ee0', '#5e5ce6', '#bf5af2'],
+      barFrom: '#0a84ff',
+      barTo: '#bf5af2',
+    },
+    light: {
+      bg: '#f5f5f7',
+      glow1: 'rgba(191, 90, 242, 0.12)',
+      glow2: 'rgba(0, 122, 255, 0.12)',
+      glow3: 'rgba(255, 55, 95, 0.08)',
+      surface: 'rgba(255, 255, 255, 0.88)',
+      surfaceBorder: 'rgba(0, 0, 0, 0.08)',
+      text: '#1d1d1f',
+      muted: '#6e6e73',
+      faint: '#a1a1a6',
+      accent: '#007aff',
+      accentSoft: 'rgba(0, 122, 255, 0.10)',
+      track: 'rgba(0, 0, 0, 0.08)',
+      ringTrack: 'rgba(0, 0, 0, 0.08)',
+      heat: ['rgba(0, 0, 0, 0.055)', '#a8d4ff', '#4aa3ff', '#5e5ce6', '#bf5af2'],
+      barFrom: '#007aff',
+      barTo: '#bf5af2',
+    },
+  };
+
+  const shareLocalYmd = (ms) => {
+    const date = new Date(ms);
+    if (Number.isNaN(date.getTime())) return '';
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
+      date.getDate()
+    ).padStart(2, '0')}`;
+  };
+
+  const buildShareCardModel = (result) => {
+    const weeklyWindow = result.windows.find((item) => item.id === 'codex-weekly') ?? null;
+    const fiveHourWindow = result.windows.find((item) => item.id === 'codex-five-hour') ?? null;
+    const analytics = result.analytics ?? null;
+    const weeklyEstimate = analytics?.weeklyEstimate ?? null;
+    const rollingRange = analytics?.ranges?.find((range) => range.id === 'rolling') ?? null;
+    const historyRange = analytics?.ranges?.find((range) => range.id === 'history') ?? null;
+    const rollingDayValues = rollingRange && historyRange ? buildDailyUsageSeries(rollingRange) : [];
+    const historyDayValues = historyRange ? buildDailyUsageSeries(historyRange) : [];
+    const historyHeatScale = buildUsageHeatScale(historyDayValues);
+
+    const remainingPercentLabel = (windowInfo) =>
+      windowInfo?.remainingPercent === null || windowInfo?.remainingPercent === undefined
+        ? '--'
+        : `${Math.round(windowInfo.remainingPercent)}%`;
+
+    const rangeKpis = (range) => {
+      const cacheRatio = cacheHitRatio(range.cachedInputTokens, range.uncachedInputTokens);
+      const usdPerMillion = usdPerMillionTokens(range.usd, range.tokens);
+      return {
+        credits: formatNumber(range.credits, 2),
+        creditsHint: formatUsd(range.usd),
+        tokens: formatInteger(range.tokens),
+        tokensHint: `${formatInteger(range.turns)} turns`,
+        cacheRatio: formatPercent(cacheRatio),
+        cacheHint:
+          cacheRatio === null
+            ? '数据源无缓存明细'
+            : `cached ${formatCompact(range.cachedInputTokens)} / input ${formatCompact(
+                range.cachedInputTokens + range.uncachedInputTokens
+              )}`,
+        usdPerMillion: usdPerMillion === null ? '--' : formatUsd(usdPerMillion),
+      };
+    };
+
+    return {
+      version: APP_VERSION,
+      generatedAtMs: Date.parse(result.fetchedAt),
+      dateLabel: shareLocalYmd(Date.parse(result.fetchedAt)),
+      planLabel: getPlanLabel(result.planType),
+      sourceLabel: analyticsSourceLabel(analytics?.source),
+      isTeamSource: analytics?.source === 'team-leaderboard',
+      weekly: weeklyWindow
+        ? {
+            remainingPercent: weeklyWindow.remainingPercent,
+            remainingLabel: remainingPercentLabel(weeklyWindow),
+            resetLabel: weeklyWindow.resetLabel || '-',
+          }
+        : null,
+      fiveHour: fiveHourWindow
+        ? {
+            remainingPercent: fiveHourWindow.remainingPercent,
+            remainingLabel: remainingPercentLabel(fiveHourWindow),
+            resetInLabel:
+              fiveHourWindow.resetInLabel && fiveHourWindow.resetInLabel !== '-'
+                ? `${fiveHourWindow.resetInLabel}后重置`
+                : '重置时间未知',
+          }
+        : null,
+      resetCredits:
+        result.rateLimitResetCreditsAvailableCount === null ||
+        result.rateLimitResetCreditsAvailableCount === undefined
+          ? '--'
+          : `${formatInteger(result.rateLimitResetCreditsAvailableCount)} 次可用`,
+      estimate: weeklyEstimate
+        ? {
+            total: formatInteger(weeklyEstimate.totalCreditsWithResetDay),
+            usd: formatUsd(weeklyEstimate.totalUsdWithResetDay),
+            subLabel: weeklyEstimate.source
+              ? `Team leaderboard 口径 · 剩余约 ${formatInteger(
+                  weeklyEstimate.remainingCreditsWithResetDay
+                )} credits`
+              : `区间 ${formatInteger(weeklyEstimate.totalCreditsWithoutResetDay)} ~ ${formatInteger(
+                  weeklyEstimate.totalCreditsWithResetDay
+                )}（不含 ~ 含重置日）· 剩余约 ${formatInteger(
+                  weeklyEstimate.remainingCreditsWithResetDay
+                )} credits`,
+          }
+        : null,
+      rolling: rollingRange
+        ? {
+            label: rollingRange.label,
+            dateLabel: rangeDateLabel(rollingRange),
+            kpis: rangeKpis(rollingRange),
+            dayValues: rollingDayValues,
+          }
+        : null,
+      history: historyRange
+        ? {
+            label: historyRange.label,
+            dateLabel: rangeDateLabel(historyRange),
+            kpis: rangeKpis(historyRange),
+            activeDays: formatInteger(historyRange.returnedDays),
+            fetchWindowDays: analytics?.fetchWindowDays ?? null,
+            firstDate: historyRange.firstDate || '',
+            lastDate: historyRange.lastDate || '',
+            dayValues: historyDayValues,
+            heatScale: historyHeatScale,
+          }
+        : null,
+    };
+  };
+
+  const shareRoundRectPath = (ctx, x, y, width, height, radius) => {
+    const r = Math.min(radius, width / 2, height / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + width, y, x + width, y + height, r);
+    ctx.arcTo(x + width, y + height, x, y + height, r);
+    ctx.arcTo(x, y + height, x, y, r);
+    ctx.arcTo(x, y, x + width, y, r);
+    ctx.closePath();
+  };
+
+  const shareFillRoundRect = (ctx, x, y, width, height, radius, fill) => {
+    shareRoundRectPath(ctx, x, y, width, height, radius);
+    ctx.fillStyle = fill;
+    ctx.fill();
+  };
+
+  const shareText = (ctx, text, x, y, options = {}) => {
+    const { size = 13, weight = 400, color, align = 'left', baseline = 'alphabetic' } = options;
+    ctx.save();
+    ctx.font = `${weight} ${size}px ${SHARE_CARD_FONT}`;
+    ctx.fillStyle = color;
+    ctx.textAlign = align;
+    ctx.textBaseline = baseline;
+    ctx.fillText(String(text), x, y);
+    ctx.restore();
+  };
+
+  const shareGlow = (ctx, cx, cy, radius, color) => {
+    const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+    gradient.addColorStop(0, color);
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
+  };
+
+  const shareSurface = (ctx, x, y, width, height, theme) => {
+    shareFillRoundRect(ctx, x, y, width, height, 18, theme.surface);
+    shareRoundRectPath(ctx, x + 0.5, y + 0.5, width - 1, height - 1, 17.5);
+    ctx.strokeStyle = theme.surfaceBorder;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  };
+
+  const shareSlimBar = (ctx, x, y, width, height, percent, theme) => {
+    shareFillRoundRect(ctx, x, y, width, height, height / 2, theme.track);
+    if (percent === null || percent === undefined) return;
+    const ratio = clamp(percent, 0, 100) / 100;
+    if (ratio <= 0) return;
+    const gradient = ctx.createLinearGradient(x, y, x + width, y);
+    gradient.addColorStop(0, theme.barFrom);
+    gradient.addColorStop(1, theme.barTo);
+    shareFillRoundRect(ctx, x, y, Math.max(height, width * ratio), height, height / 2, gradient);
+  };
+
+  const shareKpiCell = (ctx, x, y, label, value, hint, theme) => {
+    shareText(ctx, label, x, y, { size: 10, color: theme.muted });
+    shareText(ctx, value, x, y + 25, { size: 17, weight: 700, color: theme.text });
+    if (hint) {
+      shareText(ctx, hint, x, y + 41, { size: 9, color: theme.faint });
+    }
+  };
+
+  const shareKpiRow = (ctx, x, y, width, cells, theme) => {
+    const cellWidth = width / cells.length;
+    cells.forEach((cell, index) => {
+      shareKpiCell(ctx, x + index * cellWidth, y, cell.label, cell.value, cell.hint, theme);
+    });
+  };
+
+  const shareSectionHead = (ctx, x, y, width, title, sideLabel, theme) => {
+    shareText(ctx, title, x, y, { size: 14, weight: 700, color: theme.text });
+    if (sideLabel) {
+      shareText(ctx, sideLabel, x + width, y, { size: 10, color: theme.faint, align: 'right' });
+    }
+  };
+
+  const drawShareCardHeader = (ctx, x, y, width, height, model, theme) => {
+    shareText(ctx, 'Codex Quota Compass', x, y + 26, { size: 20, weight: 700, color: theme.text });
+    shareText(ctx, `Codex 额度战报 · ${model.dateLabel}`, x, y + 48, {
+      size: 12,
+      color: theme.muted,
+    });
+
+    ctx.save();
+    ctx.font = `600 12px ${SHARE_CARD_FONT}`;
+    const badgeWidth = ctx.measureText(model.planLabel).width + 24;
+    ctx.restore();
+    const badgeX = x + width - badgeWidth;
+    const badgeY = y + 12;
+    shareFillRoundRect(ctx, badgeX, badgeY, badgeWidth, 26, 13, theme.accentSoft);
+    shareText(ctx, model.planLabel, badgeX + badgeWidth / 2, badgeY + 13, {
+      size: 12,
+      weight: 600,
+      color: theme.accent,
+      align: 'center',
+      baseline: 'middle',
+    });
+  };
+
+  const drawShareCardHero = (ctx, x, y, width, height, model, theme) => {
+    shareSurface(ctx, x, y, width, height, theme);
+
+    const ringCx = x + 32 + 50;
+    const ringCy = y + height / 2;
+    const ringRadius = 50;
+    ctx.save();
+    ctx.lineWidth = 10;
+    ctx.strokeStyle = theme.ringTrack;
+    ctx.beginPath();
+    ctx.arc(ringCx, ringCy, ringRadius, 0, Math.PI * 2);
+    ctx.stroke();
+    const percent = model.weekly?.remainingPercent;
+    if (percent !== null && percent !== undefined) {
+      const gradient = ctx.createLinearGradient(
+        ringCx - ringRadius,
+        ringCy - ringRadius,
+        ringCx + ringRadius,
+        ringCy + ringRadius
+      );
+      gradient.addColorStop(0, '#0a84ff');
+      gradient.addColorStop(0.55, '#5e5ce6');
+      gradient.addColorStop(1, '#bf5af2');
+      ctx.strokeStyle = gradient;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(
+        ringCx,
+        ringCy,
+        ringRadius,
+        -Math.PI / 2,
+        -Math.PI / 2 + (clamp(percent, 0, 100) / 100) * Math.PI * 2
+      );
+      ctx.stroke();
+    }
+    ctx.restore();
+    shareText(ctx, model.weekly?.remainingLabel ?? '--', ringCx, ringCy - 2, {
+      size: 24,
+      weight: 700,
+      color: theme.text,
+      align: 'center',
+      baseline: 'middle',
+    });
+    shareText(ctx, '7 天剩余', ringCx, ringCy + 18, {
+      size: 10,
+      color: theme.muted,
+      align: 'center',
+      baseline: 'middle',
+    });
+
+    const rightX = x + 32 + 50 * 2 + 36;
+    const rightWidth = x + width - 28 - rightX;
+    const rowY = y + 34;
+
+    shareText(ctx, '5 小时剩余', rightX, rowY, { size: 12, color: theme.muted });
+    shareText(ctx, model.fiveHour?.remainingLabel ?? '--', rightX + rightWidth, rowY, {
+      size: 15,
+      weight: 700,
+      color: theme.text,
+      align: 'right',
+    });
+    shareSlimBar(ctx, rightX, rowY + 10, rightWidth, 7, model.fiveHour?.remainingPercent, theme);
+    shareText(ctx, model.fiveHour?.resetInLabel ?? '-', rightX, rowY + 34, {
+      size: 10,
+      color: theme.faint,
+    });
+
+    shareText(ctx, '7 天重置', rightX, rowY + 62, { size: 12, color: theme.muted });
+    shareText(ctx, model.weekly?.resetLabel ?? '-', rightX + rightWidth, rowY + 62, {
+      size: 12,
+      weight: 600,
+      color: theme.text,
+      align: 'right',
+    });
+
+    shareText(ctx, '手动重置', rightX, rowY + 90, { size: 12, color: theme.muted });
+    shareText(ctx, model.resetCredits, rightX + rightWidth, rowY + 90, {
+      size: 12,
+      weight: 600,
+      color: theme.text,
+      align: 'right',
+    });
+  };
+
+  const drawShareCardEstimate = (ctx, x, y, width, height, model, theme) => {
+    shareSurface(ctx, x, y, width, height, theme);
+    const innerX = x + 24;
+    const innerWidth = width - 48;
+
+    shareText(ctx, '周额度预计', innerX, y + 32, { size: 13, weight: 700, color: theme.text });
+    shareText(ctx, '按使用比例反推 · 估算值', innerX + innerWidth, y + 32, {
+      size: 10,
+      color: theme.faint,
+      align: 'right',
+    });
+
+    shareText(ctx, `~${model.estimate.total}`, innerX, y + 72, {
+      size: 30,
+      weight: 700,
+      color: theme.text,
+    });
+    ctx.save();
+    ctx.font = `700 30px ${SHARE_CARD_FONT}`;
+    const totalWidth = ctx.measureText(`~${model.estimate.total}`).width;
+    ctx.restore();
+    shareText(ctx, ' credits', innerX + totalWidth + 4, y + 72, { size: 14, color: theme.muted });
+    shareText(ctx, `≈ ${model.estimate.usd}`, innerX + innerWidth, y + 72, {
+      size: 16,
+      weight: 700,
+      color: theme.accent,
+      align: 'right',
+    });
+
+    shareText(ctx, model.estimate.subLabel, innerX, y + 96, { size: 11, color: theme.muted });
+  };
+
+  const drawShareCardBarChart = (ctx, x, y, width, height, dayValues, theme) => {
+    const maxValue = Math.max(...dayValues.map((item) => item.credits), 0.0001);
+    const gap = 3;
+    const barWidth = (width - gap * (dayValues.length - 1)) / dayValues.length;
+    const gradient = ctx.createLinearGradient(0, y, 0, y + height);
+    gradient.addColorStop(0, theme.barTo);
+    gradient.addColorStop(1, theme.barFrom);
+
+    dayValues.forEach((item, index) => {
+      const barX = x + index * (barWidth + gap);
+      if (item.credits <= 0) {
+        shareFillRoundRect(ctx, barX, y + height - 2, barWidth, 2, 1, theme.track);
+        return;
+      }
+      const barHeight = Math.max(3, (item.credits / maxValue) * height);
+      shareFillRoundRect(
+        ctx,
+        barX,
+        y + height - barHeight,
+        barWidth,
+        barHeight,
+        Math.min(3, barWidth / 2),
+        gradient
+      );
+    });
+  };
+
+  const drawShareCardRolling = (ctx, x, y, width, height, model, theme) => {
+    shareSurface(ctx, x, y, width, height, theme);
+    const innerX = x + 24;
+    const innerWidth = width - 48;
+    const rolling = model.rolling;
+
+    shareSectionHead(ctx, innerX, y + 32, innerWidth, rolling.label, rolling.dateLabel, theme);
+    shareKpiRow(
+      ctx,
+      innerX,
+      y + 54,
+      innerWidth,
+      [
+        { label: 'Credits', value: rolling.kpis.credits, hint: rolling.kpis.creditsHint },
+        { label: 'Tokens', value: rolling.kpis.tokens, hint: rolling.kpis.tokensHint },
+        { label: '缓存命中率', value: rolling.kpis.cacheRatio, hint: rolling.kpis.cacheHint },
+        { label: '混合成本', value: rolling.kpis.usdPerMillion, hint: 'USD / 1M 总 tokens' },
+      ],
+      theme
+    );
+
+    if (rolling.dayValues.length > 0) {
+      drawShareCardBarChart(ctx, innerX, y + 118, innerWidth, 64, rolling.dayValues, theme);
+      shareText(ctx, rolling.dayValues[0].date, innerX, y + 198, { size: 9, color: theme.faint });
+      shareText(
+        ctx,
+        rolling.dayValues[rolling.dayValues.length - 1].date,
+        innerX + innerWidth,
+        y + 198,
+        { size: 9, color: theme.faint, align: 'right' }
+      );
+    } else {
+      shareText(ctx, '当前数据来源没有每日明细，无法绘制趋势图。', innerX, y + 110, {
+        size: 11,
+        color: theme.faint,
+      });
+    }
+  };
+
+  const drawShareCardHeatmap = (ctx, x, y, width, model, theme) => {
+    const history = model.history;
+    const dayValues = history.dayValues;
+    if (dayValues.length === 0) return;
+
+    const cell = 9;
+    const step = cell + 2;
+    const startMs = Date.parse(`${dayValues[0].date}T00:00:00Z`);
+    const startDow = new Date(startMs).getUTCDay();
+    const heatScale = history.heatScale ?? buildUsageHeatScale(dayValues);
+
+    let lastMonth = -1;
+    dayValues.forEach((item, index) => {
+      const gridIndex = startDow + index;
+      const column = Math.floor(gridIndex / 7);
+      const row = gridIndex % 7;
+      const cellX = x + column * step;
+      const cellY = y + 16 + row * step;
+      shareFillRoundRect(
+        ctx,
+        cellX,
+        cellY,
+        cell,
+        cell,
+        2,
+        theme.heat[usageHeatLevel(item.credits, heatScale)]
+      );
+
+      const month = Number(item.date.slice(5, 7));
+      if (row === 0 && month !== lastMonth) {
+        shareText(ctx, `${month}月`, cellX, y + 8, { size: 9, color: theme.faint });
+        lastMonth = month;
+      }
+    });
+
+    const legendY = y + 16 + 7 * step + 8;
+    const legendCell = 8;
+    const legendWidth = 24 + 5 * (legendCell + 3) + 24;
+    let legendX = x + width - legendWidth;
+    shareText(ctx, '少', legendX, legendY + legendCell - 1, { size: 9, color: theme.faint });
+    legendX += 18;
+    for (let level = 0; level < 5; level += 1) {
+      shareFillRoundRect(ctx, legendX, legendY, legendCell, legendCell, 2, theme.heat[level]);
+      legendX += legendCell + 3;
+    }
+    shareText(ctx, '多', legendX + 4, legendY + legendCell - 1, { size: 9, color: theme.faint });
+  };
+
+  const drawShareCardHistory = (ctx, x, y, width, height, model, theme) => {
+    shareSurface(ctx, x, y, width, height, theme);
+    const innerX = x + 24;
+    const innerWidth = width - 48;
+    const history = model.history;
+
+    shareSectionHead(ctx, innerX, y + 32, innerWidth, history.label, history.dateLabel, theme);
+    shareKpiRow(
+      ctx,
+      innerX,
+      y + 54,
+      innerWidth,
+      [
+        { label: 'Credits', value: history.kpis.credits, hint: history.kpis.creditsHint },
+        { label: 'Tokens', value: history.kpis.tokens, hint: history.kpis.tokensHint },
+        {
+          label: '活跃天数',
+          value: history.activeDays,
+          hint: history.fetchWindowDays ? `查询窗口 ${history.fetchWindowDays} 天` : '',
+        },
+        { label: '混合成本', value: history.kpis.usdPerMillion, hint: 'USD / 1M 总 tokens' },
+      ],
+      theme
+    );
+
+    if (history.dayValues.length > 0) {
+      drawShareCardHeatmap(ctx, innerX, y + 116, innerWidth, model, theme);
+    } else {
+      shareText(ctx, '当前数据来源没有每日明细，无法绘制贡献热力图。', innerX, y + 110, {
+        size: 11,
+        color: theme.faint,
+      });
+    }
+  };
+
+  const drawShareCardFooter = (ctx, x, y, width, height, model, theme) => {
+    const coverage = model.history?.firstDate
+      ? `覆盖 ${model.history.firstDate} → ${model.history.lastDate}`
+      : '暂无用量数据覆盖';
+    shareText(ctx, coverage, x, y + 16, { size: 10, color: theme.faint });
+    shareText(
+      ctx,
+      `${model.sourceLabel} · 更新于 ${formatLocalDateTime(model.generatedAtMs)}`,
+      x + width,
+      y + 16,
+      { size: 10, color: theme.faint, align: 'right' }
+    );
+    shareText(
+      ctx,
+      `Codex Quota Compass v${model.version} · 数据来自 ChatGPT Codex 接口，仅供个人分享参考`,
+      x + width / 2,
+      y + 38,
+      { size: 9, color: theme.faint, align: 'center' }
+    );
+  };
+
+  const SHARE_CARD_DRAWERS = {
+    header: drawShareCardHeader,
+    hero: drawShareCardHero,
+    estimate: drawShareCardEstimate,
+    rolling: drawShareCardRolling,
+    history: drawShareCardHistory,
+    footer: drawShareCardFooter,
+  };
+
+  const buildShareCardSections = (model) => {
+    const sections = [
+      { id: 'header', height: 64 },
+      { id: 'hero', height: 168 },
+    ];
+    if (model.estimate) sections.push({ id: 'estimate', height: 116 });
+    if (model.rolling) {
+      sections.push({ id: 'rolling', height: model.rolling.dayValues.length > 0 ? 210 : 132 });
+    }
+    if (model.history) {
+      sections.push({ id: 'history', height: model.history.dayValues.length > 0 ? 252 : 132 });
+    }
+    sections.push({ id: 'footer', height: 50 });
+    return sections;
+  };
+
+  const renderShareCardCanvas = (model, themeName = 'dark') => {
+    const theme = SHARE_CARD_THEMES[themeName] ?? SHARE_CARD_THEMES.dark;
+    const sections = buildShareCardSections(model);
+    let contentHeight = 34 + 28;
+    sections.forEach((section, index) => {
+      contentHeight += section.height + (index > 0 ? SHARE_CARD_GAP : 0);
+    });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = SHARE_CARD_WIDTH * SHARE_CARD_SCALE;
+    canvas.height = contentHeight * SHARE_CARD_SCALE;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(SHARE_CARD_SCALE, SHARE_CARD_SCALE);
+
+    shareRoundRectPath(ctx, 0, 0, SHARE_CARD_WIDTH, contentHeight, 28);
+    ctx.clip();
+    ctx.fillStyle = theme.bg;
+    ctx.fillRect(0, 0, SHARE_CARD_WIDTH, contentHeight);
+
+    shareGlow(ctx, SHARE_CARD_WIDTH * 0.88, -40, 320, theme.glow1);
+    shareGlow(ctx, -60, contentHeight * 0.5, 300, theme.glow2);
+    shareGlow(ctx, SHARE_CARD_WIDTH * 0.35, contentHeight + 30, 280, theme.glow3);
+
+    const aurora = ctx.createLinearGradient(0, 0, SHARE_CARD_WIDTH, 0);
+    aurora.addColorStop(0, '#007aff');
+    aurora.addColorStop(0.42, '#bf5af2');
+    aurora.addColorStop(0.72, '#ff375f');
+    aurora.addColorStop(1, '#ff9500');
+    ctx.fillStyle = aurora;
+    ctx.fillRect(0, 0, SHARE_CARD_WIDTH, 5);
+
+    let cursorY = 34;
+    sections.forEach((section, index) => {
+      if (index > 0) cursorY += SHARE_CARD_GAP;
+      SHARE_CARD_DRAWERS[section.id](
+        ctx,
+        SHARE_CARD_PAD,
+        cursorY,
+        SHARE_CARD_WIDTH - SHARE_CARD_PAD * 2,
+        section.height,
+        model,
+        theme
+      );
+      cursorY += section.height;
+    });
+
+    return canvas;
+  };
+
+  const exportShareCard = () => {
+    if (!state.result) return;
+    try {
+      const model = buildShareCardModel(state.result);
+      const canvas = renderShareCardCanvas(model, 'light');
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          window.alert('生成分享卡片失败：浏览器未返回图像数据。');
+          return;
+        }
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `codex-quota-card-${ymdUtc(Date.now())}.png`;
+        link.rel = 'noopener';
+        document.body.appendChild(link);
+        link.click();
+        window.setTimeout(() => {
+          URL.revokeObjectURL(url);
+          link.remove();
+        }, 1000);
+      }, 'image/png');
+    } catch (error) {
+      console.error('[CodexQuotaCompass] 分享卡片生成失败', error);
+      window.alert(`生成分享卡片失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+  // ===== SHARE CARD MODULE END =====
+
   const css = `
     :host {
       color-scheme: light dark;
@@ -1674,6 +2589,11 @@
       --cqc-glow-low: 0 0 10px rgba(255, 59, 48, 0.32);
       --cqc-table-head: rgba(0, 0, 0, 0.035);
       --cqc-toggle-shadow: 0 10px 26px rgba(191, 90, 242, 0.32), 0 2px 8px rgba(0, 122, 255, 0.20);
+      --cqc-heat-0: ${SHARE_CARD_THEMES.light.heat[0]};
+      --cqc-heat-1: ${SHARE_CARD_THEMES.light.heat[1]};
+      --cqc-heat-2: ${SHARE_CARD_THEMES.light.heat[2]};
+      --cqc-heat-3: ${SHARE_CARD_THEMES.light.heat[3]};
+      --cqc-heat-4: ${SHARE_CARD_THEMES.light.heat[4]};
       font-family: ui-sans-serif, system-ui, -apple-system, "SF Pro Text", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
       font-variant-numeric: tabular-nums;
     }
@@ -1721,6 +2641,11 @@
         --cqc-glow-low: 0 0 12px rgba(255, 69, 58, 0.40);
         --cqc-table-head: rgba(255, 255, 255, 0.05);
         --cqc-toggle-shadow: 0 10px 28px rgba(0, 0, 0, 0.45), 0 0 26px rgba(191, 90, 242, 0.30);
+        --cqc-heat-0: ${SHARE_CARD_THEMES.dark.heat[0]};
+        --cqc-heat-1: ${SHARE_CARD_THEMES.dark.heat[1]};
+        --cqc-heat-2: ${SHARE_CARD_THEMES.dark.heat[2]};
+        --cqc-heat-3: ${SHARE_CARD_THEMES.dark.heat[3]};
+        --cqc-heat-4: ${SHARE_CARD_THEMES.dark.heat[4]};
       }
     }
     .cqc-toggle {
@@ -2171,6 +3096,176 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    .cqc-heatmap-card {
+      --cqc-heatmap-cell: 9px;
+      --cqc-heatmap-gap: 2px;
+      min-width: 0;
+      margin: 10px 0;
+      padding: 11px 12px;
+      background: var(--cqc-surface-subtle);
+      border: 1px solid var(--cqc-border);
+      border-radius: 14px;
+    }
+    .cqc-heatmap-head,
+    .cqc-heatmap-meta {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .cqc-heatmap-head strong,
+    .cqc-heatmap-head span {
+      display: block;
+    }
+    .cqc-heatmap-head strong {
+      font-size: 11.5px;
+    }
+    .cqc-heatmap-head span,
+    .cqc-heatmap-head em,
+    .cqc-heatmap-meta {
+      color: var(--cqc-muted);
+      font-size: 9.5px;
+      font-style: normal;
+      line-height: 1.45;
+    }
+    .cqc-heatmap-head em {
+      flex: 0 0 auto;
+    }
+    .cqc-heatmap-scroll {
+      max-width: 100%;
+      margin-top: 6px;
+      padding: 2px 0 7px;
+      overflow-x: auto;
+      overscroll-behavior-inline: contain;
+      scrollbar-color: var(--cqc-border-strong) transparent;
+      scrollbar-width: thin;
+    }
+    .cqc-heatmap-inner {
+      width: max-content;
+      min-width: 100%;
+    }
+    .cqc-heatmap-months,
+    .cqc-heatmap-grid {
+      display: grid;
+      grid-template-columns: repeat(var(--cqc-heatmap-columns), var(--cqc-heatmap-cell));
+      column-gap: var(--cqc-heatmap-gap);
+      width: max-content;
+    }
+    .cqc-heatmap-months {
+      min-height: 11px;
+      margin-bottom: 4px;
+      align-items: end;
+      color: var(--cqc-faint);
+      font-size: 8.5px;
+      line-height: 1.2;
+    }
+    .cqc-heatmap-months span {
+      min-width: 0;
+      overflow: visible;
+      white-space: nowrap;
+    }
+    .cqc-heatmap-grid {
+      grid-template-rows: repeat(7, var(--cqc-heatmap-cell));
+      grid-auto-flow: column;
+      row-gap: var(--cqc-heatmap-gap);
+    }
+    .cqc-heatmap-cell {
+      display: block;
+      width: var(--cqc-heatmap-cell);
+      height: var(--cqc-heatmap-cell);
+      border-radius: 2px;
+      box-shadow: inset 0 0 0 0.5px var(--cqc-border);
+    }
+    .cqc-heatmap-cell.placeholder {
+      visibility: hidden;
+    }
+    .cqc-heatmap-cell.level-0 {
+      background: var(--cqc-heat-0);
+    }
+    .cqc-heatmap-cell.level-1 {
+      background: var(--cqc-heat-1);
+    }
+    .cqc-heatmap-cell.level-2 {
+      background: var(--cqc-heat-2);
+    }
+    .cqc-heatmap-cell.level-3 {
+      background: var(--cqc-heat-3);
+    }
+    .cqc-heatmap-cell.level-4 {
+      background: var(--cqc-heat-4);
+    }
+    .cqc-heatmap-meta {
+      align-items: center;
+      margin-top: 5px;
+    }
+    .cqc-heatmap-meta > span {
+      min-width: 0;
+    }
+    .cqc-heatmap-legend {
+      display: inline-flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: 3px;
+      color: var(--cqc-faint);
+      white-space: nowrap;
+    }
+    .cqc-heatmap-legend .cqc-heatmap-cell {
+      width: 8px;
+      height: 8px;
+    }
+    .cqc-tip {
+      position: fixed;
+      z-index: 2147483647;
+      padding: 6px 9px;
+      background: var(--cqc-surface);
+      color: var(--cqc-text);
+      border: 1px solid var(--cqc-border-strong);
+      border-radius: 9px;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+      font-size: 10.5px;
+      line-height: 1.45;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+    .cqc-tip[hidden] {
+      display: none;
+    }
+    .cqc-tip strong {
+      display: block;
+      margin-bottom: 1px;
+      font-size: 11px;
+    }
+    .cqc-tip span {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--cqc-muted);
+    }
+    .cqc-tip b {
+      font-weight: 500;
+    }
+    .cqc-tip-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 2px;
+      box-shadow: inset 0 0 0 0.5px var(--cqc-border-strong);
+    }
+    .cqc-tip-dot.level-0 {
+      background: var(--cqc-heat-0);
+    }
+    .cqc-tip-dot.level-1 {
+      background: var(--cqc-heat-1);
+    }
+    .cqc-tip-dot.level-2 {
+      background: var(--cqc-heat-2);
+    }
+    .cqc-tip-dot.level-3 {
+      background: var(--cqc-heat-3);
+    }
+    .cqc-tip-dot.level-4 {
+      background: var(--cqc-heat-4);
+    }
     .cqc-ranges {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -2264,6 +3359,10 @@
       padding: 6px 8px;
       align-items: center;
     }
+    .cqc-table-daily .cqc-table-head,
+    .cqc-table-daily .cqc-table-row {
+      grid-template-columns: minmax(0, 1.1fr) repeat(4, minmax(42px, 0.55fr));
+    }
     .cqc-table-head {
       color: var(--cqc-muted);
       background: var(--cqc-table-head);
@@ -2343,6 +3442,7 @@
     }
     .cqc-toggle:focus-visible,
     .cqc-action:focus-visible,
+    .cqc-heatmap-scroll:focus-visible,
     summary:focus-visible {
       outline: 2px solid var(--cqc-accent);
       outline-offset: 2px;
@@ -2410,9 +3510,21 @@
         grid-template-columns: 1fr;
         gap: 6px;
       }
+      .cqc-heatmap-card {
+        --cqc-heatmap-cell: 8px;
+      }
+      .cqc-heatmap-meta {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 5px;
+      }
       .cqc-table-head,
       .cqc-table-row {
         grid-template-columns: minmax(0, 1.05fr) repeat(3, minmax(44px, 0.55fr));
+      }
+      .cqc-table-daily .cqc-table-head,
+      .cqc-table-daily .cqc-table-row {
+        grid-template-columns: minmax(0, 1fr) repeat(4, minmax(38px, 0.55fr));
       }
       .cqc-footer {
         flex-direction: column;
@@ -2451,12 +3563,19 @@
           <div class="cqc-actions">
             <button class="cqc-action primary cqc-refresh" type="button">刷新</button>
             <button class="cqc-action cqc-export" type="button" disabled>导出 JSON</button>
+            <button class="cqc-action cqc-share" type="button" disabled>分享卡片</button>
             <button class="cqc-action cqc-close" type="button">关闭</button>
           </div>
         </div>
         <div class="cqc-body"></div>
       </aside>
+      <div class="cqc-tip" role="tooltip" hidden>
+        <strong></strong>
+        <span><i class="cqc-tip-dot level-0" aria-hidden="true"></i><b class="cqc-tip-text"></b></span>
+      </div>
     `;
+
+    bindHeatmapTooltip(shadow);
 
     shadow.querySelector('.cqc-toggle')?.addEventListener('click', () => {
       state.panelOpen = !state.panelOpen;
@@ -2473,6 +3592,7 @@
       void refresh(shadow);
     });
     shadow.querySelector('.cqc-export')?.addEventListener('click', exportJson);
+    shadow.querySelector('.cqc-share')?.addEventListener('click', exportShareCard);
 
     document.body.appendChild(host);
     render(shadow);
