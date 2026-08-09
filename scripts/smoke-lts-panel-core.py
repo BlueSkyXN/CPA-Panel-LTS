@@ -189,9 +189,13 @@ def build_core_config(port: int, temp_dir: Path) -> str:
             api-key-entries:
               - api-key: "openai-smoke-key"
             models:
-              - name: "openai-smoke-model"
-                alias: "openai-smoke"
-                display-name: "OpenAI Smoke"
+              - name: "k3"
+                alias: "kimi-k3"
+                display-name: "Kimi K3 Smoke"
+                thinking:
+                  levels: ["low", "vendor-custom"]
+                  min: 128
+                  max: 32768
         ampcode:
           upstream-url: "https://amp.example.test"
           upstream-api-key: "amp-smoke-upstream-key"
@@ -808,10 +812,15 @@ def run_write_smoke(api_url: str) -> list[str]:
             "api-key-entries": [{"api-key": "openai-real-write-key"}],
             "models": [
                 {
-                    "name": "openai-real-write-model",
-                    "alias": "openai-real-write",
-                    "display-name": "OpenAI Real Write",
+                    "name": "k3",
+                    "alias": "kimi-k3",
+                    "display-name": "Kimi K3 Smoke",
                     "image": True,
+                    "thinking": {
+                        "levels": ["low", "vendor-custom"],
+                        "min": 128,
+                        "max": 32768,
+                    },
                 }
             ],
         }
@@ -838,18 +847,29 @@ def run_write_smoke(api_url: str) -> list[str]:
         and item.get("prefix") == "real-write"
         and any(
             isinstance(model, dict)
-            and model.get("display-name") == "OpenAI Real Write"
+            and model.get("display-name") == "Kimi K3 Smoke"
+            and model.get("thinking")
+            == {
+                "levels": ["low", "vendor-custom"],
+                "min": 128,
+                "max": 32768,
+            }
             for model in item.get("models", [])
         )
         for item in openai_items
     ):
         raise AssertionError(f"OpenAI Compatibility write smoke did not round-trip prefix: {openai_items!r}")
+    seen.append("OpenAI Compatibility thinking config round-tripped through Core")
     persisted_yaml = request_text(api_url, "/v0/management/config.yaml")
     seen.append("GET /v0/management/config.yaml after provider writes")
     if "auth-index" in persisted_yaml or "authIndex" in persisted_yaml:
         raise AssertionError("Provider write smoke persisted response-only auth-index into config.yaml")
     if contains_key(openai_payload, "auth-index") or contains_key(openai_payload, "authIndex"):
         raise AssertionError("OpenAI Compatibility write smoke payload unexpectedly contains auth-index")
+    if "vendor-custom" not in persisted_yaml or "max: 32768" not in persisted_yaml:
+        raise AssertionError(
+            "OpenAI Compatibility write smoke did not persist thinking config to config.yaml"
+        )
 
     return seen
 
@@ -2121,6 +2141,29 @@ def run_browser_provider_workbench_smoke(page: Any, app_url: str, api_url: str) 
         != expected_openai_display_name
     ):
         raise AssertionError("OpenAI workbench did not parse existing model display-name")
+    first_model = sheet.get_by_label("Display name (optional)").first.locator(
+        "xpath=ancestor::div[contains(@class, 'modelEntry')][1]"
+    )
+    first_model.get_by_role("button", name="Expand", exact=True).click()
+    if not first_model.get_by_role("checkbox", name="Low", exact=True).is_checked():
+        raise AssertionError("OpenAI workbench did not parse the existing low thinking level")
+    first_model.get_by_role("checkbox", name="High", exact=True).set_checked(
+        True, force=True
+    )
+    first_model.get_by_role("checkbox", name="Maximum", exact=True).set_checked(
+        True, force=True
+    )
+    first_model.get_by_text("Advanced thinking JSON", exact=True).click()
+    thinking_textarea = first_model.locator("textarea")
+    updated_thinking = json.loads(thinking_textarea.input_value())
+    if updated_thinking != {
+        "levels": ["low", "high", "max", "vendor-custom"],
+        "min": 128,
+        "max": 32768,
+    }:
+        raise AssertionError(
+            f"OpenAI workbench dropped advanced thinking config: {updated_thinking!r}"
+        )
     sheet.get_by_label("Display name (optional)").first.fill("OpenAI Smoke Updated")
     with page.expect_response(
         lambda response: response.request.method == "PUT"
@@ -2143,16 +2186,25 @@ def run_browser_provider_workbench_smoke(page: Any, app_url: str, api_url: str) 
         and any(
             isinstance(model, dict)
             and model.get("display-name") == "OpenAI Smoke Updated"
+            and model.get("thinking")
+            == {
+                "levels": ["low", "high", "max", "vendor-custom"],
+                "min": 128,
+                "max": 32768,
+            }
             for model in item.get("models", [])
         )
         for item in openai_after_save
     ):
         raise AssertionError(f"OpenAI browser save did not round-trip prefix: {openai_after_save!r}")
+    seen.append("BROWSER provider workbench thinking levels preserved advanced config")
     seen.append("BROWSER provider workbench new model display-name round-trip")
     seen.append("BROWSER provider workbench updated model display-name round-trip")
     persisted_yaml = request_text(api_url, "/v0/management/config.yaml")
     if "auth-index" in persisted_yaml or "authIndex" in persisted_yaml:
         raise AssertionError("Browser provider workbench persisted response-only auth-index")
+    if "vendor-custom" not in persisted_yaml or "max: 32768" not in persisted_yaml:
+        raise AssertionError("Browser provider workbench did not persist thinking config")
     seen.append("BROWSER provider workbench kept auth-index out of config.yaml")
 
     return seen

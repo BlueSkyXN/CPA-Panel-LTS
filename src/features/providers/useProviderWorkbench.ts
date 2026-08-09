@@ -31,6 +31,7 @@ import type {
   SponsorProviderBrand,
   SponsorProviderRaw,
 } from './types';
+import { parseThinkingJson } from './thinkingLevels';
 import { CLAUDE_API_BASE_URL, isClaudeApiProvider } from './claudeApi';
 import {
   buildCode0Raw,
@@ -98,16 +99,6 @@ const headersFromEntries = (
     out[key] = entry.value;
   });
   return out;
-};
-
-const parseThinkingJson = (value: string | undefined): Record<string, unknown> | undefined => {
-  const trimmed = (value ?? '').trim();
-  if (!trimmed) return undefined;
-  const parsed = JSON.parse(trimmed) as unknown;
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('Thinking config must be a JSON object');
-  }
-  return parsed as Record<string, unknown>;
 };
 
 const buildExcludedModels = (
