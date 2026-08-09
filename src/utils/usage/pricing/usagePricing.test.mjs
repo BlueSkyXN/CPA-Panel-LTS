@@ -39,6 +39,21 @@ test('detail pricing uses effective tier and remains independent of unrecognized
   assert.deepEqual(Object.keys(priced.estimate).sort().includes('legacyServerField'), false);
 });
 
+test('detail pricing uses outbound tier before request intent when effective data is absent', () => {
+  const priced = pricing.estimateUsageDetailCost(
+    {
+      __modelName: 'gpt-5.4-mini',
+      request_service_tier: 'priority',
+      outbound_service_tier: 'default',
+      tokens: { input_tokens: 1_000_000, total_tokens: 1_000_000 },
+    },
+    profile
+  );
+  assert.equal(priced.tier.tier, 'std');
+  assert.equal(priced.tier.evidence, 'outbound');
+  assert.equal(priced.estimate.amount, 0.75);
+});
+
 test('coverage uses priced and total request, token, and model dimensions only', () => {
   const coverage = pricing.summarizeUsageDetailCosts(
     [

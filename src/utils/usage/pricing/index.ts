@@ -559,6 +559,7 @@ const ASSUMED_STANDARD_TIER: ResolvedServiceTier = {
   tier: 'std',
   evidence: 'assumed',
   rawRequest: null,
+  rawOutbound: null,
   rawResponse: null,
   rawEffective: null,
 };

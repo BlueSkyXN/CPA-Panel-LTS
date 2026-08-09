@@ -1,10 +1,11 @@
 export type DisplayServiceTier = 'fast' | 'std';
 
-export type ServiceTierEvidence = 'effective' | 'response' | 'request' | 'assumed';
+export type ServiceTierEvidence = 'effective' | 'response' | 'outbound' | 'request' | 'assumed';
 
 export interface ServiceTierValues {
   serviceTier?: unknown;
   requestServiceTier?: unknown;
+  outboundServiceTier?: unknown;
   responseServiceTier?: unknown;
   effectiveServiceTier?: unknown;
 }
@@ -13,6 +14,7 @@ export interface ResolvedServiceTier {
   tier: DisplayServiceTier;
   evidence: ServiceTierEvidence;
   rawRequest: string | null;
+  rawOutbound: string | null;
   rawResponse: string | null;
   rawEffective: string | null;
 }
@@ -33,15 +35,24 @@ export function classifyServiceTier(value: unknown): DisplayServiceTier | null {
 export function resolveServiceTier(values: ServiceTierValues): ResolvedServiceTier {
   const rawEffective = normalizeServiceTier(values.effectiveServiceTier);
   const rawResponse = normalizeServiceTier(values.responseServiceTier);
+  const rawOutbound = normalizeServiceTier(values.outboundServiceTier);
   const rawRequest =
     normalizeServiceTier(values.requestServiceTier) ?? normalizeServiceTier(values.serviceTier);
 
   const effectiveTier = classifyServiceTier(rawEffective);
   if (effectiveTier) {
+    const responseTier = classifyServiceTier(rawResponse);
+    const outboundTier = classifyServiceTier(rawOutbound);
     return {
       tier: effectiveTier,
-      evidence: 'effective',
+      evidence:
+        responseTier === effectiveTier
+          ? 'response'
+          : rawResponse === null && outboundTier === effectiveTier
+            ? 'outbound'
+            : 'effective',
       rawRequest,
+      rawOutbound,
       rawResponse,
       rawEffective,
     };
@@ -55,6 +66,7 @@ export function resolveServiceTier(values: ServiceTierValues): ResolvedServiceTi
       tier: 'std',
       evidence: 'assumed',
       rawRequest,
+      rawOutbound,
       rawResponse,
       rawEffective,
     };
@@ -66,6 +78,7 @@ export function resolveServiceTier(values: ServiceTierValues): ResolvedServiceTi
       tier: responseTier,
       evidence: 'response',
       rawRequest,
+      rawOutbound,
       rawResponse,
       rawEffective,
     };
@@ -78,6 +91,30 @@ export function resolveServiceTier(values: ServiceTierValues): ResolvedServiceTi
       tier: 'std',
       evidence: 'assumed',
       rawRequest,
+      rawOutbound,
+      rawResponse,
+      rawEffective,
+    };
+  }
+
+  const outboundTier = classifyServiceTier(rawOutbound);
+  if (outboundTier) {
+    return {
+      tier: outboundTier,
+      evidence: 'outbound',
+      rawRequest,
+      rawOutbound,
+      rawResponse,
+      rawEffective,
+    };
+  }
+
+  if (rawOutbound) {
+    return {
+      tier: 'std',
+      evidence: 'assumed',
+      rawRequest,
+      rawOutbound,
       rawResponse,
       rawEffective,
     };
@@ -89,6 +126,7 @@ export function resolveServiceTier(values: ServiceTierValues): ResolvedServiceTi
       tier: requestTier,
       evidence: 'request',
       rawRequest,
+      rawOutbound,
       rawResponse,
       rawEffective,
     };
@@ -98,6 +136,7 @@ export function resolveServiceTier(values: ServiceTierValues): ResolvedServiceTi
     tier: 'std',
     evidence: 'assumed',
     rawRequest,
+    rawOutbound,
     rawResponse,
     rawEffective,
   };

@@ -16,6 +16,7 @@ import type { CredentialInfo } from '@/types/sourceInfo';
 import { buildSourceInfoMap, resolveSourceDisplay } from '@/utils/sourceResolver';
 import { parseTimestampMs } from '@/utils/timestamp';
 import {
+  classifyServiceTier,
   collectUsageDetails,
   extractLatencyMs,
   extractTotalTokens,
@@ -23,6 +24,7 @@ import {
   LATENCY_SOURCE_FIELD,
   normalizeAuthIndex,
   resolveServiceTier,
+  type DisplayServiceTier,
   type ResolvedServiceTier,
   type UsageTimeRange,
 } from '@/utils/usage';
@@ -158,10 +160,13 @@ type RequestEventRow = {
   authIndex: string;
   serviceTier: string | null;
   requestServiceTier: string | null;
+  outboundServiceTier: string | null;
   responseServiceTier: string | null;
   effectiveServiceTier: string | null;
   resolvedServiceTier: ResolvedServiceTier;
+  requestDisplayServiceTier: DisplayServiceTier | null;
   serviceTierFilterValue: string;
+  requestServiceTierLabel: string | null;
   serviceTierLabel: string;
   serviceTierTitle: string;
   reasoningEffort: string | null;
@@ -689,24 +694,59 @@ export function RequestEventsDetailsCard({
       const model = String(detail.__modelName ?? '').trim() || '-';
       const serviceTier = detail.service_tier ?? null;
       const requestServiceTier = detail.request_service_tier ?? null;
+      const outboundServiceTier = detail.outbound_service_tier ?? null;
       const responseServiceTier = detail.response_service_tier ?? null;
       const effectiveServiceTier = detail.effective_service_tier ?? null;
       const resolvedServiceTier = resolveServiceTier({
         serviceTier,
         requestServiceTier,
+        outboundServiceTier,
         responseServiceTier,
         effectiveServiceTier,
       });
       const serviceTierFilterValue =
         resolvedServiceTier.tier === 'fast' ? SERVICE_TIER_FAST_FILTER : SERVICE_TIER_STD_FILTER;
-      const serviceTierLabel =
-        resolvedServiceTier.tier === 'fast'
+      const getServiceTierLabel = (tier: DisplayServiceTier) =>
+        tier === 'fast'
           ? t('usage_stats.request_events_tier_fast')
           : t('usage_stats.request_events_tier_standard');
-      const serviceTierTitle = t(
-        `usage_stats.request_events_tier_tooltip_${resolvedServiceTier.evidence}`,
-        { tier: serviceTierLabel }
+      const serviceTierLabel = getServiceTierLabel(resolvedServiceTier.tier);
+      const requestDisplayServiceTier = classifyServiceTier(resolvedServiceTier.rawRequest);
+      const requestServiceTierLabel = requestDisplayServiceTier
+        ? getServiceTierLabel(requestDisplayServiceTier)
+        : null;
+      const describeServiceTierValue = (raw: string | null) => {
+        if (!raw) return t('usage_stats.request_events_tier_value_missing');
+        const tier = classifyServiceTier(raw);
+        if (!tier) {
+          return t('usage_stats.request_events_tier_value_unknown', { raw });
+        }
+        return t('usage_stats.request_events_tier_value_known', {
+          tier: getServiceTierLabel(tier),
+          raw,
+        });
+      };
+      const evidenceLabel = t(
+        `usage_stats.request_events_tier_evidence_${resolvedServiceTier.evidence}`
       );
+      const serviceTierTitle = [
+        t('usage_stats.request_events_tier_chain_client', {
+          value: describeServiceTierValue(resolvedServiceTier.rawRequest),
+        }),
+        t('usage_stats.request_events_tier_chain_outbound', {
+          value: describeServiceTierValue(resolvedServiceTier.rawOutbound),
+        }),
+        t('usage_stats.request_events_tier_chain_response', {
+          value: describeServiceTierValue(resolvedServiceTier.rawResponse),
+        }),
+        t('usage_stats.request_events_tier_chain_effective', {
+          value: describeServiceTierValue(resolvedServiceTier.rawEffective),
+        }),
+        t('usage_stats.request_events_tier_chain_resolved', {
+          tier: serviceTierLabel,
+          evidence: evidenceLabel,
+        }),
+      ].join('\n');
       const reasoningEffort = normalizeReasoningEffort(detail.reasoning_effort);
       const reasoningEffortFilterValue = getReasoningEffortFilterValue(reasoningEffort);
       const reasoningEffortLabel =
@@ -737,10 +777,13 @@ export function RequestEventsDetailsCard({
         authIndex,
         serviceTier,
         requestServiceTier,
+        outboundServiceTier,
         responseServiceTier,
         effectiveServiceTier,
         resolvedServiceTier,
+        requestDisplayServiceTier,
         serviceTierFilterValue,
+        requestServiceTierLabel,
         serviceTierLabel,
         serviceTierTitle,
         reasoningEffort,
@@ -1251,6 +1294,7 @@ export function RequestEventsDetailsCard({
       'auth_index',
       'service_tier',
       'request_service_tier',
+      'outbound_service_tier',
       'response_service_tier',
       'effective_service_tier',
       'resolved_service_tier',
@@ -1277,6 +1321,7 @@ export function RequestEventsDetailsCard({
         row.authIndex,
         row.serviceTier ?? '',
         row.requestServiceTier ?? '',
+        row.outboundServiceTier ?? '',
         row.responseServiceTier ?? '',
         row.effectiveServiceTier ?? '',
         row.resolvedServiceTier.tier,
@@ -1316,6 +1361,7 @@ export function RequestEventsDetailsCard({
       auth_index: row.authIndex,
       service_tier: row.serviceTier,
       request_service_tier: row.requestServiceTier,
+      outbound_service_tier: row.outboundServiceTier,
       response_service_tier: row.responseServiceTier,
       effective_service_tier: row.effectiveServiceTier,
       resolved_service_tier: row.resolvedServiceTier.tier,
@@ -1924,15 +1970,48 @@ export function RequestEventsDetailsCard({
                       {columnVisibility.tier && (
                         <td>
                           <span
-                            className={`${styles.requestEventsTierBadge} ${
-                              row.resolvedServiceTier.tier === 'fast'
-                                ? styles.requestEventsTierFast
-                                : styles.requestEventsTierStd
-                            }`}
+                            className={styles.requestEventsTierFlow}
                             title={row.serviceTierTitle}
                             aria-label={row.serviceTierTitle}
+                            role="group"
+                            data-service-tier-flow={
+                              row.requestDisplayServiceTier &&
+                              row.requestDisplayServiceTier !== row.resolvedServiceTier.tier
+                                ? 'combined'
+                                : 'resolved'
+                            }
                           >
-                            {row.serviceTierLabel}
+                            {row.requestDisplayServiceTier &&
+                              row.requestDisplayServiceTier !== row.resolvedServiceTier.tier && (
+                                <>
+                                  <span
+                                    className={`${styles.requestEventsTierBadge} ${
+                                      row.requestDisplayServiceTier === 'fast'
+                                        ? styles.requestEventsTierFast
+                                        : styles.requestEventsTierStd
+                                    }`}
+                                    aria-hidden="true"
+                                  >
+                                    {row.requestServiceTierLabel}
+                                  </span>
+                                  <span
+                                    className={styles.requestEventsTierArrow}
+                                    aria-hidden="true"
+                                  >
+                                    →
+                                  </span>
+                                </>
+                              )}
+                            <span
+                              className={`${styles.requestEventsTierBadge} ${
+                                row.resolvedServiceTier.tier === 'fast'
+                                  ? styles.requestEventsTierFast
+                                  : styles.requestEventsTierStd
+                              }`}
+                              aria-hidden="true"
+                            >
+                              {row.serviceTierLabel}
+                            </span>
                           </span>
                         </td>
                       )}

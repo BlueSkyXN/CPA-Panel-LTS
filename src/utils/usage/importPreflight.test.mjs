@@ -107,7 +107,18 @@ const v2Payload = (...details) => v2PayloadForModel('gpt-5.6-sol', ...details);
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
 test('accepts canonical v2 and rejects unsupported or malformed envelopes', () => {
-  assert.equal(analyzeUsageImport(v2Payload(detail(v2Tokens()))).valid, true);
+  assert.equal(
+    analyzeUsageImport(
+      v2Payload(
+        detail(v2Tokens(), {
+          request_service_tier: 'priority',
+          outbound_service_tier: 'standard',
+          effective_service_tier: 'standard',
+        })
+      )
+    ).valid,
+    true
+  );
 
   const cases = [
     [null, 'usage_shape_invalid'],
@@ -144,6 +155,10 @@ test('rejects malformed nested containers and known field types', () => {
       (payload.usage.apis['POST /v1/responses'].models['gpt-5.6-sol'].details[0].tokens = []),
     (payload) =>
       (payload.usage.apis['POST /v1/responses'].models['gpt-5.6-sol'].details[0].source = 7),
+    (payload) =>
+      (payload.usage.apis['POST /v1/responses'].models[
+        'gpt-5.6-sol'
+      ].details[0].outbound_service_tier = 7),
     (payload) =>
       (payload.usage.apis['POST /v1/responses'].models['gpt-5.6-sol'].details[0].failed = 'false'),
     (payload) => (payload.usage.requests_by_day = []),

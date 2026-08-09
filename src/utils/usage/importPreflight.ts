@@ -82,6 +82,7 @@ const DETAIL_STRING_FIELDS = [
   'reasoning_effort',
   'service_tier',
   'request_service_tier',
+  'outbound_service_tier',
   'response_service_tier',
   'effective_service_tier',
   'failure_reason',
