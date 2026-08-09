@@ -439,6 +439,7 @@ def build_service_tier_usage_snapshot() -> dict[str, Any]:
             "auth_index": "1",
             "service_tier": "priority",
             "request_service_tier": "priority",
+            "outbound_service_tier": "priority",
             "response_service_tier": "standard",
             "effective_service_tier": "standard",
             "tokens": {
@@ -456,6 +457,7 @@ def build_service_tier_usage_snapshot() -> dict[str, Any]:
             "auth_index": "1",
             "service_tier": "auto",
             "request_service_tier": "auto",
+            "outbound_service_tier": "priority",
             "effective_service_tier": "priority",
             "tokens": {
                 "input_tokens": 8,
@@ -472,6 +474,7 @@ def build_service_tier_usage_snapshot() -> dict[str, Any]:
             "auth_index": "1",
             "service_tier": "priority",
             "request_service_tier": "priority",
+            "outbound_service_tier": "priority",
             "response_service_tier": "future-tier",
             "tokens": {
                 "input_tokens": 6,
@@ -1387,6 +1390,7 @@ def run_endpoint_smoke(
     if (
         not isinstance(standard_detail, dict)
         or standard_detail.get("request_service_tier") != "priority"
+        or standard_detail.get("outbound_service_tier") != "priority"
         or standard_detail.get("effective_service_tier") != "standard"
     ):
         raise AssertionError(
@@ -1404,6 +1408,7 @@ def run_endpoint_smoke(
     if (
         not isinstance(outbound_detail, dict)
         or outbound_detail.get("response_service_tier") not in {None, ""}
+        or outbound_detail.get("outbound_service_tier") != "priority"
         or outbound_detail.get("effective_service_tier") != "priority"
     ):
         raise AssertionError(
@@ -1418,10 +1423,11 @@ def run_endpoint_smoke(
         ),
         None,
     )
-    if not isinstance(unknown_detail, dict) or unknown_detail.get("effective_service_tier") not in {
-        None,
-        "",
-    }:
+    if (
+        not isinstance(unknown_detail, dict)
+        or unknown_detail.get("outbound_service_tier") != "priority"
+        or unknown_detail.get("effective_service_tier") not in {None, ""}
+    ):
         raise AssertionError(
             "Unknown response tier must not fabricate effective_service_tier: "
             f"{unknown_detail!r}"
@@ -2343,24 +2349,32 @@ def run_browser_smoke(
                             "Real Core migration/tier fixtures rendered "
                             f"{rows.count()} rows, want {expected_usage_rows}"
                         )
-                    if events_card.get_by_text("Fast", exact=True).count() != 1:
+                    resolved_fast_flows = events_card.locator(
+                        '[data-service-tier-flow][aria-label*="Resolved: Fast"]'
+                    )
+                    resolved_fast_flows.first.wait_for()
+                    if resolved_fast_flows.count() != 1:
                         raise AssertionError("Real Core effective priority did not render as Fast")
                     expected_std_rows = 3 if core_usage_version == 2 else 2
-                    if events_card.get_by_text("Std", exact=True).count() != expected_std_rows:
+                    resolved_std_flows = events_card.locator(
+                        '[data-service-tier-flow][aria-label*="Resolved: Std"]'
+                    )
+                    if resolved_std_flows.count() != expected_std_rows:
                         raise AssertionError(
                             "Real Core response standard/unknown tiers did not render as Std"
                         )
-                    assumed_std_badges = events_card.get_by_label(
-                        "Historical or unknown tier; estimated as Std.", exact=True
+                    assumed_std_flows = events_card.locator(
+                        '[data-service-tier-flow]'
+                        '[aria-label*="Resolved: Std (evidence: assumed fallback)"]'
                     )
                     expected_assumed_std = 2 if core_usage_version == 2 else 1
-                    if assumed_std_badges.count() != expected_assumed_std:
+                    if assumed_std_flows.count() != expected_assumed_std:
                         raise AssertionError(
                             "Real Core migration/tier fixtures exposed "
-                            f"{assumed_std_badges.count()} assumed Std badges, "
+                            f"{assumed_std_flows.count()} assumed Std flows, "
                             f"want {expected_assumed_std}"
                         )
-                    assumed_std_badges.first.wait_for()
+                    assumed_std_flows.first.wait_for()
                     tier_select = events_card.get_by_label("Tier", exact=True)
                     tier_select.click()
                     page.get_by_role("option", name="Fast", exact=True).wait_for()

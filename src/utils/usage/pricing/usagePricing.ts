@@ -14,6 +14,7 @@ export interface PriceableUsageDetail {
   tokens: UsageTokenFields;
   service_tier?: unknown;
   request_service_tier?: unknown;
+  outbound_service_tier?: unknown;
   response_service_tier?: unknown;
   effective_service_tier?: unknown;
 }
@@ -26,6 +27,7 @@ export function resolveUsageDetailServiceTier(detail: PriceableUsageDetail): Res
   return resolveServiceTier({
     serviceTier: detail.service_tier,
     requestServiceTier: detail.request_service_tier,
+    outboundServiceTier: detail.outbound_service_tier,
     responseServiceTier: detail.response_service_tier,
     effectiveServiceTier: detail.effective_service_tier,
   });

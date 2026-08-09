@@ -24,22 +24,56 @@ test('normalizes and classifies the two supported display tiers', () => {
   assert.equal(classifyServiceTier(undefined), null);
 });
 
-test('effective tier wins over response and request values', () => {
+test('effective tier wins while matching response or outbound values refine its evidence', () => {
   assert.deepEqual(
     resolveServiceTier({
       serviceTier: 'priority',
       requestServiceTier: 'priority',
+      outboundServiceTier: 'priority',
       responseServiceTier: 'default',
       effectiveServiceTier: 'standard',
     }),
     {
       tier: 'std',
-      evidence: 'effective',
+      evidence: 'response',
       rawRequest: 'priority',
+      rawOutbound: 'priority',
       rawResponse: 'default',
       rawEffective: 'standard',
     }
   );
+
+  const outbound = resolveServiceTier({
+    requestServiceTier: 'auto',
+    outboundServiceTier: 'fast',
+    effectiveServiceTier: 'priority',
+  });
+  assert.equal(outbound.tier, 'fast');
+  assert.equal(outbound.evidence, 'outbound');
+  assert.equal(outbound.rawOutbound, 'fast');
+
+  const effective = resolveServiceTier({
+    outboundServiceTier: 'default',
+    effectiveServiceTier: 'priority',
+  });
+  assert.equal(effective.tier, 'fast');
+  assert.equal(effective.evidence, 'effective');
+
+  const unknownResponse = resolveServiceTier({
+    responseServiceTier: 'future-tier',
+    outboundServiceTier: 'priority',
+    effectiveServiceTier: 'priority',
+  });
+  assert.equal(unknownResponse.tier, 'fast');
+  assert.equal(unknownResponse.evidence, 'effective');
+
+  const conflictingResponse = resolveServiceTier({
+    responseServiceTier: 'default',
+    outboundServiceTier: 'priority',
+    effectiveServiceTier: 'priority',
+  });
+  assert.equal(conflictingResponse.tier, 'fast');
+  assert.equal(conflictingResponse.evidence, 'effective');
 });
 
 test('recognized response wins over request intent', () => {
@@ -73,11 +107,31 @@ test('unknown effective tier blocks fallback to response or request Fast evidenc
 test('unknown response blocks fallback to a Fast request', () => {
   const resolved = resolveServiceTier({
     requestServiceTier: 'priority',
+    outboundServiceTier: 'priority',
     responseServiceTier: 'flex',
   });
   assert.equal(resolved.tier, 'std');
   assert.equal(resolved.evidence, 'assumed');
   assert.equal(resolved.rawResponse, 'flex');
+});
+
+test('outbound tier is the authoritative fallback before legacy request intent', () => {
+  const resolved = resolveServiceTier({
+    requestServiceTier: 'priority',
+    outboundServiceTier: 'default',
+  });
+  assert.equal(resolved.tier, 'std');
+  assert.equal(resolved.evidence, 'outbound');
+  assert.equal(resolved.rawRequest, 'priority');
+  assert.equal(resolved.rawOutbound, 'default');
+
+  const unknown = resolveServiceTier({
+    requestServiceTier: 'priority',
+    outboundServiceTier: 'future-tier',
+  });
+  assert.equal(unknown.tier, 'std');
+  assert.equal(unknown.evidence, 'assumed');
+  assert.equal(unknown.rawOutbound, 'future-tier');
 });
 
 test('request tier is used only when response evidence is absent', () => {

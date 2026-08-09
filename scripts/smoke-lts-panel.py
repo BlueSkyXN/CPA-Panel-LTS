@@ -304,6 +304,7 @@ def build_usage_payload() -> dict[str, Any]:
             "auth_index": "codex-smoke-auth",
             "service_tier": " priority ",
             "request_service_tier": " priority ",
+            "outbound_service_tier": " priority ",
             "response_service_tier": " priority ",
             "effective_service_tier": " priority ",
             "reasoning_effort": " max ",
@@ -325,6 +326,7 @@ def build_usage_payload() -> dict[str, Any]:
             "authIndex": "codex-smoke-auth",
             "serviceTier": " priority ",
             "requestServiceTier": " priority ",
+            "outboundServiceTier": " standard ",
             "responseServiceTier": " default ",
             "effectiveServiceTier": " standard ",
             "reasoningEffort": " high ",
@@ -361,6 +363,7 @@ def build_usage_payload() -> dict[str, Any]:
             "auth_index": "codex-smoke-auth",
             "ServiceTier": " flex ",
             "RequestServiceTier": " priority ",
+            "OutboundServiceTier": " priority ",
             "ResponseServiceTier": " flex ",
             "ReasoningEffort": " low ",
             "latency": 140,
@@ -380,6 +383,7 @@ def build_usage_payload() -> dict[str, Any]:
             "auth_index": "codex-smoke-auth",
             "service_tier": " cache-import ",
             "request_service_tier": " fast ",
+            "outbound_service_tier": " standard ",
             "reasoning_effort": "xhigh",
             "latency": 150,
             "tokens": {
@@ -3605,10 +3609,53 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         )
     for expected_label in ["Fast", "Std", "none", "low", "high", "xhigh", "max"]:
         card.get_by_text(expected_label, exact=True).first.wait_for()
-    fast_rows = rows.filter(has_text="Fast")
-    if fast_rows.count() != 2:
+    resolved_fast_flows = card.locator('[data-service-tier-flow="resolved"]').filter(
+        has_text="Fast"
+    )
+    if resolved_fast_flows.count() != 1:
         raise AssertionError(
-            f"Expected two Fast rows, found {fast_rows.count()}"
+            "Expected one resolved Fast tier after outbound precedence, found "
+            f"{resolved_fast_flows.count()}"
+        )
+    combined_flows = card.locator('[data-service-tier-flow="combined"]')
+    if combined_flows.count() != 3:
+        raise AssertionError(
+            f"Expected three compact request-to-effective tier flows, found {combined_flows.count()}"
+        )
+    for index in range(combined_flows.count()):
+        if combined_flows.nth(index).inner_text().replace("\n", "").replace(" ", "") != "Fast→Std":
+            raise AssertionError(
+                "Combined tier flow did not render Fast → Std with existing badges: "
+                f"{combined_flows.nth(index).inner_text()!r}"
+            )
+    outbound_flow = card.locator(
+        '[data-service-tier-flow="combined"]'
+        '[aria-label*="Resolved: Std (evidence: CPA outbound)"]'
+    )
+    if outbound_flow.count() != 1:
+        raise AssertionError("Outbound-resolved tier flow did not expose precise evidence")
+    outbound_description = outbound_flow.first.get_attribute("aria-label") or ""
+    for expected in [
+        "Client request: Fast (raw: fast)",
+        "CPA outbound: Std (raw: standard)",
+        "Upstream response: Missing",
+        "Effective: Missing",
+        "Resolved: Std (evidence: CPA outbound)",
+    ]:
+        if expected not in outbound_description:
+            raise AssertionError(
+                f"Outbound tier flow lost {expected!r}: {outbound_description!r}"
+            )
+    unknown_flow = card.locator(
+        '[data-service-tier-flow="combined"]'
+        '[aria-label*="Upstream response: Unknown (raw: flex)"]'
+    )
+    if unknown_flow.count() != 1:
+        raise AssertionError("Unknown response tier was not preserved in the accessible chain")
+    unknown_description = unknown_flow.first.get_attribute("aria-label") or ""
+    if "Resolved: Std (evidence: assumed fallback)" not in unknown_description:
+        raise AssertionError(
+            f"Unknown response tier was presented as confirmed: {unknown_description!r}"
         )
     priority_row = rows.filter(has_text="12").filter(has_text="Fast").first
     priority_cells = [text.strip() for text in priority_row.locator("td").all_inner_texts()]
@@ -3671,13 +3718,18 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     csv_tiers = sorted(row.get("service_tier", "") for row in csv_rows)
     if csv_tiers != ["", "cache-import", "flex", "priority", "priority"]:
         raise AssertionError(f"Request-event CSV lost raw service_tier values: {csv_tiers!r}")
+    csv_outbound_tiers = sorted(row.get("outbound_service_tier", "") for row in csv_rows)
+    if csv_outbound_tiers != ["", "priority", "priority", "standard", "standard"]:
+        raise AssertionError(
+            f"Request-event CSV lost raw outbound_service_tier values: {csv_outbound_tiers!r}"
+        )
     resolved_csv_tiers = sorted(row.get("resolved_service_tier", "") for row in csv_rows)
-    if resolved_csv_tiers != ["fast", "fast", "std", "std", "std"]:
+    if resolved_csv_tiers != ["fast", "std", "std", "std", "std"]:
         raise AssertionError(
             f"Request-event CSV resolved tiers incorrectly: {resolved_csv_tiers!r}"
         )
     csv_evidence = sorted(row.get("service_tier_evidence", "") for row in csv_rows)
-    if csv_evidence != ["assumed", "assumed", "effective", "effective", "request"]:
+    if csv_evidence != ["assumed", "assumed", "outbound", "response", "response"]:
         raise AssertionError(
             f"Request-event CSV lost tier evidence: {csv_evidence!r}"
         )
@@ -3732,8 +3784,19 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     )
     if json_tiers != ["<null>", "cache-import", "flex", "priority", "priority"]:
         raise AssertionError(f"Request-event JSON lost raw service_tier values: {json_tiers!r}")
+    json_outbound_tiers = sorted(
+        "<null>"
+        if row.get("outbound_service_tier") is None
+        else str(row.get("outbound_service_tier"))
+        for row in json_rows
+    )
+    if json_outbound_tiers != ["<null>", "priority", "priority", "standard", "standard"]:
+        raise AssertionError(
+            "Request-event JSON lost raw outbound_service_tier values: "
+            f"{json_outbound_tiers!r}"
+        )
     resolved_json_tiers = sorted(str(row.get("resolved_service_tier")) for row in json_rows)
-    if resolved_json_tiers != ["fast", "fast", "std", "std", "std"]:
+    if resolved_json_tiers != ["fast", "std", "std", "std", "std"]:
         raise AssertionError(
             f"Request-event JSON resolved tiers incorrectly: {resolved_json_tiers!r}"
         )
@@ -3779,7 +3842,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         )
 
     tier_select = card.get_by_label("Tier", exact=True)
-    for option_label, expected_rows in [("Fast", 2), ("Std", 3)]:
+    for option_label, expected_rows in [("Fast", 1), ("Std", 4)]:
         tier_select.click()
         page.get_by_role("option", name=option_label, exact=True).click()
         wait_for_row_count(expected_rows)

@@ -132,7 +132,7 @@ export type {
   ResolvedServiceTier,
   ServiceTierEvidence,
 } from './usage/serviceTier';
-export { normalizeServiceTier, resolveServiceTier } from './usage/serviceTier';
+export { classifyServiceTier, normalizeServiceTier, resolveServiceTier } from './usage/serviceTier';
 
 export interface UsageTokenStats extends UsageTokenFields {
   input_tokens?: number;
@@ -150,6 +150,7 @@ export interface UsageDetail {
   auth_index: string | number | null;
   service_tier?: string | null;
   request_service_tier?: string | null;
+  outbound_service_tier?: string | null;
   response_service_tier?: string | null;
   effective_service_tier?: string | null;
   reasoning_effort?: string | null;
@@ -505,6 +506,14 @@ const extractRequestServiceTier = (detail: Record<string, unknown>): string | nu
     'RequestServiceTier'
   );
 
+const extractOutboundServiceTier = (detail: Record<string, unknown>): string | null =>
+  extractNamedServiceTier(
+    detail,
+    'outbound_service_tier',
+    'outboundServiceTier',
+    'OutboundServiceTier'
+  );
+
 const extractResponseServiceTier = (detail: Record<string, unknown>): string | null =>
   extractNamedServiceTier(
     detail,
@@ -822,6 +831,7 @@ export function collectUsageDetails(usageData: unknown): UsageDetail[] {
             null) as UsageDetail['auth_index'],
           service_tier: extractServiceTier(detailRaw),
           request_service_tier: extractRequestServiceTier(detailRaw),
+          outbound_service_tier: extractOutboundServiceTier(detailRaw),
           response_service_tier: extractResponseServiceTier(detailRaw),
           effective_service_tier: extractEffectiveServiceTier(detailRaw),
           reasoning_effort: extractReasoningEffort(detailRaw),
@@ -903,6 +913,7 @@ export function collectUsageDetailsWithEndpoint(usageData: unknown): UsageDetail
             null) as UsageDetail['auth_index'],
           service_tier: extractServiceTier(detailRaw),
           request_service_tier: extractRequestServiceTier(detailRaw),
+          outbound_service_tier: extractOutboundServiceTier(detailRaw),
           response_service_tier: extractResponseServiceTier(detailRaw),
           effective_service_tier: extractEffectiveServiceTier(detailRaw),
           reasoning_effort: extractReasoningEffort(detailRaw),
