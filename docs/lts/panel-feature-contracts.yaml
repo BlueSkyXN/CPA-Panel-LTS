@@ -208,10 +208,16 @@ features:
 
   - id: provider-stable-lts-page
     status: protected
-    reason: The stable provider page preserves full usage-backed status bars and LTS-only providers.
+    reason: The legacy provider page preserves full usage-backed status bars and LTS-only providers; the Workbench is the canonical provider management surface at /ai-providers.
     routes:
-      - /ai-providers
+      - /ai-providers/legacy
       - /lts/providers
+      - /ai-providers/gemini/*
+      - /ai-providers/codex/*
+      - /ai-providers/claude/*
+      - /ai-providers/vertex/*
+      - /ai-providers/openai/*
+      - /ai-providers/ampcode
     panel_files:
       - src/pages/AiProvidersPage.tsx
       - src/pages/AiProvidersPage.module.scss
@@ -236,8 +242,9 @@ features:
 
   - id: provider-workbench
     status: coexist
-    reason: Upstream workbench is useful for resource management and recent health, but must not replace the stable LTS provider page; it must preserve and edit Core model mapping fields including canonical display-name from Core v7.2.70 or later. The accepted xAI API-key adapt-port targets the current CPA-Core-LTS xai-api-key management contract, preserves unknown config fields, and uses api-key plus base-url selectors. Branded groups remain config-detected only and must not add promotional quick-start routes or registration links.
+    reason: The Workbench is the canonical provider management surface at /ai-providers; /ai-providers/workbench remains a redirect alias, while the legacy LTS provider page stays available under /ai-providers/legacy. It must preserve and edit Core model mapping fields including canonical display-name from Core v7.2.70 or later. Its all-provider thinking editor follows Core ThinkingSupport fields levels, min, max, zero_allowed, and dynamic_allowed. It does not expose the Codex client-only ultra compatibility preset as a provider wire capability, while unknown existing levels and fields remain lossless through advanced JSON. The accepted xAI API-key adapt-port targets the current CPA-Core-LTS xai-api-key management contract, preserves unknown config fields, and uses api-key plus base-url selectors. Branded groups remain config-detected only and must not add promotional quick-start routes or registration links.
     routes:
+      - /ai-providers
       - /ai-providers/workbench
     panel_files:
       - src/router/MainRoutes.tsx
@@ -246,6 +253,7 @@ features:
       - src/features/providers/descriptors.ts
       - src/features/providers/xaiApiKeyProvider.test.mjs
       - src/features/providers/providerIntegrity.test.mjs
+      - src/features/providers/thinkingLevels.ts
       - src/features/providers/code0.ts
       - src/features/providers/fennoAI.ts
       - src/features/providers/qiniuCloud.ts
@@ -260,6 +268,7 @@ features:
       - src/features/providers/adapters.ts
       - src/components/providers/hooks/useProviderRecentRequests.ts
       - src/components/providers/hooks/providerRecentRequests.test.mjs
+      - src/components/ui/modelInputListUtils.ts
       - src/services/api/config.ts
       - src/services/api/providers.ts
       - src/services/api/transformers.ts
@@ -326,6 +335,12 @@ features:
       - preserved legacy model routing aliases
       - cleared model display-name without dropping unknown fields
       - updated sponsor model display-name
+      - THINKING_EFFORT_LEVELS
+      - updateThinkingBudgetJson
+      - zero_allowed
+      - dynamic_allowed
+      - thinking capability round-trip and reset
+      - legacy model inputs preserve fields that are not visually editable
     validation:
       - npm run test:providers
       - npm run smoke:lts
@@ -335,6 +350,7 @@ features:
     status: lts-maintained
     reason: Upstream Panel removed Ampcode, but CPA-Core-LTS still exposes Ampcode config and management endpoints.
     routes:
+      - /ai-providers/legacy/ampcode
       - /ai-providers/ampcode
       - /lts/ampcode
     panel_files:

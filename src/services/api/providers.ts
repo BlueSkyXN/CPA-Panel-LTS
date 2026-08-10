@@ -75,8 +75,9 @@ const MODEL_ALIAS_FIELDS = [
   'display_name',
   'priority',
   'test-model',
+  'thinking',
 ] as const;
-const OPENAI_MODEL_ALIAS_FIELDS = [...MODEL_ALIAS_FIELDS, 'image', 'thinking'] as const;
+const OPENAI_MODEL_ALIAS_FIELDS = [...MODEL_ALIAS_FIELDS, 'image'] as const;
 
 const API_KEY_ENTRY_FIELDS = ['api-key', 'proxy-url'] as const;
 
@@ -347,7 +348,7 @@ const buildProviderDeleteQuery = (apiKey: string, baseUrl?: string) => {
   return `?${params.toString()}`;
 };
 
-const serializeModelAliases = (models?: ModelAlias[], includeOpenAIFields = false) =>
+const serializeModelAliases = (models?: ModelAlias[], includeImage = false) =>
   Array.isArray(models)
     ? models
         .map((model) => {
@@ -365,12 +366,12 @@ const serializeModelAliases = (models?: ModelAlias[], includeOpenAIFields = fals
           if (model.testModel) {
             payload['test-model'] = model.testModel;
           }
-          if (includeOpenAIFields) {
+          if (model.thinking) {
+            payload.thinking = model.thinking;
+          }
+          if (includeImage) {
             if (model.image) {
               payload.image = true;
-            }
-            if (model.thinking) {
-              payload.thinking = model.thinking;
             }
           }
           return payload;
@@ -430,7 +431,10 @@ const serializeVertexModelAliases = (models?: ModelAlias[]) =>
           const displayName =
             typeof model?.displayName === 'string' ? model.displayName.trim() : '';
           if (!name || !alias) return null;
-          return displayName ? { name, alias, 'display-name': displayName } : { name, alias };
+          const payload: Record<string, unknown> = { name, alias };
+          if (displayName) payload['display-name'] = displayName;
+          if (model.thinking) payload.thinking = model.thinking;
+          return payload;
         })
         .filter(Boolean)
     : undefined;

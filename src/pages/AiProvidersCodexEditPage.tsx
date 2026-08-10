@@ -143,7 +143,7 @@ export function AiProvidersCodexEditPage() {
       navigate(-1);
       return;
     }
-    navigate('/ai-providers', { replace: true });
+    navigate('/ai-providers/legacy', { replace: true });
   }, [location.state, navigate]);
 
   const swipeRef = useEdgeSwipeBack({ onBack: handleBack });

@@ -427,8 +427,8 @@ export function AiProvidersPage() {
             loading={loading}
             disableControls={disableControls}
             isSwitching={isSwitching}
-            onAdd={() => openEditor('/ai-providers/gemini/new')}
-            onEdit={(index) => openEditor(`/ai-providers/gemini/${index}`)}
+            onAdd={() => openEditor('/ai-providers/legacy/gemini/new')}
+            onEdit={(index) => openEditor(`/ai-providers/legacy/gemini/${index}`)}
             onDelete={deleteGemini}
             onToggle={(index, enabled) => void setConfigEnabled('gemini', index, enabled)}
           />
@@ -443,8 +443,8 @@ export function AiProvidersPage() {
             loading={loading}
             disableControls={disableControls}
             isSwitching={isSwitching}
-            onAdd={() => openEditor('/ai-providers/codex/new')}
-            onEdit={(index) => openEditor(`/ai-providers/codex/${index}`)}
+            onAdd={() => openEditor('/ai-providers/legacy/codex/new')}
+            onEdit={(index) => openEditor(`/ai-providers/legacy/codex/${index}`)}
             onDelete={(index) => void deleteProviderEntry('codex', index)}
             onToggle={(index, enabled) => void setConfigEnabled('codex', index, enabled)}
           />
@@ -459,8 +459,8 @@ export function AiProvidersPage() {
             loading={loading}
             disableControls={disableControls}
             isSwitching={isSwitching}
-            onAdd={() => openEditor('/ai-providers/claude/new')}
-            onEdit={(index) => openEditor(`/ai-providers/claude/${index}`)}
+            onAdd={() => openEditor('/ai-providers/legacy/claude/new')}
+            onEdit={(index) => openEditor(`/ai-providers/legacy/claude/${index}`)}
             onDelete={(index) => void deleteProviderEntry('claude', index)}
             onToggle={(index, enabled) => void setConfigEnabled('claude', index, enabled)}
           />
@@ -475,8 +475,8 @@ export function AiProvidersPage() {
             loading={loading}
             disableControls={disableControls}
             isSwitching={isSwitching}
-            onAdd={() => openEditor('/ai-providers/vertex/new')}
-            onEdit={(index) => openEditor(`/ai-providers/vertex/${index}`)}
+            onAdd={() => openEditor('/ai-providers/legacy/vertex/new')}
+            onEdit={(index) => openEditor(`/ai-providers/legacy/vertex/${index}`)}
             onDelete={deleteVertex}
             onToggle={(index, enabled) => void setConfigEnabled('vertex', index, enabled)}
           />
@@ -488,7 +488,7 @@ export function AiProvidersPage() {
             loading={loading}
             disableControls={disableControls}
             isSwitching={isSwitching}
-            onEdit={() => openEditor('/ai-providers/ampcode')}
+            onEdit={() => openEditor('/ai-providers/legacy/ampcode')}
           />
         </div>
 
@@ -502,8 +502,8 @@ export function AiProvidersPage() {
             disableControls={disableControls}
             isSwitching={isSwitching}
             resolvedTheme={resolvedTheme}
-            onAdd={() => openEditor('/ai-providers/openai/new')}
-            onEdit={(index) => openEditor(`/ai-providers/openai/${index}`)}
+            onAdd={() => openEditor('/ai-providers/legacy/openai/new')}
+            onEdit={(index) => openEditor(`/ai-providers/legacy/openai/${index}`)}
             onDelete={deleteOpenai}
             onToggle={(index, enabled) => void setOpenAIProviderEnabled(index, enabled)}
           />

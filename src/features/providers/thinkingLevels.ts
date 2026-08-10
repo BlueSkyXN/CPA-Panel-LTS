@@ -1,27 +1,11 @@
-export const THINKING_LEVELS = [
-  'none',
-  'minimal',
-  'low',
-  'medium',
-  'high',
-  'xhigh',
-  'max',
-  'auto',
-] as const;
+export const THINKING_EFFORT_LEVELS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
+
+export const THINKING_LEVELS = [...THINKING_EFFORT_LEVELS, 'none', 'auto'] as const;
 
 export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
 
 const THINKING_LEVEL_SET = new Set<string>(THINKING_LEVELS);
-const SERIALIZED_LEVEL_ORDER: readonly ThinkingLevel[] = [
-  'minimal',
-  'low',
-  'medium',
-  'high',
-  'xhigh',
-  'max',
-  'none',
-  'auto',
-];
+export type ThinkingBudgetField = 'min' | 'max';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -37,6 +21,11 @@ export const parseThinkingJson = (
     throw new Error('Thinking config must be a JSON object');
   }
   return parsed;
+};
+
+export const formatThinkingJson = (value: Record<string, unknown> | undefined): string => {
+  if (!value || Object.keys(value).length === 0) return '';
+  return JSON.stringify(value, null, 2);
 };
 
 export const readThinkingLevels = (value: unknown): ThinkingLevel[] => {
@@ -78,11 +67,19 @@ export const mergeThinkingLevels = (
   const next = { ...(current ?? {}) };
   const unknownLevels = readUnknownLevels(next);
   const selected = new Set(levels);
-  const standardLevels = SERIALIZED_LEVEL_ORDER.filter((level) => selected.has(level));
+  const standardLevels = THINKING_EFFORT_LEVELS.filter((level) => selected.has(level));
   const mergedLevels = [...standardLevels, ...unknownLevels];
 
-  delete next.zero_allowed;
-  delete next.dynamic_allowed;
+  if (selected.has('none')) {
+    next.zero_allowed = true;
+  } else {
+    delete next.zero_allowed;
+  }
+  if (selected.has('auto')) {
+    next.dynamic_allowed = true;
+  } else {
+    delete next.dynamic_allowed;
+  }
   if (mergedLevels.length > 0) {
     next.levels = mergedLevels;
   } else {
@@ -97,5 +94,43 @@ export const updateThinkingLevelsJson = (
   levels: readonly ThinkingLevel[]
 ): string => {
   const merged = mergeThinkingLevels(parseThinkingJson(value), levels);
-  return merged ? JSON.stringify(merged, null, 2) : '';
+  return formatThinkingJson(merged);
+};
+
+export const readThinkingBudget = (
+  value: Record<string, unknown> | undefined,
+  field: ThinkingBudgetField
+): number | undefined => {
+  const budget = value?.[field];
+  return typeof budget === 'number' && Number.isSafeInteger(budget) && budget >= 0
+    ? budget
+    : undefined;
+};
+
+export const mergeThinkingBudget = (
+  current: Record<string, unknown> | undefined,
+  field: ThinkingBudgetField,
+  budget: number | undefined
+): Record<string, unknown> | undefined => {
+  const next = { ...(current ?? {}) };
+  if (budget === undefined) {
+    delete next[field];
+  } else {
+    next[field] = budget;
+  }
+  return Object.keys(next).length > 0 ? next : undefined;
+};
+
+export const updateThinkingBudgetJson = (
+  value: string | undefined,
+  field: ThinkingBudgetField,
+  budget: number | undefined
+): string => formatThinkingJson(mergeThinkingBudget(parseThinkingJson(value), field, budget));
+
+export const hasThinkingBudgetRangeError = (
+  value: Record<string, unknown> | undefined
+): boolean => {
+  const min = readThinkingBudget(value, 'min');
+  const max = readThinkingBudget(value, 'max');
+  return min !== undefined && max !== undefined && min > max;
 };

@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/icons';
 import { hasDisableAllModelsRule } from '@/components/providers/utils';
 import { maskApiKey } from '@/utils/format';
+import type { ModelAlias } from '@/types';
 import type { ModelInfo } from '@/utils/models';
 import { isSponsorPartialMutationError } from '../../sponsorMutationRecovery';
 import {
@@ -33,8 +34,14 @@ import type {
   SponsorProviderRaw,
 } from '../../types';
 import { ModelDiscoveryPanel } from './ModelDiscoveryPanel';
+import { ModelEntriesEditor } from './ModelEntriesEditor';
 import { useModelDiscovery, type UseModelDiscoveryResult } from './useModelDiscovery';
 import styles from './sharedForm.module.scss';
+import {
+  formatThinkingJson,
+  hasThinkingBudgetRangeError,
+  parseThinkingJson,
+} from '../../thinkingLevels';
 
 interface SponsorProviderFormProps {
   brand: SponsorProviderBrand;
@@ -51,6 +58,7 @@ interface SponsorModelSectionProps {
   description: string;
   models: ModelEntryInput[];
   discovery: UseModelDiscoveryResult;
+  supportsImage: boolean;
   mutating: boolean;
   onChange: (next: ModelEntryInput[]) => void;
 }
@@ -114,17 +122,7 @@ const protocolUrlForEntry = (
   definition: SponsorProviderDefinition
 ): string => sponsorProtocolUrl(definition.getProtocolUrls(entry.baseUrl), entry.protocol);
 
-const modelsFromConfig = (
-  models:
-    | Array<{
-        name?: string;
-        alias?: string;
-        displayName?: string;
-        priority?: number;
-        testModel?: string;
-      }>
-    | undefined
-): ModelEntryInput[] =>
+const modelsFromConfig = (models: ModelAlias[] | undefined): ModelEntryInput[] =>
   models?.length
     ? models.map((model) => ({
         name: model.name ?? '',
@@ -132,6 +130,8 @@ const modelsFromConfig = (
         displayName: model.displayName ?? '',
         priority: model.priority,
         testModel: model.testModel,
+        image: model.image === true,
+        thinkingJson: formatThinkingJson(model.thinking),
       }))
     : [emptyModel()];
 
@@ -227,6 +227,7 @@ function SponsorModelSection({
   description,
   models,
   discovery,
+  supportsImage,
   mutating,
   onChange,
 }: SponsorModelSectionProps) {
@@ -288,55 +289,16 @@ function SponsorModelSection({
             onClose={() => setDiscoveryOpen(false)}
           />
         ) : null}
-        {modelsList.map((entry, modelIndex) => (
-          <div key={modelIndex} className={styles.modelAliasRow}>
-            <input
-              className={styles.input}
-              placeholder={t('providersPage.form.modelNamePlaceholder')}
-              aria-label={t('providersPage.form.modelNamePlaceholder')}
-              value={entry.name}
-              onChange={(event) => updateModelEntry(modelIndex, { name: event.target.value })}
-              disabled={mutating}
-            />
-            <input
-              className={styles.input}
-              placeholder={t('providersPage.form.modelAliasPlaceholder')}
-              aria-label={t('providersPage.form.modelAliasPlaceholder')}
-              value={entry.alias ?? ''}
-              onChange={(event) => updateModelEntry(modelIndex, { alias: event.target.value })}
-              disabled={mutating}
-            />
-            <input
-              className={styles.input}
-              placeholder={t('providersPage.form.modelDisplayNamePlaceholder')}
-              aria-label={t('providersPage.form.modelDisplayNamePlaceholder')}
-              value={entry.displayName ?? ''}
-              onChange={(event) =>
-                updateModelEntry(modelIndex, { displayName: event.target.value })
-              }
-              disabled={mutating}
-            />
-            <div className={styles.modelEntryActions}>
-              <button
-                type="button"
-                className={styles.removeBtn}
-                disabled={mutating || modelsList.length <= 1}
-                onClick={() => removeModelEntry(modelIndex)}
-              >
-                <IconX size={12} />
-              </button>
-            </div>
-          </div>
-        ))}
-        <button
-          type="button"
-          className={styles.addBtn}
-          disabled={mutating}
-          onClick={() => onChange([...modelsList, emptyModel()])}
-        >
-          <IconPlus size={12} />
-          <span>{t('providersPage.form.addModel')}</span>
-        </button>
+        <ModelEntriesEditor
+          models={modelsList}
+          supportsImage={supportsImage}
+          supportsThinking
+          mutating={mutating}
+          removeDisabled={modelsList.length <= 1}
+          onUpdate={updateModelEntry}
+          onAdd={() => onChange([...modelsList, emptyModel()])}
+          onRemove={removeModelEntry}
+        />
       </div>
     </Collapsible>
   );
@@ -637,6 +599,7 @@ function SponsorKeyEntryCard({
             description={t(`providersPage.sponsor.protocolModelHints.${modelKey}`)}
             models={entry.models}
             discovery={discovery}
+            supportsImage={entry.protocol === 'openai'}
             mutating={mutating}
             onChange={(models) => updateEntry({ models })}
           />
@@ -728,6 +691,18 @@ export function SponsorProviderForm({
     const protocolSet = new Set(entries.map((entry) => entry.protocol));
     if (protocolSet.size !== entries.length) {
       return t('providersPage.sponsor.validation.protocolDuplicate');
+    }
+    for (const entry of entries) {
+      for (const model of entry.models) {
+        try {
+          const thinking = parseThinkingJson(model.thinkingJson);
+          if (hasThinkingBudgetRangeError(thinking)) {
+            return t('providersPage.form.thinkingBudgetRangeInvalid');
+          }
+        } catch {
+          return t('providersPage.form.thinkingInvalidJson');
+        }
+      }
     }
     return null;
   };

@@ -11,7 +11,7 @@ import type { ModelEntry, ProviderFormState } from '@/components/providers/types
 import { buildHeaderObject, headersToEntries, normalizeHeaderEntries } from '@/utils/headers';
 import { areKeyValueEntriesEqual, areModelEntriesEqual, areStringArraysEqual } from '@/utils/compare';
 import { excludedModelsToText, parseExcludedModels } from '@/components/providers/utils';
-import { modelsToEntries } from '@/components/ui/modelInputListUtils';
+import { entriesToModels, modelsToEntries } from '@/components/ui/modelInputListUtils';
 import { parseRouteIndexParam } from '@/utils/routeParams';
 import type { ClaudeEditBaseline } from '@/stores/useClaudeEditDraftStore';
 
@@ -205,7 +205,7 @@ export function AiProvidersClaudeEditLayout() {
       navigate(-1);
       return;
     }
-    navigate('/ai-providers', { replace: true });
+    navigate('/ai-providers/legacy', { replace: true });
   }, [location.state, navigate]);
 
   useEffect(() => {
@@ -315,9 +315,9 @@ export function AiProvidersClaudeEditLayout() {
       isCloakDirty);
   const editorRootPath = useMemo(() => {
     if (hasIndexParam) {
-      return `/ai-providers/claude/${params.index ?? ''}`;
+      return `/ai-providers/legacy/claude/${params.index ?? ''}`;
     }
-    return '/ai-providers/claude/new';
+    return '/ai-providers/legacy/claude/new';
   }, [hasIndexParam, params.index]);
   const canGuard = !resolvedLoading && !saving && !invalidIndexParam && !invalidIndex;
 
@@ -405,14 +405,10 @@ export function AiProvidersClaudeEditLayout() {
         baseUrl: (form.baseUrl ?? '').trim() || undefined,
         proxyUrl: form.proxyUrl?.trim() || undefined,
         headers: buildHeaderObject(form.headers),
-        models: form.modelEntries
-          .map((entry) => {
-            const name = entry.name.trim();
-            if (!name) return null;
-            const alias = entry.alias.trim();
-            return { name, alias: alias || name };
-          })
-          .filter(Boolean) as ProviderKeyConfig['models'],
+        models: entriesToModels(form.modelEntries).map((model) => ({
+          ...model,
+          alias: model.alias || model.name,
+        })),
         excludedModels: parseExcludedModels(form.excludedText),
         cloak: form.cloak,
       };

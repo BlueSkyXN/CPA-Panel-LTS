@@ -29,6 +29,11 @@ import { ApiKeyEntriesEditor } from './ApiKeyEntriesEditor';
 import { ModelEntriesEditor } from './ModelEntriesEditor';
 import styles from './sharedForm.module.scss';
 import { CLAUDE_API_BASE_URL } from '../../claudeApi';
+import {
+  formatThinkingJson,
+  hasThinkingBudgetRangeError,
+  parseThinkingJson,
+} from '../../thinkingLevels';
 
 interface BaseProviderFormProps {
   brand: ProviderBrand;
@@ -50,11 +55,6 @@ const XAI_API_BASE_URL = 'https://api.x.ai/v1';
 
 const stripDisableAllRule = (list?: string[]): string[] =>
   (list ?? []).filter((s) => s.trim() !== '*');
-
-const formatJsonObject = (value?: Record<string, unknown>): string => {
-  if (!value || Object.keys(value).length === 0) return '';
-  return JSON.stringify(value, null, 2);
-};
 
 const isClaudeLikeBrand = (brand: ProviderBrand): boolean =>
   brand === 'claude' || brand === 'claudeApi';
@@ -115,7 +115,7 @@ function buildInitialForm(
             priority: m.priority,
             testModel: m.testModel,
             image: m.image === true,
-            thinkingJson: formatJsonObject(m.thinking),
+            thinkingJson: formatThinkingJson(m.thinking),
           }))
         : [emptyModel()],
       headers: cfg.headers
@@ -157,6 +157,7 @@ function buildInitialForm(
           displayName: m.displayName ?? '',
           priority: m.priority,
           testModel: m.testModel,
+          thinkingJson: formatThinkingJson(m.thinking),
         }))
       : [emptyModel()],
     headers: cfg.headers
@@ -378,6 +379,16 @@ export function BaseProviderForm({
     if (descriptor.baseUrlRequired && !form.baseUrl.trim()) {
       return t('providersPage.form.validation.baseUrlRequired');
     }
+    for (const model of form.models) {
+      try {
+        const thinking = parseThinkingJson(model.thinkingJson);
+        if (hasThinkingBudgetRangeError(thinking)) {
+          return t('providersPage.form.thinkingBudgetRangeInvalid');
+        }
+      } catch {
+        return t('providersPage.form.thinkingInvalidJson');
+      }
+    }
     return null;
   };
 
@@ -418,7 +429,7 @@ export function BaseProviderForm({
     brand === 'xai' ||
     isClaudeLikeBrand(brand) ||
     brand === 'openaiCompatibility';
-  const supportsOpenAIModelOptions = brand === 'openaiCompatibility';
+  const supportsImageModels = brand === 'openaiCompatibility';
   const singleConnectivity =
     brand === 'codex' || brand === 'xai'
       ? { status: connectivity.codexStatus, run: connectivity.runCodex }
@@ -816,7 +827,8 @@ export function BaseProviderForm({
             ) : null}
             <ModelEntriesEditor
               models={modelsList}
-              extendedOptions={supportsOpenAIModelOptions}
+              supportsImage={supportsImageModels}
+              supportsThinking
               mutating={mutating}
               removeDisabled={modelsList.length <= 1}
               onUpdate={updateModelEntry}
