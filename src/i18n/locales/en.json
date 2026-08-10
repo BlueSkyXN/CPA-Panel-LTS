@@ -2236,7 +2236,8 @@
       "claudeApi": "ClaudeAPI",
       "code0": "Code0",
       "fennoAI": "FennoAI",
-      "qiniuCloud": "Qiniu Cloud"
+      "qiniuCloud": "Qiniu Cloud",
+      "infistar": "Infistar"
     },
     "table": {
       "key": "Key",

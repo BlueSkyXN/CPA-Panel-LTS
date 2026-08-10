@@ -241,9 +241,28 @@ Open upstream PRs were reviewed separately because they are not represented by `
 
 | Upstream PR / head | Classification | LTS evidence and decision |
 |---|---|---|
+| `#371` / `5d8d18f7` | `defer` | The Anthropic login-mode selector depends on Core PR #4830 adding the `manual` query parameter and returning the effective mode. Current CPA-Core-LTS `RequestAnthropicToken` neither reads `manual` nor returns it. When an older Core ignores the parameter, the proposed Panel falls back to the user's selected mode and can label a local callback as a manual authorization-code flow, so it is not harmless for the current LTS pair. Reassess after the Core contract lands with an explicit response/capability signal and authenticated browser coverage for both redirects. |
 | `#366` / `4b9aea67` | `defer` | Custom/system/accelerator plugin proxy selection depends on the still-open Core PR #4693 and new `/plugin-proxy`, `/plugin-proxy/validate`, and `/proxy-url` contracts. Its service split also drops `PluginStoreResponse.sources`, which LTS needs for `plugin_store_sources` round-trip behavior. A later adaptation must preserve that field, the plugin capability gate, confirm-token flow, npm validation, and authenticated write smoke. |
 | `#367` / `93c4cb0c` | `defer` | Per-key profiles, request/token limits, summaries, and recent events depend on the still-open Core PR #4753 and its SQLite-backed Management APIs. The page may later coexist with protected full `/usage`, but it must not redirect away from existing LTS API-key configuration or replace full usage statistics without an explicit capability/version contract. |
 | `#352` / `9813935a` | `defer` | Korean locale support is independent of Core but expands the active four-locale contract. Accepting it requires a reviewed `ko.lts.json` overlay, complete LTS-only keys, locale guards, language selection/browser mapping, and translation QA; that product expansion is outside this intake closeout. |
+
+## Audited seven-day v1.22.1-v1.22.2 intake (2026-08-10)
+
+Refs were fetched with pruning after the prior `v1.22.0` intake:
+
+- rolling review window: `2026-08-03T11:11:54+08:00` through `2026-08-10T11:11:54+08:00`
+- previous audited boundary: `0eeb747cdc7903834fee00ce9f9254c23b162be9` (`v1.22.0`)
+- `upstream/main`: `f60c8ca683b118be5750ff102187cc6d8ad4605b` (`v1.22.2`)
+- `origin/main` at intake start: `63e411301c1b7f1cfcaf294fab673c3405fb1f29`
+- new canonical delta since the prior boundary: 2 non-merge commits, 19 files, 423 insertions, and 18 deletions
+- decisions: 1 `already-equivalent`, 1 `adapt-port`
+
+| Upstream commit | Classification | LTS evidence and decision |
+|---|---|---|
+| `1ad9cac75c6bd694160da3b80f4092cff1b83da4` | `already-equivalent` | The upstream fix pins its unified Codex timeline lane to the account `five-hour` or `weekly` window instead of a same-period Spark window. LTS does not use that timeline state model: `buildCodexQuotaWindows` builds the account rows from the top-level `rate_limit`, renders each `additional_rate_limits` entry with separate IDs, and derives analytics only from the top-level weekly window. The incorrect lane substitution is therefore not reachable, so no timeline code was copied. |
+| `f60c8ca683b118be5750ff102187cc6d8ad4605b` | `adapt-port` | Panel commit `5703e0c` / PR #61 recognizes the official Infistar domestic and global endpoints across OpenAI, Codex, Anthropic, and Gemini configs while retaining backend `sourceIndex` and leaving custom endpoints in the generic group. The group is config-detected only. Affiliate metadata, registration links, recommendations, quick fill, and the upstream Bun tests were omitted; the accepted path uses the repository's Node/Vite regression and four active locales. |
+
+The accepted adaptation passed `npm run validate:lts`, `npm run test:provider-integrity`, `npm run check:lts`, and `git diff --check`. `npm run smoke:lts` rebuilt successfully, but Chromium launch was blocked by the current macOS sandbox's Mach port permission, so this intake does not claim a new browser-smoke pass. No Core Management API, full usage statistics, quota data model, release workflow, tag, release, or deployment changed.
 
 
 ## Maintenance rules

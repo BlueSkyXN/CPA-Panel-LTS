@@ -89,11 +89,13 @@ for path in \
   src/assets/icons/code0.png \
   src/assets/icons/fenno-ai.png \
   src/assets/icons/qiniu-cloud.png \
+  src/assets/icons/infistar.png \
   src/features/providers/ProvidersWorkbenchPage.tsx \
   src/features/providers/descriptors.ts \
   src/features/providers/code0.ts \
   src/features/providers/fennoAI.ts \
   src/features/providers/qiniuCloud.ts \
+  src/features/providers/infistar.ts \
   src/features/providers/claudeApi.ts \
   src/features/providers/sponsorDefinitions.ts \
   src/features/providers/sponsorMutationRecovery.ts \
@@ -965,11 +967,14 @@ require_file_contains src/features/providers/descriptors.ts "claudeApi"
 require_file_contains src/features/providers/descriptors.ts "code0"
 require_file_contains src/features/providers/descriptors.ts "fennoAI"
 require_file_contains src/features/providers/descriptors.ts "qiniuCloud"
+require_file_contains src/features/providers/descriptors.ts "infistar"
 require_file_contains src/features/providers/useProviderWorkbench.ts "CONFIG_DETECTED_BRANDS"
+require_file_contains src/features/providers/useProviderWorkbench.ts "'infistar',"
 require_file_contains src/features/providers/claudeApi.ts "CLAUDE_API_BASE_URL"
 require_file_contains src/features/providers/code0.ts "CODE0_PROVIDER_NAME"
 require_file_contains src/features/providers/fennoAI.ts "FENNO_AI_PROVIDER_NAME"
 require_file_contains src/features/providers/qiniuCloud.ts "QINIU_CLOUD_PROVIDER_NAME"
+require_file_contains src/features/providers/infistar.ts "INFISTAR_PROVIDER_NAME"
 require_file_contains src/types/provider.ts "sourceIndex?: number"
 require_file_contains src/services/api/transformers.ts "normalizeOpenAIProvider(item, index)"
 require_file_contains src/services/api/providers.ts "getOpenAIProviderMutationIndex"
@@ -978,6 +983,7 @@ require_file_contains src/features/providers/adapters.ts "config.sourceIndex ?? 
 require_file_contains src/features/providers/sponsorDefinitions.ts "getSponsorOpenAIDeleteIndices"
 require_file_contains src/features/providers/useProviderWorkbench.ts "getSponsorOpenAIDeleteIndices(raw)"
 require_file_contains src/features/providers/providerIntegrity.test.mjs "custom branded endpoints"
+require_file_contains src/features/providers/providerIntegrity.test.mjs "adapts configured Infistar endpoints without promotional metadata"
 require_file_contains src/components/providers/hooks/useProviderRecentRequests.ts "createProviderRecentRequestsCacheController"
 require_file_contains src/components/providers/hooks/useProviderRecentRequests.ts "state.managementKey"
 require_file_contains src/components/providers/hooks/providerRecentRequests.test.mjs "late writes to an old connection"

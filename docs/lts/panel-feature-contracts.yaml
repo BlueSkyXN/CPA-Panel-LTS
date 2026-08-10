@@ -242,7 +242,7 @@ features:
 
   - id: provider-workbench
     status: coexist
-    reason: The Workbench is the canonical provider management surface at /ai-providers; /ai-providers/workbench remains a redirect alias, while the legacy LTS provider page stays available under /ai-providers/legacy. It must preserve and edit Core model mapping fields including canonical display-name from Core v7.2.70 or later. Its all-provider thinking editor follows Core ThinkingSupport fields levels, min, max, zero_allowed, and dynamic_allowed. It does not expose the Codex client-only ultra compatibility preset as a provider wire capability, while unknown existing levels and fields remain lossless through advanced JSON. The accepted xAI API-key adapt-port targets the current CPA-Core-LTS xai-api-key management contract, preserves unknown config fields, and uses api-key plus base-url selectors. Branded groups remain config-detected only and must not add promotional quick-start routes or registration links.
+    reason: The Workbench is the canonical provider management surface at /ai-providers; /ai-providers/workbench remains a redirect alias, while the legacy LTS provider page stays available under /ai-providers/legacy. It must preserve and edit Core model mapping fields including canonical display-name from Core v7.2.70 or later. Its all-provider thinking editor follows Core ThinkingSupport fields levels, min, max, zero_allowed, and dynamic_allowed. It does not expose the Codex client-only ultra compatibility preset as a provider wire capability, while unknown existing levels and fields remain lossless through advanced JSON. The accepted xAI API-key adapt-port targets the current CPA-Core-LTS xai-api-key management contract, preserves unknown config fields, and uses api-key plus base-url selectors. Branded groups, including the Infistar adaptation, remain config-detected only and must not add promotional quick-start routes, affiliate metadata, recommendations, or registration links.
     routes:
       - /ai-providers
       - /ai-providers/workbench
@@ -257,6 +257,7 @@ features:
       - src/features/providers/code0.ts
       - src/features/providers/fennoAI.ts
       - src/features/providers/qiniuCloud.ts
+      - src/features/providers/infistar.ts
       - src/features/providers/claudeApi.ts
       - src/features/providers/sponsorDefinitions.ts
       - src/features/providers/sponsorMutationRecovery.ts
@@ -299,6 +300,7 @@ features:
       - CODE0_PROVIDER_NAME
       - FENNO_AI_PROVIDER_NAME
       - QINIU_CLOUD_PROVIDER_NAME
+      - INFISTAR_PROVIDER_NAME
       - CLAUDE_API_BASE_URL
       - openrouter-a
       - openrouter-b
@@ -311,6 +313,7 @@ features:
       - dropped provider unknown fields
       - dropped model unknown field
       - dropped configured branded provider
+      - adapts configured Infistar endpoints without promotional metadata
       - include_branded_providers
       - run_branded_provider_visibility_smoke
       - shown as a recommendation

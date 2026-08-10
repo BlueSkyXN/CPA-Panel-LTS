@@ -14,9 +14,10 @@ export type ProviderBrand =
   | 'openaiCompatibility'
   | 'code0'
   | 'fennoAI'
-  | 'qiniuCloud';
+  | 'qiniuCloud'
+  | 'infistar';
 
-export type SponsorProviderBrand = 'code0' | 'fennoAI' | 'qiniuCloud';
+export type SponsorProviderBrand = 'code0' | 'fennoAI' | 'qiniuCloud' | 'infistar';
 
 export const PROVIDER_SORT_BY_VALUES = ['name', 'priority', 'recent-success'] as const;
 export type ProviderSortBy = (typeof PROVIDER_SORT_BY_VALUES)[number];
@@ -48,6 +49,13 @@ export type ProviderResourceSelector =
     }
   | {
       brand: 'qiniuCloud';
+      openaiIndices: number[];
+      claudeIndices: number[];
+      codexIndices: number[];
+      geminiIndices: number[];
+    }
+  | {
+      brand: 'infistar';
       openaiIndices: number[];
       claudeIndices: number[];
       codexIndices: number[];

@@ -15,6 +15,14 @@ import {
   resolveFennoAIBaseUrl,
 } from './fennoAI';
 import {
+  INFISTAR_BASE_URL_OPTIONS,
+  INFISTAR_DISPLAY_NAME,
+  INFISTAR_PROTOCOL_LABELS,
+  INFISTAR_PROVIDER_NAME,
+  getInfistarProtocolUrls,
+  resolveInfistarBaseUrl,
+} from './infistar';
+import {
   QINIU_CLOUD_BASE_URL_OPTIONS,
   QINIU_CLOUD_DISPLAY_NAME,
   QINIU_CLOUD_PROTOCOL_LABELS,
@@ -92,10 +100,21 @@ const SPONSOR_DEFINITIONS: Record<SponsorProviderBrand, SponsorProviderDefinitio
     resolveBaseUrl: resolveQiniuCloudBaseUrl,
     getProtocolUrls: getQiniuCloudProtocolUrls,
   },
+  infistar: {
+    brand: 'infistar',
+    displayName: INFISTAR_DISPLAY_NAME,
+    providerName: INFISTAR_PROVIDER_NAME,
+    protocols: ['openai', 'claude', 'gemini', 'codex'],
+    protocolLabels: INFISTAR_PROTOCOL_LABELS,
+    defaultProtocol: 'openai',
+    baseUrlOptions: INFISTAR_BASE_URL_OPTIONS,
+    resolveBaseUrl: resolveInfistarBaseUrl,
+    getProtocolUrls: getInfistarProtocolUrls,
+  },
 };
 
 export const isMultiProtocolSponsorBrand = (brand: ProviderBrand): brand is SponsorProviderBrand =>
-  brand === 'code0' || brand === 'fennoAI' || brand === 'qiniuCloud';
+  brand === 'code0' || brand === 'fennoAI' || brand === 'qiniuCloud' || brand === 'infistar';
 
 export type SponsorAggregationConflict = 'multiple-configs' | 'multiple-openai-keys';
 

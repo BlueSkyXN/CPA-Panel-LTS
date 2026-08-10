@@ -18,7 +18,10 @@ const [
   code0,
   fennoAI,
   qiniuCloud,
+  infistar,
   sponsorDefinitions,
+  descriptors,
+  brandLogos,
   claudeApi,
   thinkingLevels,
   modelInputListUtils,
@@ -29,7 +32,10 @@ const [
   vite.ssrLoadModule('/src/features/providers/code0.ts'),
   vite.ssrLoadModule('/src/features/providers/fennoAI.ts'),
   vite.ssrLoadModule('/src/features/providers/qiniuCloud.ts'),
+  vite.ssrLoadModule('/src/features/providers/infistar.ts'),
   vite.ssrLoadModule('/src/features/providers/sponsorDefinitions.ts'),
+  vite.ssrLoadModule('/src/features/providers/descriptors.ts'),
+  vite.ssrLoadModule('/src/features/providers/brandLogos.ts'),
   vite.ssrLoadModule('/src/features/providers/claudeApi.ts'),
   vite.ssrLoadModule('/src/features/providers/thinkingLevels.ts'),
   vite.ssrLoadModule('/src/components/ui/modelInputListUtils.ts'),
@@ -94,6 +100,72 @@ test('preserves backend indices and keeps custom branded endpoints in the generi
     name: 'code0',
     index: 2,
   });
+});
+
+test('adapts configured Infistar endpoints without promotional metadata', () => {
+  const config = {
+    openaiCompatibility: [
+      {
+        name: 'Infistar official',
+        baseUrl: infistar.INFISTAR_DOMESTIC_BASE_URL,
+        apiKeyEntries: [{ apiKey: 'openai-key' }],
+        sourceIndex: 4,
+      },
+      {
+        name: 'infistar-custom',
+        baseUrl: 'https://gateway.example.test/v1',
+        apiKeyEntries: [{ apiKey: 'custom-key' }],
+        sourceIndex: 7,
+      },
+    ],
+    claudeApiKeys: [{ apiKey: 'claude-key', baseUrl: infistar.INFISTAR_DOMESTIC_ROOT_URL }],
+    codexApiKeys: [{ apiKey: 'codex-key', baseUrl: infistar.INFISTAR_GLOBAL_BASE_URL }],
+    geminiApiKeys: [{ apiKey: 'gemini-key', baseUrl: infistar.INFISTAR_GLOBAL_ROOT_URL }],
+  };
+
+  const raw = infistar.buildInfistarRaw(config);
+  assert.deepEqual(
+    raw.openai.map((item) => item.index),
+    [4]
+  );
+  assert.equal(infistar.isInfistarOpenAIProvider(config.openaiCompatibility[1]), false);
+  assert.deepEqual(
+    raw.claude.map((item) => item.index),
+    [0]
+  );
+  assert.deepEqual(
+    raw.codex.map((item) => item.index),
+    [0]
+  );
+  assert.deepEqual(
+    raw.gemini.map((item) => item.index),
+    [0]
+  );
+
+  const resource = adapters.infistarToResource(raw);
+  assert.equal(resource?.brand, 'infistar');
+  assert.equal(resource?.name, '无限星河');
+  assert.deepEqual(resource?.flags.protocols, ['openai', 'anthropic', 'gemini', 'codexResponses']);
+
+  const definition = sponsorDefinitions.getSponsorProviderDefinition('infistar');
+  assert.deepEqual(definition.protocols, ['openai', 'claude', 'gemini', 'codex']);
+  assert.deepEqual(
+    definition.baseUrlOptions.map(({ id, baseUrl }) => ({ id, baseUrl })),
+    [
+      { id: 'domestic', baseUrl: 'https://coneverse.com/v1' },
+      { id: 'overseas', baseUrl: 'https://infistar.ai/v1' },
+    ]
+  );
+  assert.equal(
+    Object.keys(definition).some((key) => key.toLowerCase().includes('affiliate')),
+    false
+  );
+  assert.equal(
+    Object.keys(infistar).some((key) => key.toLowerCase().includes('affiliate')),
+    false
+  );
+  assert.equal(descriptors.PROVIDER_BRAND_ORDER.at(-1), 'infistar');
+  assert.match(brandLogos.PROVIDER_LOGOS.infistar.src, /infistar\.png/);
 });
 
 test('deletes sponsor OpenAI entries by unique descending source index', () => {
