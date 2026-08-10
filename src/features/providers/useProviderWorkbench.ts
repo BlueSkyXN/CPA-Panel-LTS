@@ -15,6 +15,7 @@ import {
   codexToResource,
   fennoAIToResource,
   geminiToResource,
+  infistarToResource,
   openaiToResource,
   qiniuCloudToResource,
   vertexToResource,
@@ -49,6 +50,13 @@ import {
   isQiniuCloudOpenAIProvider,
 } from './qiniuCloud';
 import {
+  buildInfistarRaw,
+  isInfistarClaudeProvider,
+  isInfistarCodexProvider,
+  isInfistarGeminiProvider,
+  isInfistarOpenAIProvider,
+} from './infistar';
+import {
   getSponsorOpenAIDeleteIndices,
   getSponsorProviderDefinition,
   type SponsorProtocolUrls,
@@ -60,6 +68,7 @@ const CONFIG_DETECTED_BRANDS: ReadonlySet<ProviderBrand> = new Set([
   'code0',
   'fennoAI',
   'qiniuCloud',
+  'infistar',
 ]);
 
 export interface UseProviderWorkbenchResult {
@@ -416,7 +425,11 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
         case 'gemini':
           resources = (config.geminiApiKeys ?? []).reduce<ProviderResource[]>(
             (out, item, index) => {
-              if (!isCode0GeminiProvider(item) && !isQiniuCloudGeminiProvider(item)) {
+              if (
+                !isCode0GeminiProvider(item) &&
+                !isQiniuCloudGeminiProvider(item) &&
+                !isInfistarGeminiProvider(item)
+              ) {
                 out.push(geminiToResource(item, index));
               }
               return out;
@@ -429,7 +442,8 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
             if (
               !isCode0CodexProvider(item) &&
               !isFennoAICodexProvider(item) &&
-              !isQiniuCloudCodexProvider(item)
+              !isQiniuCloudCodexProvider(item) &&
+              !isInfistarCodexProvider(item)
             ) {
               out.push(codexToResource(item, index));
             }
@@ -446,6 +460,7 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
                 !isCode0ClaudeProvider(item) &&
                 !isFennoAIClaudeProvider(item) &&
                 !isQiniuCloudClaudeProvider(item) &&
+                !isInfistarClaudeProvider(item) &&
                 !isClaudeApiProvider(item)
               ) {
                 out.push(claudeToResource(item, index));
@@ -472,7 +487,11 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
         case 'openaiCompatibility':
           resources = (config.openaiCompatibility ?? []).reduce<ProviderResource[]>(
             (out, item, index) => {
-              if (!isCode0OpenAIProvider(item) && !isQiniuCloudOpenAIProvider(item)) {
+              if (
+                !isCode0OpenAIProvider(item) &&
+                !isQiniuCloudOpenAIProvider(item) &&
+                !isInfistarOpenAIProvider(item)
+              ) {
                 out.push(openaiToResource(item, index));
               }
               return out;
@@ -495,14 +514,17 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           resources = sponsorResource ? [sponsorResource] : [];
           break;
         }
+        case 'infistar': {
+          const sponsorResource = infistarToResource(buildInfistarRaw(config));
+          resources = sponsorResource ? [sponsorResource] : [];
+          break;
+        }
       }
       return {
         id: brand,
         resources,
       };
-    }).filter(
-      (group) => group.resources.length > 0 || !CONFIG_DETECTED_BRANDS.has(group.id)
-    );
+    }).filter((group) => group.resources.length > 0 || !CONFIG_DETECTED_BRANDS.has(group.id));
     return {
       fetchedAt,
       groups,
@@ -519,7 +541,9 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           ? buildCode0Raw(config)
           : brand === 'fennoAI'
             ? buildFennoAIRaw(config)
-            : buildQiniuCloudRaw(config);
+            : brand === 'qiniuCloud'
+              ? buildQiniuCloudRaw(config)
+              : buildInfistarRaw(config);
       const entries = normalizeSponsorKeyEntries(input.sponsorKeyEntries);
       const openaiEntry = entries.find((entry) => entry.protocol === 'openai');
       const claudeEntry = entries.find((entry) => entry.protocol === 'claude');
@@ -644,7 +668,12 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           );
         } else if (brand === 'openaiCompatibility') {
           await providersApi.createOpenAIProvider(buildOpenAIConfig(input));
-        } else if (brand === 'code0' || brand === 'fennoAI' || brand === 'qiniuCloud') {
+        } else if (
+          brand === 'code0' ||
+          brand === 'fennoAI' ||
+          brand === 'qiniuCloud' ||
+          brand === 'infistar'
+        ) {
           await runSponsorMutationWithRecovery(() => persistSponsorConfig(brand, input), refetch);
         }
         await refetch();
@@ -708,7 +737,12 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
             selector.index,
             buildOpenAIConfig(input, resource.raw as OpenAIProviderConfig)
           );
-        } else if (brand === 'code0' || brand === 'fennoAI' || brand === 'qiniuCloud') {
+        } else if (
+          brand === 'code0' ||
+          brand === 'fennoAI' ||
+          brand === 'qiniuCloud' ||
+          brand === 'infistar'
+        ) {
           await runSponsorMutationWithRecovery(() => persistSponsorConfig(brand, input), refetch);
         }
         await refetch();
@@ -738,7 +772,12 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           await providersApi.deleteVertexConfig(sel.apiKey, sel.baseUrl);
         } else if (sel.brand === 'openaiCompatibility') {
           await providersApi.deleteOpenAIProvider(sel.index);
-        } else if (sel.brand === 'code0' || sel.brand === 'fennoAI' || sel.brand === 'qiniuCloud') {
+        } else if (
+          sel.brand === 'code0' ||
+          sel.brand === 'fennoAI' ||
+          sel.brand === 'qiniuCloud' ||
+          sel.brand === 'infistar'
+        ) {
           await runSponsorMutationWithRecovery(async () => {
             const raw = resource.raw as SponsorProviderRaw;
             for (const item of raw.gemini) {
@@ -801,7 +840,12 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           }
         } else if (brand === 'openaiCompatibility' && selector.brand === 'openaiCompatibility') {
           await providersApi.updateOpenAIProviderDisabled(selector.index, disabled);
-        } else if (brand === 'code0' || brand === 'fennoAI' || brand === 'qiniuCloud') {
+        } else if (
+          brand === 'code0' ||
+          brand === 'fennoAI' ||
+          brand === 'qiniuCloud' ||
+          brand === 'infistar'
+        ) {
           await runSponsorMutationWithRecovery(
             () => toggleSponsorConfig(resource.raw as SponsorProviderRaw, disabled),
             refetch

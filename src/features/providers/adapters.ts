@@ -15,6 +15,12 @@ import {
   resolveFennoAIBaseUrl,
 } from './fennoAI';
 import {
+  INFISTAR_DISPLAY_NAME,
+  INFISTAR_PROTOCOL_LABELS,
+  getInfistarProtocolUrls,
+  resolveInfistarBaseUrl,
+} from './infistar';
+import {
   QINIU_CLOUD_DISPLAY_NAME,
   QINIU_CLOUD_PROTOCOL_LABELS,
   getQiniuCloudProtocolUrls,
@@ -329,5 +335,14 @@ export function qiniuCloudToResource(raw: SponsorProviderRaw): ProviderResource 
     protocolLabels: QINIU_CLOUD_PROTOCOL_LABELS,
     resolveBaseUrl: resolveQiniuCloudBaseUrl,
     getProtocolUrls: getQiniuCloudProtocolUrls,
+  });
+}
+
+export function infistarToResource(raw: SponsorProviderRaw): ProviderResource | null {
+  return sponsorRawToResource('infistar', raw, {
+    displayName: INFISTAR_DISPLAY_NAME,
+    protocolLabels: INFISTAR_PROTOCOL_LABELS,
+    resolveBaseUrl: resolveInfistarBaseUrl,
+    getProtocolUrls: getInfistarProtocolUrls,
   });
 }
