@@ -821,7 +821,33 @@
   border: 0;
 }
 
-.thinkingLevelGrid {
+.thinkingPanel {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.thinkingStatusRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+
+  @media (max-width: 520px) {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+.thinkingLevelGrid,
+.thinkingBudgetGrid,
+.thinkingCapabilityGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
@@ -829,6 +855,16 @@
   @media (max-width: 520px) {
     grid-template-columns: 1fr;
   }
+}
+
+.thinkingLevelGrid {
+  @media (min-width: 980px) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.thinkingBudgetGrid {
+  padding-top: 2px;
 }
 
 .thinkingLevelOption {
@@ -869,6 +905,7 @@
 }
 
 .thinkingDefaultHint,
+.thinkingConfiguredHint,
 .thinkingError {
   margin: 0;
   font-size: 11px;
@@ -877,6 +914,31 @@
 
 .thinkingDefaultHint {
   color: var(--muted-foreground);
+}
+
+.thinkingConfiguredHint {
+  color: var(--text-secondary);
+}
+
+.thinkingResetBtn {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--primary-color);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: var(--primary-10);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 }
 
 .thinkingError {

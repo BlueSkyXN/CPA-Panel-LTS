@@ -523,8 +523,8 @@ export function MainLayout() {
           children: [
             {
               kind: 'link',
-              path: '/ai-providers/workbench',
-              label: t('nav.provider_workbench'),
+              path: '/ai-providers/legacy',
+              label: t('nav.provider_legacy'),
               icon: <span className="nav-sub-dot" aria-hidden="true" />,
               end: true,
             },
@@ -653,15 +653,25 @@ export function MainLayout() {
 
     const aiProvidersIndex = navOrder.indexOf('/ai-providers');
     if (aiProvidersIndex !== -1) {
-      if (normalizedPath === '/ai-providers') return aiProvidersIndex;
-      if (normalizedPath.startsWith('/ai-providers/')) {
-        if (normalizedPath.startsWith('/ai-providers/gemini')) return aiProvidersIndex + 0.1;
-        if (normalizedPath.startsWith('/ai-providers/codex')) return aiProvidersIndex + 0.2;
-        if (normalizedPath.startsWith('/ai-providers/claude')) return aiProvidersIndex + 0.3;
-        if (normalizedPath.startsWith('/ai-providers/vertex')) return aiProvidersIndex + 0.4;
-        if (normalizedPath.startsWith('/ai-providers/ampcode')) return aiProvidersIndex + 0.5;
-        if (normalizedPath.startsWith('/ai-providers/openai')) return aiProvidersIndex + 0.6;
-        return aiProvidersIndex + 0.05;
+      if (normalizedPath === '/ai-providers' || normalizedPath === '/ai-providers/workbench') {
+        return aiProvidersIndex;
+      }
+
+      const legacyProvidersIndex = navOrder.indexOf('/ai-providers/legacy');
+      const legacyBaseIndex =
+        legacyProvidersIndex === -1 ? aiProvidersIndex + 0.05 : legacyProvidersIndex;
+      const legacyPrefix = normalizedPath.startsWith('/ai-providers/legacy')
+        ? '/ai-providers/legacy'
+        : '/ai-providers';
+      if (normalizedPath.startsWith(`${legacyPrefix}/`) || normalizedPath === legacyPrefix) {
+        const legacyRoute = normalizedPath.slice(legacyPrefix.length);
+        if (legacyRoute.startsWith('/gemini')) return legacyBaseIndex + 0.1;
+        if (legacyRoute.startsWith('/codex')) return legacyBaseIndex + 0.2;
+        if (legacyRoute.startsWith('/claude')) return legacyBaseIndex + 0.3;
+        if (legacyRoute.startsWith('/vertex')) return legacyBaseIndex + 0.4;
+        if (legacyRoute.startsWith('/ampcode')) return legacyBaseIndex + 0.5;
+        if (legacyRoute.startsWith('/openai')) return legacyBaseIndex + 0.6;
+        return legacyBaseIndex;
       }
     }
 

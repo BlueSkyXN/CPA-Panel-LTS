@@ -1788,13 +1788,49 @@ def run_browser_provider_key_crud_smoke(
     sheet.get_by_label("Upstream model name").fill(model_name)
     sheet.get_by_label("Routing alias (optional)").fill(model_alias)
     sheet.get_by_label("Display name (optional)").fill(created_display_name)
+    model_card = sheet.get_by_label("Upstream model name").locator(
+        "xpath=ancestor::div[contains(@class, 'modelEntry')][1]"
+    )
+    model_card.get_by_role("button", name="Expand", exact=True).click()
+    model_card.get_by_role("checkbox", name="Maximum", exact=True).set_checked(True, force=True)
+    model_card.get_by_role(
+        "checkbox", name="Allow thinking off", exact=True
+    ).set_checked(True, force=True)
+    model_card.get_by_role("checkbox", name="Allow automatic budget", exact=True).set_checked(
+        True, force=True
+    )
+    model_card.get_by_label("Minimum token budget").fill("128")
+    model_card.get_by_label("Maximum token budget").fill("32768")
+    model_card.get_by_text("Advanced thinking JSON", exact=True).click()
+    thinking_textarea = model_card.locator("textarea")
+    thinking_config = json.loads(thinking_textarea.input_value())
+    thinking_config["levels"].append("vendor-custom")
+    thinking_config["x-lts-thinking-note"] = f"keep-{label.lower()}-thinking"
+    thinking_textarea.fill(json.dumps(thinking_config))
+    model_card.get_by_role("checkbox", name="High", exact=True).set_checked(True, force=True)
     with page.expect_response(
         lambda response: response.request.method == "PUT"
         and response.url.endswith(endpoint)
-    ):
+    ) as create_response_info:
         sheet.get_by_role("button", name="Create").click()
     wait_for_no_dialog(page)
     seen.append(f"BROWSER provider workbench {label} create PUT {endpoint}")
+    create_payload = json.loads(create_response_info.value.request.post_data or "null")
+    if not isinstance(create_payload, list) or not any(
+        isinstance(item, dict)
+        and item.get("api-key") == api_key
+        and any(
+            isinstance(model, dict)
+            and model.get("name") == model_name
+            and isinstance(model.get("thinking"), dict)
+            and model["thinking"].get("x-lts-thinking-note")
+            == f"keep-{label.lower()}-thinking"
+            for model in item.get("models", [])
+        )
+        for item in create_payload
+        if isinstance(item, dict)
+    ):
+        raise AssertionError(f"{label} browser PUT dropped advanced thinking JSON: {create_payload!r}")
     items_after_create = provider_items(request_json(api_url, endpoint), response_key, endpoint)
     if not any(
         isinstance(item, dict)
@@ -1805,6 +1841,14 @@ def run_browser_provider_key_crud_smoke(
             and model.get("name") == model_name
             and model.get("alias") == model_alias
             and model.get("display-name") == created_display_name
+            and model.get("thinking")
+            == {
+                "levels": ["high", "max", "vendor-custom"],
+                "min": 128,
+                "max": 32768,
+                "zero_allowed": True,
+                "dynamic_allowed": True,
+            }
             for model in item.get("models", [])
         )
         for item in items_after_create
@@ -1817,6 +1861,17 @@ def run_browser_provider_key_crud_smoke(
     sheet.get_by_label("Base URL").fill(update_base_url)
     sheet.get_by_text("Custom models", exact=True).click()
     sheet.get_by_label("Display name (optional)").fill(updated_display_name)
+    model_card = sheet.get_by_label("Upstream model name").locator(
+        "xpath=ancestor::div[contains(@class, 'modelEntry')][1]"
+    )
+    model_card.get_by_role("button", name="Expand", exact=True).click()
+    if not model_card.get_by_role("checkbox", name="Maximum", exact=True).is_checked():
+        raise AssertionError(f"{label} edit did not reload the saved maximum thinking level")
+    model_card.get_by_role("button", name="Use Core default", exact=True).click()
+    model_card.get_by_text(
+        "Not explicitly configured. Core will use the model's built-in or default capability.",
+        exact=True,
+    ).wait_for()
     with page.expect_response(
         lambda response: response.request.method == "PUT"
         and response.url.endswith(endpoint)
@@ -1833,6 +1888,7 @@ def run_browser_provider_key_crud_smoke(
             isinstance(model, dict)
             and model.get("name") == model_name
             and model.get("display-name") == updated_display_name
+            and "thinking" not in model
             for model in item.get("models", [])
         )
         for item in items_after_update
@@ -1840,6 +1896,7 @@ def run_browser_provider_key_crud_smoke(
         raise AssertionError(f"{label} browser update did not round-trip: {items_after_update!r}")
     seen.append(f"BROWSER provider workbench {label} new model display-name")
     seen.append(f"BROWSER provider workbench {label} updated model display-name")
+    seen.append(f"BROWSER provider workbench {label} thinking capability round-trip and reset")
 
     row = provider_row_for_api_key(page, api_key)
     row.get_by_role("button", name="Delete").click()
@@ -1862,8 +1919,8 @@ def run_browser_provider_key_crud_smoke(
 def run_browser_provider_workbench_smoke(page: Any, app_url: str, api_url: str) -> list[str]:
     seen: list[str] = []
 
-    page.goto(f"{app_url}?core-provider-workbench#/ai-providers/workbench", wait_until="domcontentloaded")
-    page.wait_for_function("() => window.location.hash.endsWith('/ai-providers/workbench')")
+    page.goto(f"{app_url}?core-provider-workbench#/ai-providers", wait_until="domcontentloaded")
+    page.wait_for_function("() => window.location.hash.endsWith('/ai-providers')")
     page.get_by_role("heading", name="AI Providers").wait_for()
 
     gemini_before = provider_items(
@@ -2332,10 +2389,20 @@ def run_browser_smoke(
         ("/usage", "Usage Statistics", None),
         ("/usage/pricing", "Pricing workspace", None),
         ("/lts/usage", "Usage Statistics", "/usage"),
-        ("/ai-providers", "AI Providers Configuration", None),
-        ("/ai-providers/workbench", "AI Providers", None),
-        ("/ai-providers/ampcode", "Configure Ampcode", None),
-        ("/lts/ampcode", "Configure Ampcode", "/ai-providers/ampcode"),
+        ("/auth-files/oauth-excluded", "OAuth Model Disablement", None),
+        ("/auth-files/oauth-model-alias", "OAuth Model Aliases", None),
+        ("/ai-providers", "AI Providers", None),
+        ("/ai-providers/workbench", "AI Providers", "/ai-providers"),
+        ("/ai-providers/legacy", "AI Providers Configuration", None),
+        ("/ai-providers/legacy/ampcode", "Configure Ampcode", None),
+        ("/lts/providers", "AI Providers Configuration", "/ai-providers/legacy"),
+        ("/lts/ampcode", "Configure Ampcode", "/ai-providers/legacy/ampcode"),
+        ("/ai-providers/gemini/new", "AI Providers", "/ai-providers/legacy/gemini/new"),
+        ("/ai-providers/codex/new", "AI Providers", "/ai-providers/legacy/codex/new"),
+        ("/ai-providers/claude/new", "AI Providers", "/ai-providers/legacy/claude/new"),
+        ("/ai-providers/vertex/new", "AI Providers", "/ai-providers/legacy/vertex/new"),
+        ("/ai-providers/openai/new", "AI Providers", "/ai-providers/legacy/openai/new"),
+        ("/ai-providers/ampcode", "Configure Ampcode", "/ai-providers/legacy/ampcode"),
         ("/logs", "Logs Viewer", None),
     ]
     if supports_plugin:

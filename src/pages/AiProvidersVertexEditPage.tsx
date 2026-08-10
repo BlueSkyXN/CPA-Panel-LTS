@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { HeaderInputList } from '@/components/ui/HeaderInputList';
 import { ModelInputList } from '@/components/ui/ModelInputList';
-import { modelsToEntries } from '@/components/ui/modelInputListUtils';
+import { entriesToModels, modelsToEntries } from '@/components/ui/modelInputListUtils';
 import { useEdgeSwipeBack } from '@/hooks/useEdgeSwipeBack';
 import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard';
 import { SecondaryScreenShell } from '@/components/common/SecondaryScreenShell';
@@ -107,7 +107,7 @@ export function AiProvidersVertexEditPage() {
       navigate(-1);
       return;
     }
-    navigate('/ai-providers', { replace: true });
+    navigate('/ai-providers/legacy', { replace: true });
   }, [location.state, navigate]);
 
   const swipeRef = useEdgeSwipeBack({ onBack: handleBack });
@@ -245,14 +245,7 @@ export function AiProvidersVertexEditPage() {
         baseUrl,
         proxyUrl: form.proxyUrl?.trim() || undefined,
         headers: buildHeaderObject(form.headers),
-        models: form.modelEntries
-          .map((entry) => {
-            const name = entry.name.trim();
-            const alias = entry.alias.trim();
-            if (!name || !alias) return null;
-            return { name, alias };
-          })
-          .filter(Boolean) as ProviderKeyConfig['models'],
+        models: entriesToModels(form.modelEntries).filter((model) => Boolean(model.alias)) as ProviderKeyConfig['models'],
         excludedModels: parseExcludedModels(form.excludedText),
       };
 

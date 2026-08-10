@@ -203,10 +203,26 @@ require_file_contains src/router/MainRoutes.tsx "path: '/lts/usage'"
 require_file_contains src/router/MainRoutes.tsx "path: '/lts/providers'"
 require_file_contains src/router/MainRoutes.tsx "path: '/lts/ampcode'"
 require_file_contains src/router/MainRoutes.tsx "path: '/ai-providers'"
+require_file_contains src/router/MainRoutes.tsx "path: '/ai-providers/workbench'"
+require_file_contains src/router/MainRoutes.tsx "path: '/ai-providers/legacy'"
+require_file_contains src/router/MainRoutes.tsx "path: '/ai-providers/legacy/ampcode'"
+require_file_contains src/router/MainRoutes.tsx "path: '/ai-providers/gemini/*'"
+require_file_contains src/router/MainRoutes.tsx "path: '/ai-providers/codex/*'"
+require_file_contains src/router/MainRoutes.tsx "path: '/ai-providers/claude/*'"
+require_file_contains src/router/MainRoutes.tsx "path: '/ai-providers/vertex/*'"
+require_file_contains src/router/MainRoutes.tsx "path: '/ai-providers/openai/*'"
 require_file_contains src/router/MainRoutes.tsx "path: '/ai-providers/ampcode'"
+require_file_contains src/router/MainRoutes.tsx "to=\"/ai-providers\""
+require_file_contains src/router/MainRoutes.tsx "to=\"/ai-providers/legacy"
+require_file_contains src/router/MainRoutes.tsx "to=\"/ai-providers/legacy/ampcode"
+require_file_contains src/router/MainRoutes.tsx "path: '/auth-files/oauth-excluded'"
+require_file_contains src/router/MainRoutes.tsx "path: '/auth-files/oauth-model-alias'"
+require_file_contains src/router/MainRoutes.tsx "path: '/oauth'"
 require_file_contains src/router/MainRoutes.tsx "UsagePage"
 require_file_contains src/router/MainRoutes.tsx "AiProvidersAmpcodeEditPage"
 require_file_contains src/components/layout/MainLayout.tsx "path: '/usage'"
+require_file_contains src/components/layout/MainLayout.tsx "path: '/ai-providers/legacy'"
+require_file_contains src/components/layout/MainLayout.tsx "nav.provider_legacy"
 require_file_contains src/services/api/usage.ts "'/usage'"
 require_file_contains src/services/api/usage.ts "'/usage/export'"
 require_file_contains src/services/api/usage.ts "'/usage/import'"
@@ -397,7 +413,6 @@ require_file_contains docs/lts/sync-runbook.md "protected selective-port"
 require_file_contains docs/lts/panel-feature-contracts.yaml "npm run test:usage-cache"
 
 # Accepted upstream feature regression checks.
-require_file_contains src/router/MainRoutes.tsx "path: '/ai-providers/workbench'"
 require_file_contains src/router/MainRoutes.tsx "ProvidersWorkbenchPage"
 require_file_contains src/services/api/providers.ts "mutateLatestProviderList"
 require_file_contains src/services/api/providers.ts "replaceLatestProviderRecord"
@@ -420,13 +435,17 @@ require_file_contains src/i18n/locales/en.json '"xai": "xAI"'
 require_file_contains src/i18n/locales/zh-CN.json '"xai": "xAI"'
 require_file_contains src/i18n/locales/zh-TW.json '"xai": "xAI"'
 require_file_contains src/i18n/locales/ru.json '"xai": "xAI"'
+require_file_contains src/i18n/locales/en.json '"provider_legacy": "LTS Provider Status"'
+require_file_contains src/i18n/locales/zh-CN.json '"provider_legacy": "LTS 提供商状态"'
+require_file_contains src/i18n/locales/zh-TW.json '"provider_legacy": "LTS 提供商狀態"'
+require_file_contains src/i18n/locales/ru.json '"provider_legacy": "Статус провайдеров LTS"'
 require_file_contains src/types/provider.ts "displayName?: string"
 require_file_contains src/features/providers/types.ts "displayName?: string"
 require_file_contains src/services/api/transformers.ts "item['display-name']"
 require_file_contains src/services/api/transformers.ts "item.alias || item.display_name || item.displayName"
 require_file_contains src/services/api/providers.ts "payload['display-name']"
 require_file_contains src/features/providers/sheets/forms/ModelEntriesEditor.tsx "modelDisplayNamePlaceholder"
-require_file_contains src/features/providers/sheets/forms/SponsorProviderForm.tsx "modelDisplayNamePlaceholder"
+require_file_contains src/features/providers/sheets/forms/SponsorProviderForm.tsx "ModelEntriesEditor"
 require_file_contains src/i18n/locales/en.json '"modelDisplayNamePlaceholder"'
 require_file_contains src/i18n/locales/zh-CN.json '"modelDisplayNamePlaceholder"'
 require_file_contains src/i18n/locales/zh-TW.json '"modelDisplayNamePlaceholder"'
@@ -439,9 +458,43 @@ require_file_contains scripts/smoke-lts-panel.py "updated sponsor model display-
 require_file_contains scripts/smoke-lts-panel-core.py "updated model display-name"
 require_file_contains scripts/smoke-lts-panel-core.py "new model display-name"
 require_file_contains docs/lts/panel-feature-contracts.yaml "Core v7.2.70 or later"
+require_file_contains src/features/providers/thinkingLevels.ts "THINKING_EFFORT_LEVELS"
+require_file_not_contains src/features/providers/thinkingLevels.ts "'ultra'"
+require_file_not_contains src/features/providers/sheets/forms/ModelEntriesEditor.tsx '"ultra"'
+require_file_contains docs/lts/panel-feature-contracts.yaml "client-only ultra compatibility preset"
+require_file_contains src/features/providers/thinkingLevels.ts "zero_allowed"
+require_file_contains src/features/providers/thinkingLevels.ts "dynamic_allowed"
+require_file_contains src/features/providers/thinkingLevels.ts "updateThinkingBudgetJson"
+require_file_contains src/features/providers/sheets/forms/ModelEntriesEditor.tsx "thinkingResetDefault"
+require_file_contains src/features/providers/sheets/forms/ModelEntriesEditor.tsx "thinkingBudgetRangeInvalid"
+require_file_contains src/features/providers/sheets/forms/BaseProviderForm.tsx "supportsThinking"
+require_file_contains src/features/providers/sheets/forms/SponsorProviderForm.tsx "supportsThinking"
+require_file_contains src/services/api/providers.ts "'thinking'"
+require_file_contains src/components/ui/modelInputListUtils.ts "preserved"
+require_file_contains src/features/providers/providerIntegrity.test.mjs "legacy model inputs preserve fields that are not visually editable"
+require_file_contains scripts/smoke-lts-panel.py "Codex Thinking Model"
+require_file_contains scripts/smoke-lts-panel-core.py "thinking capability round-trip and reset"
+require_file_contains src/i18n/locales/en.json '"thinkingResetDefault"'
+require_file_contains src/i18n/locales/zh-CN.json '"thinkingResetDefault"'
+require_file_contains src/i18n/locales/zh-TW.json '"thinkingResetDefault"'
+require_file_contains src/i18n/locales/ru.json '"thinkingResetDefault"'
 require_file_contains src/features/providers/sponsorDefinitions.ts "getSponsorAggregationConflict"
 require_file_contains src/features/providers/sponsorMutationRecovery.ts "runSponsorMutationWithRecovery"
 require_file_contains scripts/smoke-lts-panel.py "assert_each_request_immediately_preceded_by"
+require_file_contains scripts/smoke-lts-panel.py '("/ai-providers", "AI Providers", None)'
+require_file_contains scripts/smoke-lts-panel.py '("/ai-providers/workbench", "AI Providers", "/ai-providers")'
+require_file_contains scripts/smoke-lts-panel.py '("/ai-providers/legacy", "AI Providers Configuration", None)'
+require_file_contains scripts/smoke-lts-panel.py '("/lts/providers", "AI Providers Configuration", "/ai-providers/legacy")'
+require_file_contains scripts/smoke-lts-panel.py '("/lts/ampcode", "Configure Ampcode", "/ai-providers/legacy/ampcode")'
+require_file_contains scripts/smoke-lts-panel.py '"/auth-files/oauth-excluded"'
+require_file_contains scripts/smoke-lts-panel.py '"/auth-files/oauth-model-alias"'
+require_file_contains scripts/smoke-lts-panel-core.py '("/ai-providers", "AI Providers", None)'
+require_file_contains scripts/smoke-lts-panel-core.py '("/ai-providers/workbench", "AI Providers", "/ai-providers")'
+require_file_contains scripts/smoke-lts-panel-core.py '("/ai-providers/legacy", "AI Providers Configuration", None)'
+require_file_contains scripts/smoke-lts-panel-core.py '("/lts/providers", "AI Providers Configuration", "/ai-providers/legacy")'
+require_file_contains scripts/smoke-lts-panel-core.py '("/lts/ampcode", "Configure Ampcode", "/ai-providers/legacy/ampcode")'
+require_file_contains scripts/smoke-lts-panel-core.py '"/auth-files/oauth-excluded"'
+require_file_contains scripts/smoke-lts-panel-core.py '"/auth-files/oauth-model-alias"'
 require_file_not_contains src/router/MainRoutes.tsx "path: '/quick-start'"
 require_file_not_contains src/components/layout/MainLayout.tsx "path: '/quick-start'"
 require_repo_not_contains "apikey"".""fun"

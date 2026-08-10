@@ -119,7 +119,7 @@ const buildExcludedModels = (
 
 const buildModelAliases = (
   models: ProviderEntryFormInput['models'] | undefined,
-  includeOpenAIFields = false
+  includeImage = false
 ): ModelAlias[] =>
   (models ?? [])
     .map((m) => {
@@ -129,10 +129,10 @@ const buildModelAliases = (
         displayName: m.displayName?.trim() || undefined,
         priority: m.priority,
         testModel: m.testModel,
+        thinking: parseThinkingJson(m.thinkingJson),
       };
-      if (includeOpenAIFields) {
+      if (includeImage) {
         entry.image = m.image === true;
-        entry.thinking = parseThinkingJson(m.thinkingJson);
       }
       return entry;
     })

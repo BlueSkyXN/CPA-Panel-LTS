@@ -251,7 +251,7 @@ export function AiProvidersOpenAIEditLayout() {
       navigate(-1);
       return;
     }
-    navigate('/ai-providers', { replace: true });
+    navigate('/ai-providers/legacy', { replace: true });
   }, [location.state, navigate]);
 
   useEffect(() => {
@@ -436,9 +436,9 @@ export function AiProvidersOpenAIEditLayout() {
       isModelsDirty);
   const editorRootPath = useMemo(() => {
     if (hasIndexParam) {
-      return `/ai-providers/openai/${params.index ?? ''}`;
+      return `/ai-providers/legacy/openai/${params.index ?? ''}`;
     }
-    return '/ai-providers/openai/new';
+    return '/ai-providers/legacy/openai/new';
   }, [hasIndexParam, params.index]);
   const canGuard = !resolvedLoading && !saving && !invalidIndexParam && !invalidIndex;
 

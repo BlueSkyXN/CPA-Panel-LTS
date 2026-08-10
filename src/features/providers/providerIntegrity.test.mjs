@@ -21,6 +21,7 @@ const [
   sponsorDefinitions,
   claudeApi,
   thinkingLevels,
+  modelInputListUtils,
 ] = await Promise.all([
   vite.ssrLoadModule('/src/services/api/transformers.ts'),
   vite.ssrLoadModule('/src/services/api/providers.ts'),
@@ -31,6 +32,7 @@ const [
   vite.ssrLoadModule('/src/features/providers/sponsorDefinitions.ts'),
   vite.ssrLoadModule('/src/features/providers/claudeApi.ts'),
   vite.ssrLoadModule('/src/features/providers/thinkingLevels.ts'),
+  vite.ssrLoadModule('/src/components/ui/modelInputListUtils.ts'),
 ]);
 
 test.after(async () => {
@@ -126,35 +128,47 @@ test('recognizes the current and legacy ClaudeAPI gateways without affiliate met
 
 test('updates standard thinking levels without dropping advanced config', () => {
   assert.deepEqual(thinkingLevels.THINKING_LEVELS, [
-    'none',
     'minimal',
     'low',
     'medium',
     'high',
     'xhigh',
     'max',
+    'none',
     'auto',
   ]);
 
   const existing = {
-    levels: ['LOW', 'vendor-custom'],
+    levels: ['LOW', 'ultra', 'vendor-custom'],
     min: 128,
     max: 32768,
     zero_allowed: true,
     dynamic_allowed: true,
     'future-field': { enabled: true },
   };
-  assert.deepEqual(thinkingLevels.readThinkingLevels(existing), ['none', 'low', 'auto']);
+  assert.deepEqual(thinkingLevels.readThinkingLevels(existing), ['low', 'none', 'auto']);
+
+  assert.deepEqual(
+    thinkingLevels.mergeThinkingLevels(existing, ['low', 'high', 'max', 'none', 'auto']),
+    {
+      levels: ['low', 'high', 'max', 'ultra', 'vendor-custom'],
+      min: 128,
+      max: 32768,
+      zero_allowed: true,
+      dynamic_allowed: true,
+      'future-field': { enabled: true },
+    }
+  );
 
   assert.deepEqual(thinkingLevels.mergeThinkingLevels(existing, ['low', 'high', 'max']), {
-    levels: ['low', 'high', 'max', 'vendor-custom'],
+    levels: ['low', 'high', 'max', 'ultra', 'vendor-custom'],
     min: 128,
     max: 32768,
     'future-field': { enabled: true },
   });
 
   assert.deepEqual(thinkingLevels.mergeThinkingLevels(existing, []), {
-    levels: ['vendor-custom'],
+    levels: ['ultra', 'vendor-custom'],
     min: 128,
     max: 32768,
     'future-field': { enabled: true },
@@ -172,6 +186,46 @@ test('keeps thinking JSON as the editor source of truth', () => {
     custom: 'keep',
   });
   assert.equal(thinkingLevels.updateThinkingLevelsJson('', []), '');
+  assert.deepEqual(
+    JSON.parse(
+      thinkingLevels.updateThinkingBudgetJson(
+        JSON.stringify({ levels: ['ultra'], custom: 'keep' }),
+        'min',
+        256
+      )
+    ),
+    { levels: ['ultra'], custom: 'keep', min: 256 }
+  );
+  assert.equal(thinkingLevels.hasThinkingBudgetRangeError({ min: 1024, max: 512 }), true);
+  assert.equal(thinkingLevels.hasThinkingBudgetRangeError({ min: 512, max: 1024 }), false);
   assert.throws(() => thinkingLevels.parseThinkingJson('[]'), /JSON object/);
   assert.throws(() => thinkingLevels.parseThinkingJson('{'), SyntaxError);
+});
+
+test('legacy model inputs preserve fields that are not visually editable', () => {
+  const original = [
+    {
+      name: 'gpt-5.6-sol',
+      alias: 'sol',
+      displayName: 'Sol',
+      priority: 7,
+      testModel: 'probe-sol',
+      image: true,
+      thinking: {
+        levels: ['high', 'ultra', 'vendor-custom'],
+        min: 128,
+        max: 32768,
+        'future-field': { enabled: true },
+      },
+    },
+  ];
+
+  const entries = modelInputListUtils.modelsToEntries(original);
+  entries[0].alias = 'sol-updated';
+  assert.deepEqual(modelInputListUtils.entriesToModels(entries), [
+    {
+      ...original[0],
+      alias: 'sol-updated',
+    },
+  ]);
 });

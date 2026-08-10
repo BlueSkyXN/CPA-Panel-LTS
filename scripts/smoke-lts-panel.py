@@ -1673,10 +1673,24 @@ def assert_provider_mutation_payloads(state: MockCoreState) -> None:
             item.get("api-key") == "codex-smoke-new"
             and item.get("base-url") == "https://codex.new.example/v1"
             and item.get("websockets") is True
+            and any(
+                isinstance(model, dict)
+                and model.get("name") == "gpt-5.6-sol"
+                and model.get("display-name") == "Codex Thinking Model"
+                and model.get("thinking")
+                == {
+                    "levels": ["max"],
+                    "min": 128,
+                    "max": 32768,
+                    "zero_allowed": True,
+                    "dynamic_allowed": True,
+                }
+                for model in item.get("models", [])
+            )
             for item in payload
             if isinstance(item, dict)
         ),
-        "created Codex resource with websocket field preserved",
+        "created Codex resource with websocket and thinking capability preserved",
     )
     assert_payload_match(
         state,
@@ -1788,8 +1802,10 @@ def assert_provider_mutation_payloads(state: MockCoreState) -> None:
                 and model.get("thinking")
                 == {
                     "levels": ["low", "high", "max", "vendor-custom"],
-                    "min": 128,
+                    "min": 256,
                     "max": 32768,
+                    "zero_allowed": True,
+                    "dynamic_allowed": True,
                     "x-lts-thinking-note": "keep-thinking",
                 }
                 for model in item.get("models", [])
@@ -4737,10 +4753,10 @@ def run_branded_provider_visibility_smoke(
     state.include_branded_providers = False
     try:
         page.goto(
-            f"{app_url}?route=workbench-no-brands#/ai-providers/workbench",
+            f"{app_url}?route=workbench-no-brands#/ai-providers",
             wait_until="domcontentloaded",
         )
-        page.wait_for_function("() => window.location.hash.endsWith('/ai-providers/workbench')")
+        page.wait_for_function("() => window.location.hash.endsWith('/ai-providers')")
         page.get_by_text("AI Providers", exact=False).first.wait_for()
         page.get_by_role("button", name=re.compile(r"^Gemini(?:\s|$)", re.I)).wait_for()
 
@@ -5172,16 +5188,16 @@ def run_sidebar_navigation_smoke(page: Any, state: MockCoreState) -> None:
 
     providers_drawer = navigation.get_by_role("button", name="AI Providers", exact=True)
     if providers_drawer.count() != 1:
-        raise AssertionError("AI Providers navigation did not expose the Workbench drawer")
+        raise AssertionError("AI Providers navigation did not expose the provider drawer")
     if providers_drawer.get_attribute("aria-expanded") != "false":
         raise AssertionError("AI Providers drawer must start collapsed away from Provider routes")
     providers_drawer.click()
-    workbench_link = navigation.get_by_role("link", name="Provider Workbench", exact=True)
-    workbench_link.wait_for()
-    workbench_link.click()
-    page.wait_for_function("() => window.location.hash.endsWith('/ai-providers/workbench')")
+    legacy_link = navigation.get_by_role("link", name="LTS Provider Status", exact=True)
+    legacy_link.wait_for()
+    legacy_link.click()
+    page.wait_for_function("() => window.location.hash.endsWith('/ai-providers/legacy')")
     if providers_drawer.get_attribute("aria-expanded") != "true":
-        raise AssertionError("Active Provider Workbench did not keep its drawer open")
+        raise AssertionError("Active legacy provider status did not keep its drawer open")
     providers_drawer.click()
     if providers_drawer.get_attribute("aria-expanded") != "false":
         raise AssertionError("Active AI Providers drawer could not be manually collapsed")
@@ -5325,10 +5341,20 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
                 ("/usage", "Usage Statistics", None),
                 ("/usage/pricing", "Pricing workspace", None),
                 ("/lts/usage", "Usage Statistics", "/usage"),
-                ("/ai-providers", "AI Providers Configuration", None),
-                ("/ai-providers/workbench", "AI Providers", None),
-                ("/ai-providers/ampcode", "Configure Ampcode", None),
-                ("/lts/ampcode", "Configure Ampcode", "/ai-providers/ampcode"),
+                ("/auth-files/oauth-excluded", "OAuth Model Disablement", None),
+                ("/auth-files/oauth-model-alias", "OAuth Model Aliases", None),
+                ("/ai-providers", "AI Providers", None),
+                ("/ai-providers/workbench", "AI Providers", "/ai-providers"),
+                ("/ai-providers/legacy", "AI Providers Configuration", None),
+                ("/ai-providers/legacy/ampcode", "Configure Ampcode", None),
+                ("/lts/providers", "AI Providers Configuration", "/ai-providers/legacy"),
+                ("/lts/ampcode", "Configure Ampcode", "/ai-providers/legacy/ampcode"),
+                ("/ai-providers/gemini/new", "AI Providers", "/ai-providers/legacy/gemini/new"),
+                ("/ai-providers/codex/new", "AI Providers", "/ai-providers/legacy/codex/new"),
+                ("/ai-providers/claude/new", "AI Providers", "/ai-providers/legacy/claude/new"),
+                ("/ai-providers/vertex/new", "AI Providers", "/ai-providers/legacy/vertex/new"),
+                ("/ai-providers/openai/new", "AI Providers", "/ai-providers/legacy/openai/new"),
+                ("/ai-providers/ampcode", "Configure Ampcode", "/ai-providers/legacy/ampcode"),
                 ("/plugins", "Mock Resource Plugin", None),
                 ("/plugin-store", "Plugin Store", None),
                 ("/plugin-pages/mock-plugin/0", "Mock", None),
@@ -5387,8 +5413,8 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             page.get_by_text("Provider keys", exact=False).first.wait_for()
             page.get_by_text("Credential status", exact=False).first.wait_for()
 
-            page.goto(f"{app_url}?route=workbench-toggle#/ai-providers/workbench", wait_until="domcontentloaded")
-            page.wait_for_function("() => window.location.hash.endsWith('/ai-providers/workbench')")
+            page.goto(f"{app_url}?route=workbench-toggle#/ai-providers", wait_until="domcontentloaded")
+            page.wait_for_function("() => window.location.hash.endsWith('/ai-providers')")
             page.get_by_text("AI Providers", exact=False).first.wait_for()
             with page.expect_response(
                 lambda response: response.request.method == "PUT"
@@ -5404,6 +5430,24 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             sheet.get_by_role("textbox", name="API key").fill("codex-smoke-new")
             sheet.get_by_label("Base URL").fill("https://codex.new.example/v1")
             sheet.get_by_label("Enable WebSockets").check()
+            sheet.get_by_text("Custom models", exact=True).click()
+            sheet.get_by_label("Upstream model name").fill("gpt-5.6-sol")
+            sheet.get_by_label("Display name (optional)").fill("Codex Thinking Model")
+            codex_model = sheet.get_by_label("Upstream model name").locator(
+                "xpath=ancestor::div[contains(@class, 'modelEntry')][1]"
+            )
+            codex_model.get_by_role("button", name="Expand", exact=True).click()
+            codex_model.get_by_role("checkbox", name="Maximum", exact=True).set_checked(
+                True, force=True
+            )
+            codex_model.get_by_role(
+                "checkbox", name="Allow thinking off", exact=True
+            ).set_checked(True, force=True)
+            codex_model.get_by_role("checkbox", name="Allow automatic budget", exact=True).set_checked(
+                True, force=True
+            )
+            codex_model.get_by_label("Minimum token budget").fill("128")
+            codex_model.get_by_label("Maximum token budget").fill("32768")
             with page.expect_response(
                 lambda response: response.request.method == "PUT"
                 and response.url.endswith("/v0/management/codex-api-key")
@@ -5516,9 +5560,9 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             )
             first_model.get_by_role("button", name="Expand", exact=True).click()
             expected_initial_thinking = {
-                "Disable thinking": True,
+                "Allow thinking off": True,
                 "Low": True,
-                "Automatic": True,
+                "Allow automatic budget": True,
             }
             for label, expected_checked in expected_initial_thinking.items():
                 if first_model.get_by_role(
@@ -5527,12 +5571,19 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
                     raise AssertionError(
                         f"Workbench did not parse existing thinking level {label!r}"
                     )
-            first_model.get_by_role(
-                "checkbox", name="Disable thinking", exact=True
-            ).set_checked(False, force=True)
-            first_model.get_by_role("checkbox", name="Automatic", exact=True).set_checked(
-                False, force=True
-            )
+            thinking_min = first_model.get_by_label("Minimum token budget")
+            thinking_max = first_model.get_by_label("Maximum token budget")
+            if thinking_min.input_value() != "128" or thinking_max.input_value() != "32768":
+                raise AssertionError("Workbench did not parse existing thinking budget bounds")
+            thinking_min.fill("256")
+            thinking_max.fill("128")
+            first_model.get_by_text(
+                "Minimum token budget cannot exceed the maximum token budget.", exact=True
+            ).wait_for()
+            thinking_max.fill("32768")
+            first_model.get_by_text(
+                "Minimum token budget cannot exceed the maximum token budget.", exact=True
+            ).wait_for(state="detached")
             first_model.get_by_role("checkbox", name="High", exact=True).set_checked(
                 True, force=True
             )
@@ -5544,8 +5595,10 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             updated_thinking = json.loads(thinking_textarea.input_value())
             if updated_thinking != {
                 "levels": ["low", "high", "max", "vendor-custom"],
-                "min": 128,
+                "min": 256,
                 "max": 32768,
+                "zero_allowed": True,
+                "dynamic_allowed": True,
                 "x-lts-thinking-note": "keep-thinking",
             }:
                 raise AssertionError(
@@ -5573,7 +5626,19 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             )
             second_model.get_by_role("button", name="Expand", exact=True).click()
             second_model.get_by_text(
-                "Not explicitly configured. Core currently defaults to low, medium, and high.",
+                "Not explicitly configured. Core will use the model's built-in or default capability.",
+                exact=True,
+            ).wait_for()
+            second_model.get_by_role("checkbox", name="Maximum", exact=True).set_checked(
+                True, force=True
+            )
+            second_model.get_by_text(
+                "Explicit capability configured. Custom fields in advanced JSON are preserved.",
+                exact=True,
+            ).wait_for()
+            second_model.get_by_role("button", name="Use Core default", exact=True).click()
+            second_model.get_by_text(
+                "Not explicitly configured. Core will use the model's built-in or default capability.",
                 exact=True,
             ).wait_for()
             display_name_inputs.first.fill("Updated Mock Model")
