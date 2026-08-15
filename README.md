@@ -156,6 +156,7 @@ The UI language is automatically detected from browser settings and can be manua
 
 - Vite produces a **single HTML** output (`dist/index.html`) with all assets inlined (via `vite-plugin-singlefile`).
 - Tagging a panel release such as `v1-tls-0.0.1` triggers `.github/workflows/release.yml` to publish `dist/management.html`.
+- Use an annotated tag whose message is the human summary. The workflow turns that message, first-parent LTS PRs, the companion Core release, and GitHub `generate-notes` into the Release body; do not rely on a raw `git log` dump.
 - Push only the exact panel release tag being released; do not use `git push --tags` after fetching upstream.
 - The UI version shown in the footer is injected at build time (env `VERSION`, git tag, or `package.json` fallback).
 
