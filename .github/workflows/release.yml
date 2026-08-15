@@ -22,6 +22,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ github.event.inputs.release_tag || github.ref }}
           fetch-depth: 0
           fetch-tags: true
 
@@ -58,27 +59,21 @@ jobs:
             exit 1
           fi
 
-          previous_tag="$(git tag --merged HEAD --list 'v*-tls-*' --sort=-v:refname | grep -v "^${current_tag}$" | head -n 1 || true)"
-          if [ -z "${previous_tag}" ]; then
-            previous_tag="$(git tag --merged HEAD --list 'v*-lts.*' --sort=-v:refname | head -n 1 || true)"
-          fi
-          if [ -n "${previous_tag}" ]; then
-            range="${previous_tag}..${current_tag}"
-          elif git rev-parse -q --verify "refs/tags/v1.8.4" >/dev/null; then
-            range="v1.8.4..${current_tag}"
-          else
-            range="${current_tag}"
-          fi
-
-          : > release-notes.md
-          git log --pretty=format:"- %h %s" "${range}" >> release-notes.md
+          bash scripts/generate-lts-release-notes.sh \
+            --product panel \
+            --tag "${current_tag}" \
+            --notes-file release-notes.md \
+            --title-file release-title.txt
+          echo "RELEASE_TITLE=$(tr -d '\n' < release-title.txt)" >> "$GITHUB_ENV"
         env:
           RELEASE_TAG: ${{ github.event.inputs.release_tag || github.ref_name }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
+          name: ${{ env.RELEASE_TITLE }}
           files: |
             dist/management.html
           body_path: release-notes.md

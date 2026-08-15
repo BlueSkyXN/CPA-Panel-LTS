@@ -155,6 +155,7 @@ npm run build
 
 - 使用 Vite 输出 **单文件 HTML**（`dist/index.html`），资源全部内联（`vite-plugin-singlefile`）。
 - 打 `v1-tls-0.0.1` 这类面板发布标签会触发 `.github/workflows/release.yml`，发布 `dist/management.html`。
+- 使用 annotated tag，并在 tag message 里写清本版摘要。工作流会用这条摘要、first-parent LTS PR、配套 Core 版本和 GitHub `generate-notes` 生成 Release 正文，不再倒原始 `git log`。
 - 发布时只推送当前面板发布标签；跟进上游后不要使用 `git push --tags`。
 - 页脚显示的 UI 版本在构建期注入（优先使用环境变量 `VERSION`，否则使用 git tag / `package.json`）。
 
