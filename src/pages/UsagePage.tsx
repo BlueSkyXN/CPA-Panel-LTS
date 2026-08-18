@@ -408,6 +408,7 @@ export function UsagePage() {
         loading={loading}
         pageTimeRange={timeRange}
         referenceNowMs={nowMs}
+        priceProfile={priceProfile}
         geminiKeys={config?.geminiApiKeys || []}
         claudeConfigs={config?.claudeApiKeys || []}
         codexConfigs={config?.codexApiKeys || []}

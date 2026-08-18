@@ -12,6 +12,7 @@ import type {
   GeminiCliQuotaPayload,
   KimiUsagePayload,
   XaiBillingPayload,
+  XaiAutoTopupPayload,
 } from '@/types';
 import { normalizeAuthIndex } from '@/utils/usage';
 
@@ -305,6 +306,33 @@ export function parseXaiBillingPayload(payload: unknown): XaiBillingPayload | nu
   }
   if (typeof payload === 'object') {
     return payload as XaiBillingPayload;
+  }
+  return null;
+}
+
+export function parseXaiAutoTopupPayload(payload: unknown): XaiAutoTopupPayload | null {
+  if (payload === undefined || payload === null) return null;
+  if (typeof payload === 'string') {
+    const trimmed = payload.trim();
+    if (!trimmed) return null;
+    try {
+      return parseXaiAutoTopupPayload(JSON.parse(trimmed));
+    } catch {
+      return null;
+    }
+  }
+  if (typeof payload === 'object' && !Array.isArray(payload)) {
+    const record = payload as Record<string, unknown>;
+    if (Object.keys(record).some((key) => key !== 'rule')) return null;
+    const rule = record.rule;
+    if (
+      rule !== undefined &&
+      rule !== null &&
+      (typeof rule !== 'object' || Array.isArray(rule))
+    ) {
+      return null;
+    }
+    return payload as XaiAutoTopupPayload;
   }
   return null;
 }

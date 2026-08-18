@@ -80,11 +80,12 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
       i18nPrefix: string;
       fetchQuota: (file: AuthFileItem, t: TFunction) => Promise<unknown>;
       buildLoadingState: () => unknown;
-      buildSuccessState: (data: unknown) => unknown;
+      buildSuccessState: (data: unknown, previous?: unknown) => unknown;
       buildErrorState: (message: string, status?: number) => unknown;
       renderQuotaItems: (quota: unknown, t: TFunction, helpers: unknown) => unknown;
     };
     const cacheGeneration = captureQuotaCacheGeneration();
+    const previousQuota = quota;
 
     updateQuotaState((prev: Record<string, unknown>) => ({
       ...prev,
@@ -96,7 +97,7 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
       commitIfQuotaCacheCurrent(cacheGeneration, () => {
         updateQuotaState((prev: Record<string, unknown>) => ({
           ...prev,
-          [file.name]: config.buildSuccessState(data),
+          [file.name]: config.buildSuccessState(data, previousQuota),
         }));
         showNotification(t('auth_files.quota_refresh_success', { name: file.name }), 'success');
       });
@@ -114,7 +115,7 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
         );
       });
     }
-  }, [disableControls, file, quota?.status, quotaType, showNotification, t, updateQuotaState]);
+  }, [disableControls, file, quota, quotaType, showNotification, t, updateQuotaState]);
 
   const resetQuotaForFile = useCallback(() => {
     if (disableControls) return;

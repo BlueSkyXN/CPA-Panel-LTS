@@ -12,6 +12,8 @@ export const OPENAI_PRICING_SOURCE_URL = 'https://developers.openai.com/api/docs
 export const ZAI_PRICING_SOURCE_URL = 'https://docs.z.ai/guides/overview/pricing';
 export const KIMI_PRICING_SOURCE_URL = 'https://platform.kimi.ai/docs/pricing/chat';
 export const XAI_PRICING_SOURCE_URL = 'https://docs.x.ai/developers/models/grok-4.5';
+export const XAI_GROK_46_PRICING_SOURCE_URL = 'https://docs.x.ai/developers/models/grok-4.6';
+export const XAI_GROK_46_CATALOG_AS_OF = '2026-08-18';
 export const ANTHROPIC_PRICING_SOURCE_URL =
   'https://platform.claude.com/docs/en/about-claude/pricing';
 export const ANTHROPIC_MODEL_IDS_SOURCE_URL =
@@ -324,5 +326,16 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
     },
     sourceUrl: XAI_PRICING_SOURCE_URL,
     asOf: XAI_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'grok-4.6',
+    aliases: [],
+    currency: 'USD',
+    standard: {
+      short: rateCard(2, 0.5, undefined, 6),
+      long: longCard(rateCard(4, 1, undefined, 12), XAI_LONG_CONTEXT_INPUT_TOKEN_THRESHOLD),
+    },
+    sourceUrl: XAI_GROK_46_PRICING_SOURCE_URL,
+    asOf: XAI_GROK_46_CATALOG_AS_OF,
   },
 ];

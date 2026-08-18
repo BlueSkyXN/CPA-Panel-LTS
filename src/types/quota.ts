@@ -513,6 +513,17 @@ export interface XaiBillingProductUsage {
   usage_percent?: number | string | null;
 }
 
+export interface XaiBillingPeriodUsage {
+  billingCycle?: { year?: number | string; month?: number | string } | null;
+  billing_cycle?: { year?: number | string; month?: number | string } | null;
+  includedUsed?: XaiBillingCent | number | string | null;
+  included_used?: XaiBillingCent | number | string | null;
+  onDemandUsed?: XaiBillingCent | number | string | null;
+  on_demand_used?: XaiBillingCent | number | string | null;
+  totalUsed?: XaiBillingCent | number | string | null;
+  total_used?: XaiBillingCent | number | string | null;
+}
+
 export interface XaiBillingConfig {
   currentPeriod?: XaiBillingPeriod | null;
   current_period?: XaiBillingPeriod | null;
@@ -527,6 +538,11 @@ export interface XaiBillingConfig {
   on_demand_cap?: XaiBillingCent | number | string | null;
   onDemandUsed?: XaiBillingCent | number | string | null;
   on_demand_used?: XaiBillingCent | number | string | null;
+  prepaidBalance?: XaiBillingCent | number | string | null;
+  prepaid_balance?: XaiBillingCent | number | string | null;
+  isUnifiedBillingUser?: boolean | null;
+  is_unified_billing_user?: boolean | null;
+  history?: XaiBillingPeriodUsage[] | null;
   billingPeriodStart?: string;
   billing_period_start?: string;
   billingPeriodEnd?: string;
@@ -535,6 +551,24 @@ export interface XaiBillingConfig {
 
 export interface XaiBillingPayload {
   config?: XaiBillingConfig | null;
+  onDemandEnabled?: boolean | null;
+  on_demand_enabled?: boolean | null;
+  subscriptionTier?: string | null;
+  subscription_tier?: string | null;
+}
+
+export interface XaiAutoTopupRule {
+  enabled?: boolean | null;
+  minBeforeHittingSl?: XaiBillingCent | number | string | null;
+  min_before_hitting_sl?: XaiBillingCent | number | string | null;
+  topupAmount?: XaiBillingCent | number | string | null;
+  topup_amount?: XaiBillingCent | number | string | null;
+  maxAmountPerMonth?: XaiBillingCent | number | string | null;
+  max_amount_per_month?: XaiBillingCent | number | string | null;
+}
+
+export interface XaiAutoTopupPayload {
+  rule?: XaiAutoTopupRule | null;
 }
 
 export type XaiBillingPeriodType = 'weekly' | 'monthly' | 'unknown';
@@ -559,6 +593,20 @@ export interface XaiBillingSummary {
   billingPeriodStart?: string;
   billingPeriodEnd?: string;
   usedPercent: number | null;
+  prepaidBalanceCents: number | null;
+  isUnifiedBillingUser: boolean | null;
+  onDemandEnabled: boolean | null;
+  subscriptionTier: string | null;
+  historyCount: number;
+  autoTopupEnabled: boolean | null;
+  autoTopupMinBeforeCents: number | null;
+  autoTopupAmountCents: number | null;
+  autoTopupMaxPerMonthCents: number | null;
+}
+
+export interface XaiQuotaFetchResult {
+  billing: XaiBillingSummary;
+  preserveAutoTopup: boolean;
 }
 
 export interface XaiQuotaState {

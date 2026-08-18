@@ -1,4 +1,13 @@
-import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react';
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ThHTMLAttributes,
+} from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -17,6 +26,7 @@ import { buildSourceInfoMap, resolveSourceDisplay } from '@/utils/sourceResolver
 import { parseTimestampMs } from '@/utils/timestamp';
 import {
   classifyServiceTier,
+  calculateCostEstimate,
   collectUsageDetails,
   extractLatencyMs,
   extractTotalTokens,
@@ -24,7 +34,9 @@ import {
   LATENCY_SOURCE_FIELD,
   normalizeAuthIndex,
   resolveServiceTier,
+  type CostEstimateStatus,
   type DisplayServiceTier,
+  type PriceProfileV3,
   type ResolvedServiceTier,
   type UsageTimeRange,
 } from '@/utils/usage';
@@ -98,11 +110,22 @@ const REQUEST_EVENT_COLUMN_IDS = [
   'cacheReadTokens',
   'cacheWriteTokens',
   'totalTokens',
+  'cost',
 ] as const;
 
 type RequestEventColumnId = (typeof REQUEST_EVENT_COLUMN_IDS)[number];
 type RequestEventColumnVisibility = Record<RequestEventColumnId, boolean>;
 type RequestEventCacheRateTone = 'unavailable' | 'low' | 'medium' | 'high' | 'anomaly';
+type RequestEventCostTone =
+  | 'unavailable'
+  | 'inactive'
+  | 'free'
+  | 'micro'
+  | 'low'
+  | 'medium'
+  | 'elevated'
+  | 'high'
+  | 'critical';
 type RequestEventReasoningEffortTone =
   | 'empty'
   | 'none'
@@ -114,6 +137,45 @@ type RequestEventReasoningEffortTone =
   | 'max'
   | 'ultra'
   | 'other';
+
+type RequestEventHeaderTooltipState = {
+  key: string;
+  text: string;
+  anchorEl: HTMLTableCellElement;
+  left: number;
+  top: number;
+  width: number;
+  transform: string;
+};
+
+const buildRequestEventHeaderTooltipState = (
+  key: string,
+  text: string,
+  anchorEl: HTMLTableCellElement
+): RequestEventHeaderTooltipState => {
+  const viewportMargin = 16;
+  const tooltipOffset = 8;
+  const tooltipSafeHeight = 132;
+  const width = Math.min(360, Math.max(0, window.innerWidth - viewportMargin * 2));
+  const rect = anchorEl.getBoundingClientRect();
+  const halfWidth = width / 2;
+  const left = Math.min(
+    Math.max(rect.left + rect.width / 2, viewportMargin + halfWidth),
+    Math.max(viewportMargin + halfWidth, window.innerWidth - viewportMargin - halfWidth)
+  );
+  const openBelow =
+    window.innerHeight - rect.bottom >= tooltipSafeHeight || rect.top < tooltipSafeHeight;
+
+  return {
+    key,
+    text,
+    anchorEl,
+    left,
+    top: openBelow ? rect.bottom + tooltipOffset : rect.top - tooltipOffset,
+    width,
+    transform: openBelow ? 'translateX(-50%)' : 'translate(-50%, -100%)',
+  };
+};
 
 const REQUEST_EVENT_NUMERIC_METRIC_IDS = [
   'totalInputTokens',
@@ -145,6 +207,7 @@ const DEFAULT_COLUMN_VISIBILITY: RequestEventColumnVisibility = {
   cacheReadTokens: true,
   cacheWriteTokens: true,
   totalTokens: true,
+  cost: true,
 };
 
 type RequestEventRow = {
@@ -183,7 +246,11 @@ type RequestEventRow = {
   cacheWriteTokens: number;
   cacheRate: number | null;
   cacheRateTone: RequestEventCacheRateTone;
+  longContext: boolean;
   totalTokens: number;
+  costAmount: number | null;
+  costStatus: CostEstimateStatus;
+  costTone: RequestEventCostTone;
 };
 
 const isRequestEventNumericMetricId = (value: string): value is RequestEventNumericMetricId =>
@@ -261,6 +328,7 @@ export interface RequestEventsDetailsCardProps {
   loading: boolean;
   pageTimeRange: UsageTimeRange;
   referenceNowMs: number;
+  priceProfile: PriceProfileV3;
   geminiKeys: GeminiKeyConfig[];
   claudeConfigs: ProviderKeyConfig[];
   codexConfigs: ProviderKeyConfig[];
@@ -403,11 +471,44 @@ const encodeCsv = (value: string | number): string => {
   return `"${safeText.replace(/"/g, '""')}"`;
 };
 
+const formatRequestEventCostUsd = (value: number, locale: string): string => {
+  if (value === 0) return '$0.00';
+
+  if (value < 0.01) {
+    const cents = value * 100;
+    if (Number(cents.toFixed(4)) === 0) return '≈0';
+    return `${cents.toLocaleString(locale, {
+      maximumFractionDigits: 4,
+    })}¢`;
+  }
+
+  return `$${value.toLocaleString(locale, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  })}`;
+};
+
+const getRequestEventCostTone = (
+  amount: number | null,
+  status: CostEstimateStatus,
+  totalTokens: number
+): RequestEventCostTone => {
+  if (status !== 'priced' || amount === null) return 'unavailable';
+  if (amount === 0) return totalTokens > 0 ? 'free' : 'inactive';
+  if (amount < 0.01) return 'micro';
+  if (amount < 0.05) return 'low';
+  if (amount < 0.1) return 'medium';
+  if (amount < 0.2) return 'elevated';
+  if (amount < 0.5) return 'high';
+  return 'critical';
+};
+
 export function RequestEventsDetailsCard({
   usage,
   loading,
   pageTimeRange,
   referenceNowMs,
+  priceProfile,
   geminiKeys,
   claudeConfigs,
   codexConfigs,
@@ -463,6 +564,8 @@ export function RequestEventsDetailsCard({
   const [draftNumericMaximumFilter, setDraftNumericMaximumFilter] = useState('');
   const [authFileMap, setAuthFileMap] = useState<Map<string, CredentialInfo>>(new Map());
   const [columnSettingsOpen, setColumnSettingsOpen] = useState(false);
+  const [activeHeaderTooltip, setActiveHeaderTooltip] =
+    useState<RequestEventHeaderTooltipState | null>(null);
   const [storedColumnVisibility, setStoredColumnVisibility] = useLocalStorage<unknown>(
     COLUMN_VISIBILITY_STORAGE_KEY,
     DEFAULT_COLUMN_VISIBILITY
@@ -472,6 +575,7 @@ export function RequestEventsDetailsCard({
     [storedColumnVisibility]
   );
   const columnSettingsId = useId();
+  const headerTooltipId = useId();
   const numericFilterId = useId();
   const numericMetricSelectId = useId();
   const numericFilterErrorId = useId();
@@ -480,6 +584,47 @@ export function RequestEventsDetailsCard({
   const numericFilterRef = useRef<HTMLDivElement | null>(null);
   const numericFilterPanelRef = useRef<HTMLDivElement | null>(null);
   const numericFilterPopoverRafRef = useRef<number | null>(null);
+
+  const showHeaderTooltip = (key: string, text: string, anchorEl: HTMLTableCellElement) => {
+    setActiveHeaderTooltip(buildRequestEventHeaderTooltipState(key, text, anchorEl));
+  };
+
+  const hideHeaderTooltip = (key: string) => {
+    setActiveHeaderTooltip((current) => (current?.key === key ? null : current));
+  };
+
+  const getHeaderTooltipProps = (
+    key: string,
+    text: string
+  ): ThHTMLAttributes<HTMLTableCellElement> => ({
+    tabIndex: 0,
+    'aria-label': text,
+    'aria-describedby': activeHeaderTooltip?.key === key ? headerTooltipId : undefined,
+    onMouseEnter: (event) => showHeaderTooltip(key, text, event.currentTarget),
+    onMouseLeave: (event) => {
+      if (document.activeElement !== event.currentTarget) hideHeaderTooltip(key);
+    },
+    onFocus: (event) => showHeaderTooltip(key, text, event.currentTarget),
+    onBlur: () => hideHeaderTooltip(key),
+  });
+
+  useEffect(() => {
+    if (!activeHeaderTooltip) return;
+
+    const updatePosition = () => {
+      setActiveHeaderTooltip((current) => {
+        if (!current || !document.body.contains(current.anchorEl)) return null;
+        return buildRequestEventHeaderTooltipState(current.key, current.text, current.anchorEl);
+      });
+    };
+
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [activeHeaderTooltip]);
 
   useEffect(() => {
     try {
@@ -763,6 +908,9 @@ export function RequestEventsDetailsCard({
         extractTotalTokens(detail)
       );
       const latencyMs = extractLatencyMs(detail);
+      const costEstimate = calculateCostEstimate(detail, priceProfile);
+      const longContext = costEstimate.contextBand === 'long';
+      const costAmount = costEstimate.status === 'priced' ? costEstimate.amount : null;
 
       return {
         id: `${timestamp}-${model}-${sourceKey}-${authIndex}-${index}`,
@@ -800,7 +948,11 @@ export function RequestEventsDetailsCard({
         cacheWriteTokens,
         cacheRate,
         cacheRateTone: getCacheRateTone(cacheRate, inputTokens, cacheReadTokens),
+        longContext,
         totalTokens,
+        costAmount,
+        costStatus: costEstimate.status,
+        costTone: getRequestEventCostTone(costAmount, costEstimate.status, totalTokens),
       };
     });
 
@@ -838,7 +990,7 @@ export function RequestEventsDetailsCard({
         source: buildDisambiguatedSourceLabel(row),
       }))
       .sort((a, b) => b.timestampMs - a.timestampMs);
-  }, [authFileMap, i18n.language, sourceInfoMap, t, usage]);
+  }, [authFileMap, i18n.language, priceProfile, sourceInfoMap, t, usage]);
 
   const effectiveTimeRangeFilter = isRequestEventTimeRange(timeRangeFilter)
     ? timeRangeFilter
@@ -1029,6 +1181,7 @@ export function RequestEventsDetailsCard({
       { id: 'cacheReadTokens' as const, label: t('usage_stats.cache_read_tokens') },
       { id: 'cacheWriteTokens' as const, label: t('usage_stats.cache_write_tokens') },
       { id: 'totalTokens' as const, label: t('usage_stats.total_tokens') },
+      { id: 'cost' as const, label: t('usage_stats.request_events_cost_estimate') },
     ],
     [t]
   );
@@ -1310,6 +1463,8 @@ export function RequestEventsDetailsCard({
       'cache_read_tokens',
       'cache_creation_tokens',
       'total_tokens',
+      'estimated_cost_usd',
+      'pricing_status',
     ];
 
     const csvRows = filteredRows.map((row) =>
@@ -1337,6 +1492,8 @@ export function RequestEventsDetailsCard({
         row.cacheReadTokens,
         row.cacheWriteTokens,
         row.totalTokens,
+        row.costAmount ?? '',
+        row.costStatus,
       ]
         .map((value) => encodeCsv(value))
         .join(',')
@@ -1379,6 +1536,8 @@ export function RequestEventsDetailsCard({
         cache_creation_tokens: row.cacheWriteTokens,
         total_tokens: row.totalTokens,
       },
+      estimated_cost_usd: row.costAmount,
+      pricing_status: row.costStatus,
     }));
 
     const content = JSON.stringify(payload, null, 2);
@@ -1867,8 +2026,7 @@ export function RequestEventsDetailsCard({
                   {columnVisibility.nonCacheReadInputTokens && (
                     <th
                       className={`${styles.requestEventsTokenHeader} ${styles.requestEventsTokenHeaderHint}`}
-                      title={nonCacheReadInputHint}
-                      aria-label={nonCacheReadInputHint}
+                      {...getHeaderTooltipProps('non-cache-read-input', nonCacheReadInputHint)}
                     >
                       {t('usage_stats.request_events_non_cache_read_input_tokens')}
                     </th>
@@ -1881,8 +2039,7 @@ export function RequestEventsDetailsCard({
                   {columnVisibility.displayedOutputTokens && (
                     <th
                       className={`${styles.requestEventsTokenHeader} ${styles.requestEventsTokenHeaderHint}`}
-                      title={displayedOutputHint}
-                      aria-label={displayedOutputHint}
+                      {...getHeaderTooltipProps('displayed-output', displayedOutputHint)}
                     >
                       {t('usage_stats.request_events_explicit_output_tokens')}
                     </th>
@@ -1895,8 +2052,10 @@ export function RequestEventsDetailsCard({
                   {columnVisibility.cacheReadTokens && (
                     <th
                       className={`${styles.requestEventsTokenHeader} ${styles.requestEventsTokenHeaderHint} ${styles.requestEventsTokenCacheRead}`}
-                      title={t('usage_stats.request_events_cache_rate_hint')}
-                      aria-label={t('usage_stats.request_events_cache_rate_hint')}
+                      {...getHeaderTooltipProps(
+                        'cache-read-rate',
+                        t('usage_stats.request_events_cache_rate_hint')
+                      )}
                     >
                       {t('usage_stats.cache_read_tokens')}
                     </th>
@@ -1911,6 +2070,11 @@ export function RequestEventsDetailsCard({
                       className={`${styles.requestEventsTokenHeader} ${styles.requestEventsTokenTotal}`}
                     >
                       {t('usage_stats.total_tokens')}
+                    </th>
+                  )}
+                  {columnVisibility.cost && (
+                    <th className={styles.requestEventsCostHeader}>
+                      {t('usage_stats.request_events_cost_estimate')}
                     </th>
                   )}
                 </tr>
@@ -1945,6 +2109,10 @@ export function RequestEventsDetailsCard({
                   const cacheRateCellDescription = cacheAnomalyLabel
                     ? `${cacheRateCellLabel} ${cacheAnomalyLabel}`
                     : cacheRateCellLabel;
+                  const longContextLabel = t('usage_stats.pricing_long_context');
+                  const inputTokensCellLabel = row.longContext
+                    ? `${inputTokensLabel} · ${longContextLabel}`
+                    : undefined;
 
                   return (
                     <tr key={row.id}>
@@ -2043,7 +2211,14 @@ export function RequestEventsDetailsCard({
                         </td>
                       )}
                       {columnVisibility.totalInputTokens && (
-                        <td className={styles.requestEventsTokenCell}>
+                        <td
+                          className={`${styles.requestEventsTokenCell} ${
+                            row.longContext ? styles.requestEventsLongContext : ''
+                          }`}
+                          data-context-band={row.longContext ? 'long' : 'short'}
+                          title={inputTokensCellLabel}
+                          aria-label={inputTokensCellLabel}
+                        >
                           <span className={styles.requestEventsTokenValue}>
                             {row.inputTokens.toLocaleString()}
                           </span>
@@ -2115,6 +2290,24 @@ export function RequestEventsDetailsCard({
                           </span>
                         </td>
                       )}
+                      {columnVisibility.cost && (
+                        <td
+                          className={styles.requestEventsCostCell}
+                          data-request-cost-status={row.costStatus}
+                          data-request-cost-tone={row.costTone}
+                          title={
+                            row.costStatus === 'priced'
+                              ? t('usage_stats.pricing_estimate_notice')
+                              : row.costStatus === 'unmatched'
+                                ? t('usage_stats.pricing_unmatched')
+                                : t('usage_stats.pricing_anomaly')
+                          }
+                        >
+                          {row.costAmount === null
+                            ? '--'
+                            : formatRequestEventCostUsd(row.costAmount, i18n.language)}
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -2123,6 +2316,24 @@ export function RequestEventsDetailsCard({
           </div>
         </>
       )}
+      {activeHeaderTooltip &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            id={headerTooltipId}
+            role="tooltip"
+            className={styles.requestEventsHeaderTooltip}
+            style={{
+              left: activeHeaderTooltip.left,
+              top: activeHeaderTooltip.top,
+              width: activeHeaderTooltip.width,
+              transform: activeHeaderTooltip.transform,
+            }}
+          >
+            {activeHeaderTooltip.text}
+          </div>,
+          document.body
+        )}
     </Card>
   );
 }

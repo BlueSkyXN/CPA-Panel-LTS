@@ -15,6 +15,8 @@ import type {
   KimiLimitWindow,
   KimiQuotaRow,
   XaiBillingConfig,
+  XaiBillingPayload,
+  XaiAutoTopupRule,
   XaiBillingPeriod,
   XaiBillingPeriodType,
   XaiBillingSummary,
@@ -453,7 +455,7 @@ export function buildKimiQuotaRows(payload: KimiUsagePayload): KimiQuotaRow[] {
   return rows;
 }
 
-function normalizeXaiCentValue(value: XaiBillingConfig['monthlyLimit']): number | null {
+function normalizeXaiCentValue(value: unknown): number | null {
   if (value === undefined || value === null) return null;
   if (typeof value === 'object' && !Array.isArray(value)) {
     return normalizeNumberValue((value as { val?: unknown }).val);
@@ -495,10 +497,20 @@ const emptyXaiBillingSummary = (): XaiBillingSummary => ({
   onDemandUsedCents: null,
   onDemandUsedPercent: null,
   usedPercent: null,
+  prepaidBalanceCents: null,
+  isUnifiedBillingUser: null,
+  onDemandEnabled: null,
+  subscriptionTier: null,
+  historyCount: 0,
+  autoTopupEnabled: null,
+  autoTopupMinBeforeCents: null,
+  autoTopupAmountCents: null,
+  autoTopupMaxPerMonthCents: null,
 });
 
 export function buildXaiBillingSummary(
-  config: XaiBillingConfig | null | undefined
+  config: XaiBillingConfig | null | undefined,
+  payload?: Pick<XaiBillingPayload, 'onDemandEnabled' | 'on_demand_enabled' | 'subscriptionTier' | 'subscription_tier'>
 ): XaiBillingSummary | null {
   if (!config || typeof config !== 'object') return null;
 
@@ -531,6 +543,20 @@ export function buildXaiBillingSummary(
     normalizeStringValue(config.billingPeriodStart ?? config.billing_period_start) ?? undefined;
   const billingPeriodEnd =
     normalizeStringValue(config.billingPeriodEnd ?? config.billing_period_end) ?? undefined;
+  const prepaidBalanceCents = normalizeXaiCentValue(
+    config.prepaidBalance ?? config.prepaid_balance
+  );
+  const isUnifiedBillingUser =
+    typeof (config.isUnifiedBillingUser ?? config.is_unified_billing_user) === 'boolean'
+      ? (config.isUnifiedBillingUser ?? config.is_unified_billing_user)!
+      : null;
+  const onDemandEnabled =
+    typeof (payload?.onDemandEnabled ?? payload?.on_demand_enabled) === 'boolean'
+      ? (payload?.onDemandEnabled ?? payload?.on_demand_enabled)!
+      : null;
+  const subscriptionTier =
+    normalizeStringValue(payload?.subscriptionTier ?? payload?.subscription_tier) ?? null;
+  const historyCount = Array.isArray(config.history) ? config.history.length : 0;
 
   const includedUsedCents =
     usedCents === null
@@ -558,8 +584,10 @@ export function buildXaiBillingSummary(
     monthlyLimitCents !== null ||
     usedCents !== null ||
     (!hasWeeklyData && (onDemandCapCents !== null || !!billingPeriodEnd));
+  const hasSupplementaryData =
+    prepaidBalanceCents !== null || isUnifiedBillingUser !== null || historyCount > 0;
 
-  if (!hasWeeklyData && !hasMonthlyData) return null;
+  if (!hasWeeklyData && !hasMonthlyData && !hasSupplementaryData) return null;
 
   summary.periodType = hasWeeklyData
     ? periodType === 'unknown'
@@ -579,8 +607,33 @@ export function buildXaiBillingSummary(
   summary.billingPeriodStart = hasMonthlyData ? billingPeriodStart : undefined;
   summary.billingPeriodEnd = hasMonthlyData ? billingPeriodEnd : undefined;
   summary.usedPercent = usedPercent;
+  summary.prepaidBalanceCents = prepaidBalanceCents;
+  summary.isUnifiedBillingUser = isUnifiedBillingUser;
+  summary.onDemandEnabled = onDemandEnabled;
+  summary.subscriptionTier = subscriptionTier;
+  summary.historyCount = historyCount;
 
   return summary;
+}
+
+export function applyXaiAutoTopupRule(
+  summary: XaiBillingSummary,
+  rule: XaiAutoTopupRule | null | undefined
+): XaiBillingSummary {
+  const resolvedRule = rule && typeof rule === 'object' ? rule : null;
+  return {
+    ...summary,
+    autoTopupEnabled: typeof resolvedRule?.enabled === 'boolean' ? resolvedRule.enabled : false,
+    autoTopupMinBeforeCents: normalizeXaiCentValue(
+      resolvedRule?.minBeforeHittingSl ?? resolvedRule?.min_before_hitting_sl
+    ),
+    autoTopupAmountCents: normalizeXaiCentValue(
+      resolvedRule?.topupAmount ?? resolvedRule?.topup_amount
+    ),
+    autoTopupMaxPerMonthCents: normalizeXaiCentValue(
+      resolvedRule?.maxAmountPerMonth ?? resolvedRule?.max_amount_per_month
+    ),
+  };
 }
 
 export function mergeXaiBillingSummaries(
@@ -613,5 +666,16 @@ export function mergeXaiBillingSummaries(
     billingPeriodStart: primary.billingPeriodStart ?? fallback.billingPeriodStart,
     billingPeriodEnd: primary.billingPeriodEnd ?? fallback.billingPeriodEnd,
     usedPercent: primary.usedPercent ?? fallback.usedPercent,
+    prepaidBalanceCents: primary.prepaidBalanceCents ?? fallback.prepaidBalanceCents,
+    isUnifiedBillingUser: primary.isUnifiedBillingUser ?? fallback.isUnifiedBillingUser,
+    onDemandEnabled: primary.onDemandEnabled ?? fallback.onDemandEnabled,
+    subscriptionTier: primary.subscriptionTier ?? fallback.subscriptionTier,
+    historyCount: Math.max(primary.historyCount, fallback.historyCount),
+    autoTopupEnabled: primary.autoTopupEnabled ?? fallback.autoTopupEnabled,
+    autoTopupMinBeforeCents:
+      primary.autoTopupMinBeforeCents ?? fallback.autoTopupMinBeforeCents,
+    autoTopupAmountCents: primary.autoTopupAmountCents ?? fallback.autoTopupAmountCents,
+    autoTopupMaxPerMonthCents:
+      primary.autoTopupMaxPerMonthCents ?? fallback.autoTopupMaxPerMonthCents,
   };
 }

@@ -1,35 +1,35 @@
 # .github/workflows navigation card
 
-GitHub Actions workflows for release and LTS contract CI.
-Read this before modifying `release.yml`, `lts-panel-contract.yml`, tag triggers, permissions, Node setup, npm install mode, or release asset preparation.
-Key files: `release.yml`, `lts-panel-contract.yml`, `scripts/check-lts-panel-contract.sh`.
+GitHub Actions for LTS contract CI and Panel release publication.
+Read before changing `release.yml`, `lts-panel-contract.yml`, triggers, permissions, Node/npm setup, tests, or asset preparation.
+Key dependencies: `package.json`, `package-lock.json`, `scripts/check-lts-panel-contract.sh`.
 
 ## Why this is high-risk
 
-- `CPA-Core-LTS` expects the latest Panel release to expose an asset named exactly `management.html`.
-- `release.yml` builds `dist/index.html`, renames it to `dist/management.html`, and publishes it.
-- `lts-panel-contract.yml` runs contract, type-check, build, and lint gates.
-- The supported release tag pattern is `v*-tls-*`; widening it can publish unintended assets.
-- `contents: write` is required for release creation. Avoid broader permissions without a concrete reason.
+- Core expects the released asset to be named exactly `management.html`.
+- `release.yml` builds and renames `dist/index.html`, then publishes on `v*-tls-*` tags or explicit dispatch.
+- `lts-panel-contract.yml` is the remote gate for Node tests, contracts, type-check, build, and lint.
+- `contents: write` is only for release creation.
 
 ## Required before changes
 
-- Confirm release CI still uses `npm ci`, `npm run build`, `VERSION`, the `v*-tls-*` guard, and `dist/management.html`.
-- Confirm contract CI still runs `npm run check:lts` with type-check/build/lint.
-- If changing asset name, repository, tag scheme, or release semantics, inspect `CPA-Core-LTS` updater compatibility.
+- Read both workflow files and current `package.json` scripts; do not preserve stale command assumptions.
+- For release changes, verify Node 20, `npm ci`, `VERSION`, tag validation, and the `index.html` → `management.html` flow.
+- For CI changes, compare its gate with `npm run validate:lts`; report intentional differences.
+- If asset name, repository, or release semantics would change, stop and inspect current `CPA-Core-LTS` updater contract before editing.
 
 ## Do not
 
-- Do not rename `management.html`.
-- Do not replace `npm ci` with an install mode that ignores `package-lock.json`.
-- Do not remove the `v*-tls-*` guard without an explicit user request.
-- Do not remove `npm run check:lts` from PR/main CI.
-- Do not add secret printing, token echoing, or debug dumps of GitHub context.
-- Do not add broad tag-publishing behavior such as `git push --tags`.
-- Do not treat userscript publishing as part of the Panel mainline release unless the user explicitly scopes that work.
+- Do not rename or omit `management.html`.
+- Do not weaken `v*-tls-*` validation or add broad tag publishing without explicit release scope.
+- Do not replace `npm ci` with a mode that ignores `package-lock.json`.
+- Do not remove protected tests or `npm run check:lts` merely to make CI green.
+- Do not echo secrets, tokens, GitHub context, or sensitive payloads.
+- Do not dispatch or publish as validation without explicit authorization.
 
 ## Validation
 
-No repository-local workflow linter is configured.
-Run `npm run build` for release build changes and `npm run check:lts` for contract CI changes; use `npm run validate:lts` for broad CI changes.
-Live GitHub Actions validation requires GitHub network/auth.
+- `npm run validate:lts` — local parity gate for broad CI changes.
+- `npm run build` — confirm `dist/index.html` is generated for release changes.
+- Inspect the workflow diff to confirm it still publishes `dist/management.html`.
+- No local workflow linter is configured. Live GitHub Actions/release verification requires GitHub network/auth and is a separate claim.

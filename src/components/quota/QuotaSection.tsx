@@ -223,6 +223,7 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
 
       singleRefreshInFlightRef.current.add(file.name);
       const cacheGeneration = captureQuotaCacheGeneration();
+      const previousQuota = quota[file.name];
 
       setQuota((prev) => ({
         ...prev,
@@ -234,7 +235,7 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
         commitIfQuotaCacheCurrent(cacheGeneration, () => {
           setQuota((prev) => ({
             ...prev,
-            [file.name]: config.buildSuccessState(data),
+            [file.name]: config.buildSuccessState(data, previousQuota),
           }));
           showNotification(t('auth_files.quota_refresh_success', { name: file.name }), 'success');
         });

@@ -24,6 +24,7 @@ import type {
   GeminiCliUserTier,
   KimiQuotaRow,
   KimiQuotaState,
+  XaiQuotaFetchResult,
   XaiBillingSummary,
   XaiQuotaState,
 } from '@/types';
@@ -43,7 +44,9 @@ import {
   KIMI_REQUEST_HEADERS,
   XAI_BILLING_MONTHLY_URL,
   XAI_BILLING_WEEKLY_URL,
-  XAI_REQUEST_HEADERS,
+  XAI_AUTO_TOPUP_URL,
+  XAI_USER_URL,
+  buildXaiRequestHeaders as buildXaiControlPlaneHeaders,
   normalizeGeminiCliModelId,
   normalizeNumberValue,
   normalizeQuotaFraction,
@@ -54,6 +57,7 @@ import {
   parseGeminiCliCodeAssistPayload,
   parseKimiUsagePayload,
   parseXaiBillingPayload,
+  parseXaiAutoTopupPayload,
   resolveGeminiCliProjectId,
   formatQuotaResetTime,
   formatKimiResetHint,
@@ -61,6 +65,7 @@ import {
   buildGeminiCliQuotaBuckets,
   buildKimiQuotaRows,
   buildXaiBillingSummary,
+  applyXaiAutoTopupRule,
   mergeXaiBillingSummaries,
   createStatusError,
   getStatusFromError,
@@ -120,7 +125,7 @@ export interface QuotaConfig<TState, TData> {
   storeSelector: (state: QuotaStore) => Record<string, TState>;
   storeSetter: keyof QuotaStore;
   buildLoadingState: () => TState;
-  buildSuccessState: (data: TData) => TState;
+  buildSuccessState: (data: TData, previous?: TState) => TState;
   buildErrorState: (message: string, status?: number) => TState;
   batchConcurrency?: number;
   batchDelayMs?: number;
@@ -1069,22 +1074,16 @@ const resolveXaiUserId = (file: AuthFileItem): string | null => {
   const user = toXaiRecord(file.user ?? metadata?.user ?? attributes?.user);
 
   const candidates = [
-    file.sub,
-    file.subject,
     file.user_id,
     file.userId,
-    metadata?.sub,
-    metadata?.subject,
     metadata?.user_id,
     metadata?.userId,
-    attributes?.sub,
-    attributes?.subject,
     attributes?.user_id,
     attributes?.userId,
-    oauth?.sub,
-    oauth?.subject,
-    user?.sub,
-    user?.id,
+    user?.user_id,
+    user?.userId,
+    oauth?.user_id,
+    oauth?.userId,
   ];
 
   for (const candidate of candidates) {
@@ -1095,13 +1094,32 @@ const resolveXaiUserId = (file: AuthFileItem): string | null => {
   return null;
 };
 
-const buildXaiRequestHeaders = (file: AuthFileItem): Record<string, string> => {
-  const headers: Record<string, string> = { ...XAI_REQUEST_HEADERS };
-  const userId = resolveXaiUserId(file);
-  if (userId) {
-    headers['x-userid'] = userId;
+const buildXaiRequestHeaders = (file: AuthFileItem, userId?: string): Record<string, string> => {
+  const headers = buildXaiControlPlaneHeaders();
+  const resolvedUserId = userId ?? resolveXaiUserId(file);
+  if (resolvedUserId) {
+    headers['x-userid'] = resolvedUserId;
   }
   return headers;
+};
+
+const requestXaiUserId = async (authIndex: string): Promise<string> => {
+  const result = await apiCallApi.request({
+    authIndex,
+    method: 'GET',
+    url: XAI_USER_URL,
+    header: buildXaiControlPlaneHeaders(),
+  });
+  if (result.statusCode < 200 || result.statusCode >= 300) {
+    throw createStatusError(
+      `xAI user identity request failed (HTTP ${result.statusCode || 'unknown'})`,
+      result.statusCode || undefined
+    );
+  }
+  const payload = toXaiRecord(result.body ?? result.bodyText);
+  const userId = normalizeStringValue(payload?.user_id ?? payload?.userId);
+  if (!userId) throw new Error('xAI user identity response did not include user_id');
+  return userId;
 };
 
 const requestXaiBilling = async (
@@ -1121,17 +1139,27 @@ const requestXaiBilling = async (
   }
 
   const payload = parseXaiBillingPayload(result.body ?? result.bodyText);
-  return buildXaiBillingSummary(payload?.config);
+  return buildXaiBillingSummary(payload?.config, payload ?? undefined);
 };
 
-const fetchXaiQuota = async (file: AuthFileItem, t: TFunction): Promise<XaiBillingSummary> => {
+const fetchXaiQuota = async (file: AuthFileItem, t: TFunction): Promise<XaiQuotaFetchResult> => {
   const rawAuthIndex = file['auth_index'] ?? file.authIndex;
   const authIndex = normalizeAuthIndex(rawAuthIndex);
   if (!authIndex) {
     throw new Error(t('xai_quota.missing_auth_index'));
   }
 
-  const requestHeader = buildXaiRequestHeaders(file);
+  const storedUserId = resolveXaiUserId(file);
+  let resolvedUserId = storedUserId;
+  if (!resolvedUserId) {
+    try {
+      resolvedUserId = await requestXaiUserId(authIndex);
+    } catch {
+      // Keep legacy credentials usable when /user is unavailable. Billing
+      // remains authoritative and may still accept a request without x-userid.
+    }
+  }
+  const requestHeader = buildXaiRequestHeaders(file, resolvedUserId ?? undefined);
   const [weeklyResult, monthlyResult] = await Promise.allSettled([
     requestXaiBilling(authIndex, XAI_BILLING_WEEKLY_URL, requestHeader),
     requestXaiBilling(authIndex, XAI_BILLING_MONTHLY_URL, requestHeader),
@@ -1146,7 +1174,43 @@ const fetchXaiQuota = async (file: AuthFileItem, t: TFunction): Promise<XaiBilli
     throw new Error(t('xai_quota.empty_data'));
   }
 
-  return summary;
+  if (summary.prepaidBalanceCents === null || Math.abs(summary.prepaidBalanceCents) <= 0) {
+    return { billing: summary, preserveAutoTopup: false };
+  }
+  try {
+    const topupResult = await apiCallApi.request({
+      authIndex,
+      method: 'GET',
+      url: XAI_AUTO_TOPUP_URL,
+      header: requestHeader,
+    });
+    if (topupResult.statusCode >= 200 && topupResult.statusCode < 300) {
+      const topupPayload = parseXaiAutoTopupPayload(topupResult.body ?? topupResult.bodyText);
+      if (topupPayload) {
+        return {
+          billing: applyXaiAutoTopupRule(summary, topupPayload.rule),
+          preserveAutoTopup: false,
+        };
+      }
+    }
+  } catch {
+    // Auto-top-up is supplementary; billing quota remains useful when it fails.
+  }
+  return { billing: summary, preserveAutoTopup: true };
+};
+
+const preserveXaiAutoTopup = (
+  billing: XaiBillingSummary,
+  previous: XaiBillingSummary | null | undefined
+): XaiBillingSummary => {
+  if (!previous) return billing;
+  return {
+    ...billing,
+    autoTopupEnabled: previous.autoTopupEnabled,
+    autoTopupMinBeforeCents: previous.autoTopupMinBeforeCents,
+    autoTopupAmountCents: previous.autoTopupAmountCents,
+    autoTopupMaxPerMonthCents: previous.autoTopupMaxPerMonthCents,
+  };
 };
 
 const formatUsdFromCents = (cents: number | null): string => {
@@ -1188,8 +1252,19 @@ const XAI_SUPERGROK_LIMIT_CENTS = 15_000;
 const XAI_SUPERGROK_HEAVY_LIMIT_CENTS = 150_000;
 
 const resolveXaiPlan = (
-  monthlyLimitCents: number | null
-): { labelKey: string; premium: boolean } | null => {
+  monthlyLimitCents: number | null,
+  subscriptionTier: string | null
+): { labelKey?: string; label?: string; premium: boolean } | null => {
+  const normalizedTier = subscriptionTier?.trim().toLowerCase();
+  if (normalizedTier) {
+    if (normalizedTier.includes('heavy')) {
+      return { labelKey: 'plan_supergrok_heavy', premium: true };
+    }
+    if (normalizedTier.includes('supergrok')) {
+      return { labelKey: 'plan_supergrok', premium: false };
+    }
+    return { label: subscriptionTier ?? undefined, premium: false };
+  }
   if (monthlyLimitCents === XAI_SUPERGROK_LIMIT_CENTS) {
     return { labelKey: 'plan_supergrok', premium: false };
   }
@@ -1227,7 +1302,7 @@ const renderXaiItems = (
     clampedOnDemandUsed === null ? null : Math.max(0, Math.min(100, 100 - clampedOnDemandUsed));
   const onDemandPercentLabel = formatXaiPercent(onDemandRemaining);
   const onDemandAmountLabel = formatXaiOnDemandAmount(billing);
-  const plan = resolveXaiPlan(billing.monthlyLimitCents);
+  const plan = resolveXaiPlan(billing.monthlyLimitCents, billing.subscriptionTier);
   const weeklyUsed =
     billing.periodType === 'weekly' && billing.usagePercent !== null
       ? Math.max(0, Math.min(100, billing.usagePercent))
@@ -1241,6 +1316,7 @@ const renderXaiItems = (
     billing.monthlyLimitCents !== null ||
     billing.usedCents !== null ||
     Boolean(billing.billingPeriodEnd);
+  const paygEnabled = billing.onDemandEnabled ?? onDemandCap > 0;
 
   return h(
     Fragment,
@@ -1253,7 +1329,7 @@ const renderXaiItems = (
           h(
             'span',
             { className: plan.premium ? styleMap.premiumPlanValue : styleMap.codexPlanValue },
-            t(`xai_quota.${plan.labelKey}`)
+            plan.labelKey ? t(`xai_quota.${plan.labelKey}`) : plan.label
           )
         )
       : null,
@@ -1327,7 +1403,7 @@ const renderXaiItems = (
         })
       );
     }),
-    onDemandCap > 0
+    paygEnabled && onDemandCap > 0
       ? h(
           'div',
           { key: 'pay-as-you-go', className: styleMap.quotaRow },
@@ -1354,6 +1430,58 @@ const renderXaiItems = (
           h('span', { className: styleMap.codexPlanLabel }, t('xai_quota.pay_as_you_go_label')),
           h('span', { className: styleMap.codexPlanValue }, t('xai_quota.pay_as_you_go_disabled'))
         ),
+    billing.prepaidBalanceCents !== null
+      ? h(
+          'div',
+          { key: 'prepaid-credits', className: styleMap.codexPlan },
+          h('span', { className: styleMap.codexPlanLabel }, t('xai_quota.prepaid_balance_label')),
+          h('span', { className: styleMap.codexPlanValue }, formatUsdFromCents(Math.abs(billing.prepaidBalanceCents)))
+        )
+      : null,
+    billing.autoTopupEnabled !== null
+      ? h(
+          'div',
+          { key: 'auto-topup', className: styleMap.codexPlan },
+          h('span', { className: styleMap.codexPlanLabel }, t('xai_quota.auto_topup_label')),
+          h(
+            'span',
+            { className: styleMap.codexPlanValue },
+            billing.autoTopupEnabled
+              ? billing.autoTopupAmountCents !== null
+                ? t('xai_quota.auto_topup_enabled', {
+                    amount: formatUsdFromCents(Math.abs(billing.autoTopupAmountCents)),
+                  })
+                : t('xai_quota.auto_topup_enabled_simple')
+              : t('xai_quota.auto_topup_disabled')
+          )
+        )
+      : null,
+    billing.autoTopupEnabled === true && billing.autoTopupMaxPerMonthCents !== null
+      ? h(
+          'div',
+          { key: 'auto-topup-max', className: styleMap.codexPlan },
+          h('span', { className: styleMap.codexPlanLabel }, t('xai_quota.auto_topup_max_label')),
+          h(
+            'span',
+            { className: styleMap.codexPlanValue },
+            formatUsdFromCents(Math.abs(billing.autoTopupMaxPerMonthCents))
+          )
+        )
+      : null,
+    billing.isUnifiedBillingUser !== null
+      ? h(
+          'div',
+          { key: 'unified-billing', className: styleMap.codexPlan },
+          h('span', { className: styleMap.codexPlanLabel }, t('xai_quota.billing_mode_label')),
+          h(
+            'span',
+            { className: styleMap.codexPlanValue },
+            billing.isUnifiedBillingUser
+              ? t('xai_quota.billing_mode_unified')
+              : t('xai_quota.billing_mode_separate')
+          )
+        )
+      : null,
     hasMonthlyData
       ? h(
           'div',
@@ -1403,7 +1531,7 @@ export const KIMI_CONFIG: QuotaConfig<KimiQuotaState, KimiQuotaRow[]> = {
   renderQuotaItems: renderKimiItems,
 };
 
-export const XAI_CONFIG: QuotaConfig<XaiQuotaState, XaiBillingSummary> = {
+export const XAI_CONFIG: QuotaConfig<XaiQuotaState, XaiQuotaFetchResult> = {
   type: 'xai',
   i18nPrefix: 'xai_quota',
   cardIdleMessageKey: 'quota_management.card_idle_hint',
@@ -1412,7 +1540,12 @@ export const XAI_CONFIG: QuotaConfig<XaiQuotaState, XaiBillingSummary> = {
   storeSelector: (state) => state.xaiQuota,
   storeSetter: 'setXaiQuota',
   buildLoadingState: () => ({ status: 'loading', billing: null }),
-  buildSuccessState: (billing) => ({ status: 'success', billing }),
+  buildSuccessState: (result, previous) => ({
+    status: 'success',
+    billing: result.preserveAutoTopup
+      ? preserveXaiAutoTopup(result.billing, previous?.billing)
+      : result.billing,
+  }),
   buildErrorState: (message, status) => ({
     status: 'error',
     billing: null,

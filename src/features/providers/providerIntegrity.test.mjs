@@ -184,6 +184,7 @@ test('deletes sponsor OpenAI entries by unique descending source index', () => {
 });
 
 test('recognizes the current and legacy ClaudeAPI gateways without affiliate metadata', () => {
+  assert.equal(claudeApi.CLAUDE_API_DISPLAY_NAME, 'Claudeapi.com');
   assert.equal(claudeApi.CLAUDE_API_BASE_URL, 'https://gw.apito.ai');
   assert.equal(claudeApi.CLAUDE_API_LEGACY_BASE_URL, 'https://gw.claudeapi.com');
   assert.equal(claudeApi.isClaudeApiProvider({ baseUrl: 'https://gw.apito.ai/' }), true);
