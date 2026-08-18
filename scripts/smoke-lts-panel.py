@@ -4893,7 +4893,7 @@ def run_branded_provider_visibility_smoke(
     app_url: str,
     state: MockCoreState,
 ) -> None:
-    branded_labels = ["ClaudeAPI", "Code0", "FennoAI", "Qiniu Cloud"]
+    branded_labels = ["Claudeapi.com", "Code0", "FennoAI", "Qiniu Cloud"]
 
     for label in branded_labels:
         category = page.get_by_role(
