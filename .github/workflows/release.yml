@@ -10,6 +10,16 @@ on:
         description: 'Release tag to build and publish, for example v1-tls-0.0.1'
         required: true
         type: string
+      rewrite_release_notes:
+        description: 'Replace the title and notes when the Release already exists'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  GH_REPO: ${{ github.repository }}
+  RELEASE_TAG: ${{ github.event.inputs.release_tag || github.ref_name }}
+  REWRITE_RELEASE_NOTES: ${{ github.event_name == 'workflow_dispatch' && inputs.rewrite_release_notes || false }}
 
 jobs:
   build-and-release:
@@ -22,6 +32,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ github.event.inputs.release_tag || github.ref }}
           fetch-depth: 0
           fetch-tags: true
 
@@ -48,41 +59,51 @@ jobs:
       - name: Generate release notes
         run: |
           set -euo pipefail
-          current_tag="${RELEASE_TAG:-${GITHUB_REF_NAME}}"
-          if [[ "${current_tag}" != v*-tls-* ]]; then
+          if [[ "${RELEASE_TAG}" != v*-tls-* ]]; then
             echo "Only panel release tags matching v*-tls-* are supported."
             exit 1
           fi
-          if ! git rev-parse -q --verify "refs/tags/${current_tag}" >/dev/null; then
-            echo "Release tag ${current_tag} does not exist."
+          if ! git rev-parse -q --verify "refs/tags/${RELEASE_TAG}" >/dev/null; then
+            echo "Release tag ${RELEASE_TAG} does not exist."
             exit 1
           fi
 
-          previous_tag="$(git tag --merged HEAD --list 'v*-tls-*' --sort=-v:refname | grep -v "^${current_tag}$" | head -n 1 || true)"
-          if [ -z "${previous_tag}" ]; then
-            previous_tag="$(git tag --merged HEAD --list 'v*-lts.*' --sort=-v:refname | head -n 1 || true)"
+          release_exists=false
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            release_exists=true
           fi
-          if [ -n "${previous_tag}" ]; then
-            range="${previous_tag}..${current_tag}"
-          elif git rev-parse -q --verify "refs/tags/v1.8.4" >/dev/null; then
-            range="v1.8.4..${current_tag}"
+          echo "RELEASE_EXISTS=${release_exists}" >> "$GITHUB_ENV"
+          if [[ "$release_exists" == "true" && "$REWRITE_RELEASE_NOTES" != "true" ]]; then
+            echo "Release ${RELEASE_TAG} already exists; preserving its title and notes."
+            echo "RELEASE_NOTES_READY=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          bash scripts/generate-lts-release-notes.sh \
+            --tag "${RELEASE_TAG}" \
+            --notes-file release-notes.md \
+            --title-file release-title.txt
+          echo "RELEASE_TITLE=$(tr -d '\n' < release-title.txt)" >> "$GITHUB_ENV"
+          echo "RELEASE_NOTES_READY=true" >> "$GITHUB_ENV"
+
+      - name: Publish release and management.html
+        run: |
+          set -euo pipefail
+          if [[ "$RELEASE_EXISTS" == "true" ]]; then
+            if [[ "$RELEASE_NOTES_READY" == "true" ]]; then
+              gh release edit "$RELEASE_TAG" \
+                --title "$RELEASE_TITLE" \
+                --notes-file release-notes.md
+            fi
+            gh release upload "$RELEASE_TAG" dist/management.html --clobber
           else
-            range="${current_tag}"
+            if [[ "$RELEASE_NOTES_READY" != "true" ]]; then
+              echo "Release notes are required when creating ${RELEASE_TAG}." >&2
+              exit 1
+            fi
+            gh release create "$RELEASE_TAG" dist/management.html \
+              --title "$RELEASE_TITLE" \
+              --notes-file release-notes.md
           fi
-
-          : > release-notes.md
-          git log --pretty=format:"- %h %s" "${range}" >> release-notes.md
-        env:
-          RELEASE_TAG: ${{ github.event.inputs.release_tag || github.ref_name }}
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
-          files: |
-            dist/management.html
-          body_path: release-notes.md
-          draft: false
-          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -415,5 +415,8 @@ When releasing:
 2. Run `npm run type-check`.
 3. Run `npm run lint`.
 4. Run `npm run build`.
-5. Push only the exact intended tag, for example `v1-tls-0.0.3`.
-6. Verify the GitHub release contains `management.html`.
+5. Create an annotated `v*-tls-*` tag. Its subject is the user-facing summary and its body must contain exactly one `Companion-Core: v*-tls-*` line. Do not use a lightweight tag, a placeholder summary, or release-time proximity as a compatibility signal.
+6. Push only the exact intended tag, for example `v1-tls-0.0.3`.
+7. Confirm `.github/workflows/release.yml` wrote the Release body via `scripts/generate-lts-release-notes.sh` and that the GitHub release contains `management.html`.
+8. Read the published notes and confirm they show the tag summary, explicitly declared companion Core release, and `management.html` asset — not a raw commit dump.
+9. A manual dispatch for an existing Release preserves its title and body by default. Enable `rewrite_release_notes` only when replacing those fields is intentional.
