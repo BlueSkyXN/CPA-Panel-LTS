@@ -1,279 +1,210 @@
-# AGENTS.md
-
-本文件是 `CPA-Panel-LTS` 的 Codex root router。仓库内还有少量子目录 `AGENTS.md` 作为按需导航卡片；从仓库根目录启动 Codex 时，先遵守本文件，再按目录地图读取对应本地卡片。
+# CPA-Panel-LTS agent instructions
 
 ## Purpose
 
-`CPA-Panel-LTS` 是 `CPA-Core-LTS` 的长期维护管理面板。它不是上游 `router-for-me/Cli-Proxy-API-Management-Center` 的普通同步 fork，而是用于继续维护 Web 管理面板并保留完整使用统计 UI 的 LTS 分发仓库。
-
-## Codex startup behavior
-
-- Codex 通常从仓库根目录 `/Users/sky/Github/CPA-Panel-LTS` 启动，本文件是启动期主规则。
-- 子目录 `AGENTS.md` 是按需导航卡片；修改带有本地卡片的目录前，必须先 `cat <path>/AGENTS.md`。
-- 如果目标路径上存在多个本地 `AGENTS.md`，从浅到深依次读取，冲突时以更靠近目标文件的规则为准。
-- 如果从子目录直接启动，Codex 可能自动加载路径链上的本地 `AGENTS.md`；仍以本文件的目录地图作为根启动 workflow 的 router。
-- 当前没有 `AGENTS.override.md`。不要创建或修改 `AGENTS.override.md`，除非用户明确要求。
+`CPA-Panel-LTS` 是 `CPA-Core-LTS` 的长期维护 Web 管理面板。它保护完整 usage statistics，通过 selective-port 吸收上游修复，并以单文件 `management.html` 交付给 Core。
 
 ## Repository identity
 
-- LTS 仓库：`https://github.com/BlueSkyXN/CPA-Panel-LTS`
-- 上游来源：`https://github.com/router-for-me/Cli-Proxy-API-Management-Center`
-- 面板基线版本：`v1.8.4`
-- 面板基线提交：`8ed837c3d734c3970a6d6799c557bb6a6753360d`
-- 配套核心仓库：`https://github.com/BlueSkyXN/CPA-Core-LTS`
-- 核心基线版本：`CLIProxyAPI v6.9.49`
-- 核心基线提交：`b8bba053fcdafd80abc2152c88c78f4e7713c05a`
-- `main` 是唯一的 LTS 主线。不要为了“保留统计”再创建长期分支。
+- LTS repository: `BlueSkyXN/CPA-Panel-LTS`
+- Upstream: `router-for-me/Cli-Proxy-API-Management-Center`
+- Panel baseline: `v1.8.4` / `8ed837c3d734c3970a6d6799c557bb6a6753360d`
+- Companion Core: `BlueSkyXN/CPA-Core-LTS`
+- Core baseline: `CLIProxyAPI v6.9.49` / `b8bba053fcdafd80abc2152c88c78f4e7713c05a`
+- `main` 是唯一 LTS 主线；不创建长期“保留统计”分支。
+
+## Codex startup behavior
+
+- 从仓库根目录启动时，本文件是 repo-local 启动期 router。
+- 子目录 `AGENTS.md` 是按需 navigation card；修改对应目录前必须先读取。
+- 若目标路径上有多层 `AGENTS.md`，从浅到深读取，冲突时以更近的规则为准。
+- 不创建/修改 `AGENTS.override.md`，除非用户明确要求。
 
 ## Directory map
 
 | Path | Responsibility | Local AGENTS.md | Read when |
 |---|---|---:|---|
-| `AGENTS.md` | 根启动规则、LTS 不变量、命令索引 | This file | 每次从仓库根目录开始任务时 |
-| `README.md`, `README_CN.md` | 人类文档、LTS 背景、开发和发布说明 | No | 修改对外说明、quick start、release notes 前 |
-| `docs/` | 仓库文档和 LTS contract/runbook | No | 修改文档索引、普通说明、非 LTS contract 文档前 |
-| `docs/lts/` | LTS protected-delta registry、feature contracts、selective-port runbook | Yes | 修改 `panel-feature-contracts.yaml`、`panel-protected-deltas.yaml`、`sync-runbook.md` 前 |
-| `local/` | 未跟踪本地证据、截图、release-candidate 和临时交付材料 | No | 读取材料可用；不要把它当作主线源码或发布 truth |
-| `package.json`, `package-lock.json` | npm 依赖、scripts、锁定版本 | No | 新增依赖、改 scripts、改构建链前 |
-| `vite.config.ts` | Vite single-file build、版本注入、alias、SCSS module 配置 | No | 改 build 输出、asset inline、`__APP_VERSION__`、`@/` alias 前 |
-| `.github/workflows/` | GitHub Actions release workflow，发布 Panel `management.html` asset | Yes | 修改 workflow、tag trigger、release asset、GitHub permissions 前 |
-| `scripts/` | 额外材料和维护/验证脚本；userscript 不属于 Panel 主线完成标准 | Yes | 修改 `codex-quota-compass.user.js`、metadata、ChatGPT quota 请求逻辑，或维护/验证脚本前 |
-| `src/main.tsx`, `src/App.tsx`, `src/index.css`, `src/App.css` | React app 入口和全局样式入口 | No | 修改 app bootstrap、全局 CSS 注入、router 挂载前 |
-| `src/router/` | route registration and protected routes | No | 修改路由、导航路径、`/usage`、auth guard 前 |
-| `src/pages/` | 页面级 UI、页面状态和 page-level SCSS modules | No | 修改 Dashboard、Providers、AuthFiles、Quota、Usage、Config、Logs、System 页面前 |
-| `src/components/usage/` | 完整 usage statistics UI 组件 | Yes | 修改 usage charts、token breakdown、events table、import/export、price settings 前 |
-| `src/components/quota/` | quota cards、quota loader、quota config and rendering | No | 修改 Claude/Codex/Gemini/Antigravity/Kimi quota 展示或刷新逻辑前 |
-| `src/components/providers/` | provider config sections、provider nav、status bar、provider stats | No | 修改 provider 表单、status bar、usage-dependent provider 展示前 |
-| `src/components/config/` | visual/source config editor、diff modal、config sections | No | 修改 `/config.yaml` 编辑、save/reload、visual config blocks 前 |
-| `src/components/modelAlias/` | OAuth model alias diagram/list editing UI | No | 修改 alias diagram、fork、context menu、modal 行为前 |
-| `src/components/ui/` | 共享 UI primitives 和 icon wrappers | No | 修改 Button/Input/Modal/Select/Toggle 等公共组件 API 前 |
-| `src/features/authFiles/` | auth file cards、OAuth excluded/model alias、auth-file quota/status cache | No | 修改凭据上传/删除、runtime-only 状态、OAuth excluded/model alias、auth-file quota 前 |
-| `src/features/providers/` | provider workbench、model discovery、connectivity tests、recent-request health | No | 修改 `/ai-providers/workbench`、provider form/adapters/model discovery/recent request smoke 前 |
-| `src/features/plugins/` | plugin management/store/resource pages，受 Core plugin capability gate 控制 | Yes | 修改 `/plugins`、`/plugin-store`、plugin resource pages、install gate、plugin polling/resource descriptors 前 |
-| `src/hooks/` | 通用 React hooks | No | 修改 shared hook contract、interval、pagination、unsaved guard、API hook 前 |
-| `src/i18n/` | i18next setup and active locale JSON (`en`, `zh-CN`, `zh-TW`, `ru`) | No | 新增或修改用户可见文案、语言切换、locale key 前 |
-| `src/lts/` | LTS-owned sidecar/overlay code：Codex quota、Codex remote cloud connect、LTS locale overlays | Yes | 修改 `codexQuota`、`codexRemoteCloudConnect`、`i18n/*.lts.json` 或 LTS-only integration 前 |
-| `src/services/api/` | browser-side Management API clients and transformers | No | 修改 `/v0/management` endpoint、request/response transform、auth header、usage/quota/oauth clients 前 |
-| `src/services/storage/` | browser local storage abstraction | No | 修改 management key 或敏感本地存储前 |
-| `src/stores/` | Zustand stores for auth/config/models/usage/quota/theme/drafts | No | 修改跨页面缓存、load state、draft state、usage/quota store 前 |
-| `src/styles/` | SCSS variables、themes、mixins、layout/global styles | No | 修改 global design tokens、theme variables、layout primitives 前 |
-| `src/types/` | TypeScript contracts for API/domain data | No | 修改 Management API schema、usage/quota/auth/provider types 前 |
-| `src/utils/` | shared formatting、usage/quota aggregation、source resolving、validation helpers | No | 修改聚合、索引、格式化、quota parser/resolver 前 |
-| `src/assets/` | logos and provider icons | No | 替换 icon/logo 资产前 |
-| `dist/` | build output, generated by Vite | No | 不要手动修改；由 `npm run build` 生成 |
-| `node_modules/` | installed dependencies | No | 不要手动修改或审查为源码 |
+| `AGENTS.md` | 根 router、LTS 不变量、命令与验证入口 | This file | 每次从仓库根开始任务时 |
+| `.codex/` | 本机 Codex 配置 symlink | No | 非仓库交付物；仅按用户明确要求处理 |
+| `README.md`, `README_CN.md` | 对外介绍、开发和 release 说明 | No | 修改公开说明、quick start、release notes 前 |
+| `docs/` | 仓库文档 | No | 修改普通文档前 |
+| `docs/lts/` | feature contract、protected delta、selective-port runbook | Yes | 修改任一 LTS contract 或同步规则前 |
+| `local/` | 未跟踪的本地证据和临时材料 | No | 可读取；不要当作源码或 release truth |
+| `package.json`, `package-lock.json` | npm scripts、依赖与锁文件 | No | 改依赖、scripts 或安装链前 |
+| `vite.config.ts` | single-file build、版本注入、alias、SCSS module | No | 改构建输出、asset inline、`__APP_VERSION__` 或 alias 前 |
+| `.github/workflows/` | LTS contract CI 与 Panel release | Yes | 改 workflow、permissions、tag trigger 或 asset 前 |
+| `scripts/` | contract checks、browser smokes、userscripts | Yes | 改检查脚本、smoke 或 userscript 前 |
+| `src/main.tsx`, `src/App.tsx`, `src/router/`, `src/pages/` | app bootstrap、routes、page composition | No | 改入口、路由、guard 或页面挂载前 |
+| `src/components/config/` | source/visual config editors、diff 与安全提示 | Yes | 改 `/config.yaml` 编辑、visual schema 或 save flow 前 |
+| `src/components/usage/` | 完整 usage statistics UI | Yes | 改 usage charts、events、prices、import/export 前 |
+| `src/components/quota/` | quota loaders、cards 与 provider quota config | No | 改 quota 加载、解析、刷新或展示前；Codex 专有逻辑另读 `src/lts/AGENTS.md` |
+| `src/components/providers/` | 稳定 provider 页面、status bar、recent requests | No | 改 provider status 或 usage-dependent 展示前 |
+| `src/components/modelAlias/` | OAuth model alias diagram/editor | No | 改 alias graph、fork、context menu 或 modal 前 |
+| `src/components/ui/`, `src/components/common/`, `src/components/layout/` | shared UI primitives 与 layout | No | 改公共 props、navigation 或 design primitive 前 |
+| `src/features/authFiles/` | auth-file CRUD、OAuth rules、quota/status cache | Yes | 改凭据操作、OAuth excluded/model alias 或 cache 前 |
+| `src/features/providers/` | provider workbench、discovery、connectivity、mutation recovery | Yes | 改 workbench、adapter、provider form 或 test flow 前 |
+| `src/features/plugins/` | capability-gated plugin management/store/resources | Yes | 改 plugin route、gate、install、polling 或 resource descriptor 前 |
+| `src/features/dashboard/` | dashboard metrics and visualization | No | 改 dashboard aggregation 或 cards 前 |
+| `src/services/api/` | browser-side Management API clients and transforms | Yes | 改 endpoint、auth header、transform 或 API error semantics 前 |
+| `src/services/storage/` | management connection data 的浏览器存储封装 | Yes | 改 storage format、migration 或敏感数据持久化前 |
+| `src/i18n/` | i18next bootstrap 与四套 shared locale | Yes | 新增/修改用户文案、locale key 或语言初始化前 |
+| `src/lts/` | LTS-owned Codex sidecars 与 locale overlays | Yes | 改 Codex quota、remote cloud connect 或 `*.lts.json` 前 |
+| `src/hooks/`, `src/stores/` | shared hooks 与 Zustand state | No | 改跨页面状态、连接生命周期、缓存或 draft 前 |
+| `src/types/`, `src/utils/` | API/domain contracts、formatting、aggregation、parsers | No | 改 schema、usage/quota semantics 或共享算法前 |
+| `src/styles/`, `src/assets/` | themes、SCSS primitives、logos/icons | No | 改全局 token、layout primitive 或品牌资产前 |
+| `dist/` | Vite generated build output | No | 不手改；由 `npm run build` 生成 |
+| `node_modules/` | installed dependencies | No | 不作为源码修改或 review |
 
 ## On-demand cat protocol
 
-Before editing files under a directory that has `Local AGENTS.md = Yes`, read that file first:
+修改 `Local AGENTS.md = Yes` 的路径前，读取对应卡片；跨边界修改要读取所有直接相关卡片：
 
 ```bash
 cat .github/workflows/AGENTS.md
 cat docs/lts/AGENTS.md
 cat scripts/AGENTS.md
-cat src/features/plugins/AGENTS.md
-cat src/lts/AGENTS.md
+cat src/components/config/AGENTS.md
 cat src/components/usage/AGENTS.md
+cat src/features/authFiles/AGENTS.md
+cat src/features/providers/AGENTS.md
+cat src/features/plugins/AGENTS.md
+cat src/services/api/AGENTS.md
+cat src/services/storage/AGENTS.md
+cat src/i18n/AGENTS.md
+cat src/lts/AGENTS.md
 ```
-
-Read only the cards that are on the path or directly relevant to the change. Do not create extra local cards for pure organization directories unless there is a real invariant, high-risk boundary, or directory-specific validation that is not already covered here.
 
 ## LTS invariants
 
-Full usage statistics are the reason this LTS panel exists. Preserve this data path unless the user explicitly asks for a different LTS direction.
+完整 usage statistics 是本仓库存在的原因。除非用户明确改变 LTS 产品方向，以下链路必须保留：
 
-Must keep:
-
-- `/usage` route in `src/router/MainRoutes.tsx`
-- `src/pages/UsagePage.tsx`
-- `src/pages/UsagePage.module.scss`
+- `/usage` in `src/router/MainRoutes.tsx`
+- `src/pages/UsagePage.tsx` and `src/pages/UsagePage.module.scss`
 - `src/components/usage/`
 - `src/services/api/usage.ts`
 - `src/stores/useUsageStatsStore.ts`
 - `src/types/usage.ts`
-- `src/utils/usage.ts`
-- `src/utils/usageIndex.ts`
-- usage import/export
-- usage charts, token breakdown, request events table, model/API/credential breakdown, local model price settings
-- provider status bar displays that depend on complete usage details
+- `src/utils/usage.ts`, `src/utils/usageIndex.ts`, and `src/utils/usage/`
+- usage import/export、charts、token breakdown、request events、model/API/credential breakdown、local pricing
+- 依赖完整 usage details 的 provider status surfaces
 
-Do not directly merge or re-create the upstream direction that replaces complete usage statistics with only recent requests or API-key summaries.
+上游边界已确认：`v1.9.3` 仍保留完整 usage；本仓以 `v1.8.4` 为基线；`b25f722` 开始将 provider usage 转向 recent requests；`632be0b` 大规模删除完整 usage UI/store/API/utils。Panel 因此采用 **protected selective-port**，不是 Core 所用的 protected full-sync。
 
-Confirmed upstream removal boundary:
+处理上游变更时：
 
-- `v1.9.3` still retains the complete usage implementation.
-- `v1.8.4` is the baseline used by this repository and the last tagged panel version before the removal path.
-- `b25f722` starts switching provider usage tracking to recent requests.
-- `632be0b` removes the full usage UI, store, API client, and usage utilities at large scale.
+1. 先读 upstream diff 与 `docs/lts/sync-runbook.md`、`panel-protected-deltas.yaml`。
+2. 检查 route、usage store/API/utils、provider status、auth-file stats、quota、locale 与 release workflow 的影响。
+3. 选择 cherry-pick、manual port 或 rejection；不得盲用 GitHub `Sync fork`。
+4. 保留 LTS protected surface，再适配兼容部分。
+5. port 完成前运行 `npm run check:lts`；广泛变更运行 `npm run validate:lts`。
 
-Panel maintenance mode is protected selective-port, not protected full-sync. `CPA-Core-LTS` can full-sync because its protected delta is small and localized; this Panel cannot, because upstream deletes the protected usage UI itself. Port compatible upstream fixes deliberately, and reject or adapt changes that weaken complete usage statistics.
+Contract truth 必须保持一致：
 
-When following upstream:
+- `docs/lts/panel-feature-contracts.yaml` 记录 `protected`、`lts-maintained`、`shared`、`coexist`、`experimental` surface。
+- `scripts/check-lts-panel-contract.sh` 与 `scripts/check-panel-feature-contracts.mjs` 执行文件、route、API、locale、release、plugin、sidecar 等 marker guard。
+- 新增或移除 protected/coexist LTS surface 时，同一变更中同步 registry 与 guard；若用户只授权调查，明确报告未落盘项。
 
-- Do not use GitHub `Sync fork` blindly.
-- Read upstream diffs first, then choose cherry-pick, manual port, or rejection.
-- Before merging an upstream change, check whether it touches usage routes, usage store, usage API client, provider status bar, auth-file stats, quota display, or release workflow.
-- If an upstream change removes or weakens full statistics, preserve the LTS implementation first and port only unrelated compatible pieces.
-- Lightweight cleanup may remove promotional copy, sponsorship text, unused pages, unused providers, or non-target release machinery, but must not remove code still needed by the Core/Panel statistics contract.
-- Run `npm run check:lts` before opening or merging upstream-port PRs.
-- For detailed upstream handling rules, read `docs/lts/sync-runbook.md` and `docs/lts/panel-protected-deltas.yaml`.
+当前关键边界：
 
-Contract truth lives in two places and should stay aligned:
-
-- `docs/lts/panel-feature-contracts.yaml` documents protected, LTS-maintained, shared, coexist, and experimental feature surfaces.
-- `scripts/check-lts-panel-contract.sh` enforces sentinel files, required markers, locale overlay coverage, lockfile policy, release asset contract, plugin support markers, and LTS sidecar markers.
-
-When adding or removing a protected/coexist LTS surface, update both the feature contract and the guard script in the same change unless the user explicitly scopes a partial investigation.
-
-Important current feature boundaries:
-
-- `full-usage-statistics` is protected and must not be replaced by recent-request summaries.
-- `provider-workbench` and `recent-requests` may coexist, but must not replace the stable LTS provider page or full usage statistics.
-- `plugin-management` is capability-gated by Core support, including `x-cpa-support-plugin`, `pluginSupportKnown`, and `RequirePluginSupport`.
-- `codex-abnormal-reasoning-retry-config` is a downstream Core LTS visual config surface. Keep `src/types/visualConfig.ts`, `src/hooks/useVisualConfig.ts`, `src/components/config/VisualConfigEditor.tsx`, all active locale catalogs, smoke markers, and the feature contract aligned when Core changes `codex.abnormal-reasoning-retry`.
-- `src/lts/codexQuota/` and `src/lts/codexRemoteCloudConnect/` are LTS-owned sidecars; shared pages should keep thin integration points.
-- `src/lts/i18n/*.lts.json` are runtime overlay locale catalogs. Keep all active locales aligned when adding LTS-only text.
+- `full-usage-statistics` 不得被 recent-request/API-key summaries 取代。
+- `provider-workbench` 和 `recent-requests` 可以 coexist，但不能替换稳定 provider 页面或完整 usage。
+- `plugin-management` 必须由 Core capability gate 控制，包括 `x-cpa-support-plugin`、`pluginSupportKnown` 与 `RequirePluginSupport`。
+- `codex-abnormal-reasoning-retry-config` 涉及 `visualConfig` types/hooks/editor、四套 shared locale、smoke markers 与 feature contract；Core schema 改变时一起核对。
+- `src/lts/codexQuota/`、`codexRemoteCloudConnect/` 和 `i18n/*.lts.json` 是 LTS sidecars；shared pages 保持 thin integration surface。
 
 ## CPA-Core-LTS contract
 
-`CPA-Core-LTS` is the server core. It owns proxying, auth, Management API, and usage data collection.
-
-`CPA-Panel-LTS` is the browser management panel. It reads the Core `/v0/management` API to show and edit config, credentials, logs, quota, and full usage statistics.
-
-Maintain these contracts:
-
-- Core must continue to provide usage Management API endpoints such as `/usage`, `/usage/export`, and `/usage/import`.
-- Panel must remain compatible with Core usage response structures.
-- Panel latest release must include an asset named exactly `management.html`; Core downloads this asset by default.
-- If Core changes usage/quota/auth-file schema, inspect Panel types, API clients, stores, pages, and provider status bar before claiming compatibility.
-- If Panel changes usage UI or schema expectations, verify Core still exposes the corresponding endpoint and field semantics.
+- Core owns proxying、auth、Management API 与 usage collection；Panel 只通过浏览器端 `/v0/management` 管理。
+- Core 需继续提供 `/usage`、`/usage/export`、`/usage/import` 等 Management API；Panel types/transforms 必须匹配当前 Core 或 live endpoint。
+- Panel release asset 必须精确命名为 `management.html`，Core updater 依赖该名称。
+- Core schema 变更时，检查 Panel API client、types、stores、pages、quota/auth-file 与 provider status；Panel schema expectation 变更时反向核对 Core。
+- 构建通过只证明本地编译，不证明 Core compatibility、release、deployment 或 live acceptance。
 
 ## Commands
 
-All commands below are confirmed from `package.json`, `.github/workflows/release.yml`, or repository docs.
+命令来源为当前 `package.json`、workflow 与仓库脚本。仓库使用 npm 和 `package-lock.json`；CI 使用 Node.js 20。
 
 | Command | Purpose | Scope | Sandbox notes |
 |---|---|---|---|
-| `npm ci` | Install exact dependencies from `package-lock.json` | repo | Requires npm registry/network if dependencies are not already cached |
-| `npm run dev` | Start Vite dev server | local browser/dev | Long-running server; use when browser validation is needed |
-| `npm run build` | Run `tsc && vite build` and generate single-file `dist/index.html` | repo | Default build validation for UI/TS/release-affecting changes |
-| `npm run preview` | Serve built `dist/` output locally | local browser/dev | Requires `npm run build` first; long-running server |
-| `npm run lint` | Run ESLint on `ts,tsx` files | repo | Does not validate `scripts/*.js` userscripts |
-| `npm run type-check` | Run `tsc --noEmit` | repo | Good first validation for TypeScript-only changes |
-| `npm run format` | Run Prettier over `src/**/*.{ts,tsx,css,scss}` | `src/` only | Writes files; use only when formatting source changes is intended |
-| `npm run check:feature-contract` | Run `scripts/check-panel-feature-contracts.mjs` against `docs/lts/panel-feature-contracts.yaml` | repo | Feature file/route/API marker guard; included by `npm run check:lts` |
-| `npm run check:lts` | Run the Panel LTS contract guard, including feature contract, sentinel paths, release asset contract, provider/plugin/recent-request/visual-config markers, and npm lockfile policy | repo | Lightweight guard; does not replace browser or Core compatibility smoke |
-| `npm run validate:lts` | Run `check:lts`, `type-check`, `lint`, and `build` in sequence | repo | Default post-port validation for shared code or upstream-port batches |
-| `npm run smoke:lts` | Build and run optional Python Playwright browser smoke against a mock Core API | local browser/dev | Requires Python Playwright and Chromium; not part of default CI gate |
-| `npm run smoke:lts:core` | Build and run optional authenticated smoke against a local sibling `CPA-Core-LTS` process, including safe writes to the temporary smoke config | local browser/dev + Core checkout | Requires Go, `/Users/sky/Github/CPA-Core-LTS`, Python Playwright, and Chromium; plugin-store is skipped unless `-- --include-plugin-store` is passed; use `-- --no-write-smoke` to skip temp config/provider writes |
-| `scripts/check-lts-panel-contract.sh` | Underlying shell implementation for `npm run check:lts` | repo | Prefer npm script in docs and handoffs unless debugging the shell script itself |
+| `npm install` | 本地 quick start 安装/更新依赖与 lockfile | repo | README 的交互开发入口；需要 npm registry/network，可能改 `package-lock.json` |
+| `npm ci` | 按 lockfile 安装依赖 | repo | 缓存缺失时需要 npm registry/network；会重建 `node_modules/` |
+| `npm run dev` | 启动 Vite dev server | local UI | 长驻进程；browser validation 时使用 |
+| `npm run preview` | 服务已构建的 `dist/` | local UI | 先运行 build；长驻进程 |
+| `npm run type-check` | `tsc --noEmit` | TS source | 默认 TypeScript 检查 |
+| `npm run build` | `tsc && vite build`，生成 single-file `dist/index.html` | repo | UI/TS/release 变更的默认构建检查 |
+| `npm run lint` | ESLint `ts,tsx` | repo | 不覆盖 userscript JavaScript |
+| `npm run format` | Prettier 写入 `src/**/*.{ts,tsx,css,scss}` | `src/` | 会修改文件；仅在明确需要格式化时运行 |
+| `npm run test:usage` | usage cache/prices/import/effort/tier/pricing tests | usage chain | Node test aggregator |
+| `npm run test:providers` | xAI、provider integrity、recent requests tests | provider code | Node test aggregator |
+| `npm run test:auth-files` | OAuth load guard 与 upstream quota-port tests | auth/quota | Node tests |
+| `npm run test:dashboard` | dashboard metric tests | dashboard | Node test |
+| `npm run test:config` | config API-key storage/security tests | config | Node test |
+| `npm run test:api-client` | connection-generation/client semantics | API client | Node test |
+| `npm run test:logs` | incremental log merge semantics | logs | Node test |
+| `npm run test:quota` | upstream quota-port semantics | quota | Node test |
+| `npm run check:feature-contract` | 校验 feature registry 的文件/route/API markers | LTS contract | 被 `check:lts` 包含 |
+| `npm run check:lts` | Panel LTS contract guard | repo | 轻量结构门禁，不替代 browser/Core smoke |
+| `npm run validate:lts` | 全部已配置 Node tests + contract + type-check + lint + build | repo | 默认广泛变更/port gate；可能耗时 |
+| `npm run smoke:lts` | build + mock Core browser smoke | local browser | 需要 Python Playwright 与 Chromium |
+| `npm run smoke:lts:core` | build + local sibling Core authenticated smoke | Panel + Core | 需要 Go、Core checkout、Python Playwright、Chromium 与 management credentials；可能写临时 smoke config |
 
-There is no configured `npm test` script in this repository. Do not claim tests passed unless a real test command is added or provided by the user.
+没有通用 `npm test`；报告实际运行的 `test:*` 或 `validate:lts`。
 
 ## Validation standard
 
-For documentation-only or AGENTS-only changes:
+验证按变更风险选择最小充分集合，且区分 local check、mock smoke、real-Core smoke、GitHub CI/release 与 live deployment。
 
-1. Verify only intended `AGENTS.md` or docs files changed.
-2. No build is required unless the content change depends on generated output.
+### AGENTS/docs only
 
-For TypeScript or UI changes:
+1. 用 `git diff --check` 检查 whitespace。
+2. 用 `git status --short` 与 `git diff --name-only` 确认只修改目标文档/`AGENTS.md`。
+3. 内容若依赖命令、schema 或 workflow，回读真实配置；纯规则修改不要求 build。
 
-1. Run `npm run type-check`.
-2. Run `npm run build`.
-3. Run `npm run lint` when touching shared components, hooks, stores, API clients, or broad refactors.
-4. For visual/layout changes, start `npm run dev` or `npm run preview` and inspect in a browser when feasible.
+### TypeScript/UI
 
-For visual config schema changes:
+1. 运行相关 `npm run test:*`（若存在）。
+2. 运行 `npm run type-check` 与 `npm run build`。
+3. 共享 components/hooks/stores/API clients、跨模块改动或广泛 refactor 再运行 `npm run lint`。
+4. layout、navigation、chart、modal 或 responsive 行为变更时用 dev/preview 做 browser inspection；未运行要单独报告。
 
-1. Inspect `src/types/visualConfig.ts`, `src/hooks/useVisualConfig.ts`, `src/components/config/VisualConfigEditor.tsx`, `src/components/config/VisualConfigEditorBlocks.tsx`, and all active locale JSON files.
-2. If the change is an LTS/Core-owned config surface such as `codex.abnormal-reasoning-retry`, keep `docs/lts/panel-feature-contracts.yaml` and `scripts/check-lts-panel-contract.sh` aligned in the same change.
-3. Run `npm run check:lts`.
-4. Run `npm run type-check`.
-5. Run `npm run build`.
-6. Run `npm run smoke:lts` or `npm run smoke:lts:core` when behavior depends on browser write flows or current `CPA-Core-LTS` config parsing; report skipped browser/Core validation separately.
+### Protected domains
 
-For usage statistics changes:
-
-1. Read `src/components/usage/AGENTS.md`.
-2. Read `docs/lts/AGENTS.md` if the protected feature registry or guard markers need to change.
-3. Run `npm run check:lts`.
-4. Run `npm run type-check`.
-5. Run `npm run build`.
-6. Inspect `src/router/MainRoutes.tsx`, `src/pages/UsagePage.tsx`, `src/services/api/usage.ts`, `src/stores/useUsageStatsStore.ts`, `src/types/usage.ts`, `src/utils/usage.ts`, and `src/utils/usageIndex.ts` for contract drift.
-7. If the change depends on Core behavior, verify against current `CPA-Core-LTS` Management API code or live endpoint; do not infer fields from memory.
-
-For LTS contract or guard changes:
-
-1. Read `docs/lts/AGENTS.md`.
-2. Read `scripts/AGENTS.md` when changing `scripts/check-lts-panel-contract.sh`, `scripts/check-panel-feature-contracts.mjs`, or smoke scripts.
-3. Keep `docs/lts/panel-feature-contracts.yaml` and `scripts/check-lts-panel-contract.sh` aligned.
-4. Run `npm run check:lts`.
-5. Run `npm run validate:lts` for broad protected-surface, route, API, or smoke marker changes.
-
-For LTS sidecar changes under `src/lts/`:
-
-1. Read `src/lts/AGENTS.md`.
-2. Run `npm run check:lts`.
-3. Run `npm run type-check`.
-4. Run `npm run build`.
-5. Run `npm run smoke:lts` when touching Codex quota rendering, reset-credit behavior, remote cloud connect UI, auth-file quota cards, or locale overlays; report if Playwright/Chromium is unavailable.
-
-For plugin management changes:
-
-1. Read `src/features/plugins/AGENTS.md`.
-2. Run `npm run check:lts`.
-3. Run `npm run type-check`.
-4. Run `npm run build`.
-5. Run `npm run smoke:lts` for route, gate, install modal, store-source, or plugin resource changes.
-6. Use `npm run smoke:lts:core -- --include-plugin-store` only when local `CPA-Core-LTS`, management credentials, and plugin-store support are available; report skipped real-Core validation separately.
-
-For release workflow changes:
-
-1. Read `.github/workflows/AGENTS.md`.
-2. Confirm `npm run build` still produces `dist/index.html`.
-3. Confirm the workflow still publishes `dist/management.html`.
-4. Live workflow or GitHub release validation requires GitHub network/auth and should be reported separately.
-
-For userscript changes:
-
-1. Read `scripts/AGENTS.md`.
-2. There is no package script that fully validates `scripts/codex-quota-compass.user.js`.
-3. Do not treat `npm run build`, `npm run lint`, or `npm run type-check` as userscript validation unless the build config is changed to include it.
-4. If no browser/Tampermonkey smoke test was run, say so in the final report.
+- Usage: 先读 `src/components/usage/AGENTS.md`；运行 `test:usage`、`check:lts`、`type-check`、`build`。
+- Config: 先读 `src/components/config/AGENTS.md`；运行 `test:config`、`type-check`、`build`；LTS/Core-owned schema 再加 `check:lts` 与相应 smoke。
+- Providers: 先读 `src/features/providers/AGENTS.md`；运行 `test:providers`、`type-check`、`build`；mutation/discovery UI 需要 browser smoke 时说明依赖。
+- Auth files/quota: 先读 `src/features/authFiles/AGENTS.md`；运行 `test:auth-files`（或 `test:quota`）、`type-check`、`build`；涉及 Codex sidecar 再读 `src/lts/AGENTS.md` 并跑 `check:lts`/smoke。
+- API client: 先读 `src/services/api/AGENTS.md`；运行 `test:api-client`、`type-check`、`build`；Core-dependent semantics 必须核对当前 Core source 或 live endpoint。
+- LTS contract/guard: 先读 `docs/lts/AGENTS.md` 与 `scripts/AGENTS.md`；运行 `check:lts`，广泛 marker/route/API 变更运行 `validate:lts`。
+- Plugins: 先读 `src/features/plugins/AGENTS.md`；运行 `check:lts`、`type-check`、`build`、`smoke:lts`；只有本地 Core 具备支持和凭据时才运行 `smoke:lts:core -- --include-plugin-store`。
+- LTS sidecars/locales: 读 `src/lts/AGENTS.md` 与 `src/i18n/AGENTS.md`；运行 `check:lts`、`type-check`、`build`，交互变更运行 `smoke:lts`。
+- Release workflow: 读 `.github/workflows/AGENTS.md`；确认 build 产生 `dist/index.html` 且 workflow 发布 `dist/management.html`。Live Actions/release 需要 GitHub network/auth，不能由本地检查代替。
+- Userscript: 读 `scripts/AGENTS.md`；app build/lint/type-check 不覆盖 userscript。未运行 Tampermonkey/browser smoke 时明确报告。
 
 ## Global rules
 
-- Package manager is npm. Use `package-lock.json`; do not introduce pnpm, yarn, bun, or a second lockfile.
-- Communicate with the user in Chinese by default; keep code, commands, file paths, API names, and proper nouns in English.
-- Prefer `npm ci` for repeatable install in automation. README still mentions `npm install` for casual local quick start.
-- React app code is TypeScript with strict compiler settings. Avoid `any` as a default escape hatch; if unavoidable, keep it narrow and justified by external data shape.
-- Import application modules through the existing `@/` alias when that matches local style.
-- Reuse existing API clients, stores, hooks, utilities, and UI primitives before adding new abstractions.
-- User-visible text belongs in locale JSON under `src/i18n/locales/`. When adding text, update all active locale files (`en`, `zh-CN`, `zh-TW`, `ru`) or clearly report any missing translation.
-- Keep SCSS module class names compatible with `localsConvention: 'camelCase'`.
-- Browser-side Management API semantics must come from current `CPA-Core-LTS` implementation, current Panel code, or a live endpoint. Do not invent fields or endpoints by analogy.
-- Keep secrets out of docs, logs, screenshots, release notes, and userscript metadata. Do not hardcode management keys, API keys, OAuth access tokens, refresh tokens, or JWTs in committed files.
-- It is acceptable to use user-provided test credentials for local debugging when the user asks, but remove them before writing docs, committing, publishing, or producing shareable artifacts.
-- UI work should preserve responsive behavior for desktop and mobile management screens. Check for text overflow, incoherent overlap, and broken navigation after layout changes.
+- 默认中文沟通；代码、命令、路径、API/配置键与专有名词保留英文。
+- 使用 npm；依赖变更同步 `package.json` 与 `package-lock.json`，不引入第二种 package manager/lockfile。
+- TypeScript strict；不要用宽泛 `any` 逃避外部数据解析，必要时缩小范围并说明数据边界。
+- 优先复用现有 `@/` imports、API clients、stores、hooks、utilities 与 UI primitives。
+- 用户可见文案进入 locale catalogs；shared key 同步 `en`、`zh-CN`、`zh-TW`、`ru`，LTS-only key 进入四套 `*.lts.json` overlay。
+- SCSS module class names 必须兼容 `localsConvention: 'camelCase'`；UI 保持 desktop/mobile responsive，检查 overflow、overlap 与 navigation。
+- Management API endpoint/schema/header 只能来自当前 Panel/Core source、schema 或 live readback；不要按类比编造。
+- 现有测试凭据可用于用户授权的本地调试，但不得进入 commit、docs、logs、screenshots、fixtures 或 shareable artifacts。
 
 ## Do not
 
-- Do not delete or weaken the full usage statistics page and data chain listed in this file.
-- Do not rename the release asset away from `management.html`.
-- Do not treat userscript or other `scripts/` extra materials as Panel mainline completion criteria unless the user explicitly scopes that work in.
-- Do not broaden release tag publishing casually; panel releases use `v*-tls-*`, for example `v1-tls-0.0.1`.
-- Do not run `git push --tags` after upstream tracking work; push only the exact intended panel release tag when releasing.
-- Do not execute release publishing, `gh release`, or workflow dispatch unless the user explicitly asks for release work.
-- Do not edit `dist/` by hand; change source/config and rebuild.
-- Do not add hidden network calls from the browser UI without clear user-facing purpose and error handling.
-- Do not log raw Management API credentials, OAuth tokens, ChatGPT access tokens, or raw quota/usage responses that may contain sensitive account data.
-- Do not assume upstream changes are safe just because they build; compare them against the LTS usage contract.
+- 不删除或削弱完整 usage statistics chain。
+- 不把 release asset 改离 `management.html`。
+- 不把 userscript 或 `scripts/` 额外材料当作 Panel mainline 完成标准，除非用户明确点名。
+- 不盲目 full-sync upstream；build pass 不是 LTS contract preservation 的证明。
+- 不手改 `dist/` 或 `node_modules/`。
+- 不新增无用户目的或无错误处理的隐藏 browser network call。
+- 不记录 raw management keys、OAuth/access/refresh tokens、JWT、auth JSON 或可能含账户数据的 raw quota/usage payload。
+- 不运行 release publishing、`gh release`、workflow dispatch、push exact tag 或 `git push --tags`，除非用户明确授权；release tag pattern 保持 `v*-tls-*`。
 
 ## Notes for future agents
 
-- This repository is a single Web UI, not the proxy server. Server-side fixes usually belong in `CPA-Core-LTS`.
-- The panel is expected to work from `/management.html` on the API server port and talk to `/v0/management`.
-- Opening `dist/index.html` directly via `file://` can hit browser CORS limits; use `npm run preview` or a dev server for browser checks.
-- Quota and auth-file status surfaces often share data through `src/stores/useQuotaStore.ts`, `src/components/quota/`, and `src/features/authFiles/`; avoid fixing only one display if the underlying data model changed.
-- Provider status bar depends on complete usage details through `src/utils/usage.ts` and `src/utils/usageIndex.ts`; usage changes can affect provider pages even when `src/components/providers/` was not edited.
+- 本仓库是单一 Web UI，不是 proxy server；server-side fixes 通常属于 `CPA-Core-LTS`。
+- Panel 通常由 API server 的 `/management.html` 提供，并调用 `/v0/management`；不要用 `file://dist/index.html` 代替 dev/preview browser validation。
+- Quota/auth-file surfaces 共享 store、components 与 cache；底层模型改变时检查所有消费者。
+- Provider status bar 依赖完整 usage aggregation；usage 变更时一并检查。

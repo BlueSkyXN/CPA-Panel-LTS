@@ -1,36 +1,36 @@
 # src/components/usage navigation card
 
-Complete usage statistics UI for the LTS panel.
-Read before modifying charts, events, import/export, prices, tokens, or usage-backed provider status.
-
-Linked files: `UsagePage.tsx`, `usage.ts`, `useUsageStatsStore.ts`, `src/types/usage.ts`, `src/utils/usage.ts`, `src/utils/usageIndex.ts`, `MainRoutes.tsx`.
+Complete usage statistics UI and pricing/detail components for the LTS product boundary.
+Read before changing charts, events, tokens, prices, import/export, or usage-backed provider status.
+Linked chain: `UsagePage.tsx`, `services/api/usage.ts`, `useUsageStatsStore.ts`, `types/usage.ts`, `utils/usage.ts`, `utils/usageIndex.ts`, `utils/usage/`, `MainRoutes.tsx`.
 
 ## Local invariants
 
-- `/usage` is a first-class LTS route, not a legacy page to remove.
-- Preserve events, model/API/credential breakdowns, token categories, cached/reasoning tokens, charts, import/export, and local prices.
-- Do not replace this page with only recent requests, API-key counters, or a provider-level summary.
-- Provider status bars rely on `src/utils/usage.ts` and `src/utils/usageIndex.ts`; update consumers when aggregation changes.
-- API fields must match current `CPA-Core-LTS` Management API behavior. Do not invent response fields from UI assumptions.
-- `docs/lts/panel-feature-contracts.yaml` and `scripts/check-lts-panel-contract.sh` are the registry/guard for protected markers.
+- `/usage` is a protected first-class route, not legacy UI.
+- Preserve request events, model/API/credential breakdowns, token categories, cached/reasoning tokens, service tier/effort semantics, charts, import/export, and local pricing.
+- Recent requests or API-key summaries may coexist but cannot replace complete usage.
+- Provider status bars consume usage aggregation/indexes; aggregation changes require consumer review.
+- Import/export and persisted pricing changes require backward-compatible parsing or an explicit migration/fallback.
+- API fields must match current Core Management API or live readback.
 
 ## Local rules
 
-- Keep expensive aggregation in reusable utilities/hooks rather than duplicating calculations across cards.
+- Keep aggregation and pricing logic in shared utilities/hooks rather than duplicating card calculations.
 - Preserve loading, empty, error, unsupported, import-success, and import-failure states.
-- When adding user-visible text, update `src/i18n/locales/` consistently.
-- When changing chart datasets, verify both chart rendering and tabular/detail views still agree on totals.
-- Keep import/export compatible with existing saved usage data, or add fallback/migration.
+- Chart and table/detail totals must agree at the same filter/grain.
+- Protected marker changes require `docs/lts/AGENTS.md` and `scripts/AGENTS.md`.
 
 ## Do not
 
-- Do not delete `UsagePage.tsx`, `useUsageStatsStore`, `usage.ts`, or `usageIndex.ts`.
-- Do not silently drop dimensions just because a sample response lacks that field.
-- Do not break existing pricing settings or imported usage data without migration or fallback.
+- Do not delete the linked route/store/API/types/utils chain.
+- Do not silently drop a dimension because one sample response omitted it.
+- Do not round away cents or token categories before aggregation requires it.
+- Do not break saved usage imports or pricing settings without compatibility handling.
 
 ## Validation
 
+- `npm run test:usage`
 - `npm run check:lts`
 - `npm run type-check`
 - `npm run build`
-- Browser inspection is expected for layout/chart changes when feasible; report explicitly if it was not run.
+- Run `npm run lint` for shared utility/hook changes. Inspect charts, tables, filters, and responsive layout in a browser for visual changes; report if skipped.
