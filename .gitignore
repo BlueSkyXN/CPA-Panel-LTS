@@ -18,6 +18,8 @@ node_modules
 dist
 dist-ssr
 *.local
+__pycache__/
+*.py[cod]
 local/
 skills
 # Local helper userscripts
