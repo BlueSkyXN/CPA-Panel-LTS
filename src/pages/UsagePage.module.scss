@@ -1127,7 +1127,9 @@
 }
 
 .requestEventsTokenHeader,
-.requestEventsTokenCell {
+.requestEventsTokenCell,
+.requestEventsCostHeader,
+.requestEventsCostCell {
   --request-events-token-color: var(--text-primary);
 }
 
@@ -1145,11 +1147,122 @@
   font-weight: 750 !important;
 }
 
+.requestEventsTable th.requestEventsCostHeader,
+.requestEventsTable td.requestEventsCostCell {
+  min-width: 132px;
+  text-align: right;
+  vertical-align: middle;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.requestEventsCostHeader,
+.requestEventsCostCell {
+  font-weight: 750;
+}
+
+.requestEventsCostCell {
+  color: var(--text-primary);
+}
+
+.requestEventsTable td.requestEventsCostCell[data-request-cost-tone='unavailable'],
+.requestEventsTable td.requestEventsCostCell[data-request-cost-tone='inactive'] {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.requestEventsTable td.requestEventsCostCell[data-request-cost-tone='free'] {
+  color: var(--success-badge-text);
+  font-weight: 720;
+}
+
+.requestEventsTable td.requestEventsCostCell[data-request-cost-tone='micro'] {
+  color: #0f766e;
+  font-weight: 680;
+}
+
+.requestEventsTable td.requestEventsCostCell[data-request-cost-tone='low'] {
+  color: #1d4ed8;
+  font-weight: 720;
+}
+
+.requestEventsTable td.requestEventsCostCell[data-request-cost-tone='medium'] {
+  color: #6d28d9;
+  font-weight: 750;
+}
+
+.requestEventsTable td.requestEventsCostCell[data-request-cost-tone='elevated'] {
+  color: #854d0e;
+  font-weight: 780;
+}
+
+.requestEventsTable td.requestEventsCostCell[data-request-cost-tone='high'] {
+  color: #b23b0b;
+  font-weight: 810;
+}
+
+.requestEventsTable td.requestEventsCostCell[data-request-cost-tone='critical'] {
+  color: var(--failure-badge-text);
+  font-weight: 840;
+}
+
+:global([data-theme='dark'])
+  .requestEventsTable
+  td.requestEventsCostCell[data-request-cost-tone='micro'] {
+  color: #5eead4;
+}
+
+:global([data-theme='dark'])
+  .requestEventsTable
+  td.requestEventsCostCell[data-request-cost-tone='low'] {
+  color: #93c5fd;
+}
+
+:global([data-theme='dark'])
+  .requestEventsTable
+  td.requestEventsCostCell[data-request-cost-tone='medium'] {
+  color: #c4b5fd;
+}
+
+:global([data-theme='dark'])
+  .requestEventsTable
+  td.requestEventsCostCell[data-request-cost-tone='elevated'] {
+  color: #fde047;
+}
+
+:global([data-theme='dark'])
+  .requestEventsTable
+  td.requestEventsCostCell[data-request-cost-tone='high'] {
+  color: #fdba74;
+}
+
 .requestEventsTokenHeaderHint {
   cursor: help;
   text-decoration: underline dotted;
   text-decoration-color: color-mix(in srgb, currentColor 58%, transparent);
   text-underline-offset: 3px;
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: -3px;
+  }
+}
+
+.requestEventsHeaderTooltip {
+  position: fixed;
+  z-index: 1200;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: $radius-sm;
+  background: var(--bg-primary);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+  pointer-events: none;
+  text-align: left;
+  white-space: normal;
 }
 
 .requestEventsTokenValue {
@@ -1170,6 +1283,11 @@
   }
 }
 
+.requestEventsLongContext {
+  --request-events-token-color: var(--amber-text);
+  background: var(--amber-10);
+}
+
 .requestEventsCacheRateUnavailable {
   --request-events-token-color: var(--text-secondary);
 
@@ -1180,6 +1298,7 @@
 
 .requestEventsCacheRateLow {
   --request-events-token-color: var(--failure-badge-text);
+  background: var(--failure-badge-bg);
 
   .requestEventsTokenValue {
     font-weight: 800;
@@ -1188,6 +1307,7 @@
 
 .requestEventsCacheRateMedium {
   --request-events-token-color: var(--amber-text);
+  background: var(--amber-10);
 
   .requestEventsTokenValue {
     font-weight: 750;
@@ -1196,6 +1316,7 @@
 
 .requestEventsCacheRateHigh {
   --request-events-token-color: var(--success-badge-text, #065f46);
+  background: var(--success-badge-bg, color-mix(in srgb, #10b981 10%, transparent));
 
   .requestEventsTokenValue {
     font-weight: 650;
@@ -1204,6 +1325,7 @@
 
 .requestEventsCacheRateAnomaly {
   --request-events-token-color: var(--failure-badge-text);
+  background: var(--failure-badge-bg);
 
   .requestEventsTokenValue {
     font-weight: 820;

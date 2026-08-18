@@ -18,7 +18,7 @@
     "test:usage-pricing-v3": "node --test src/utils/usage/pricing/index.test.mjs",
     "test:usage-pricing-catalog": "node --test src/components/usage/PresetPricingCatalog.test.mjs",
     "test:usage-pricing-storage": "node --test src/utils/usage/pricing/storage.test.mjs",
-    "test:usage-pricing-integration": "node --test src/utils/usage/pricing/usagePricing.test.mjs src/utils/usage/pricing/usageAggregation.test.mjs",
+    "test:usage-pricing-integration": "node --test src/utils/usage/pricing/usagePricing.test.mjs src/utils/usage/pricing/usageAggregation.test.mjs src/components/usage/RequestEventsDetailsCard.test.mjs",
     "test:dashboard": "node --test src/features/dashboard/dashboardMetrics.test.mjs",
     "test:config": "node --test src/components/config/apiKeySecurity.test.mjs",
     "test:provider-xai": "node --test src/features/providers/xaiApiKeyProvider.test.mjs",

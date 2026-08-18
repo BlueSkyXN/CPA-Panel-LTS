@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { createServer } from 'vite';
 
 const originalWindow = globalThis.window;
@@ -12,8 +13,8 @@ const vite = await createServer({
 });
 
 const [
-  { buildKimiQuotaRows, mergeXaiBillingSummaries },
-  { buildClaudeQuotaWindows },
+  { applyXaiAutoTopupRule, buildKimiQuotaRows, buildXaiBillingSummary, mergeXaiBillingSummaries },
+  { buildClaudeQuotaWindows, XAI_CONFIG },
   {
     buildCodexAnalyticsRange,
     classifyCodexLeaderboardPayloadForAccount,
@@ -24,6 +25,10 @@ const [
   { invalidateAuthFileDerivedCaches },
   { useQuotaStore },
   { normalizeAuthFilesResponse },
+  { parseXaiAutoTopupPayload },
+  quotaConstants,
+  i18nModule,
+  { apiCallApi },
 ] = await Promise.all([
   vite.ssrLoadModule('/src/utils/quota/builders.ts'),
   vite.ssrLoadModule('/src/components/quota/quotaConfigs.ts'),
@@ -32,7 +37,13 @@ const [
   vite.ssrLoadModule('/src/features/authFiles/cacheInvalidation.ts'),
   vite.ssrLoadModule('/src/stores/useQuotaStore.ts'),
   vite.ssrLoadModule('/src/services/api/authFiles.ts'),
+  vite.ssrLoadModule('/src/utils/quota/parsers.ts'),
+  vite.ssrLoadModule('/src/utils/quota/constants.ts'),
+  vite.ssrLoadModule('/src/i18n/index.ts'),
+  vite.ssrLoadModule('/src/services/api/apiCall.ts'),
 ]);
+
+const i18n = i18nModule.default;
 
 test.after(async () => {
   await vite.close();
@@ -115,6 +126,205 @@ test('keeps xAI period type and dates from one endpoint', () => {
   assert.equal(merged?.periodType, 'weekly');
   assert.equal(merged?.periodStart, weekly.periodStart);
   assert.equal(merged?.periodEnd, undefined);
+});
+
+test('parses current xAI billing supplements without breaking legacy fields', () => {
+  const current = buildXaiBillingSummary(
+    {
+      credit_usage_percent: '35',
+      current_period: { type: 'USAGE_PERIOD_TYPE_WEEKLY', start: '2026-08-01T00:00:00Z' },
+      prepaid_balance: { val: 875 },
+      is_unified_billing_user: true,
+      history: [{ billing_cycle: { year: 2026, month: 7 }, total_used: { val: 42 } }],
+    },
+    { on_demand_enabled: false, subscription_tier: 'SuperGrok Heavy' }
+  );
+
+  assert.equal(current?.periodType, 'weekly');
+  assert.equal(current?.usagePercent, 35);
+  assert.equal(current?.prepaidBalanceCents, 875);
+  assert.equal(current?.isUnifiedBillingUser, true);
+  assert.equal(current?.onDemandEnabled, false);
+  assert.equal(current?.subscriptionTier, 'SuperGrok Heavy');
+  assert.equal(current?.historyCount, 1);
+
+  const withTopup = applyXaiAutoTopupRule(current, {
+    enabled: true,
+    min_before_hitting_sl: { val: -100 },
+    topup_amount: { val: -750 },
+    max_amount_per_month: { val: -2500 },
+  });
+  assert.equal(withTopup.autoTopupEnabled, true);
+  assert.equal(withTopup.autoTopupAmountCents, -750);
+  assert.equal(withTopup.autoTopupMaxPerMonthCents, -2500);
+
+  const disabledTopup = applyXaiAutoTopupRule(current, {});
+  assert.equal(disabledTopup.autoTopupEnabled, false);
+  assert.equal(disabledTopup.autoTopupAmountCents, null);
+
+  for (const missingRule of [undefined, null]) {
+    const noRule = applyXaiAutoTopupRule(current, missingRule);
+    assert.equal(noRule.autoTopupEnabled, false);
+    assert.equal(noRule.autoTopupAmountCents, null);
+    assert.equal(noRule.autoTopupMaxPerMonthCents, null);
+  }
+
+  const previous = {
+    status: 'success',
+    billing: withTopup,
+  };
+  const preserved = XAI_CONFIG.buildSuccessState(
+    { billing: current, preserveAutoTopup: true },
+    previous
+  );
+  assert.equal(preserved.billing?.autoTopupEnabled, true);
+  assert.equal(preserved.billing?.autoTopupAmountCents, -750);
+  const cleared = XAI_CONFIG.buildSuccessState(
+    { billing: current, preserveAutoTopup: false },
+    previous
+  );
+  assert.equal(cleared.billing?.autoTopupEnabled, null);
+
+  for (const malformed of [
+    [],
+    '[ ]',
+    { rule: [] },
+    '{"rule":[]}',
+    { raw: 'upstream-not-json' },
+    '{"raw":"upstream-not-json"}',
+  ]) {
+    assert.equal(parseXaiAutoTopupPayload(malformed), null);
+  }
+  assert.deepEqual(parseXaiAutoTopupPayload('{}'), {});
+  assert.deepEqual(parseXaiAutoTopupPayload('{"rule":null}'), { rule: null });
+
+  const legacy = buildXaiBillingSummary({
+    monthlyLimit: { val: 15000 },
+    used: { val: 1250 },
+    onDemandCap: { val: 5000 },
+  });
+  assert.equal(legacy?.monthlyLimitCents, 15000);
+  assert.equal(legacy?.prepaidBalanceCents, null);
+  assert.equal(legacy?.onDemandEnabled, null);
+  assert.equal(legacy?.subscriptionTier, null);
+  assert.equal(legacy?.historyCount, 0);
+});
+
+test('uses the current official Grok Shell identity for xAI billing requests', () => {
+  const { XAI_GROK_CLIENT_VERSION, buildXaiGrokUserAgent, buildXaiRequestHeaders } =
+    quotaConstants;
+
+  assert.equal(XAI_GROK_CLIENT_VERSION, '1.0.3');
+  assert.equal(
+    buildXaiGrokUserAgent('MacIntel', 'Mozilla/5.0 (Macintosh; ARM64 Mac OS X)'),
+    'grok-pager/1.0.3 grok-shell/1.0.3 (macos; aarch64)'
+  );
+  assert.equal(
+    buildXaiGrokUserAgent('MacIntel', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)'),
+    'grok-pager/1.0.3 grok-shell/1.0.3 (macos; x86_64)'
+  );
+  assert.equal(
+    buildXaiGrokUserAgent(
+      'MacIntel',
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
+      'macOS'
+    ),
+    'grok-pager/1.0.3 grok-shell/1.0.3 (macos; x86_64)'
+  );
+  assert.equal(
+    buildXaiGrokUserAgent('Linux x86_64', 'Mozilla/5.0 (X11; Linux x86_64)'),
+    'grok-pager/1.0.3 grok-shell/1.0.3 (linux; x86_64)'
+  );
+  assert.equal(
+    buildXaiGrokUserAgent('Win32', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'),
+    'grok-pager/1.0.3 grok-shell/1.0.3 (windows; x86_64)'
+  );
+  const headers = buildXaiRequestHeaders();
+  assert.deepEqual(
+    { ...headers, 'user-agent': '<validated separately>' },
+    {
+      Authorization: 'Bearer $TOKEN$',
+      'x-xai-token-auth': 'xai-grok-cli',
+      'x-grok-client-version': '1.0.3',
+      'x-grok-client-mode': 'interactive',
+      accept: 'application/json',
+      'user-agent': '<validated separately>',
+    }
+  );
+  assert.match(
+    headers['user-agent'],
+    /^grok-pager\/1\.0\.3 grok-shell\/1\.0\.3 \((?:macos|windows|linux|unknown); (?:aarch64|x86_64|unknown)\)$/
+  );
+});
+
+test('does not render a pseudo monthly row for weekly xAI credits with prepaid balance', () => {
+  const billing = buildXaiBillingSummary({
+    creditUsagePercent: 35,
+    currentPeriod: {
+      type: 'USAGE_PERIOD_TYPE_WEEKLY',
+      start: '2026-08-01T00:00:00Z',
+      end: '2026-08-08T00:00:00Z',
+    },
+    prepaidBalance: { val: -875 },
+    isUnifiedBillingUser: true,
+  });
+  assert.ok(billing);
+
+  const markup = renderToStaticMarkup(
+    XAI_CONFIG.renderQuotaItems(
+      { status: 'success', billing },
+      i18n.t.bind(i18n),
+      {
+        styles: new Proxy({}, { get: (_target, key) => String(key) }),
+        QuotaProgressBar: () => null,
+      }
+    )
+  );
+
+  assert.match(markup, new RegExp(i18n.t('xai_quota.weekly_limit')));
+  assert.match(markup, new RegExp(i18n.t('xai_quota.prepaid_balance_label')));
+  assert.doesNotMatch(markup, new RegExp(i18n.t('xai_quota.monthly_credits')));
+});
+
+test('continues xAI billing without x-userid when identity lookup fails', async (t) => {
+  const originalRequest = apiCallApi.request;
+  const seen = [];
+  apiCallApi.request = async (payload) => {
+    seen.push(payload);
+    if (payload.url === quotaConstants.XAI_USER_URL) {
+      return { statusCode: 401, header: {}, bodyText: '', body: null };
+    }
+    if (payload.url === quotaConstants.XAI_BILLING_WEEKLY_URL) {
+      return {
+        statusCode: 200,
+        header: {},
+        bodyText: '',
+        body: {
+          config: {
+            creditUsagePercent: 25,
+            currentPeriod: { type: 'USAGE_PERIOD_TYPE_WEEKLY' },
+          },
+        },
+      };
+    }
+    if (payload.url === quotaConstants.XAI_BILLING_MONTHLY_URL) {
+      return { statusCode: 404, header: {}, bodyText: '', body: null };
+    }
+    throw new Error(`unexpected URL ${payload.url}`);
+  };
+  t.after(() => {
+    apiCallApi.request = originalRequest;
+  });
+
+  const result = await XAI_CONFIG.fetchQuota(
+    { name: 'legacy-xai.json', type: 'xai', auth_index: 'xai-auth-index' },
+    i18n.t.bind(i18n)
+  );
+
+  assert.equal(result.billing.usagePercent, 25);
+  const weekly = seen.find((payload) => payload.url === quotaConstants.XAI_BILLING_WEEKLY_URL);
+  assert.ok(weekly, 'weekly billing should run after /user failure');
+  assert.equal(weekly.header['x-userid'], undefined);
 });
 
 test('treats disabled credentials separately from actionable problem states', () => {

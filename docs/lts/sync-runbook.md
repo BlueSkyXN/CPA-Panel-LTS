@@ -264,6 +264,34 @@ Refs were fetched with pruning after the prior `v1.22.0` intake:
 
 The accepted adaptation passed `npm run validate:lts`, `npm run test:provider-integrity`, `npm run check:lts`, and `git diff --check`. An initial sandboxed Chromium launch was blocked by the macOS Mach port permission, but the final `npm run smoke:lts` rerun outside that sandbox completed successfully. No Core Management API, full usage statistics, quota data model, release workflow, tag, release, or deployment changed.
 
+## Audited seven-day v1.22.3-v1.22.5 intake (2026-08-18)
+
+Refs were fetched without pruning before diff review:
+
+- rolling review window: `2026-08-11T16:04:21+08:00` through `2026-08-18T16:04:21+08:00`
+- previous audited boundary: `f60c8ca683b118be5750ff102187cc6d8ad4605b` (`v1.22.2`)
+- `upstream/main`: `0d84919845b5be9f8d1dd8ed1e03f6bff77ade65` (`v1.22.4` and `v1.22.5` point to the same merge)
+- `origin/main` at intake start: `367a46dbd7402c43f186ddbc901b7a37d531596f`
+- exact seven-day window: 3 non-merge commits plus 1 merge, 15 files, 204 insertions, and 15 deletions
+- carry-forward since the prior audited boundary: `38b6ac66138b4105f0f982465fb6ffe1c7005b4b` from 2026-08-09, reviewed here so no new upstream commit is skipped
+- full delta since `v1.22.2`: 4 non-merge commits plus 1 merge, 16 files, 209 insertions, and 20 deletions
+- decisions: 1 `direct-port`, 3 `reject` rows; no protected usage, Core API, package, build, or release change is required
+
+| Upstream commit | Classification | LTS evidence and decision |
+|---|---|---|
+| `38b6ac66138b4105f0f982465fb6ffe1c7005b4b` | `direct-port` | This intake corrects the config-detected provider display name from `ClaudeAPI` to `Claudeapi.com` in the shared constant and all four active locales. Current and legacy gateway detection remains unchanged, and no affiliate, registration, quick-fill, or outbound request behavior is added. |
+| `73db424f08e273c56d70812b38a8dd0cc11c4410` (`v1.22.3`) | `reject` | Upstream temporarily hides FennoAI and QiniuCloud because their sponsor roster changed. LTS already removed affiliate and promotion metadata, and exposes these brands only when matching configuration actually exists. A temporary commercial relationship change is not a correctness reason to hide stable, config-detected provider management or move those entries to generic groups. Existing backend `sourceIndex`, custom-endpoint preservation, and neutral visibility remain. |
+| `3d922bf34da03fc1b7448ea68d0b9843eed22264`, `c6c8e3bb66489eed2d751bbcff03193a47f4752e` | `reject` | The BestProxy row is a referral link (`?keyword=ayh7otlb`); the `labelExtra` / `topExtra` and sibling alignment changes exist only to make room for that sponsored row inside the still-deferred replacement Config architecture. The commercial-neutral contract rejects the link and its otherwise unnecessary layout scaffolding. |
+| `0d84919845b5be9f8d1dd8ed1e03f6bff77ade65` (`v1.22.4`, `v1.22.5`) | `reject` | The merge has no independent hunk beyond the two rejected parent decisions above. Do not cherry-pick it merely to mirror upstream ancestry or release tags. |
+
+The accepted copy correction is covered by provider tests, four-locale build checks, the full LTS validation gate, and mock browser smoke in this intake. No tag, GitHub release, `management.html` publication, Core deployment, or live runtime update is part of the selective-port.
+
+## Official Grok billing identity maintenance (2026-08-13)
+
+This maintenance item is based on the public `xai-org/grok-build` source at `e5fd4816d43260c15ba785f103990c1ed6cea230` (Grok Shell `1.0.3`), not on a Management Center upstream commit. Its `x.ai/billing` handler still calls `GET /billing?format=credits` and sends the OAuth bearer placeholder, `X-XAI-Token-Auth: xai-grok-cli`, the auth-file user ID, the Grok Shell version, and `x-grok-client-mode: interactive`; the interactive Pager startup identity makes the shared client render `grok-pager/1.0.3 grok-shell/1.0.3 (macos; aarch64)` on the matching local platform.
+
+The LTS adaptation updates the existing billing request identity, including Grok's `aarch64` / `x86_64` wire labels, obtains the real billing `user_id` from Core's curated auth-file response or the official read-only `/user` fallback, and parses current credits supplements (`prepaidBalance`, unified billing, subscription tier, on-demand state, history count, and the read-only `/auto-topup-rule`). An authoritative empty rule means disabled; transport, non-2xx, or malformed rule responses preserve the last successful auto-top-up state. It preserves the weekly/monthly merge and full usage statistics, and does not port Management Center's paid-account `/v1/me` or `/v1/chat/completions` health probes, add a paid request, mutate auto-top-up, or publish a release. The companion Core contract now persists the `/user` result separately from OIDC `sub` and exposes only that non-secret `user_id` through `/v0/management/auth-files`; enrichment failure remains backward compatible and never treats `sub` as a billing ID.
+
 
 ## Maintenance rules
 

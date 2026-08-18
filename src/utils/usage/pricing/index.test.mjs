@@ -142,6 +142,21 @@ test('catalog is versioned, self-describing, exact, and keeps provider rate boun
   assert.equal(grok.sourceUrl, 'https://docs.x.ai/developers/models/grok-4.5');
   assert.equal(grok.pricingNotesUrl, undefined);
   assert.equal(grok.asOf, '2026-07-23');
+
+  const grok46 = pricing.findCatalogEntry('grok-4.6');
+  assert.equal(grok46.currency, 'USD');
+  assert.deepEqual(grok46.aliases, []);
+  assert.deepEqual(grok46.standard.short, { input: 2, cachedInput: 0.5, output: 6 });
+  assert.deepEqual(grok46.standard.long, {
+    thresholdTokens: 200_000,
+    basis: 'inputTokens',
+    appliesTo: 'entireRequest',
+    rates: { input: 4, cachedInput: 1, output: 12 },
+  });
+  assert.equal(grok46.fast, undefined);
+  assert.equal(grok46.sourceUrl, 'https://docs.x.ai/developers/models/grok-4.6');
+  assert.equal(grok46.pricingNotesUrl, undefined);
+  assert.equal(grok46.asOf, '2026-08-18');
 });
 
 test('GPT-5.3 Codex Spark is a free preset across every billable token category', () => {
@@ -552,6 +567,43 @@ test('Grok 4.5 switches the entire request to long-context rates at 200K prompt 
 
   const fast = pricing.estimateUsageCost(
     'grok-4.5',
+    { input_tokens: 1_000 },
+    undefined,
+    tier('fast', 'request')
+  );
+  assert.equal(fast.status, 'unsupported');
+  assert.equal(fast.amount, null);
+  assert.equal(fast.rates, null);
+});
+
+test('Grok 4.6 switches the entire request to long-context rates at 200K prompt tokens', () => {
+  for (const [inputTokens, contextBand, rates] of [
+    [199_999, 'short', { input: 2, cachedInput: 0.5, output: 6 }],
+    [200_000, 'long', { input: 4, cachedInput: 1, output: 12 }],
+    [200_001, 'long', { input: 4, cachedInput: 1, output: 12 }],
+  ]) {
+    const estimate = pricing.estimateUsageCost(
+      'grok-4.6',
+      { input_tokens: inputTokens, cache_read_tokens: 1_000, output_tokens: 10_000 },
+      undefined,
+      tier()
+    );
+    assert.equal(estimate.status, 'priced');
+    assert.equal(estimate.contextBand, contextBand);
+    assert.deepEqual(estimate.rates, rates);
+  }
+
+  const unmatchedAlias = pricing.estimateUsageCost(
+    'grok-4.6-latest',
+    { input_tokens: 1_000 },
+    undefined,
+    tier()
+  );
+  assert.equal(unmatchedAlias.status, 'unmatched');
+  assert.equal(unmatchedAlias.resolvedModel, null);
+
+  const fast = pricing.estimateUsageCost(
+    'grok-4.6',
     { input_tokens: 1_000 },
     undefined,
     tier('fast', 'request')

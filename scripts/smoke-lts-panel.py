@@ -940,11 +940,16 @@ def build_xai_weekly_billing_payload() -> dict[str, Any]:
                 "end": "2026-06-22T00:00:00Z",
             },
             "creditUsagePercent": 40,
+            "prepaidBalance": {"val": -750},
+            "isUnifiedBillingUser": True,
+            "history": [{"billingCycle": {"year": 2026, "month": 7}}],
             "productUsage": [
                 {"product": "Grok 4", "usagePercent": 25},
                 {"product": "Grok Code", "usagePercent": 55},
             ],
-        }
+        },
+        "onDemandEnabled": True,
+        "subscriptionTier": "SuperGrok Heavy",
     }
 
 
@@ -1279,6 +1284,18 @@ class MockCoreHandler(BaseHTTPRequestHandler):
             return build_api_call_result(build_xai_weekly_billing_payload())
         if url == "https://cli-chat-proxy.grok.com/v1/billing":
             return build_api_call_result(build_xai_monthly_billing_payload())
+        if url == "https://cli-chat-proxy.grok.com/v1/user":
+            return build_api_call_result({"user_id": "xai-user-smoke"})
+        if url == "https://cli-chat-proxy.grok.com/v1/auto-topup-rule":
+            return build_api_call_result(
+                {
+                    "rule": {
+                        "enabled": True,
+                        "topup_amount": {"val": -750},
+                        "max_amount_per_month": {"val": -2500},
+                    }
+                }
+            )
         if url == "https://openrouter.ai/api/v1/models":
             return build_api_call_result(build_openai_models_payload())
         if url == "https://openrouter.ai/api/v1/chat/completions":
@@ -1661,6 +1678,69 @@ def assert_api_call_exact_url_auth_seen(
             f"Expected /api-call payload for {description} with url={url!r} "
             f"and authIndex={auth_index!r}; saw {payloads!r}"
         )
+
+
+def assert_xai_billing_identity(
+    state: MockCoreState,
+    url: str,
+    description: str,
+) -> None:
+    payloads = parse_json_bodies(state, "POST", "/v0/management/api-call")
+    matching = [
+        payload
+        for payload in payloads
+        if isinstance(payload, dict)
+        and payload.get("url") == url
+        and payload.get("authIndex") == "xai-smoke-auth"
+    ]
+    expected_headers = {
+        "Authorization": "Bearer $TOKEN$",
+        "x-xai-token-auth": "xai-grok-cli",
+        "x-grok-client-version": "1.0.3",
+        "x-grok-client-mode": "interactive",
+        "accept": "application/json",
+        "x-userid": "xai-user-smoke",
+    }
+    valid = False
+    for payload in matching:
+        headers = payload.get("header") or {}
+        if not all(headers.get(key) == value for key, value in expected_headers.items()):
+            continue
+        user_agent = headers.get("user-agent", "")
+        if re.fullmatch(
+            r"grok-pager/1\.0\.3 grok-shell/1\.0\.3 "
+            r"\((?:macos|windows|linux|unknown); (?:aarch64|x86_64|unknown)\)",
+            user_agent,
+        ):
+            valid = True
+            break
+    if not valid:
+        raise AssertionError(
+            f"Expected /api-call payload for {description} with the current official "
+            f"Grok billing identity; saw {matching!r}"
+        )
+
+
+def assert_xai_user_identity_lookup(state: MockCoreState) -> None:
+    payloads = parse_json_bodies(state, "POST", "/v0/management/api-call")
+    matching = [
+        payload for payload in payloads
+        if isinstance(payload, dict)
+        and payload.get("url") == "https://cli-chat-proxy.grok.com/v1/user"
+        and payload.get("authIndex") == "xai-smoke-auth"
+    ]
+    if not matching:
+        raise AssertionError("xAI quota fallback did not request /v1/user")
+    if any("x-userid" in (payload.get("header") or {}) for payload in matching):
+        raise AssertionError("xAI /v1/user fallback must not send x-userid")
+
+
+def assert_xai_auto_topup_identity(state: MockCoreState) -> None:
+    assert_xai_billing_identity(
+        state,
+        "https://cli-chat-proxy.grok.com/v1/auto-topup-rule",
+        "xAI auto-top-up rule",
+    )
 
 
 def assert_provider_mutation_payloads(state: MockCoreState) -> None:
@@ -2520,6 +2600,14 @@ def run_quota_runtime_smoke(page: Any, app_url: str, state: MockCoreState) -> No
     xai_card.get_by_text("Used 25%", exact=True).wait_for()
     xai_card.get_by_text("Pay as you go", exact=True).wait_for()
     xai_card.get_by_text("$25.00 / $25.00", exact=False).wait_for()
+    xai_card.get_by_text("Prepaid credits", exact=True).wait_for()
+    xai_card.get_by_text("Auto top-up", exact=True).wait_for()
+    xai_card.get_by_text("Enabled, $7.50 per top-up", exact=False).wait_for()
+    auto_topup_cap = xai_card.get_by_text("Auto top-up monthly cap", exact=True).locator(
+        "xpath=ancestor::div[contains(@class, 'codexPlan')][1]"
+    )
+    auto_topup_cap.get_by_text("$25.00", exact=True).wait_for()
+    xai_card.get_by_text("Unified billing", exact=True).wait_for()
     xai_card.get_by_text("$38.00 / $50.00", exact=False).wait_for()
 
 
@@ -2660,6 +2748,7 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
             "kimi-k2.7-code",
             "kimi-k2.7-code-highspeed",
             "grok-4.5",
+            "grok-4.6",
             "claude-haiku-4-5-20251001",
             "claude-sonnet-4-5-20250929",
             "claude-sonnet-4-6",
@@ -2938,6 +3027,54 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
             != "https://docs.x.ai/developers/models/grok-4.5"
         ):
             raise AssertionError("Grok 4.5 Official source does not point to xAI model pricing")
+
+        grok46_model = catalog.locator(
+            '[data-testid="preset-pricing-model"][data-model="grok-4.6"]'
+        )
+        grok46_rows = grok46_model.locator("tr")
+        if grok46_rows.count() != 2:
+            raise AssertionError("Grok 4.6 catalog did not render short and long-context rows")
+        for band, expected_rates in [
+            ("short", {"Input": "$2", "Cached input": "$0.5", "Output": "$6"}),
+            ("long", {"Input": "$4", "Cached input": "$1", "Output": "$12"}),
+        ]:
+            grok46_row = grok46_model.locator(f'tr[data-context-band="{band}"]')
+            for label, expected_rate in expected_rates.items():
+                actual_rate = (
+                    grok46_row.locator(f'td[data-label="{label}"] strong')
+                    .first.text_content()
+                    or ""
+                )
+                if actual_rate != expected_rate:
+                    raise AssertionError(
+                        f"Grok 4.6 {band} {label} rate is {actual_rate!r}, "
+                        f"expected {expected_rate!r}"
+                    )
+            cache_write = grok46_row.locator('td[data-label="Cache write"]')
+            if (
+                (cache_write.locator("strong").text_content() or "")
+                != "Auto / input rate"
+                or (cache_write.locator("small").text_content() or "")
+                != expected_rates["Input"]
+            ):
+                raise AssertionError(
+                    f"Grok 4.6 {band} Cache write did not inherit the Input rate"
+                )
+            if "Unavailable" not in (
+                grok46_row.locator('td[data-label="Fast policies"]').text_content() or ""
+            ):
+                raise AssertionError(f"Grok 4.6 {band} row did not expose Fast as unavailable")
+
+        grok46_text = grok46_model.inner_text()
+        if "200.0K" not in grok46_text:
+            raise AssertionError("Grok 4.6 catalog did not expose the 200K pricing threshold")
+        if (
+            grok46_model.locator(
+                '[data-testid="pricing-official-source"]'
+            ).first.get_attribute("href")
+            != "https://docs.x.ai/developers/models/grok-4.6"
+        ):
+            raise AssertionError("Grok 4.6 Official source does not point to xAI model pricing")
 
         long_context_cell_text = (
             catalog.locator(
@@ -3478,6 +3615,26 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     card.locator("th", has_text="Cache Read Tokens").wait_for()
     card.get_by_role("columnheader", name="Cache Write Tokens", exact=True).wait_for()
     card.get_by_role("columnheader", name="Total Tokens", exact=True).wait_for()
+    card.get_by_role("columnheader", name="Estimated cost (USD / ¢)", exact=True).wait_for()
+    cost_visuals = card.locator("td[data-request-cost-tone]").evaluate_all(
+        """cells => cells.map(cell => ({
+          tone: cell.getAttribute('data-request-cost-tone'),
+          color: getComputedStyle(cell).color,
+          marker: getComputedStyle(cell, '::before').content,
+        }))"""
+    )
+    if any(item["marker"] not in {"none", "normal", "\"\""} for item in cost_visuals):
+        raise AssertionError(f"Request-event cost cells still render a leading marker: {cost_visuals!r}")
+    tone_colors = {
+        item["tone"]: item["color"] for item in cost_visuals if item["tone"] is not None
+    }
+    required_tones = {"unavailable", "micro", "critical"}
+    if not required_tones.issubset(tone_colors) or len(
+        {tone_colors[tone] for tone in required_tones}
+    ) != len(required_tones):
+        raise AssertionError(
+            f"Request-event amount text did not retain distinct colors: {tone_colors!r}"
+        )
 
     card.get_by_role("button", name="Column Settings", exact=True).click()
     column_dialog = card.get_by_role("dialog", name="Column Settings", exact=True)
@@ -3527,6 +3684,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         "cacheReadTokens": True,
         "cacheWriteTokens": True,
         "totalTokens": True,
+        "cost": True,
     }
     if stored_columns != expected_column_defaults:
         raise AssertionError(
@@ -3562,6 +3720,22 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     model_select.click()
     page.get_by_role("option", name="gpt-5.6-sol", exact=True).click()
     wait_for_row_count(5)
+    priced_cost_cells = card.locator('td[data-request-cost-status="priced"]')
+    if priced_cost_cells.count() != 5:
+        raise AssertionError(
+            "Every matched request event must expose a priced local estimate"
+        )
+    if any(cell.inner_text().strip() in {"", "$0.00", "--"} for cell in priced_cost_cells.all()):
+        raise AssertionError(
+            "Priced request-event amounts were hidden, rounded to zero, or marked unavailable"
+        )
+    cost_tones = {
+        cell.get_attribute("data-request-cost-tone") for cell in priced_cost_cells.all()
+    }
+    if cost_tones != {"micro"}:
+        raise AssertionError(
+            f"Request-event micro-cost color classification drifted: {cost_tones!r}"
+        )
     token_column_alignment = card.locator("table").evaluate(
         """(table, labels) => {
           const headers = Array.from(table.tHead?.rows[0]?.cells ?? []);
@@ -3706,7 +3880,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         )
     priority_row = rows.filter(has_text="12").filter(has_text="Fast").first
     priority_cells = [text.strip() for text in priority_row.locator("td").all_inner_texts()]
-    priority_token_values = [cell.splitlines()[0] for cell in priority_cells[-8:]]
+    priority_token_values = [cell.splitlines()[0] for cell in priority_cells[-9:-1]]
     if priority_token_values != ["12", "9", "8", "6", "2", "3", "4", "23"]:
         raise AssertionError(
             "Combined service-tier/cache row rendered the wrong token values: "
@@ -3785,6 +3959,12 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         raise AssertionError(
             f"Request-event CSV lost raw reasoning_effort values: {csv_efforts!r}"
         )
+    if any(
+        row.get("pricing_status") != "priced"
+        or float(row.get("estimated_cost_usd", "0")) <= 0
+        for row in csv_rows
+    ):
+        raise AssertionError("Request-event CSV lost per-event pricing estimates")
     priority_csv_rows = [
         row for row in csv_rows if row.get("effective_service_tier") == "priority"
     ]
@@ -3855,6 +4035,13 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         raise AssertionError(
             f"Request-event JSON lost raw reasoning_effort values: {json_efforts!r}"
         )
+    if any(
+        row.get("pricing_status") != "priced"
+        or not isinstance(row.get("estimated_cost_usd"), (int, float))
+        or row["estimated_cost_usd"] <= 0
+        for row in json_rows
+    ):
+        raise AssertionError("Request-event JSON lost per-event pricing estimates")
     priority_json_rows = [
         row for row in json_rows if row.get("effective_service_tier") == "priority"
     ]
@@ -4015,8 +4202,10 @@ def run_usage_service_tier_smoke(page: Any) -> None:
                 "theme => document.documentElement.setAttribute('data-theme', theme)",
                 theme,
             )
-            theme_token_colors = rows.first.locator("td").evaluate_all(
-                """cells => cells.slice(-8).map(cell => getComputedStyle(cell).color)"""
+            theme_token_colors = rows.first.locator(
+                'td[class*="requestEventsTokenCell"]'
+            ).evaluate_all(
+                """cells => cells.map(cell => getComputedStyle(cell).color)"""
             )
             if (
                 len(
@@ -4430,8 +4619,10 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         raise AssertionError(
             f"Request-event table causes page-level overflow at 390px: {table_metrics!r}"
         )
-    mobile_token_colors = rows.first.locator("td").evaluate_all(
-        """cells => cells.slice(-8).map(cell => {
+    mobile_token_colors = rows.first.locator(
+        'td[class*="requestEventsTokenCell"]'
+    ).evaluate_all(
+        """cells => cells.map(cell => {
           const value = cell.querySelector('span');
           return getComputedStyle(value ?? cell).color;
         })"""
@@ -4607,7 +4798,8 @@ def run_usage_request_event_column_storage_smoke(context: Any, app_url: str) -> 
                 stored.totalOutputTokens === true &&
                 stored.displayedOutputTokens === true &&
                 stored.reasoningTokens === true && stored.cacheReadTokens === true &&
-                stored.cacheWriteTokens === true && stored.totalTokens === true;
+                stored.cacheWriteTokens === true && stored.totalTokens === true &&
+                stored.cost === true;
             }""",
             arg={"current": storage_key, "legacy": legacy_keys},
         )
@@ -4640,6 +4832,7 @@ def run_usage_request_event_column_storage_smoke(context: Any, app_url: str) -> 
                 cacheReadTokens: false,
                 cacheWriteTokens: false,
                 totalTokens: false,
+                cost: false,
                 unexpected: true,
               }));
             }""",
@@ -6009,6 +6202,18 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
         "xai-smoke-auth",
         "xAI monthly billing",
     )
+    assert_xai_billing_identity(
+        state,
+        "https://cli-chat-proxy.grok.com/v1/billing?format=credits",
+        "xAI weekly billing",
+    )
+    assert_xai_billing_identity(
+        state,
+        "https://cli-chat-proxy.grok.com/v1/billing",
+        "xAI monthly billing",
+    )
+    assert_xai_user_identity_lookup(state)
+    assert_xai_auto_topup_identity(state)
     assert_api_call_auth_seen(
         state,
         "openrouter.ai/api/v1/chat/completions",

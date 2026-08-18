@@ -108,7 +108,9 @@ features:
       - kimi-for-coding-highspeed
       - KIMI_PRICING_SOURCE_URL
       - grok-4.5
+      - grok-4.6
       - XAI_PRICING_SOURCE_URL
+      - XAI_GROK_46_PRICING_SOURCE_URL
       - XAI_LONG_CONTEXT_INPUT_TOKEN_THRESHOLD
       - claude-haiku-4-5-20251001
       - claude-haiku-4-5
@@ -145,6 +147,11 @@ features:
       - pricing_cost_incomplete
       - reasoning_effort
       - request_events_filter_effort
+      - RequestEventsDetailsCard
+      - request_events_cost_estimate
+      - estimated_cost_usd
+      - pricing_status
+      - data-request-cost-status
     validation:
       - npm run test:usage-cache
       - npm run test:usage-prices
@@ -760,6 +767,7 @@ features:
       - src/stores/useAuthStore.ts
       - src/stores/useQuotaStore.ts
       - src/types/quota.ts
+      - src/utils/quota/
       - src/lts/codexQuota/
       - src/i18n/locales/
       - scripts/chatgpt-quota-helper.js
@@ -776,6 +784,18 @@ features:
       - fetchXaiQuota
       - XAI_BILLING_WEEKLY_URL
       - XAI_BILLING_MONTHLY_URL
+      - XAI_USER_URL
+      - XAI_AUTO_TOPUP_URL
+      - XAI_GROK_CLIENT_VERSION
+      - buildXaiGrokUserAgent
+      - buildXaiRequestHeaders
+      - parseXaiAutoTopupPayload
+      - preserveAutoTopup
+      - x-grok-client-mode
+      - grok-pager/1.0.3
+      - assert_xai_billing_identity
+      - assert_xai_user_identity_lookup
+      - assert_xai_auto_topup_identity
       - batchConcurrency
       - captureQuotaCacheGeneration
       - commitIfQuotaCacheCurrent

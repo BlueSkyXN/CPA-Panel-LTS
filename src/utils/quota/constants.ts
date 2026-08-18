@@ -227,13 +227,56 @@ export const KIMI_REQUEST_HEADERS = {
 // xAI/Grok API configuration
 export const XAI_BILLING_WEEKLY_URL = 'https://cli-chat-proxy.grok.com/v1/billing?format=credits';
 export const XAI_BILLING_MONTHLY_URL = 'https://cli-chat-proxy.grok.com/v1/billing';
-export const XAI_GROK_CLIENT_VERSION = '0.2.91';
-export const XAI_GROK_USER_AGENT = 'grok-pager/0.2.91 grok-shell/0.2.91 (macos; aarch64)';
+export const XAI_USER_URL = 'https://cli-chat-proxy.grok.com/v1/user';
+export const XAI_AUTO_TOPUP_URL = 'https://cli-chat-proxy.grok.com/v1/auto-topup-rule';
+export const XAI_GROK_CLIENT_VERSION = '1.0.3';
 
-export const XAI_REQUEST_HEADERS = {
+type NavigatorUADataLike = {
+  platform?: string;
+};
+
+const normalizeXaiPlatform = (platform: string, userAgent: string): string => {
+  const value = `${platform} ${userAgent}`.toLowerCase();
+  if (value.includes('mac')) return 'macos';
+  if (value.includes('win')) return 'windows';
+  if (value.includes('linux')) return 'linux';
+  return 'unknown';
+};
+
+const normalizeXaiArchitecture = (platform: string, userAgent: string): string => {
+  const value = `${platform} ${userAgent}`.toLowerCase();
+  if (/\b(?:arm64|aarch64)\b/.test(value)) return 'aarch64';
+  if (/\b(?:x86_64|x64|win64|amd64)\b/.test(value)) return 'x86_64';
+  // Browsers commonly reduce desktop platform strings to MacIntel/Win32 and
+  // omit the CPU token from the UA. Preserve that exposed x86-compatible
+  // identity instead of inventing ARM; explicit ARM markers above still win.
+  if (/\b(?:macintel|win32)\b/.test(value)) return 'x86_64';
+  return 'unknown';
+};
+
+export const buildXaiGrokUserAgent = (
+  platform = typeof navigator === 'undefined' ? '' : navigator.platform,
+  userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent,
+  userAgentDataPlatform =
+    typeof navigator === 'undefined'
+      ? ''
+      : ((navigator as Navigator & { userAgentData?: NavigatorUADataLike }).userAgentData
+          ?.platform ?? '')
+): string => {
+  const platformIdentity = `${userAgentDataPlatform} ${platform}`.trim();
+  const osName = normalizeXaiPlatform(platformIdentity, userAgent);
+  const archName = normalizeXaiArchitecture(platformIdentity, userAgent);
+  return (
+    `grok-pager/${XAI_GROK_CLIENT_VERSION} ` +
+    `grok-shell/${XAI_GROK_CLIENT_VERSION} (${osName}; ${archName})`
+  );
+};
+
+export const buildXaiRequestHeaders = (): Record<string, string> => ({
   Authorization: 'Bearer $TOKEN$',
   'x-xai-token-auth': 'xai-grok-cli',
   'x-grok-client-version': XAI_GROK_CLIENT_VERSION,
-  accept: '*/*',
-  'user-agent': XAI_GROK_USER_AGENT,
-};
+  'x-grok-client-mode': 'interactive',
+  accept: 'application/json',
+  'user-agent': buildXaiGrokUserAgent(),
+});

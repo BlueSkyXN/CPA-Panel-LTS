@@ -65,9 +65,12 @@ export function useQuotaLoader<TState, TData>(config: QuotaConfig<TState, TData>
       try {
         if (targets.length === 0) return;
 
+        const previousByName = new Map<string, TState>();
         setQuota((prev) => {
           const nextState = { ...prev };
           targets.forEach((file) => {
+            const previous = prev[file.name];
+            if (previous !== undefined) previousByName.set(file.name, previous);
             nextState[file.name] = config.buildLoadingState();
           });
           return nextState;
@@ -81,7 +84,10 @@ export function useQuotaLoader<TState, TData>(config: QuotaConfig<TState, TData>
               ...prev,
               [result.name]:
                 result.status === 'success'
-                  ? config.buildSuccessState(result.data as TData)
+                  ? config.buildSuccessState(
+                      result.data as TData,
+                      previousByName.get(result.name)
+                    )
                   : config.buildErrorState(
                       result.error || t('common.unknown_error'),
                       result.errorStatus
