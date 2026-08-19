@@ -286,6 +286,25 @@ Refs were fetched without pruning before diff review:
 
 The accepted copy correction is covered by provider tests, four-locale build checks, the full LTS validation gate, and mock browser smoke in this intake. No tag, GitHub release, `management.html` publication, Core deployment, or live runtime update is part of the selective-port.
 
+## Post-closeout v1.22.6 intake (2026-08-19)
+
+Refs and tags were fetched with pruning after the prior `v1.22.5` closeout:
+
+- rolling review window: `2026-08-12T22:11:51+08:00` through `2026-08-19T22:11:51+08:00`
+- previous audited boundary: `0d84919845b5be9f8d1dd8ed1e03f6bff77ade65` (`v1.22.4` and `v1.22.5`)
+- `upstream/main` and `upstream/dev`: `6586f88858ca27e840bd8db2630dccd371a1cd4a` (`v1.22.6`)
+- exact seven-day window: 4 non-merge commits plus 1 merge; the first 4 were already classified in the 2026-08-18 snapshot
+- new delta since the previous audited boundary: 1 non-merge commit, 1 file, 1 insertion, and 4 deletions
+- decision: 1 `already-equivalent`; no product-code port, contract change, guard change, or test change is required
+
+| Upstream commit | Classification | LTS evidence and decision |
+|---|---|---|
+| `6586f88858ca27e840bd8db2630dccd371a1cd4a` (`v1.22.6`) | `already-equivalent` | Upstream clears `TEMPORARILY_HIDDEN_SPONSOR_BRANDS`, restoring FennoAI and QiniuCloud after `73db424` temporarily hid them. LTS rejected that temporary commercial-roster behavior and never introduced the hidden-brand set: both providers remain commercial-neutral, config-detected groups that appear only when matching configuration exists. Do not add an empty compatibility layer merely to mirror upstream ancestry. |
+
+The `v1.22.6` tag still descends from the rejected BestProxy referral and layout-scaffolding chain (`3d922bf`, `c6c8e3b`, and merge `0d84919`). Restoring provider visibility does not make the release tag safe to sync as a whole. The existing provider contract and mock browser smoke already require configured FennoAI/QiniuCloud groups to be visible while preventing unconfigured recommendation placement; full usage statistics, Core Management API compatibility, npm/package-lock, LTS sidecars, plugin gates, and `management.html` are unaffected.
+
+This intake changes only the durable decision record. Its required validation is the repository's docs-only `git diff --check`, status, and changed-file review; no product behavior or release was changed.
+
 ## Official Grok billing identity maintenance (2026-08-13)
 
 This maintenance item is based on the public `xai-org/grok-build` source at `e5fd4816d43260c15ba785f103990c1ed6cea230` (Grok Shell `1.0.3`), not on a Management Center upstream commit. Its `x.ai/billing` handler still calls `GET /billing?format=credits` and sends the OAuth bearer placeholder, `X-XAI-Token-Auth: xai-grok-cli`, the auth-file user ID, the Grok Shell version, and `x-grok-client-mode: interactive`; the interactive Pager startup identity makes the shared client render `grok-pager/1.0.3 grok-shell/1.0.3 (macos; aarch64)` on the matching local platform.
