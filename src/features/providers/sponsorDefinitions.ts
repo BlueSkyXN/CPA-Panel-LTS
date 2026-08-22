@@ -116,6 +116,11 @@ const SPONSOR_DEFINITIONS: Record<SponsorProviderBrand, SponsorProviderDefinitio
 export const isMultiProtocolSponsorBrand = (brand: ProviderBrand): brand is SponsorProviderBrand =>
   brand === 'code0' || brand === 'fennoAI' || brand === 'qiniuCloud' || brand === 'infistar';
 
+export const TEMPORARILY_HIDDEN_SPONSOR_BRANDS: ReadonlySet<SponsorProviderBrand> = new Set([]);
+
+export const isTemporarilyHiddenSponsorBrand = (brand: ProviderBrand): boolean =>
+  TEMPORARILY_HIDDEN_SPONSOR_BRANDS.has(brand as SponsorProviderBrand);
+
 export type SponsorAggregationConflict = 'multiple-configs' | 'multiple-openai-keys';
 
 export const getSponsorAggregationConflict = (

@@ -59,6 +59,8 @@ import {
 import {
   getSponsorOpenAIDeleteIndices,
   getSponsorProviderDefinition,
+  isTemporarilyHiddenSponsorBrand,
+  TEMPORARILY_HIDDEN_SPONSOR_BRANDS,
   type SponsorProtocolUrls,
 } from './sponsorDefinitions';
 import { runSponsorMutationWithRecovery } from './sponsorMutationRecovery';
@@ -419,6 +421,9 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
 
   const snapshot = useMemo<ProviderSnapshot | null>(() => {
     if (!config) return null;
+    // 临时隐藏的赞助商：不排除其协议配置，让各协议分组接管显示（见 sponsorDefinitions.ts）
+    const fennoAIHidden = TEMPORARILY_HIDDEN_SPONSOR_BRANDS.has('fennoAI');
+    const qiniuCloudHidden = TEMPORARILY_HIDDEN_SPONSOR_BRANDS.has('qiniuCloud');
     const groups: ProviderGroup[] = PROVIDER_BRAND_ORDER.map((brand) => {
       let resources: ProviderResource[] = [];
       switch (brand) {
@@ -427,7 +432,7 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
             (out, item, index) => {
               if (
                 !isCode0GeminiProvider(item) &&
-                !isQiniuCloudGeminiProvider(item) &&
+                (qiniuCloudHidden || !isQiniuCloudGeminiProvider(item)) &&
                 !isInfistarGeminiProvider(item)
               ) {
                 out.push(geminiToResource(item, index));
@@ -441,8 +446,8 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           resources = (config.codexApiKeys ?? []).reduce<ProviderResource[]>((out, item, index) => {
             if (
               !isCode0CodexProvider(item) &&
-              !isFennoAICodexProvider(item) &&
-              !isQiniuCloudCodexProvider(item) &&
+              (fennoAIHidden || !isFennoAICodexProvider(item)) &&
+              (qiniuCloudHidden || !isQiniuCloudCodexProvider(item)) &&
               !isInfistarCodexProvider(item)
             ) {
               out.push(codexToResource(item, index));
@@ -458,8 +463,8 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
             (out, item, index) => {
               if (
                 !isCode0ClaudeProvider(item) &&
-                !isFennoAIClaudeProvider(item) &&
-                !isQiniuCloudClaudeProvider(item) &&
+                (fennoAIHidden || !isFennoAIClaudeProvider(item)) &&
+                (qiniuCloudHidden || !isQiniuCloudClaudeProvider(item)) &&
                 !isInfistarClaudeProvider(item) &&
                 !isClaudeApiProvider(item)
               ) {
@@ -489,7 +494,7 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
             (out, item, index) => {
               if (
                 !isCode0OpenAIProvider(item) &&
-                !isQiniuCloudOpenAIProvider(item) &&
+                (qiniuCloudHidden || !isQiniuCloudOpenAIProvider(item)) &&
                 !isInfistarOpenAIProvider(item)
               ) {
                 out.push(openaiToResource(item, index));
@@ -524,7 +529,8 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
         id: brand,
         resources,
       };
-    }).filter((group) => group.resources.length > 0 || !CONFIG_DETECTED_BRANDS.has(group.id));
+    }).filter((group) => group.resources.length > 0 || !CONFIG_DETECTED_BRANDS.has(group.id))
+      .filter((group) => !isTemporarilyHiddenSponsorBrand(group.id));
     return {
       fetchedAt,
       groups,
