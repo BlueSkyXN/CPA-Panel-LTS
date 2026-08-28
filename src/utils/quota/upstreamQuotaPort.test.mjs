@@ -257,6 +257,15 @@ test('uses the current official Grok Shell identity for xAI billing requests', (
   );
 });
 
+test('uses the current Codex TUI identity for Codex quota requests', () => {
+  assert.deepEqual(quotaConstants.CODEX_REQUEST_HEADERS, {
+    Accept: 'application/json',
+    Authorization: 'Bearer $TOKEN$',
+    'Content-Type': 'application/json',
+    'User-Agent': 'codex-tui/0.149.1 (Mac OS 26.5.2; arm64) iTerm.app/3.6.11 (codex-tui; 0.149.1)',
+  });
+});
+
 test('does not render a pseudo monthly row for weekly xAI credits with prepaid balance', () => {
   const billing = buildXaiBillingSummary({
     creditUsagePercent: 35,

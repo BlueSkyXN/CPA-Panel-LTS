@@ -124,6 +124,9 @@ def build_config_payload(
         {
             "api-key": "claude-key-1",
             "base-url": "https://api.anthropic.com",
+            "fingerprint-profile": "claude-code-cli",
+            "experimental-cch-signing": True,
+            "x-lts-claude-note": "keep-claude-entry",
             "models": [{"name": "claude-sonnet-4"}],
         }
     ]
@@ -5709,6 +5712,37 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             ):
                 confirm.get_by_role("button", name="Delete").click()
             wait_for_no_dialog()
+
+            page.get_by_role("button", name=re.compile(r"^Claude(?:\s|$)", re.I)).click()
+            page.get_by_role("heading", name="Claude", exact=True).wait_for()
+            page.get_by_text("CLI Profile", exact=True).wait_for()
+            page.get_by_role("button", name="Edit", exact=True).first.click()
+            sheet = page.get_by_role("dialog").last
+            fingerprint_select = sheet.get_by_role("button", name="Request fingerprint")
+            if fingerprint_select.inner_text().strip() != "Claude Code CLI":
+                raise AssertionError("Workbench did not parse the Claude fingerprint profile")
+            fingerprint_select.click()
+            page.get_by_role("option", name="Default (caller-owned)", exact=True).click()
+            with page.expect_response(
+                lambda response: response.request.method == "PUT"
+                and response.url.endswith("/v0/management/claude-api-key")
+            ):
+                sheet.get_by_role("button", name="Save").click()
+            wait_for_no_dialog()
+            assert_payload_match(
+                state,
+                "PUT",
+                "/v0/management/claude-api-key",
+                lambda payload: any(
+                    isinstance(item, dict)
+                    and item.get("api-key") == "claude-key-1"
+                    and item.get("x-lts-claude-note") == "keep-claude-entry"
+                    and "fingerprint-profile" not in item
+                    and "experimental-cch-signing" not in item
+                    for item in payload
+                ),
+                "cleared Claude fingerprint profile without dropping unknown fields",
+            )
 
             page.get_by_role("button", name=re.compile(r"OpenAI Compatible", re.I)).click()
             page.get_by_role("heading", name="OpenAI Compatible").wait_for()

@@ -173,6 +173,7 @@ def build_core_config(port: int, temp_dir: Path) -> str:
         claude-api-key:
           - api-key: "claude-smoke-key"
             base-url: "https://api.anthropic.com"
+            fingerprint-profile: "claude-code-cli"
             models:
               - name: "claude-sonnet-4"
                 display-name: "Claude Sonnet Smoke"
@@ -1755,6 +1756,7 @@ BROWSER_PROVIDER_KEY_CRUD_MARKERS = (
     "BROWSER provider workbench Claude create PUT /v0/management/claude-api-key",
     "BROWSER provider workbench Claude update PUT /v0/management/claude-api-key",
     "BROWSER provider workbench Claude delete DELETE /v0/management/claude-api-key",
+    "BROWSER provider workbench Claude fingerprint-profile round-trip and reset",
     "BROWSER provider workbench Vertex create PUT /v0/management/vertex-api-key",
     "BROWSER provider workbench Vertex update PUT /v0/management/vertex-api-key",
     "BROWSER provider workbench Vertex delete DELETE /v0/management/vertex-api-key",
@@ -1780,10 +1782,15 @@ def run_browser_provider_key_crud_smoke(
 
     page.get_by_role("button", name=re.compile(button_pattern, re.I)).click()
     page.get_by_role("heading", name=label).wait_for()
+    if label == "Claude":
+        page.get_by_text("CLI Profile", exact=True).wait_for()
     page.get_by_role("button", name=re.compile(r"^New$", re.I)).first.click()
     sheet = page.get_by_role("dialog").last
     sheet.get_by_role("textbox", name="API key").fill(api_key)
     sheet.get_by_label("Base URL").fill(create_base_url)
+    if label == "Claude":
+        sheet.get_by_role("button", name="Request fingerprint").click()
+        page.get_by_role("option", name="Claude Code CLI", exact=True).click()
     sheet.get_by_text("Custom models", exact=True).click()
     sheet.get_by_label("Upstream model name").fill(model_name)
     sheet.get_by_label("Routing alias (optional)").fill(model_alias)
@@ -1819,6 +1826,7 @@ def run_browser_provider_key_crud_smoke(
     if not isinstance(create_payload, list) or not any(
         isinstance(item, dict)
         and item.get("api-key") == api_key
+        and (label != "Claude" or item.get("fingerprint-profile") == "claude-code-cli")
         and any(
             isinstance(model, dict)
             and model.get("name") == model_name
@@ -1836,6 +1844,7 @@ def run_browser_provider_key_crud_smoke(
         isinstance(item, dict)
         and item.get("api-key") == api_key
         and item.get("base-url") == create_base_url
+        and (label != "Claude" or item.get("fingerprint-profile") == "claude-code-cli")
         and any(
             isinstance(model, dict)
             and model.get("name") == model_name
@@ -1859,6 +1868,12 @@ def run_browser_provider_key_crud_smoke(
     row.get_by_role("button", name="Edit").click()
     sheet = page.get_by_role("dialog").last
     sheet.get_by_label("Base URL").fill(update_base_url)
+    if label == "Claude":
+        fingerprint_select = sheet.get_by_role("button", name="Request fingerprint")
+        if fingerprint_select.inner_text().strip() != "Claude Code CLI":
+            raise AssertionError("Claude edit did not reload the saved fingerprint profile")
+        fingerprint_select.click()
+        page.get_by_role("option", name="Default (caller-owned)", exact=True).click()
     sheet.get_by_text("Custom models", exact=True).click()
     sheet.get_by_label("Display name (optional)").fill(updated_display_name)
     model_card = sheet.get_by_label("Upstream model name").locator(
@@ -1884,6 +1899,7 @@ def run_browser_provider_key_crud_smoke(
         isinstance(item, dict)
         and item.get("api-key") == api_key
         and item.get("base-url") == update_base_url
+        and (label != "Claude" or "fingerprint-profile" not in item)
         and any(
             isinstance(model, dict)
             and model.get("name") == model_name
@@ -1897,6 +1913,8 @@ def run_browser_provider_key_crud_smoke(
     seen.append(f"BROWSER provider workbench {label} new model display-name")
     seen.append(f"BROWSER provider workbench {label} updated model display-name")
     seen.append(f"BROWSER provider workbench {label} thinking capability round-trip and reset")
+    if label == "Claude":
+        seen.append("BROWSER provider workbench Claude fingerprint-profile round-trip and reset")
 
     row = provider_row_for_api_key(page, api_key)
     row.get_by_role("button", name="Delete").click()

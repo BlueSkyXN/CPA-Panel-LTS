@@ -136,6 +136,7 @@ Contract truth 必须保持一致：
 | `npm run format` | Prettier 写入 `src/**/*.{ts,tsx,css,scss}` | `src/` | 会修改文件；仅在明确需要格式化时运行 |
 | `npm run test:usage` | usage cache/prices/import/effort/tier/pricing tests | usage chain | Node test aggregator |
 | `npm run test:providers` | xAI、provider integrity、recent requests tests | provider code | Node test aggregator |
+| `npm run test:plugins` | plugin source/repository trust tests | plugin store | Node/Vite test |
 | `npm run test:auth-files` | OAuth load guard 与 upstream quota-port tests | auth/quota | Node tests |
 | `npm run test:dashboard` | dashboard metric tests | dashboard | Node test |
 | `npm run test:config` | config API-key storage/security tests | config | Node test |
@@ -175,7 +176,7 @@ Contract truth 必须保持一致：
 - Auth files/quota: 先读 `src/features/authFiles/AGENTS.md`；运行 `test:auth-files`（或 `test:quota`）、`type-check`、`build`；涉及 Codex sidecar 再读 `src/lts/AGENTS.md` 并跑 `check:lts`/smoke。
 - API client: 先读 `src/services/api/AGENTS.md`；运行 `test:api-client`、`type-check`、`build`；Core-dependent semantics 必须核对当前 Core source 或 live endpoint。
 - LTS contract/guard: 先读 `docs/lts/AGENTS.md` 与 `scripts/AGENTS.md`；运行 `check:lts`，广泛 marker/route/API 变更运行 `validate:lts`。
-- Plugins: 先读 `src/features/plugins/AGENTS.md`；运行 `check:lts`、`type-check`、`build`、`smoke:lts`；只有本地 Core 具备支持和凭据时才运行 `smoke:lts:core -- --include-plugin-store`。
+- Plugins: 先读 `src/features/plugins/AGENTS.md`；运行 `test:plugins`、`check:lts`、`type-check`、`build`、`smoke:lts`；只有本地 Core 具备支持和凭据时才运行 `smoke:lts:core -- --include-plugin-store`。
 - LTS sidecars/locales: 读 `src/lts/AGENTS.md` 与 `src/i18n/AGENTS.md`；运行 `check:lts`、`type-check`、`build`，交互变更运行 `smoke:lts`。
 - Release workflow: 读 `.github/workflows/AGENTS.md`；确认 build 产生 `dist/index.html` 且 workflow 发布 `dist/management.html`。Live Actions/release 需要 GitHub network/auth，不能由本地检查代替。
 - Userscript: 读 `scripts/AGENTS.md`；app build/lint/type-check 不覆盖 userscript。未运行 Tampermonkey/browser smoke 时明确报告。

@@ -305,6 +305,51 @@ The `v1.22.6` tag still descends from the rejected BestProxy referral and layout
 
 This intake changes only the durable decision record. Its required validation is the repository's docs-only `git diff --check`, status, and changed-file review; no product behavior or release was changed.
 
+## Audited seven-day v1.22.7-v1.22.9 intake (2026-08-28)
+
+Refs and tags were fetched without pruning before commit-level diff review:
+
+- review window: `2026-08-21T00:00:00+08:00` through `2026-08-28T22:51:23+08:00`
+- previous audited boundary: `6586f88858ca27e840bd8db2630dccd371a1cd4a` (`v1.22.6`)
+- `origin/main` at intake start: `2f2192853391231f1076697a67a326b629ba05e9`
+- `upstream/main` and `upstream/dev`: `d249ff008e0bc2803deb23fb3e2c62418a1e8d17` (`v1.22.9`)
+- exact delta: 4 non-merge commits plus 1 merge, 19 files, 232 insertions, and 55 deletions
+- decisions: 1 `direct-port`, 1 `adapt-port`, 1 `already-equivalent`, and 2 `reject`
+
+The accepted subset is a manual LTS port, not release/tag ancestry intake. It updates the shared Codex quota request identity and replaces the deprecated Claude CCH checkbox with the current Core-owned `fingerprint-profile` contract. Full usage statistics, stable provider routes, plugin capability gates, npm/package-lock, LTS sidecars, and `management.html` remain present.
+
+| Upstream commit | Classification | LTS evidence and decision |
+|---|---|---|
+| `73baabab62ba21fcf4e76d80e472c4ebf87545af` | `reject` | PR #394 adds APIMart registration links, marketing copy, and about 9.2 MB of sponsor images to the public READMEs. It has no Panel correctness or Core compatibility change and conflicts with the commercial-neutral LTS contract. |
+| `0a3ef8475119fa3d42628ee8e2806d7265505f5b` | `reject` | This is the PR #394 merge carrier and has no independent hunk beyond the rejected sponsor content. Do not absorb it to mirror `v1.22.7` ancestry. |
+| `681d70481df8857f0456848283b1446a63e85b9c` (`v1.22.7`) | `already-equivalent` | Upstream standardizes type sizes inside the replacement `AuthFileQuota.module.scss`. LTS did not accept that Vault/quota architecture: its current host already uses consistent 12px quota text, while the LTS Codex sidecar intentionally retains a separate hierarchy for labels, values, and reset-credit details. Do not create the absent upstream module or flatten the LTS hierarchy merely to copy the implementation. |
+| `966abff9e9d3aa12308f82772e8455591cc93ef5` (`v1.22.8`) | `direct-port` | Replace the stale `codex_cli_rs/0.76.0` quota identity with upstream's current `codex-tui/0.149.1` identity. The endpoint, token placeholder, methods, parsers, and remote-cloud `Codex Desktop` identity are unchanged. The optional read-only quota monitor is updated because it calls the same `/backend-api/wham/usage` endpoint through Core. Node regression locks the exact shared header; live ChatGPT endpoint acceptance remains a separate runtime check. |
+| `d249ff008e0bc2803deb23fb3e2c62418a1e8d17` (`v1.22.9`) | `adapt-port` | Current `CPA-Core-LTS origin/main` exposes and validates `claude-api-key[].fingerprint-profile`, accepting empty/default or `claude-code-cli` and retaining `experimental-cch-signing` only as a deprecated no-op. LTS adapts the complete type/normalize/serialize/form/tag/four-locale chain onto its unknown-field-preserving provider workbench, clears the deprecated field on save, and replaces the Bun test with Node/Vite plus mock/real-Core browser assertions. Stable provider pages and config-detected commercial-neutral groups are unchanged. |
+
+Open upstream PRs updated in the same window were reviewed separately because they are not part of `upstream/main`:
+
+| Open upstream PR / head | Classification | LTS evidence and decision |
+|---|---|---|
+| `#398` / `927034542f6e71cd1e6f9aebbc7ba972b87890d3` | `defer` | Command Code provider management depends on still-open Core PR #5060 and `/commandcode-api-key`; current CPA-Core-LTS has no matching config or Management API contract. Reassess as a provider-workbench adaptation only after Core support lands, while retaining `ampcode` counts, unknown fields, stable providers, and full usage. |
+| `#397` / `b1b7944d8fe50328de897b0148f5d7190ffc73c8` | `reject` | The Tor proposal mixes five commits, 38 files, a large unrelated lockfile/config/UI bundle, duplicate Tor panels, and routes not proven registered by still-open Core PR #5282. LTS also uses a different protected Config architecture. If Core later ships a reviewed Tor contract, start a clean Config adapt-port rather than reuse this branch. |
+| `#393` / `1f6d0f7a00e6c602d3a1292746d8962a081ac4ab` | `defer` | Native `kimi-api-key` depends on still-open Core PR #5225, replaces the current OpenAI plus Claude dual-protocol model without a migration decision, and retains affiliate behavior rejected by LTS. Reassess only as a commercial-neutral, config-detected full-chain adaptation after the Core contract lands. |
+| `#389` / `8151e55f864107c5c9a8684be5baefb2d8da0496` | `defer` | Managed users and OAuth invitations depend on still-open PostgreSQL-gated Core PR #5169. The Panel PR has no capability gate and exposes high-impact user/key/invitation writes and one-time secrets. It needs an independent permissions/product decision and authenticated write/readback coverage. |
+| `#388` / `5d23e766c7a8f0cb200bc7a9312f772ef27e127b` | `defer` | Cursor quota could theoretically reuse the existing generic `/api-call`, but current LTS has no verified Cursor credential or payload contract. The PR makes five POST reads and targets the unaccepted replacement quota timeline. Reassess first after real read-only payload/Core smoke, then adapt only into the existing quota host without replacing full usage. |
+
+None of these open PRs has a completed review or visible Panel check result. Their watchlist classification is not permission to pre-port an unstable backend contract.
+
+Local and GitHub work were audited separately before this intake branch was created:
+
+- local `main` equaled `origin/main` at `2f2192853391231f1076697a67a326b629ba05e9`, with no tracked/untracked changes, stash, extra linked worktree, or open Panel PR
+- six retained feature/docs branches are ancestors of `main`; their PRs were already merged
+- `codex/panel-upstream-port-20260822` / PR #67 remains intentionally closed and unmerged because its empty sponsor-hiding compatibility layer has no current behavior benefit and can hide unsupported brand combinations
+- 21 unreachable commits were reviewed without creating refs or running GC/prune; lost-stash UI and usage candidates were older prototypes superseded by current behavior, so no production code was restored
+- still-useful orphan assertions were rewritten into the current Node/Vite suites: OAuth force-mapping/excluded/dirty-state preservation and the plugin store's combined official-source plus official-repository trust rule
+
+The dangling objects remain only historical recovery material. Their presence is not a reason to merge rejected code, and destructive object cleanup remains outside this intake.
+
+The completed intake passed `npm run validate:lts`, `npm run smoke:lts`, and the full `npm run smoke:lts:core`. The real-Core smoke used temporary local configuration against the clean sibling Core checkout at `3ec9109b69aa5377763166fa891d7831960490e3` and proved Claude fingerprint create, readback, reset, and delete through the Management API and browser workbench. The accepted schema was also read directly from `CPA-Core-LTS origin/main` at `7eadb07e34139af5e0922a8a5c97485be8a4267c`. These checks do not establish a GitHub merge, release, deployment, live ChatGPT quota acceptance, or business UAT.
+
 ## Official Grok billing identity maintenance (2026-08-13)
 
 This maintenance item is based on the public `xai-org/grok-build` source at `e5fd4816d43260c15ba785f103990c1ed6cea230` (Grok Shell `1.0.3`), not on a Management Center upstream commit. Its `x.ai/billing` handler still calls `GET /billing?format=credits` and sends the OAuth bearer placeholder, `X-XAI-Token-Auth: xai-grok-cli`, the auth-file user ID, the Grok Shell version, and `x-grok-client-mode: interactive`; the interactive Pager startup identity makes the shared client render `grok-pager/1.0.3 grok-shell/1.0.3 (macos; aarch64)` on the matching local platform.
