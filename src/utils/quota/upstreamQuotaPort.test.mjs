@@ -13,8 +13,14 @@ const vite = await createServer({
 });
 
 const [
-  { applyXaiAutoTopupRule, buildKimiQuotaRows, buildXaiBillingSummary, mergeXaiBillingSummaries },
-  { buildClaudeQuotaWindows, XAI_CONFIG },
+  {
+    applyXaiAutoTopupRule,
+    buildAntigravityQuotaGroups,
+    buildKimiQuotaRows,
+    buildXaiBillingSummary,
+    mergeXaiBillingSummaries,
+  },
+  { ANTIGRAVITY_CONFIG, buildClaudeQuotaWindows, XAI_CONFIG },
   {
     buildCodexAnalyticsRange,
     classifyCodexLeaderboardPayloadForAccount,
@@ -24,11 +30,14 @@ const [
   authFileConstants,
   { invalidateAuthFileDerivedCaches },
   { useQuotaStore },
-  { normalizeAuthFilesResponse },
+  { authFilesApi, normalizeAuthFilesResponse },
   { parseXaiAutoTopupPayload },
   quotaConstants,
   i18nModule,
   { apiCallApi },
+  { parseAntigravitySubscriptionSummary },
+  { parseRoutingStrategy },
+  credentialWeight,
 ] = await Promise.all([
   vite.ssrLoadModule('/src/utils/quota/builders.ts'),
   vite.ssrLoadModule('/src/components/quota/quotaConfigs.ts'),
@@ -41,6 +50,9 @@ const [
   vite.ssrLoadModule('/src/utils/quota/constants.ts'),
   vite.ssrLoadModule('/src/i18n/index.ts'),
   vite.ssrLoadModule('/src/services/api/apiCall.ts'),
+  vite.ssrLoadModule('/src/services/api/antigravitySubscription.ts'),
+  vite.ssrLoadModule('/src/hooks/useVisualConfig.ts'),
+  vite.ssrLoadModule('/src/utils/credentialWeight.ts'),
 ]);
 
 const i18n = i18nModule.default;
@@ -266,6 +278,116 @@ test('uses the current Codex TUI identity for Codex quota requests', () => {
   });
 });
 
+test('parses Antigravity quota-summary groups and current request identity', () => {
+  assert.deepEqual(quotaConstants.ANTIGRAVITY_QUOTA_URLS, [
+    'https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary',
+    'https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:retrieveUserQuotaSummary',
+    'https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary',
+  ]);
+  assert.equal(
+    quotaConstants.ANTIGRAVITY_REQUEST_HEADERS['User-Agent'],
+    'antigravity/cli/1.0.13 (aidev_client; os_type=darwin; arch=arm64)'
+  );
+
+  const groups = buildAntigravityQuotaGroups({
+    groups: [
+      {
+        displayName: 'Gemini models',
+        description: 'Models within this group: Gemini 3.1 Pro, Gemini 3 Flash',
+        buckets: [
+          {
+            bucketId: 'five-hour',
+            displayName: '5 hour limit',
+            window: '5h',
+            remainingFraction: '0.4',
+            resetTime: '2099-08-29T12:00:00Z',
+          },
+          {
+            bucketId: 'weekly',
+            displayName: 'Weekly limit',
+            window: 'weekly',
+            remainingFraction: 0.75,
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(groups[0]?.id, 'gemini-models');
+  assert.deepEqual(
+    groups[0]?.buckets.map(({ id, remainingFraction }) => ({ id, remainingFraction })),
+    [
+      { id: 'weekly', remainingFraction: 0.75 },
+      { id: 'five-hour', remainingFraction: 0.4 },
+    ]
+  );
+  assert.deepEqual(
+    parseAntigravitySubscriptionSummary({ paidTier: { id: 'g1-pro-tier', name: 'Google AI Pro' } }),
+    { plan: 'pro', tierId: 'g1-pro-tier', tierName: 'Google AI Pro' }
+  );
+});
+
+test('loads Antigravity project metadata and keeps subscription lookup best-effort', async (t) => {
+  const originalRequest = apiCallApi.request;
+  const originalDownloadText = authFilesApi.downloadText;
+  const seen = [];
+  let downloaded = false;
+
+  apiCallApi.request = async (payload) => {
+    seen.push(payload);
+    if (payload.url === quotaConstants.ANTIGRAVITY_CODE_ASSIST_URL) {
+      return {
+        statusCode: 503,
+        header: {},
+        bodyText: 'temporarily unavailable',
+        body: null,
+      };
+    }
+    return {
+      statusCode: 200,
+      header: { Date: [new Date(Date.now() + 5000).toUTCString()] },
+      bodyText: '',
+      body: {
+        groups: [
+          {
+            displayName: 'Gemini models',
+            buckets: [
+              { bucketId: 'weekly', displayName: 'Weekly limit', remainingFraction: 0.5 },
+            ],
+          },
+        ],
+      },
+    };
+  };
+  authFilesApi.downloadText = async () => {
+    downloaded = true;
+    return '{}';
+  };
+  t.after(() => {
+    apiCallApi.request = originalRequest;
+    authFilesApi.downloadText = originalDownloadText;
+  });
+
+  const result = await ANTIGRAVITY_CONFIG.fetchQuota(
+    {
+      name: 'antigravity.json',
+      auth_index: 'auth-1',
+      attributes: { gemini_virtual_project: 'project-42' },
+    },
+    i18n.t.bind(i18n)
+  );
+
+  assert.equal(downloaded, false);
+  assert.equal(result.groups[0]?.buckets[0]?.remainingFraction, 0.5);
+  assert.equal(result.subscription, null);
+  assert.ok(result.serverTimeOffsetMs >= 3000 && result.serverTimeOffsetMs <= 6000);
+  const quotaRequest = seen.find((payload) =>
+    quotaConstants.ANTIGRAVITY_QUOTA_URLS.includes(payload.url)
+  );
+  assert.ok(quotaRequest);
+  assert.equal(quotaRequest.data, JSON.stringify({ project: 'project-42' }));
+});
+
 test('does not render a pseudo monthly row for weekly xAI credits with prepaid balance', () => {
   const billing = buildXaiBillingSummary({
     creditUsagePercent: 35,
@@ -380,6 +502,7 @@ test('normalizes auth-file boundary fields without dropping raw provider data', 
         success: '3',
         failed: 2,
         priority: '7',
+        weight: '0',
         note: ' test note ',
         modtime: '2026-08-03T00:00:00Z',
         provider_specific: { retained: true },
@@ -394,11 +517,27 @@ test('normalizes auth-file boundary fields without dropping raw provider data', 
   assert.equal(file.successCount, 3);
   assert.equal(file.failureCount, 2);
   assert.equal(file.priority, 7);
+  assert.equal(file.weight, 0);
   assert.equal(file.note, 'test note');
   assert.equal(file.modified, Date.parse('2026-08-03T00:00:00Z'));
   assert.deepEqual(file.recentRequests, [{ time: '10:00-10:10', success: 2, failed: 1 }]);
   assert.deepEqual(file.provider_specific, { retained: true });
   assert.equal(file.status_message, ' ready ');
+});
+
+test('accepts WRR strategy aliases and enforces credential weight bounds', () => {
+  assert.equal(parseRoutingStrategy('weighted-round-robin'), 'weighted-round-robin');
+  assert.equal(parseRoutingStrategy(' WRR '), 'weighted-round-robin');
+  assert.equal(parseRoutingStrategy('fillfirst'), 'fill-first');
+  assert.equal(parseRoutingStrategy('unknown'), 'round-robin');
+
+  assert.equal(credentialWeight.DEFAULT_CREDENTIAL_WEIGHT, 1);
+  assert.equal(credentialWeight.readCredentialWeight('0'), 0);
+  assert.equal(credentialWeight.readCredentialWeight('-3'), -3);
+  assert.equal(credentialWeight.readCredentialWeight('1000001'), undefined);
+  assert.equal(credentialWeight.validateCredentialWeightText('1.5'), 'integer');
+  assert.equal(credentialWeight.validateCredentialWeightText('1000001'), 'max');
+  assert.equal(credentialWeight.parseCredentialWeightText(''), undefined);
 });
 
 test('slices one Codex daily payload into exact rolling ranges before aggregation', () => {

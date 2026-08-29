@@ -7,7 +7,8 @@ import type { ReactNode } from 'react';
 import type { TFunction } from 'i18next';
 import type {
   AntigravityQuotaGroup,
-  AntigravityModelsPayload,
+  AntigravityQuotaSubscription,
+  AntigravityQuotaSummaryPayload,
   AntigravityQuotaState,
   AuthFileItem,
   ClaudeExtraUsage,
@@ -28,7 +29,12 @@ import type {
   XaiBillingSummary,
   XaiQuotaState,
 } from '@/types';
-import { apiCallApi, authFilesApi, getApiCallErrorMessage } from '@/services/api';
+import {
+  antigravitySubscriptionApi,
+  apiCallApi,
+  authFilesApi,
+  getApiCallErrorMessage,
+} from '@/services/api';
 import { useQuotaStore } from '@/stores';
 import {
   ANTIGRAVITY_QUOTA_URLS,
@@ -85,7 +91,12 @@ type QuotaUpdater<T> = T | ((prev: T) => T);
 
 type QuotaType = 'antigravity' | 'claude' | 'codex' | 'gemini-cli' | 'kimi' | 'xai';
 
-const DEFAULT_ANTIGRAVITY_PROJECT_ID = 'bamboo-precept-lgxtn';
+type AntigravityQuotaData = {
+  groups: AntigravityQuotaGroup[];
+  subscription: AntigravityQuotaSubscription | null;
+  serverTimeOffsetMs: number | null;
+};
+
 const QUOTA_PROGRESS_HIGH_THRESHOLD = 70;
 const QUOTA_PROGRESS_MEDIUM_THRESHOLD = 30;
 const geminiCliSupplementaryRequestIds = new Map<string, number>();
@@ -137,10 +148,33 @@ export interface QuotaConfig<TState, TData> {
 }
 
 const resolveAntigravityProjectId = async (file: AuthFileItem): Promise<string> => {
+  const directProjectId = normalizeStringValue(file.project_id ?? file.projectId);
+  if (directProjectId) return directProjectId;
+
+  const metadata =
+    file.metadata && typeof file.metadata === 'object' && file.metadata !== null
+      ? (file.metadata as Record<string, unknown>)
+      : null;
+  const metadataProjectId = metadata
+    ? normalizeStringValue(metadata.project_id ?? metadata.projectId)
+    : null;
+  if (metadataProjectId) return metadataProjectId;
+
+  const attributes =
+    file.attributes && typeof file.attributes === 'object' && file.attributes !== null
+      ? (file.attributes as Record<string, unknown>)
+      : null;
+  const attributesProjectId = attributes
+    ? normalizeStringValue(
+        attributes.project_id ?? attributes.projectId ?? attributes.gemini_virtual_project
+      )
+    : null;
+  if (attributesProjectId) return attributesProjectId;
+
   try {
     const text = await authFilesApi.downloadText(file.name);
     const trimmed = text.trim();
-    if (!trimmed) return DEFAULT_ANTIGRAVITY_PROJECT_ID;
+    if (!trimmed) return '';
 
     const parsed = JSON.parse(trimmed) as Record<string, unknown>;
     const topLevel = normalizeStringValue(parsed.project_id ?? parsed.projectId);
@@ -162,16 +196,28 @@ const resolveAntigravityProjectId = async (file: AuthFileItem): Promise<string> 
     const webProjectId = web ? normalizeStringValue(web.project_id ?? web.projectId) : null;
     if (webProjectId) return webProjectId;
   } catch {
-    return DEFAULT_ANTIGRAVITY_PROJECT_ID;
+    return '';
   }
 
-  return DEFAULT_ANTIGRAVITY_PROJECT_ID;
+  return '';
+};
+
+const resolveResponseServerTimeOffsetMs = (
+  header: Record<string, string[]> | undefined
+): number | null => {
+  if (!header) return null;
+  const dateEntry = Object.entries(header).find(([key]) => key.toLowerCase() === 'date');
+  const rawDate = dateEntry?.[1]?.[0];
+  if (!rawDate) return null;
+  const serverTime = new Date(rawDate).getTime();
+  if (Number.isNaN(serverTime)) return null;
+  return serverTime - Date.now();
 };
 
 const fetchAntigravityQuota = async (
   file: AuthFileItem,
   t: TFunction
-): Promise<AntigravityQuotaGroup[]> => {
+): Promise<AntigravityQuotaData> => {
   const rawAuthIndex = file['auth_index'] ?? file.authIndex;
   const authIndex = normalizeAuthIndex(rawAuthIndex);
   if (!authIndex) {
@@ -179,7 +225,22 @@ const fetchAntigravityQuota = async (
   }
 
   const projectId = await resolveAntigravityProjectId(file);
+  if (!projectId) {
+    throw new Error(t('antigravity_quota.missing_project_id'));
+  }
   const requestBody = JSON.stringify({ project: projectId });
+  const subscriptionPromise = antigravitySubscriptionApi
+    .get(authIndex)
+    .then((summary): AntigravityQuotaSubscription | null =>
+      summary
+        ? {
+            plan: summary.plan,
+            tierName: summary.tierName,
+            tierId: summary.tierId,
+          }
+        : null
+    )
+    .catch(() => null);
 
   let lastError = '';
   let lastStatus: number | undefined;
@@ -206,20 +267,25 @@ const fetchAntigravityQuota = async (
       }
 
       hadSuccess = true;
-      const payload = parseAntigravityPayload(result.body ?? result.bodyText);
-      const models = payload?.models;
-      if (!models || typeof models !== 'object' || Array.isArray(models)) {
+      const payload = parseAntigravityPayload(
+        result.body ?? result.bodyText
+      ) as AntigravityQuotaSummaryPayload | null;
+      if (!payload || !Array.isArray(payload.groups)) {
         lastError = t('antigravity_quota.empty_models');
         continue;
       }
 
-      const groups = buildAntigravityQuotaGroups(models as AntigravityModelsPayload);
+      const groups = buildAntigravityQuotaGroups(payload);
       if (groups.length === 0) {
         lastError = t('antigravity_quota.empty_models');
         continue;
       }
 
-      return groups;
+      return {
+        groups,
+        subscription: await subscriptionPromise,
+        serverTimeOffsetMs: resolveResponseServerTimeOffsetMs(result.header),
+      };
     } catch (err: unknown) {
       lastError = err instanceof Error ? err.message : t('common.unknown_error');
       const status = getStatusFromError(err);
@@ -233,7 +299,7 @@ const fetchAntigravityQuota = async (
   }
 
   if (hadSuccess) {
-    return [];
+    return { groups: [], subscription: await subscriptionPromise, serverTimeOffsetMs: null };
   }
 
   throw createStatusError(lastError || t('common.unknown_error'), priorityStatus ?? lastStatus);
@@ -484,46 +550,217 @@ const fetchGeminiCliQuota = async (
   };
 };
 
+const ANTIGRAVITY_GROUP_LABEL_KEYS = new Map<string, string>([
+  ['gemini models', 'group_gemini_models'],
+  ['claude and gpt models', 'group_claude_gpt_models'],
+]);
+
+const ANTIGRAVITY_BUCKET_LABEL_KEYS = new Map<string, string>([
+  ['weekly limit', 'weekly_limit'],
+  ['daily limit', 'daily_limit'],
+  ['5 hour limit', 'five_hour_limit'],
+  ['5-hour limit', 'five_hour_limit'],
+  ['five hour limit', 'five_hour_limit'],
+  ['monthly limit', 'monthly_limit'],
+]);
+
+const translateAntigravityQuotaLabel = (
+  value: string,
+  keys: Map<string, string>,
+  t: TFunction
+): string => {
+  const key = keys.get(value.trim().toLowerCase().replace(/\s+/g, ' '));
+  return key ? t(`antigravity_quota.${key}`) : value;
+};
+
+const translateAntigravityQuotaDescription = (
+  value: string | undefined,
+  t: TFunction
+): string | undefined => {
+  if (!value) return undefined;
+  const modelsMatch = value.match(/^models within this group:\s*(.+)$/i);
+  return modelsMatch
+    ? t('antigravity_quota.group_models_description', { models: modelsMatch[1].trim() })
+    : value;
+};
+
+const formatAntigravityDuration = (t: TFunction, deltaMs: number): string => {
+  const totalMinutes = Math.max(1, Math.ceil(deltaMs / 60000));
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days > 0) return t('antigravity_quota.duration_day_hour', { days, hours });
+  if (hours > 0) return t('antigravity_quota.duration_hour_minute', { hours, minutes });
+  if (minutes > 0) return t('antigravity_quota.duration_minute', { minutes });
+  return t('antigravity_quota.duration_less_than_minute');
+};
+
+const formatAntigravityResetLabel = (
+  resetTime: string | undefined,
+  t: TFunction,
+  nowMs: number
+): string => {
+  if (!resetTime) return '-';
+  const resetMs = new Date(resetTime).getTime();
+  if (Number.isNaN(resetMs)) return '-';
+  const deltaMs = resetMs - nowMs;
+  if (deltaMs <= 0) return t('antigravity_quota.refresh_available');
+  return t('antigravity_quota.refreshes_in', {
+    duration: formatAntigravityDuration(t, deltaMs),
+  });
+};
+
+const getAntigravityPlanLabel = (
+  subscription: AntigravityQuotaSubscription | null | undefined,
+  t: TFunction
+): string | null => {
+  if (!subscription) return null;
+  const keyByPlan: Record<string, string> = {
+    free: 'plan_free',
+    pro: 'plan_pro',
+    ultra: 'plan_ultra',
+    'ultra-lite': 'plan_ultra_lite',
+  };
+  const key = subscription.plan ? keyByPlan[subscription.plan] : undefined;
+  return key
+    ? t(`antigravity_subscription.${key}`)
+    : (subscription.tierName ??
+        subscription.tierId ??
+        t('antigravity_subscription.plan_unknown'));
+};
+
+const AntigravityQuotaItems = ({
+  quota,
+  t,
+  helpers,
+}: {
+  quota: AntigravityQuotaState;
+  t: TFunction;
+  helpers: QuotaRenderHelpers;
+}): ReactNode => {
+  const { styles: styleMap, QuotaProgressBar } = helpers;
+  const { createElement: h, Fragment } = React;
+  const groups = quota.groups ?? [];
+  const serverTimeOffsetMs = quota.serverTimeOffsetMs ?? 0;
+  const resetSignature = groups
+    .flatMap((group) => group.buckets.map((bucket) => bucket.resetTime ?? ''))
+    .filter(Boolean)
+    .join('|');
+  const [nowMs, setNowMs] = React.useState(() => Date.now() + serverTimeOffsetMs);
+
+  React.useEffect(() => {
+    setNowMs(Date.now() + serverTimeOffsetMs);
+    if (!resetSignature) return undefined;
+    const timer = setInterval(() => setNowMs(Date.now() + serverTimeOffsetMs), 60000);
+    return () => clearInterval(timer);
+  }, [resetSignature, serverTimeOffsetMs]);
+
+  const nodes: ReactNode[] = [];
+  const planLabel = getAntigravityPlanLabel(quota.subscription, t);
+  if (planLabel) {
+    const normalizedPlan = quota.subscription?.plan?.toLowerCase() ?? '';
+    const valueClass =
+      normalizedPlan === 'ultra' || normalizedPlan === 'ultra-lite'
+        ? styleMap.premiumPlanValue
+        : styleMap.codexPlanValue;
+    nodes.push(
+      h(
+        'div',
+        { key: 'plan', className: styleMap.codexPlan },
+        h(
+          'span',
+          { className: styleMap.codexPlanItem },
+          h('span', { className: styleMap.codexPlanLabel }, t('antigravity_quota.plan_label')),
+          h('span', { className: valueClass }, planLabel)
+        )
+      )
+    );
+  }
+
+  if (groups.length === 0) {
+    nodes.push(
+      h('div', { key: 'empty', className: styleMap.quotaMessage }, t('antigravity_quota.empty_models'))
+    );
+    return h(Fragment, null, ...nodes);
+  }
+
+  groups.forEach((group) => {
+    const groupLabel = translateAntigravityQuotaLabel(
+      group.label,
+      ANTIGRAVITY_GROUP_LABEL_KEYS,
+      t
+    );
+    const groupDescription = translateAntigravityQuotaDescription(group.description, t);
+    nodes.push(
+      h(
+        'div',
+        { key: group.id, className: styleMap.antigravityQuotaGroup },
+        h(
+          'div',
+          { className: styleMap.antigravityQuotaGroupHeader },
+          h('span', { className: styleMap.antigravityQuotaGroupTitle }, groupLabel),
+          groupDescription
+            ? h(
+                'span',
+                { className: styleMap.antigravityQuotaGroupDescription },
+                groupDescription
+              )
+            : null
+        ),
+        ...group.buckets.map((bucket) => {
+          const percent = Math.max(0, Math.min(1, bucket.remainingFraction)) * 100;
+          const percentLabel =
+            bucket.remainingFraction === 1
+              ? t('antigravity_quota.quota_available')
+              : t('antigravity_quota.remaining_percent', { percent: Math.round(percent) });
+          const bucketLabel = translateAntigravityQuotaLabel(
+            bucket.label,
+            ANTIGRAVITY_BUCKET_LABEL_KEYS,
+            t
+          );
+
+          return h(
+            'div',
+            { key: bucket.id, className: styleMap.quotaRow },
+            h(
+              'div',
+              { className: styleMap.quotaRowHeader },
+              h(
+                'span',
+                { className: styleMap.quotaModel, title: bucket.description },
+                bucketLabel
+              ),
+              h(
+                'div',
+                { className: styleMap.quotaMeta },
+                h('span', { className: styleMap.quotaPercent }, percentLabel),
+                h(
+                  'span',
+                  { className: styleMap.quotaReset },
+                  formatAntigravityResetLabel(bucket.resetTime, t, nowMs)
+                )
+              )
+            ),
+            h(QuotaProgressBar, {
+              percent,
+              highThreshold: QUOTA_PROGRESS_HIGH_THRESHOLD,
+              mediumThreshold: QUOTA_PROGRESS_MEDIUM_THRESHOLD,
+            })
+          );
+        })
+      )
+    );
+  });
+
+  return h(Fragment, null, ...nodes);
+};
+
 const renderAntigravityItems = (
   quota: AntigravityQuotaState,
   t: TFunction,
   helpers: QuotaRenderHelpers
-): ReactNode => {
-  const { styles: styleMap, QuotaProgressBar } = helpers;
-  const { createElement: h } = React;
-  const groups = quota.groups ?? [];
-
-  if (groups.length === 0) {
-    return h('div', { className: styleMap.quotaMessage }, t('antigravity_quota.empty_models'));
-  }
-
-  return groups.map((group) => {
-    const clamped = Math.max(0, Math.min(1, group.remainingFraction));
-    const percent = Math.round(clamped * 100);
-    const resetLabel = formatQuotaResetTime(group.resetTime);
-
-    return h(
-      'div',
-      { key: group.id, className: styleMap.quotaRow },
-      h(
-        'div',
-        { className: styleMap.quotaRowHeader },
-        h('span', { className: styleMap.quotaModel, title: group.models.join(', ') }, group.label),
-        h(
-          'div',
-          { className: styleMap.quotaMeta },
-          h('span', { className: styleMap.quotaPercent }, `${percent}%`),
-          h('span', { className: styleMap.quotaReset }, resetLabel)
-        )
-      ),
-      h(QuotaProgressBar, {
-        percent,
-        highThreshold: QUOTA_PROGRESS_HIGH_THRESHOLD,
-        mediumThreshold: QUOTA_PROGRESS_MEDIUM_THRESHOLD,
-      })
-    );
-  });
-};
+): ReactNode => React.createElement(AntigravityQuotaItems, { quota, t, helpers });
 
 const PREMIUM_GEMINI_CLI_TIER_IDS = new Set(['g1-ultra-tier']);
 const renderGeminiCliItems = (
@@ -897,7 +1134,7 @@ export const CLAUDE_CONFIG: QuotaConfig<
   renderQuotaItems: renderClaudeItems,
 };
 
-export const ANTIGRAVITY_CONFIG: QuotaConfig<AntigravityQuotaState, AntigravityQuotaGroup[]> = {
+export const ANTIGRAVITY_CONFIG: QuotaConfig<AntigravityQuotaState, AntigravityQuotaData> = {
   type: 'antigravity',
   i18nPrefix: 'antigravity_quota',
   cardIdleMessageKey: 'quota_management.card_idle_hint',
@@ -905,11 +1142,23 @@ export const ANTIGRAVITY_CONFIG: QuotaConfig<AntigravityQuotaState, AntigravityQ
   fetchQuota: fetchAntigravityQuota,
   storeSelector: (state) => state.antigravityQuota,
   storeSetter: 'setAntigravityQuota',
-  buildLoadingState: () => ({ status: 'loading', groups: [] }),
-  buildSuccessState: (groups) => ({ status: 'success', groups }),
+  buildLoadingState: () => ({
+    status: 'loading',
+    groups: [],
+    subscription: null,
+    serverTimeOffsetMs: null,
+  }),
+  buildSuccessState: (data) => ({
+    status: 'success',
+    groups: data.groups,
+    subscription: data.subscription,
+    serverTimeOffsetMs: data.serverTimeOffsetMs,
+  }),
   buildErrorState: (message, status) => ({
     status: 'error',
     groups: [],
+    subscription: null,
+    serverTimeOffsetMs: null,
     error: message,
     errorStatus: status,
   }),

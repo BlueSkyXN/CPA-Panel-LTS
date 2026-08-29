@@ -26,6 +26,7 @@ const [
   claudeApi,
   thinkingLevels,
   modelInputListUtils,
+  providerUtils,
 ] = await Promise.all([
   vite.ssrLoadModule('/src/services/api/transformers.ts'),
   vite.ssrLoadModule('/src/services/api/providers.ts'),
@@ -41,6 +42,7 @@ const [
   vite.ssrLoadModule('/src/features/providers/claudeApi.ts'),
   vite.ssrLoadModule('/src/features/providers/thinkingLevels.ts'),
   vite.ssrLoadModule('/src/components/ui/modelInputListUtils.ts'),
+  vite.ssrLoadModule('/src/components/providers/utils.ts'),
 ]);
 
 test.after(async () => {
@@ -294,6 +296,233 @@ test('round-trips the Claude fingerprint profile without dropping unknown fields
           'base-url': 'https://api.anthropic.com',
         },
       ],
+    },
+  ]);
+});
+
+test('round-trips credential weights without dropping provider fields', async () => {
+  const config = transformers.normalizeConfigResponse({
+    'gemini-api-key': [{ 'api-key': 'gemini-secret', weight: '5' }],
+    'openai-compatibility': [
+      {
+        name: 'custom',
+        'base-url': 'https://openai.example.test/v1',
+        'api-key-entries': [{ 'api-key': 'openai-secret', weight: '0' }],
+      },
+    ],
+  });
+  assert.equal(config.geminiApiKeys[0]?.weight, 5);
+  assert.equal(config.openaiCompatibility[0]?.apiKeyEntries[0]?.weight, 0);
+
+  const originalGet = client.apiClient.get;
+  const originalPut = client.apiClient.put;
+  const calls = [];
+  let configRead = 0;
+  client.apiClient.get = async (url) => {
+    calls.push({ method: 'GET', url });
+    configRead += 1;
+    if (configRead === 1) {
+      return {
+        'gemini-api-key': [
+          {
+            'api-key': 'gemini-secret',
+            'base-url': 'https://gemini.example.test',
+            weight: 2,
+            'future-field': { keep: true },
+            'auth-index': 'response-only',
+          },
+        ],
+      };
+    }
+    return {
+      'openai-compatibility': [
+        {
+          name: 'custom',
+          'base-url': 'https://openai.example.test/v1',
+          'future-provider-field': 'keep',
+          'api-key-entries': [
+            {
+              'api-key': 'openai-secret',
+              weight: 3,
+              'future-entry-field': 'keep',
+            },
+          ],
+        },
+      ],
+    };
+  };
+  client.apiClient.put = async (url, data) => {
+    calls.push({ method: 'PUT', url, data });
+  };
+
+  try {
+    await providers.providersApi.updateGeminiKey(
+      'gemini-secret',
+      'https://gemini.example.test',
+      {
+        apiKey: 'gemini-secret',
+        baseUrl: 'https://gemini.example.test',
+        weight: 7,
+      }
+    );
+    await providers.providersApi.updateOpenAIProvider('custom', 0, {
+      name: 'custom',
+      baseUrl: 'https://openai.example.test/v1',
+      apiKeyEntries: [{ apiKey: 'openai-secret', weight: 0 }],
+    });
+  } finally {
+    client.apiClient.get = originalGet;
+    client.apiClient.put = originalPut;
+  }
+
+  assert.deepEqual(calls, [
+    { method: 'GET', url: '/config' },
+    {
+      method: 'PUT',
+      url: '/gemini-api-key',
+      data: [
+        {
+          'future-field': { keep: true },
+          'api-key': 'gemini-secret',
+          weight: 7,
+          'base-url': 'https://gemini.example.test',
+        },
+      ],
+    },
+    { method: 'GET', url: '/config' },
+    {
+      method: 'PUT',
+      url: '/openai-compatibility',
+      data: [
+        {
+          'future-provider-field': 'keep',
+          name: 'custom',
+          'base-url': 'https://openai.example.test/v1',
+          'api-key-entries': [
+            {
+              'future-entry-field': 'keep',
+              'api-key': 'openai-secret',
+              weight: 0,
+            },
+          ],
+        },
+      ],
+    },
+  ]);
+});
+
+test('manages Interactions API resources through the Core contract', async () => {
+  const config = transformers.normalizeConfigResponse({
+    'interactions-api-key': [
+      {
+        'api-key': 'interaction-secret',
+        'base-url': 'https://generativelanguage.googleapis.com',
+        weight: '4',
+      },
+    ],
+  });
+  assert.equal(config.interactionsApiKeys[0]?.weight, 4);
+
+  const resource = adapters.interactionsToResource(config.interactionsApiKeys[0], 0);
+  assert.equal(resource.brand, 'interactions');
+  assert.deepEqual(resource.selector, {
+    brand: 'interactions',
+    apiKey: 'interaction-secret',
+    baseUrl: 'https://generativelanguage.googleapis.com',
+    index: 0,
+  });
+  assert.equal(
+    descriptors.PROVIDER_BRAND_ORDER.indexOf('interactions'),
+    descriptors.PROVIDER_BRAND_ORDER.indexOf('gemini') + 1
+  );
+  assert.equal(brandLogos.PROVIDER_LOGOS.interactions.src, brandLogos.PROVIDER_LOGOS.gemini.src);
+  assert.equal(
+    providerUtils.buildInteractionsEndpoint('https://generativelanguage.googleapis.com/v1beta'),
+    'https://generativelanguage.googleapis.com/v1beta/interactions'
+  );
+  assert.deepEqual(providerUtils.buildInteractionsProbePayload('gemini-2.5-flash'), {
+    model: 'gemini-2.5-flash',
+    input: 'Hi',
+  });
+  assert.equal(providerUtils.INTERACTIONS_API_REVISION, '2026-05-20');
+  assert.equal(providerUtils.getProviderUsageKey('interactions'), 'gemini-interactions');
+
+  const originalGet = client.apiClient.get;
+  const originalPut = client.apiClient.put;
+  const originalDelete = client.apiClient.delete;
+  const calls = [];
+  let configRead = 0;
+  client.apiClient.get = async (url) => {
+    calls.push({ method: 'GET', url });
+    configRead += 1;
+    return configRead === 1
+      ? { 'interactions-api-key': [] }
+      : {
+          'interactions-api-key': [
+            {
+              'api-key': 'interaction-secret',
+              'base-url': 'https://generativelanguage.googleapis.com',
+              weight: 4,
+              'future-field': { keep: true },
+              'auth-index': 'response-only',
+            },
+          ],
+        };
+  };
+  client.apiClient.put = async (url, data) => {
+    calls.push({ method: 'PUT', url, data });
+  };
+  client.apiClient.delete = async (url) => {
+    calls.push({ method: 'DELETE', url });
+  };
+
+  try {
+    await providers.providersApi.createInteractionsKey({
+      apiKey: 'new-interaction-secret',
+      weight: 2,
+    });
+    await providers.providersApi.updateInteractionsKey(
+      'interaction-secret',
+      'https://generativelanguage.googleapis.com',
+      {
+        apiKey: 'interaction-secret',
+        baseUrl: 'https://generativelanguage.googleapis.com',
+        weight: 6,
+      }
+    );
+    await providers.providersApi.deleteInteractionsKey(
+      'interaction-secret',
+      'https://generativelanguage.googleapis.com'
+    );
+  } finally {
+    client.apiClient.get = originalGet;
+    client.apiClient.put = originalPut;
+    client.apiClient.delete = originalDelete;
+  }
+
+  assert.deepEqual(calls, [
+    { method: 'GET', url: '/config' },
+    {
+      method: 'PUT',
+      url: '/interactions-api-key',
+      data: [{ 'api-key': 'new-interaction-secret', weight: 2 }],
+    },
+    { method: 'GET', url: '/config' },
+    {
+      method: 'PUT',
+      url: '/interactions-api-key',
+      data: [
+        {
+          'future-field': { keep: true },
+          'api-key': 'interaction-secret',
+          weight: 6,
+          'base-url': 'https://generativelanguage.googleapis.com',
+        },
+      ],
+    },
+    {
+      method: 'DELETE',
+      url: '/interactions-api-key?api-key=interaction-secret&base-url=https%3A%2F%2Fgenerativelanguage.googleapis.com',
     },
   ]);
 });

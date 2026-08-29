@@ -13,6 +13,7 @@ import {
   supportsAuthFileUsingApi,
   supportsAuthFileWebsockets,
 } from '@/features/authFiles/constants';
+import { MAX_CREDENTIAL_WEIGHT } from '@/utils/credentialWeight';
 import styles from '@/pages/AuthFilesPage.module.scss';
 
 export type AuthFilesPrefixProxyEditorModalProps = {
@@ -75,7 +76,8 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
               editor?.saving === true ||
               !dirty ||
               !editor?.json ||
-              Boolean(editor?.headersTouched && editor.headersError)
+              Boolean(editor?.headersTouched && editor.headersError) ||
+              Boolean(editor?.weightError)
             }
           >
             {t('common.save')}
@@ -145,6 +147,18 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                     hint={t('auth_files.priority_hint')}
                     disabled={disableControls || editor.saving || !editor.json}
                     onChange={(e) => onChange('priority', e.target.value)}
+                  />
+                  <Input
+                    label={t('auth_files.weight_label')}
+                    value={editor.weight}
+                    type="number"
+                    step="1"
+                    max={MAX_CREDENTIAL_WEIGHT}
+                    placeholder="1"
+                    hint={t('auth_files.weight_hint')}
+                    error={editor.weightError ?? undefined}
+                    disabled={disableControls || editor.saving || !editor.json}
+                    onChange={(e) => onChange('weight', e.target.value)}
                   />
                   {supportsAuthFileWebsockets(editor.providerKey) && (
                     <div className="form-group">
