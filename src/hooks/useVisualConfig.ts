@@ -16,6 +16,7 @@ import type {
   PluginStoreAuthApplyTo,
   PluginStoreAuthRule,
   PluginStoreAuthType,
+  RoutingStrategy,
   VisualConfigValues,
   VisualConfigValidationErrors,
   PayloadParamValidationErrorCode,
@@ -563,6 +564,17 @@ function parseRawPayloadParamValue(raw: unknown): string {
 function parsePayloadProtocol(raw: unknown): string | undefined {
   if (typeof raw !== 'string') return undefined;
   return raw.trim() ? raw : undefined;
+}
+
+export function parseRoutingStrategy(raw: unknown): RoutingStrategy {
+  const normalized = String(raw ?? '')
+    .trim()
+    .toLowerCase();
+  if (['weighted-round-robin', 'weightedroundrobin', 'wrr'].includes(normalized)) {
+    return 'weighted-round-robin';
+  }
+  if (['fill-first', 'fillfirst', 'ff'].includes(normalized)) return 'fill-first';
+  return 'round-robin';
 }
 
 function parsePayloadModelScope(raw: unknown): string | undefined {
@@ -1457,7 +1469,7 @@ export function useVisualConfig() {
         quotaSwitchPreviewModel: Boolean(quotaExceeded?.['switch-preview-model'] ?? true),
         quotaAntigravityCredits: Boolean(quotaExceeded?.['antigravity-credits'] ?? false),
 
-        routingStrategy: routing?.strategy === 'fill-first' ? 'fill-first' : 'round-robin',
+        routingStrategy: parseRoutingStrategy(routing?.strategy),
         routingSessionAffinity: Boolean(
           routing?.['session-affinity'] ?? routing?.sessionAffinity ?? routing?.['sessionAffinity']
         ),

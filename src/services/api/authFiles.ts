@@ -12,6 +12,7 @@ import {
   normalizeUsageTotal,
 } from '@/utils/recentRequests';
 import { parseTimestampMs } from '@/utils/timestamp';
+import { readCredentialWeight } from '@/utils/credentialWeight';
 
 type StatusError = { status?: number };
 type AuthFileStatusResponse = { status: string; disabled: boolean };
@@ -21,6 +22,7 @@ export type AuthFileFieldsPatch = {
   proxy_url?: string;
   headers?: Record<string, string>;
   priority?: number;
+  weight?: number | null;
   websockets?: boolean;
   using_api?: boolean;
   note?: string;
@@ -219,8 +221,8 @@ const mergeAuthFileEntries = (entries: AuthFileEntry[]): AuthFileEntry => {
 
 const INTEGER_STRING_PATTERN = /^[+-]?\d+$/;
 
-const readPriorityField = (value: unknown): number | undefined => {
-  if (typeof value === 'number') return Number.isInteger(value) ? value : undefined;
+const readIntegerField = (value: unknown): number | undefined => {
+  if (typeof value === 'number') return Number.isSafeInteger(value) ? value : undefined;
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
   if (!trimmed || !INTEGER_STRING_PATTERN.test(trimmed)) return undefined;
@@ -235,7 +237,8 @@ const normalizeAuthFileEntry = (entry: AuthFileEntry): AuthFileEntry => {
   const statusMessage = readTextField(entry, 'status_message') || declaredStatusMessage;
   const note = readTextField(entry, 'note');
   const modified = readDateField(entry);
-  const priority = readPriorityField(entry['priority']);
+  const priority = readIntegerField(entry['priority']);
+  const weight = readCredentialWeight(entry['weight']);
 
   return {
     ...entry,
@@ -247,6 +250,7 @@ const normalizeAuthFileEntry = (entry: AuthFileEntry): AuthFileEntry => {
     ...(statusMessage ? { statusMessage } : {}),
     ...(modified > 0 ? { modified } : {}),
     ...(priority !== undefined ? { priority } : {}),
+    ...(weight !== undefined ? { weight } : {}),
     ...(note ? { note } : {}),
   };
 };

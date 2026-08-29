@@ -36,6 +36,8 @@ const [
   i18nModule,
   { apiCallApi },
   { parseAntigravitySubscriptionSummary },
+  { parseRoutingStrategy },
+  credentialWeight,
 ] = await Promise.all([
   vite.ssrLoadModule('/src/utils/quota/builders.ts'),
   vite.ssrLoadModule('/src/components/quota/quotaConfigs.ts'),
@@ -49,6 +51,8 @@ const [
   vite.ssrLoadModule('/src/i18n/index.ts'),
   vite.ssrLoadModule('/src/services/api/apiCall.ts'),
   vite.ssrLoadModule('/src/services/api/antigravitySubscription.ts'),
+  vite.ssrLoadModule('/src/hooks/useVisualConfig.ts'),
+  vite.ssrLoadModule('/src/utils/credentialWeight.ts'),
 ]);
 
 const i18n = i18nModule.default;
@@ -498,6 +502,7 @@ test('normalizes auth-file boundary fields without dropping raw provider data', 
         success: '3',
         failed: 2,
         priority: '7',
+        weight: '0',
         note: ' test note ',
         modtime: '2026-08-03T00:00:00Z',
         provider_specific: { retained: true },
@@ -512,11 +517,27 @@ test('normalizes auth-file boundary fields without dropping raw provider data', 
   assert.equal(file.successCount, 3);
   assert.equal(file.failureCount, 2);
   assert.equal(file.priority, 7);
+  assert.equal(file.weight, 0);
   assert.equal(file.note, 'test note');
   assert.equal(file.modified, Date.parse('2026-08-03T00:00:00Z'));
   assert.deepEqual(file.recentRequests, [{ time: '10:00-10:10', success: 2, failed: 1 }]);
   assert.deepEqual(file.provider_specific, { retained: true });
   assert.equal(file.status_message, ' ready ');
+});
+
+test('accepts WRR strategy aliases and enforces credential weight bounds', () => {
+  assert.equal(parseRoutingStrategy('weighted-round-robin'), 'weighted-round-robin');
+  assert.equal(parseRoutingStrategy(' WRR '), 'weighted-round-robin');
+  assert.equal(parseRoutingStrategy('fillfirst'), 'fill-first');
+  assert.equal(parseRoutingStrategy('unknown'), 'round-robin');
+
+  assert.equal(credentialWeight.DEFAULT_CREDENTIAL_WEIGHT, 1);
+  assert.equal(credentialWeight.readCredentialWeight('0'), 0);
+  assert.equal(credentialWeight.readCredentialWeight('-3'), -3);
+  assert.equal(credentialWeight.readCredentialWeight('1000001'), undefined);
+  assert.equal(credentialWeight.validateCredentialWeightText('1.5'), 'integer');
+  assert.equal(credentialWeight.validateCredentialWeightText('1000001'), 'max');
+  assert.equal(credentialWeight.parseCredentialWeightText(''), undefined);
 });
 
 test('slices one Codex daily payload into exact rolling ranges before aggregation', () => {

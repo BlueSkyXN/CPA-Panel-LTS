@@ -25,6 +25,7 @@ import {
   type CodexRemoteCloudConnectEnvironmentSummary,
 } from '@/lts/codexRemoteCloudConnect';
 import { formatFileSize } from '@/utils/format';
+import { readCredentialWeight } from '@/utils/credentialWeight';
 import {
   QUOTA_PROVIDER_TYPES,
   formatModified,
@@ -137,6 +138,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
   const hasStatusWarning = hasAuthFileStatusWarning(file);
 
   const priorityValue = parsePriorityValue(file.priority ?? file['priority']);
+  const weightValue = readCredentialWeight(file.weight ?? file['weight']);
   const noteValue = typeof file.note === 'string' ? file.note.trim() : '';
   const stateLabel = isRuntimeOnly
     ? t('auth_files.type_virtual') || '虚拟认证文件'
@@ -250,6 +252,12 @@ export function AuthFileCard(props: AuthFileCardProps) {
                 <span className={`${styles.metaValue} ${styles.priorityValue}`}>
                   {priorityValue}
                 </span>
+              </div>
+            )}
+            {weightValue !== undefined && (
+              <div className={styles.metaItem}>
+                <span className={styles.metaLabel}>{t('auth_files.weight_display')}</span>
+                <span className={styles.metaValue}>{weightValue}</span>
               </div>
             )}
           </div>

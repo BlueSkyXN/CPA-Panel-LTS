@@ -34,6 +34,7 @@ export interface AuthFileItem {
   lastRefresh?: string | number;
   modified?: number;
   priority?: number;
+  weight?: number;
   note?: string;
   success?: unknown;
   failed?: unknown;
