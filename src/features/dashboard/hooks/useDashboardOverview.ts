@@ -123,6 +123,7 @@ export const summarizeProviderTraffic = (bucketGroups: RecentRequestBucket[][]) 
 
 export const getProviderKeyCounts = (config: Config) => ({
   gemini: config.geminiApiKeys?.length ?? 0,
+  interactions: config.interactionsApiKeys?.length ?? 0,
   codex: config.codexApiKeys?.length ?? 0,
   ampcode: countAmpcodeConfig(config.ampcode),
   xai: config.xaiApiKeys?.length ?? 0,

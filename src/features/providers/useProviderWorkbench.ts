@@ -15,6 +15,7 @@ import {
   codexToResource,
   fennoAIToResource,
   geminiToResource,
+  interactionsToResource,
   infistarToResource,
   openaiToResource,
   qiniuCloudToResource,
@@ -148,7 +149,7 @@ const buildModelAliases = (
     .filter((m) => m.name);
 
 const buildProviderKeyConfig = (
-  brand: 'gemini' | 'codex' | 'xai' | 'claude' | 'vertex',
+  brand: 'gemini' | 'interactions' | 'codex' | 'xai' | 'claude' | 'vertex',
   input: ProviderEntryFormInput,
   existing?: ProviderKeyConfig | GeminiKeyConfig | null
 ): ProviderKeyConfig | GeminiKeyConfig => {
@@ -442,6 +443,11 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
             []
           );
           break;
+        case 'interactions':
+          resources = (config.interactionsApiKeys ?? []).map((item, index) =>
+            interactionsToResource(item, index)
+          );
+          break;
         case 'codex':
           resources = (config.codexApiKeys ?? []).reduce<ProviderResource[]>((out, item, index) => {
             if (
@@ -653,6 +659,10 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           await providersApi.createGeminiKey(
             buildProviderKeyConfig('gemini', input) as GeminiKeyConfig
           );
+        } else if (brand === 'interactions') {
+          await providersApi.createInteractionsKey(
+            buildProviderKeyConfig('interactions', input) as GeminiKeyConfig
+          );
         } else if (brand === 'codex') {
           await providersApi.createCodexConfig(
             buildProviderKeyConfig('codex', input) as ProviderKeyConfig
@@ -701,6 +711,13 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
             selector.apiKey,
             selector.baseUrl,
             buildProviderKeyConfig('gemini', input, existing) as GeminiKeyConfig
+          );
+        } else if (brand === 'interactions' && selector.brand === 'interactions') {
+          const existing = resource.raw as GeminiKeyConfig;
+          await providersApi.updateInteractionsKey(
+            selector.apiKey,
+            selector.baseUrl,
+            buildProviderKeyConfig('interactions', input, existing) as GeminiKeyConfig
           );
         } else if (brand === 'codex' && selector.brand === 'codex') {
           const existing = resource.raw as ProviderKeyConfig;
@@ -765,6 +782,10 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
         const sel = resource.selector;
         if (sel.brand === 'gemini') {
           await providersApi.deleteGeminiKey(sel.apiKey, sel.baseUrl);
+        } else if (sel.brand === 'interactions') {
+          await providersApi.deleteInteractionsKey(sel.apiKey, sel.baseUrl);
+          const next = (config?.interactionsApiKeys ?? []).filter((_, index) => index !== sel.index);
+          updateConfigValue('interactions-api-key', next);
         } else if (sel.brand === 'codex') {
           await providersApi.deleteCodexConfig(sel.apiKey, sel.baseUrl);
         } else if (sel.brand === 'xai') {
@@ -804,7 +825,7 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
         setMutating(false);
       }
     },
-    [refetch]
+    [config?.interactionsApiKeys, refetch, updateConfigValue]
   );
 
   const toggleDisabled = useCallback(
@@ -819,6 +840,15 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
             ? withDisableAllModelsRule(current.excludedModels)
             : withoutDisableAllModelsRule(current.excludedModels);
           await providersApi.updateGeminiKey(selector.apiKey, selector.baseUrl, {
+            ...current,
+            excludedModels: excluded,
+          });
+        } else if (brand === 'interactions' && selector.brand === 'interactions') {
+          const current = resource.raw as GeminiKeyConfig;
+          const excluded = disabled
+            ? withDisableAllModelsRule(current.excludedModels)
+            : withoutDisableAllModelsRule(current.excludedModels);
+          await providersApi.updateInteractionsKey(selector.apiKey, selector.baseUrl, {
             ...current,
             excludedModels: excluded,
           });

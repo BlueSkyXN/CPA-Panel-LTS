@@ -130,6 +130,31 @@ export const buildClaudeMessagesEndpoint = (baseUrl: string): string => {
   return `${trimmed}/v1/messages`;
 };
 
+export const INTERACTIONS_API_REVISION = '2026-05-20';
+
+export const buildInteractionsProbePayload = (model: string) => ({
+  model,
+  input: 'Hi',
+});
+
+export const buildInteractionsEndpoint = (baseUrl: string): string => {
+  let trimmed = String(baseUrl || '').trim() || DEFAULT_GEMINI_BASE_URL;
+  trimmed = trimmed.replace(/\/?v0\/management\/?$/i, '').replace(/\/+$/g, '');
+  if (!/^https?:\/\//i.test(trimmed)) {
+    trimmed = `http://${trimmed}`;
+  }
+  if (/\/v1beta\/interactions$/i.test(trimmed)) {
+    return trimmed;
+  }
+
+  let root = trimmed.replace(/\/v1beta\/models$/i, '');
+  if (/\/v1beta$/i.test(root)) {
+    return `${root}/interactions`;
+  }
+  root = root.replace(/\/v1beta(?:\/.*)?$/i, '');
+  return `${root}/v1beta/interactions`;
+};
+
 const buildGeminiModelResource = (model: string): string => {
   const trimmed = String(model || '')
     .trim()
@@ -172,6 +197,12 @@ export const buildGeminiGenerateContentEndpoint = (
   }
 
   return `${root}/${resource}:generateContent`;
+};
+
+export const getProviderUsageKey = (provider: string): string => {
+  if (provider === 'claudeApi') return 'claude';
+  if (provider === 'interactions') return 'gemini-interactions';
+  return provider;
 };
 
 export type ProviderRecentUsageMap = Map<string, Map<string, RecentRequestUsageEntry>>;

@@ -52,15 +52,17 @@ test('keeps labels, windows, and success-rate severity deterministic', () => {
   assert.equal(dashboard.toneForSuccessRate(79.9), 'critical');
 });
 
-test('retains the LTS ampcode provider in dashboard key counts', () => {
+test('retains LTS ampcode and Interactions API in dashboard key counts', () => {
   const counts = overview.getProviderKeyCounts({
     geminiApiKeys: [{ apiKey: 'gemini-key' }],
+    interactionsApiKeys: [{ apiKey: 'interactions-key' }],
     codexApiKeys: [{ apiKey: 'codex-key' }],
     ampcode: { upstreamUrl: 'https://amp.example.test' },
   });
 
   assert.equal(counts.ampcode, 1);
-  assert.equal(Object.values(counts).reduce((sum, count) => sum + count, 0), 3);
+  assert.equal(counts.interactions, 1);
+  assert.equal(Object.values(counts).reduce((sum, count) => sum + count, 0), 4);
 });
 
 test('keeps provider totals scoped to the same recent buckets as the traffic chart', () => {

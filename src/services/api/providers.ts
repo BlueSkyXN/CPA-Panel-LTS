@@ -37,6 +37,7 @@ const PROVIDER_COMMON_KEY_FIELDS = [
 ] as const;
 
 const GEMINI_KEY_FIELDS = PROVIDER_COMMON_KEY_FIELDS;
+const INTERACTIONS_KEY_FIELDS = PROVIDER_COMMON_KEY_FIELDS;
 const CODEX_KEY_FIELDS = [...PROVIDER_COMMON_KEY_FIELDS, 'websockets'] as const;
 const XAI_KEY_FIELDS = CODEX_KEY_FIELDS;
 const CLAUDE_KEY_FIELDS = [
@@ -538,6 +539,26 @@ export const providersApi = {
 
   deleteGeminiKey: (apiKey: string, baseUrl?: string) =>
     apiClient.delete(`/gemini-api-key${buildProviderDeleteQuery(apiKey, baseUrl)}`),
+
+  createInteractionsKey: (config: GeminiKeyConfig) =>
+    mutateLatestProviderList('interactions-api-key', (latestItems) =>
+      appendLatestProviderRecord(latestItems, serializeGeminiKey(config), (raw, payload) =>
+        mergeProviderKeyPayload(raw, payload, INTERACTIONS_KEY_FIELDS)
+      )
+    ),
+
+  updateInteractionsKey: (apiKey: string, baseUrl: string | undefined, config: GeminiKeyConfig) =>
+    mutateLatestProviderList('interactions-api-key', (latestItems) =>
+      replaceLatestProviderRecord(
+        latestItems,
+        (record) => matchesProviderKey(record, apiKey, baseUrl),
+        serializeGeminiKey(config),
+        (raw, payload) => mergeProviderKeyPayload(raw, payload, INTERACTIONS_KEY_FIELDS)
+      )
+    ),
+
+  deleteInteractionsKey: (apiKey: string, baseUrl?: string) =>
+    apiClient.delete(`/interactions-api-key${buildProviderDeleteQuery(apiKey, baseUrl)}`),
 
   async getCodexConfigs(): Promise<ProviderKeyConfig[]> {
     const data = await apiClient.get('/codex-api-key');
