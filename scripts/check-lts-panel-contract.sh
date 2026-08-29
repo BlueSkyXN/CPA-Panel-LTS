@@ -104,6 +104,7 @@ for path in \
   src/features/providers/sheets/forms/useConnectivityTest.ts \
   src/features/providers/sheets/forms/useModelDiscovery.ts \
   src/features/providers/xaiApiKeyProvider.test.mjs \
+  src/features/providers/providerIntegrity.test.mjs \
   src/services/api/client.test.mjs \
   src/features/plugins/PluginsPage.tsx \
   src/features/plugins/PluginStorePage.tsx \
@@ -135,6 +136,7 @@ for path in \
   src/services/api/authFiles.ts \
   src/services/api/oauth.ts \
   src/services/api/apiCall.ts \
+  src/services/api/antigravitySubscription.ts \
   src/lts/codexRemoteCloudConnect/api.ts \
   src/pages/AuthFilesPage.tsx \
   src/pages/AuthFilesOAuthExcludedEditPage.tsx \
@@ -143,6 +145,7 @@ for path in \
   src/components/modelAlias \
   src/pages/QuotaPage.tsx \
   src/features/authFiles \
+  src/utils/credentialWeight.ts \
   src/hooks/useUnsavedChangesGuard.ts \
   src/features/authFiles/components/AuthFileQuotaSection.tsx \
   src/features/authFiles/constants.ts \
@@ -446,6 +449,32 @@ require_file_contains src/i18n/locales/en.json '"xai": "xAI"'
 require_file_contains src/i18n/locales/zh-CN.json '"xai": "xAI"'
 require_file_contains src/i18n/locales/zh-TW.json '"xai": "xAI"'
 require_file_contains src/i18n/locales/ru.json '"xai": "xAI"'
+
+# Core-backed deferred contracts accepted as narrow LTS adaptations.
+require_file_contains src/services/api/providers.ts "'interactions-api-key'"
+require_file_contains src/features/providers/descriptors.ts "id: 'interactions'"
+require_file_contains src/components/providers/utils.ts "buildInteractionsEndpoint"
+require_file_contains src/components/providers/utils.ts "INTERACTIONS_API_REVISION"
+require_file_contains src/components/providers/utils.ts "gemini-interactions"
+require_file_contains src/features/providers/providerIntegrity.test.mjs "manages Interactions API resources through the Core contract"
+require_file_contains scripts/smoke-lts-panel-core.py "BROWSER provider workbench Interactions API weight round-trip"
+require_file_contains src/i18n/locales/en.json '"interactions": "Interactions API"'
+require_file_contains src/i18n/locales/zh-CN.json '"interactions": "Interactions API"'
+require_file_contains src/i18n/locales/zh-TW.json '"interactions": "Interactions API"'
+require_file_contains src/i18n/locales/ru.json '"interactions": "Interactions API"'
+require_file_contains src/types/visualConfig.ts "weighted-round-robin"
+require_file_contains src/utils/credentialWeight.ts "MAX_CREDENTIAL_WEIGHT"
+require_file_contains src/utils/credentialWeight.ts "validateCredentialWeightText"
+require_file_contains src/services/api/providers.ts "payload.weight"
+require_file_contains src/services/api/authFiles.ts "weight?: number | null"
+require_file_contains src/utils/quota/upstreamQuotaPort.test.mjs "accepts WRR strategy aliases and enforces credential weight bounds"
+require_file_contains src/features/providers/providerIntegrity.test.mjs "round-trips credential weights without dropping provider fields"
+require_file_contains scripts/smoke-lts-panel-core.py "BROWSER visual save and reload weighted-round-robin"
+require_file_contains scripts/smoke-lts-panel-core.py "Auth file credential weight round-tripped through Core"
+require_file_contains src/i18n/locales/en.json '"weight_label"'
+require_file_contains src/i18n/locales/zh-CN.json '"weight_label"'
+require_file_contains src/i18n/locales/zh-TW.json '"weight_label"'
+require_file_contains src/i18n/locales/ru.json '"weight_label"'
 require_file_contains src/i18n/locales/en.json '"provider_legacy": "LTS Provider Status"'
 require_file_contains src/i18n/locales/zh-CN.json '"provider_legacy": "LTS 提供商状态"'
 require_file_contains src/i18n/locales/zh-TW.json '"provider_legacy": "LTS 提供商狀態"'
@@ -925,6 +954,18 @@ require_file_contains scripts/smoke-lts-panel.py '"using_api": True'
 require_file_contains scripts/smoke-lts-panel-core.py '"using_api": True'
 require_file_contains src/features/authFiles/components/AuthFileQuotaSection.tsx "XAI_CONFIG"
 require_file_contains src/features/authFiles/components/AuthFileQuotaSection.tsx "CODEX_CONFIG"
+require_file_contains src/utils/quota/constants.ts "retrieveUserQuotaSummary"
+require_file_contains src/utils/quota/constants.ts "antigravity/cli/"
+require_file_contains src/utils/quota/constants.ts "ANTIGRAVITY_CLI_VERSION = '1.0.13'"
+require_file_contains src/utils/quota/constants.ts "ANTIGRAVITY_CODE_ASSIST_URL"
+require_file_contains src/services/api/antigravitySubscription.ts "antigravitySubscriptionApi"
+require_file_contains src/utils/quota/builders.ts "buildAntigravityQuotaGroups"
+require_file_contains src/types/quota.ts "AntigravityQuotaSummaryPayload"
+require_file_contains src/types/quota.ts "buckets: AntigravityQuotaBucket[]"
+require_file_contains src/components/quota/quotaConfigs.ts "missing_project_id"
+require_file_contains src/components/quota/quotaConfigs.ts "serverTimeOffsetMs"
+require_file_contains src/components/quota/quotaConfigs.ts "subscriptionPromise"
+require_file_contains src/utils/quota/upstreamQuotaPort.test.mjs "parses Antigravity quota-summary groups and current request identity"
 require_file_contains src/components/quota/quotaConfigs.ts "CODEX_CONFIG"
 require_file_contains src/lts/codexQuota/config.ts "resetCodexQuota"
 require_file_contains src/lts/codexQuota/config.ts "CODEX_RATE_LIMIT_RESET_CREDITS_URL"

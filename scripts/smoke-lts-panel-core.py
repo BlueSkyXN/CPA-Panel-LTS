@@ -910,6 +910,7 @@ def run_auth_files_write_smoke(api_url: str) -> list[str]:
         "prefix": "auth-smoke",
         "proxy_url": "http://127.0.0.1:7890",
         "priority": 7,
+        "weight": 5,
         "websockets": True,
         "using_api": True,
         "note": "updated by lts smoke",
@@ -928,6 +929,8 @@ def run_auth_files_write_smoke(api_url: str) -> list[str]:
         raise AssertionError("Auth file disappeared after fields patch")
     if patched_entry.get("priority") != 7:
         raise AssertionError(f"Auth file priority did not round-trip through list: {patched_entry!r}")
+    if patched_entry.get("weight") != 5:
+        raise AssertionError(f"Auth file weight did not round-trip through list: {patched_entry!r}")
     if patched_entry.get("websockets") is not True:
         raise AssertionError(f"Auth file websockets did not round-trip through list: {patched_entry!r}")
     if patched_entry.get("note") != "updated by lts smoke":
@@ -941,12 +944,14 @@ def run_auth_files_write_smoke(api_url: str) -> list[str]:
         downloaded.get("prefix") != "auth-smoke"
         or downloaded.get("proxy_url") != "http://127.0.0.1:7890"
         or downloaded.get("priority") != 7
+        or downloaded.get("weight") != 5
         or downloaded.get("websockets") is not True
         or downloaded.get("using_api") is not True
         or downloaded.get("note") != "updated by lts smoke"
         or downloaded.get("headers") != {"X-LTS-Smoke": "1"}
     ):
         raise AssertionError(f"Auth file fields patch did not persist to download payload: {downloaded!r}")
+    seen.append("Auth file credential weight round-tripped through Core")
 
     seen.append("PATCH /v0/management/auth-files/status")
     disabled_result = assert_mapping(
@@ -1582,6 +1587,10 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
     transient_cooldown_input = page.get_by_label("Transient Error Cooldown (seconds)")
     transient_cooldown_input.scroll_into_view_if_needed()
     transient_cooldown_input.fill("0")
+    routing_strategy_select = page.get_by_label("Routing Strategy")
+    routing_strategy_select.scroll_into_view_if_needed()
+    routing_strategy_select.click()
+    page.get_by_role("option", name="Weighted Round Robin", exact=True).click()
     disable_image_generation_select = page.get_by_label("Disable Image Generation")
     disable_image_generation_select.scroll_into_view_if_needed()
     if disable_image_generation_select.inner_text().strip() != (
@@ -1652,6 +1661,8 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
         raise AssertionError(
             "Browser visual save did not persist transient-error-cooldown-seconds"
         )
+    if "strategy: weighted-round-robin" not in visual_saved_yaml:
+        raise AssertionError("Browser visual save did not persist weighted-round-robin")
     if "disable-image-generation: passthrough" not in visual_saved_yaml:
         raise AssertionError(
             "Browser visual save did not persist disable-image-generation passthrough"
@@ -1715,6 +1726,9 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
     page.get_by_text("Config Panel", exact=False).first.wait_for()
     page.get_by_role("button", name="Visual Editor").click()
     page.get_by_role("tab", name="Network & Routing", exact=True).click()
+    if page.get_by_label("Routing Strategy").inner_text().strip() != "Weighted Round Robin":
+        raise AssertionError("Browser visual editor did not reload weighted-round-robin")
+    seen.append("BROWSER visual save and reload weighted-round-robin")
     if page.get_by_label("Disable Image Generation").inner_text().strip() != (
         "passthrough (preserve client tools)"
     ):
@@ -1753,6 +1767,10 @@ def provider_row_for_api_key(page: Any, api_key: str) -> Any:
 
 
 BROWSER_PROVIDER_KEY_CRUD_MARKERS = (
+    "BROWSER provider workbench Interactions API create PUT /v0/management/interactions-api-key",
+    "BROWSER provider workbench Interactions API update PUT /v0/management/interactions-api-key",
+    "BROWSER provider workbench Interactions API delete DELETE /v0/management/interactions-api-key",
+    "BROWSER provider workbench Interactions API weight round-trip",
     "BROWSER provider workbench Claude create PUT /v0/management/claude-api-key",
     "BROWSER provider workbench Claude update PUT /v0/management/claude-api-key",
     "BROWSER provider workbench Claude delete DELETE /v0/management/claude-api-key",
@@ -1773,10 +1791,12 @@ def run_browser_provider_key_crud_smoke(
     api_key: str,
     create_base_url: str,
     update_base_url: str,
+    weight: int | None = None,
 ) -> list[str]:
     seen: list[str] = []
-    model_name = f"{label.lower()}-browser-model"
-    model_alias = f"{label.lower()}-browser-alias"
+    label_slug = re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-")
+    model_name = f"{label_slug}-browser-model"
+    model_alias = f"{label_slug}-browser-alias"
     created_display_name = f"{label} Browser Model"
     updated_display_name = f"{label} Browser Model Updated"
 
@@ -1788,6 +1808,8 @@ def run_browser_provider_key_crud_smoke(
     sheet = page.get_by_role("dialog").last
     sheet.get_by_role("textbox", name="API key").fill(api_key)
     sheet.get_by_label("Base URL").fill(create_base_url)
+    if weight is not None:
+        sheet.get_by_label("Scheduling weight").fill(str(weight))
     if label == "Claude":
         sheet.get_by_role("button", name="Request fingerprint").click()
         page.get_by_role("option", name="Claude Code CLI", exact=True).click()
@@ -1826,6 +1848,7 @@ def run_browser_provider_key_crud_smoke(
     if not isinstance(create_payload, list) or not any(
         isinstance(item, dict)
         and item.get("api-key") == api_key
+        and (weight is None or item.get("weight") == weight)
         and (label != "Claude" or item.get("fingerprint-profile") == "claude-code-cli")
         and any(
             isinstance(model, dict)
@@ -1844,6 +1867,7 @@ def run_browser_provider_key_crud_smoke(
         isinstance(item, dict)
         and item.get("api-key") == api_key
         and item.get("base-url") == create_base_url
+        and (weight is None or item.get("weight") == weight)
         and (label != "Claude" or item.get("fingerprint-profile") == "claude-code-cli")
         and any(
             isinstance(model, dict)
@@ -1868,6 +1892,11 @@ def run_browser_provider_key_crud_smoke(
     row.get_by_role("button", name="Edit").click()
     sheet = page.get_by_role("dialog").last
     sheet.get_by_label("Base URL").fill(update_base_url)
+    if weight is not None:
+        weight_input = sheet.get_by_label("Scheduling weight")
+        if weight_input.input_value() != str(weight):
+            raise AssertionError(f"{label} edit did not reload credential weight")
+        weight_input.fill(str(weight + 1))
     if label == "Claude":
         fingerprint_select = sheet.get_by_role("button", name="Request fingerprint")
         if fingerprint_select.inner_text().strip() != "Claude Code CLI":
@@ -1899,6 +1928,7 @@ def run_browser_provider_key_crud_smoke(
         isinstance(item, dict)
         and item.get("api-key") == api_key
         and item.get("base-url") == update_base_url
+        and (weight is None or item.get("weight") == weight + 1)
         and (label != "Claude" or "fingerprint-profile" not in item)
         and any(
             isinstance(model, dict)
@@ -1915,6 +1945,8 @@ def run_browser_provider_key_crud_smoke(
     seen.append(f"BROWSER provider workbench {label} thinking capability round-trip and reset")
     if label == "Claude":
         seen.append("BROWSER provider workbench Claude fingerprint-profile round-trip and reset")
+    if weight is not None:
+        seen.append(f"BROWSER provider workbench {label} weight round-trip")
 
     row = provider_row_for_api_key(page, api_key)
     row.get_by_role("button", name="Delete").click()
@@ -2159,6 +2191,21 @@ def run_browser_provider_workbench_smoke(page: Any, app_url: str, api_url: str) 
     )
     if any(isinstance(item, dict) and item.get("api-key") == "xai-browser-new" for item in xai_after_delete):
         raise AssertionError(f"xAI browser delete did not remove the created key: {xai_after_delete!r}")
+
+    seen.extend(
+        run_browser_provider_key_crud_smoke(
+            page,
+            api_url,
+            label="Interactions API",
+            button_pattern=r"^Interactions API\b",
+            endpoint="/v0/management/interactions-api-key",
+            response_key="interactions-api-key",
+            api_key="interactions-browser-new",
+            create_base_url="https://interactions.browser.example",
+            update_base_url="https://interactions.browser-updated.example",
+            weight=5,
+        )
+    )
 
     seen.extend(
         run_browser_provider_key_crud_smoke(

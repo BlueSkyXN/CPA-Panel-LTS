@@ -169,7 +169,7 @@ features:
 
   - id: dashboard-overview
     status: shared
-    reason: Dashboard provider counts must derive from cached config without dropping LTS-maintained providers (including ampcode) or presenting load failures as real zero counts. The upstream visual rewrite (features/dashboard + shared motion hooks) was ported on top of the LTS data contract.
+    reason: Dashboard provider counts must derive from cached config without dropping LTS-maintained providers (including ampcode and Interactions API) or presenting load failures as real zero counts. The upstream visual rewrite (features/dashboard + shared motion hooks) was ported on top of the LTS data contract.
     routes:
       - /
       - /dashboard
@@ -202,6 +202,7 @@ features:
       - fetchConfig
       - countAmpcodeConfig
       - config.ampcode
+      - config.interactionsApiKeys
       - modelsApi.fetchModels
       - useProviderRecentRequests
       - summarizeProviderTraffic
@@ -249,7 +250,7 @@ features:
 
   - id: provider-workbench
     status: coexist
-    reason: The Workbench is the canonical provider management surface at /ai-providers; /ai-providers/workbench remains a redirect alias, while the legacy LTS provider page stays available under /ai-providers/legacy. It must preserve and edit Core model mapping fields including canonical display-name from Core v7.2.70 or later. Its all-provider thinking editor follows Core ThinkingSupport fields levels, min, max, zero_allowed, and dynamic_allowed. It does not expose the Codex client-only ultra compatibility preset as a provider wire capability, while unknown existing levels and fields remain lossless through advanced JSON. The accepted xAI API-key adapt-port targets the current CPA-Core-LTS xai-api-key management contract, preserves unknown config fields, and uses api-key plus base-url selectors. Branded groups, including the Infistar adaptation, remain config-detected only and must not add promotional quick-start routes, affiliate metadata, recommendations, or registration links.
+    reason: The Workbench is the canonical provider management surface at /ai-providers; /ai-providers/workbench remains a redirect alias, while the legacy LTS provider page stays available under /ai-providers/legacy. It must preserve and edit Core model mapping fields including canonical display-name from Core v7.2.70 or later. Its all-provider thinking editor follows Core ThinkingSupport fields levels, min, max, zero_allowed, and dynamic_allowed. It does not expose the Codex client-only ultra compatibility preset as a provider wire capability, while unknown existing levels and fields remain lossless through advanced JSON. The accepted xAI and Interactions API adapt-ports target current CPA-Core-LTS management contracts, preserve unknown config fields, and use api-key plus base-url selectors. Credential weights round-trip for provider keys and OpenAI key entries. Branded groups, including the Infistar adaptation, remain config-detected only and must not add promotional quick-start routes, affiliate metadata, recommendations, or registration links.
     routes:
       - /ai-providers
       - /ai-providers/workbench
@@ -274,14 +275,18 @@ features:
       - src/features/providers/sheets/forms/useModelDiscovery.ts
       - src/features/providers/sheets/forms/useConnectivityTest.ts
       - src/features/providers/adapters.ts
+      - src/components/providers/utils.ts
       - src/components/providers/hooks/useProviderRecentRequests.ts
       - src/components/providers/hooks/providerRecentRequests.test.mjs
       - src/components/ui/modelInputListUtils.ts
       - src/services/api/config.ts
       - src/services/api/providers.ts
       - src/services/api/transformers.ts
+      - src/stores/useConfigStore.ts
+      - src/types/config.ts
       - src/services/api/apiKeyUsage.ts
       - src/types/provider.ts
+      - src/utils/credentialWeight.ts
       - src/utils/recentRequests.ts
       - scripts/smoke-lts-panel.py
       - scripts/smoke-lts-panel-core.py
@@ -289,6 +294,7 @@ features:
       - /v0/management/config
       - /v0/management/api-key-usage
       - /v0/management/gemini-api-key
+      - /v0/management/interactions-api-key
       - /v0/management/codex-api-key
       - /v0/management/xai-api-key
       - /v0/management/claude-api-key
@@ -304,6 +310,16 @@ features:
       - updateXAIConfig
       - deleteXAIConfig
       - xai-api-key
+      - interactions-api-key
+      - createInteractionsKey
+      - updateInteractionsKey
+      - deleteInteractionsKey
+      - buildInteractionsEndpoint
+      - INTERACTIONS_API_REVISION
+      - gemini-interactions
+      - manages Interactions API resources through the Core contract
+      - BROWSER provider workbench Interactions API weight round-trip
+      - round-trips credential weights without dropping provider fields
       - CODE0_PROVIDER_NAME
       - FENNO_AI_PROVIDER_NAME
       - QINIU_CLOUD_PROVIDER_NAME
@@ -521,7 +537,7 @@ features:
 
   - id: config-management
     status: shared
-    reason: Source and visual config saves must preserve unmanaged YAML, plugin store sources, and concurrent server-side changes.
+    reason: Source and visual config saves must preserve unmanaged YAML, plugin store sources, concurrent server-side changes, and the Core weighted-round-robin routing strategy.
     routes:
       - /config
     panel_files:
@@ -532,6 +548,7 @@ features:
       - src/services/api/config.ts
       - src/services/api/configFile.ts
       - src/types/visualConfig.ts
+      - src/utils/credentialWeight.ts
       - src/utils/apiKey.ts
       - src/utils/apiKeyStrength.ts
       - scripts/smoke-lts-panel.py
@@ -566,6 +583,10 @@ features:
       - ApiKeyStrengthMeter
       - evaluateApiKeyStrength
       - meta_errors
+      - weighted-round-robin
+      - parseRoutingStrategy
+      - MAX_CREDENTIAL_WEIGHT
+      - BROWSER visual save and reload weighted-round-robin
     validation:
       - npm run test:config
       - npm run smoke:lts
@@ -699,7 +720,7 @@ features:
 
   - id: auth-files-management
     status: shared
-    reason: Auth files are shared credential management, OAuth alias and exclusion editing, xAI official API routing, and quota state inputs.
+    reason: Auth files are shared credential management, OAuth alias and exclusion editing, xAI official API routing, weighted-round-robin credential weight editing, and quota state inputs.
     routes:
       - /auth-files
       - /auth-files/oauth-excluded
@@ -713,6 +734,7 @@ features:
       - src/components/modelAlias/
       - src/features/authFiles/
       - src/features/authFiles/oauthConfigLoadGuard.test.mjs
+      - src/utils/quota/upstreamQuotaPort.test.mjs
       - src/hooks/useUnsavedChangesGuard.ts
       - src/services/api/authFiles.ts
       - src/services/api/oauth.ts
@@ -720,6 +742,7 @@ features:
       - src/i18n/locales/
       - src/types/authFile.ts
       - src/types/oauth.ts
+      - src/utils/credentialWeight.ts
       - scripts/smoke-lts-panel.py
       - scripts/smoke-lts-panel-core.py
     core_endpoints:
@@ -761,13 +784,18 @@ features:
       - OAuthConfigLoadError
       - canWriteOAuthConfig
       - run_oauth_load_failure_smoke
+      - 'weight?: number | null'
+      - validateCredentialWeightText
+      - weight_invalid_max
+      - accepts WRR strategy aliases and enforces credential weight bounds
+      - Auth file credential weight round-tripped through Core
     validation:
       - npm run test:auth-files
       - npm run smoke:lts
 
   - id: quota-management
     status: shared
-    reason: Quota surfaces include LTS Codex quota helpers, companion ChatGPT userscripts, and accepted xAI/Grok quota support.
+    reason: Quota surfaces include LTS Codex quota helpers, companion ChatGPT userscripts, accepted xAI/Grok quota support, and the current Antigravity quota-summary groups plus best-effort subscription metadata.
     routes:
       - /quota
     panel_files:
@@ -776,6 +804,7 @@ features:
       - src/features/authFiles/components/AuthFileQuotaSection.tsx
       - src/features/authFiles/constants.ts
       - src/services/api/apiCall.ts
+      - src/services/api/antigravitySubscription.ts
       - src/stores/useAuthStore.ts
       - src/stores/useQuotaStore.ts
       - src/types/quota.ts
@@ -794,6 +823,13 @@ features:
       - CODEX_RATE_LIMIT_RESET_CREDITS_CONSUME_URL
       - CODEX_REQUEST_HEADERS
       - codex-tui/0.149.1
+      - retrieveUserQuotaSummary
+      - antigravity/cli/1.0.13
+      - ANTIGRAVITY_CODE_ASSIST_URL
+      - buildAntigravityQuotaGroups
+      - AntigravityQuotaSummaryPayload
+      - missing_project_id
+      - parses Antigravity quota-summary groups and current request identity
       - XAI_CONFIG
       - fetchXaiQuota
       - XAI_BILLING_WEEKLY_URL

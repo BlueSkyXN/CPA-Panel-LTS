@@ -351,6 +351,27 @@ The dangling objects remain only historical recovery material. Their presence is
 
 The completed intake passed `npm run validate:lts`, `npm run smoke:lts`, and the full `npm run smoke:lts:core`. The real-Core smoke used temporary local configuration against the clean sibling Core checkout at `3ec9109b69aa5377763166fa891d7831960490e3` and proved Claude fingerprint create, readback, reset, and delete through the Management API and browser workbench. The accepted schema was also read directly from `CPA-Core-LTS origin/main` at `7eadb07e34139af5e0922a8a5c97485be8a4267c`. These checks do not establish a GitHub merge, release, deployment, live ChatGPT quota acceptance, or business UAT.
 
+## Core-backed deferred-contract reassessment (2026-08-29)
+
+The historical `defer` decisions for WRR, auth-file weight, and Interactions API were correct while the companion Core contract was absent. They are superseded for current maintenance only after a fresh cross-repository readback:
+
+- Panel baseline: `origin/main` at `987d9903e1a15f25aa5c196d0532242c80586d1a`
+- Panel upstream: `upstream/main` at `d249ff008e0bc2803deb23fb3e2c62418a1e8d17` (`v1.22.9`)
+- companion Core contract: `CPA-Core-LTS origin/main` at `dd465fb4002fc2846544f0dbcda879e1411792b8d`
+- Core now registers GET/PUT/PATCH/DELETE for `/v0/management/interactions-api-key`, validates credential weights up to `1,000,000`, accepts `weighted-round-robin`/`wrr`, excludes non-positive weights under WRR, and owns the `gemini-interactions` executor with default `Api-Revision: 2026-05-20`
+
+| Upstream dependency | Classification | Current LTS decision |
+|---|---|---|
+| `e95cc2b621e3b5836091a03c9b6be22aacdbd8cb`, `c595ada`, `3dc365f` | `adapt-port` | Adapt the Antigravity `retrieveUserQuotaSummary` group/bucket payload, project discovery, server clock offset, current `antigravity/cli/1.0.13` identity, and best-effort `loadCodeAssist` plan lookup into the existing LTS quota host. Do not migrate the replacement quota shell, timeline, global relative-time framework, or soonest-recovery sorting. |
+| `8faaa395346624258408b442a5d4923f3b0e1fc8`, `90971e8f6a573e800dc8909c350285bf2f1c2396` | `adapt-port` | Add `weighted-round-robin` to the existing visual Config editor and round-trip integer `weight` across provider keys, OpenAI key entries, configured multi-protocol groups, and the existing auth-file fields modal. Omitted weight remains Core default `1`; values at or below `0` retain Core exclusion semantics. No new routing abstraction or replacement AuthFiles UI is introduced. |
+| `530b585bd0b72448bc576e970b0f2c6f1f55df11` | `adapt-port` | Add commercial-neutral Interactions API management to the existing Workbench: config normalization, unknown-field-preserving CRUD, Gemini model discovery, `/v1beta/interactions` connectivity payload, `Api-Revision`, `gemini-interactions` usage mapping, dashboard count, and four locales. No registration link, affiliate metadata, sponsor placement, or quick-start route is accepted. |
+| `3738c0b` | `reject` | The paid xAI fallback performs a POST health request to `/v1/chat/completions`. LTS quota reads must not create a potentially billable probe merely to label an account; the existing read-only billing/control-plane flow remains. |
+| `ea107fd`, `0272e9b`, `001e130`, `afee40e` and the replacement Config/Quota shells | `defer` | Timeline, global relative-time, soonest sort, urgency decoration, and whole-shell migration are separate product/architecture changes with no correctness dependency for these contract ports. |
+
+Existing commercial-neutral rejections remain in force: commercial API-key referral integrations, APIMart and its assets, BestProxy referrals, provider registration links, affiliate fields, sponsor recommendations, and commercial roster-driven hiding do not enter LTS. Cursor quota and other open provider proposals remain deferred until their own Core/data contracts and product decisions are independently proven.
+
+This reassessment deliberately adds no dependency, no release workflow, no tag, no deployment, and no broad test framework. The implementation passed the focused quota/auth-files/providers/dashboard suites, `npm run validate:lts`, and `npm run smoke:lts`. Real-Core validation used an exact detached worktree at Core `dd465fb4002fc2846544f0dbcda879e1411792b8d`: the full write phase proved auth-file weight persistence, and the final `--no-write-smoke` browser run proved WRR visual save/reload plus Interactions create/update/readback/delete and weight round-trip. One intermediate retry encountered the pre-existing plugin config PATCH readback flake after that same plugin check had already passed; no product or expected-value change was made for it. These checks do not claim a release, deployment, paid upstream probe, live Antigravity account acceptance, or business UAT.
+
 ## Official Grok billing identity maintenance (2026-08-13)
 
 This maintenance item is based on the public `xai-org/grok-build` source at `e5fd4816d43260c15ba785f103990c1ed6cea230` (Grok Shell `1.0.3`), not on a Management Center upstream commit. Its `x.ai/billing` handler still calls `GET /billing?format=credits` and sends the OAuth bearer placeholder, `X-XAI-Token-Auth: xai-grok-cli`, the auth-file user ID, the Grok Shell version, and `x-grok-client-mode: interactive`; the interactive Pager startup identity makes the shared client render `grok-pager/1.0.3 grok-shell/1.0.3 (macos; aarch64)` on the matching local platform.
