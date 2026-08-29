@@ -20,7 +20,7 @@ from urllib.request import Request, urlopen
 DEFAULT_CORE_URL = "http://127.0.0.1:8317"
 MANAGEMENT_PATH = "/v0/management"
 CODEX_USAGE_URL = "https://chatgpt.com/backend-api/wham/usage"
-CODEX_USER_AGENT = "codex_cli_rs/0.76.0 (Debian 13.0.0; x86_64) WindowsTerminal"
+CODEX_USER_AGENT = "codex-tui/0.149.1 (Mac OS 26.5.2; arm64) iTerm.app/3.6.11 (codex-tui; 0.149.1)"
 
 EXIT_OK = 0
 EXIT_QUERY_FAILED = 1

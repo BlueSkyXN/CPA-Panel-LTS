@@ -351,6 +351,12 @@ features:
       - dynamic_allowed
       - thinking capability round-trip and reset
       - legacy model inputs preserve fields that are not visually editable
+      - fingerprint-profile
+      - claudeCodeCliProfile
+      - fingerprintProfileClaudeCodeCli
+      - round-trips the Claude fingerprint profile without dropping unknown fields
+      - cleared Claude fingerprint profile without dropping unknown fields
+      - BROWSER provider workbench Claude fingerprint-profile round-trip and reset
     validation:
       - npm run test:providers
       - npm run smoke:lts
@@ -399,6 +405,7 @@ features:
       - src/features/plugins/pluginReleaseVersions.ts
       - src/features/plugins/pluginResources.ts
       - src/features/plugins/pluginConfigDraft.ts
+      - src/features/plugins/pluginResources.test.mjs
       - src/features/plugins/components/PluginInstallGateModal.tsx
       - src/features/plugins/components/PluginInstallGateModal.module.scss
       - src/components/config/VisualConfigEditor.tsx
@@ -447,6 +454,7 @@ features:
       - arm_delayed_config_response
       - run_plugin_config_smoke
       - isOfficialRepository
+      - trusts only the official source with an official GitHub repository
       - supportsPluginVersionSelection
       - buildPluginConfigPatch
       - patchConfig
@@ -456,6 +464,7 @@ features:
       - plugin_id = "lts-smoke-plugin"
     validation:
       - npm run test:api-client
+      - npm run test:plugins
       - npm run smoke:lts
 
   - id: recent-requests
@@ -744,6 +753,9 @@ features:
       - hasModelAliasConflict
       - isOAuthEditorDirty
       - getEffectiveOAuthExcludedRules
+      - preserves OAuth model-alias force mapping in both wire variants
+      - normalizes and toggles OAuth excluded rules without dropping custom patterns
+      - keeps OAuth dirty signatures stable while detecting partial edits
       - useUnsavedChangesGuard
       - run_oauth_editor_smoke
       - OAuthConfigLoadError
@@ -780,6 +792,8 @@ features:
       - resetCodexQuota
       - CODEX_RATE_LIMIT_RESET_CREDITS_URL
       - CODEX_RATE_LIMIT_RESET_CREDITS_CONSUME_URL
+      - CODEX_REQUEST_HEADERS
+      - codex-tui/0.149.1
       - XAI_CONFIG
       - fetchXaiQuota
       - XAI_BILLING_WEEKLY_URL

@@ -14,6 +14,7 @@ const vite = await createServer({
 const [
   transformers,
   providers,
+  client,
   adapters,
   code0,
   fennoAI,
@@ -28,6 +29,7 @@ const [
 ] = await Promise.all([
   vite.ssrLoadModule('/src/services/api/transformers.ts'),
   vite.ssrLoadModule('/src/services/api/providers.ts'),
+  vite.ssrLoadModule('/src/services/api/client.ts'),
   vite.ssrLoadModule('/src/features/providers/adapters.ts'),
   vite.ssrLoadModule('/src/features/providers/code0.ts'),
   vite.ssrLoadModule('/src/features/providers/fennoAI.ts'),
@@ -197,6 +199,103 @@ test('recognizes the current and legacy ClaudeAPI gateways without affiliate met
     Object.keys(claudeApi).some((key) => key.toLowerCase().includes('affiliate')),
     false
   );
+});
+
+test('round-trips the Claude fingerprint profile without dropping unknown fields', async () => {
+  const config = transformers.normalizeConfigResponse({
+    'claude-api-key': [
+      {
+        'api-key': 'claude-secret',
+        'base-url': 'https://api.anthropic.com',
+        'fingerprint-profile': 'claude-code-cli',
+      },
+    ],
+  });
+
+  assert.deepEqual(config.claudeApiKeys, [
+    {
+      apiKey: 'claude-secret',
+      baseUrl: 'https://api.anthropic.com',
+      fingerprintProfile: 'claude-code-cli',
+    },
+  ]);
+  assert.equal(
+    adapters.claudeToResource(config.claudeApiKeys[0], 0).flags.claudeCodeCliProfile,
+    true
+  );
+  assert.equal(
+    adapters.claudeApiToResource(config.claudeApiKeys[0], 0).flags.claudeCodeCliProfile,
+    true
+  );
+
+  const originalGet = client.apiClient.get;
+  const originalPut = client.apiClient.put;
+  const calls = [];
+  let configRead = 0;
+  client.apiClient.get = async (url) => {
+    calls.push({ method: 'GET', url });
+    configRead += 1;
+    return configRead === 1
+      ? { 'claude-api-key': [] }
+      : {
+          'claude-api-key': [
+            {
+              'api-key': 'claude-secret',
+              'base-url': 'https://api.anthropic.com',
+              'fingerprint-profile': 'claude-code-cli',
+              'experimental-cch-signing': true,
+              'future-field': 'preserved',
+              'auth-index': 'response-only',
+            },
+          ],
+        };
+  };
+  client.apiClient.put = async (url, data) => {
+    calls.push({ method: 'PUT', url, data });
+  };
+
+  try {
+    await providers.providersApi.createClaudeConfig({
+      apiKey: 'new-claude-secret',
+      baseUrl: 'https://api.anthropic.com',
+      fingerprintProfile: 'claude-code-cli',
+    });
+    await providers.providersApi.updateClaudeConfig('claude-secret', 'https://api.anthropic.com', {
+      apiKey: 'claude-secret',
+      baseUrl: 'https://api.anthropic.com',
+      fingerprintProfile: '',
+    });
+  } finally {
+    client.apiClient.get = originalGet;
+    client.apiClient.put = originalPut;
+  }
+
+  assert.deepEqual(calls, [
+    { method: 'GET', url: '/config' },
+    {
+      method: 'PUT',
+      url: '/claude-api-key',
+      data: [
+        {
+          'api-key': 'new-claude-secret',
+          'base-url': 'https://api.anthropic.com',
+          'fingerprint-profile': 'claude-code-cli',
+        },
+      ],
+    },
+    { method: 'GET', url: '/config' },
+    {
+      method: 'PUT',
+      url: '/claude-api-key',
+      data: [
+        {
+          'future-field': 'preserved',
+          'api-key': 'claude-secret',
+          'base-url': 'https://api.anthropic.com',
+        },
+      ],
+    },
+  ]);
 });
 
 test('updates standard thinking levels without dropping advanced config', () => {
