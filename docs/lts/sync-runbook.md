@@ -305,11 +305,11 @@ The `v1.22.6` tag still descends from the rejected BestProxy referral and layout
 
 This intake changes only the durable decision record. Its required validation is the repository's docs-only `git diff --check`, status, and changed-file review; no product behavior or release was changed.
 
-## Audited seven-day v1.22.7-v1.22.9 intake (2026-08-28)
+## Audited seven-day v1.22.7-v1.22.9 intake (2026-08-29)
 
 Refs and tags were fetched without pruning before commit-level diff review:
 
-- review window: `2026-08-21T00:00:00+08:00` through `2026-08-28T22:51:23+08:00`
+- review window: `2026-08-22T00:00:00+08:00` through `2026-08-29T20:58:03+08:00`, selected by committer time
 - previous audited boundary: `6586f88858ca27e840bd8db2630dccd371a1cd4a` (`v1.22.6`)
 - `origin/main` at intake start: `2f2192853391231f1076697a67a326b629ba05e9`
 - `upstream/main` and `upstream/dev`: `d249ff008e0bc2803deb23fb3e2c62418a1e8d17` (`v1.22.9`)
@@ -330,6 +330,7 @@ Open upstream PRs updated in the same window were reviewed separately because th
 
 | Open upstream PR / head | Classification | LTS evidence and decision |
 |---|---|---|
+| `#399` / `1842c5948a63c65f073aeb5af66528812e2dba53` | `defer` | OrcaRouter can use the existing OpenAI-compatible and Claude config contracts, so it does not require a new Core endpoint; the only related Core PR #4950 is a still-open documentation example. However, this provider-team-authored PR is `REVIEW_REQUIRED`/`BLOCKED` with no checks or reviews, and its upstream implementation adds a permanent first-class commercial brand rather than LTS's config-detected, recommendation-free behavior. Current LTS/Core source contains no OrcaRouter-specific contract or demonstrated configured use. Reassess after upstream review/merge or a real configuration need, then manually adapt it with `sourceIndex`/unknown-field preservation, Node/Vite tests, browser mutation recovery, and `CONFIG_DETECTED_BRANDS`; do not port this exact PR now. |
 | `#398` / `927034542f6e71cd1e6f9aebbc7ba972b87890d3` | `defer` | Command Code provider management depends on still-open Core PR #5060 and `/commandcode-api-key`; current CPA-Core-LTS has no matching config or Management API contract. Reassess as a provider-workbench adaptation only after Core support lands, while retaining `ampcode` counts, unknown fields, stable providers, and full usage. |
 | `#397` / `b1b7944d8fe50328de897b0148f5d7190ffc73c8` | `reject` | The Tor proposal mixes five commits, 38 files, a large unrelated lockfile/config/UI bundle, duplicate Tor panels, and routes not proven registered by still-open Core PR #5282. LTS also uses a different protected Config architecture. If Core later ships a reviewed Tor contract, start a clean Config adapt-port rather than reuse this branch. |
 | `#393` / `1f6d0f7a00e6c602d3a1292746d8962a081ac4ab` | `defer` | Native `kimi-api-key` depends on still-open Core PR #5225, replaces the current OpenAI plus Claude dual-protocol model without a migration decision, and retains affiliate behavior rejected by LTS. Reassess only as a commercial-neutral, config-detected full-chain adaptation after the Core contract lands. |
