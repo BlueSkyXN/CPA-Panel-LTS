@@ -29,6 +29,15 @@ interface CommandPaletteProps {
 
 type PaletteEntry = { kind: 'page'; index: number } | { kind: 'action'; index: number };
 
+const FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
+
 interface ScoredEntry {
   entry: PaletteEntry;
   score: number;
@@ -68,6 +77,7 @@ export function CommandPalette({ onClose, pages, actions }: CommandPaletteProps)
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const paletteRef = useRef<HTMLDivElement | null>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -154,6 +164,32 @@ export function CommandPalette({ onClose, pages, actions }: CommandPaletteProps)
         onClose();
         return;
       }
+      if (event.key === 'Tab') {
+        const focusableElements = Array.from(
+          paletteRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR) ?? []
+        ).filter((element) => !element.hasAttribute('disabled') && element.tabIndex !== -1);
+        if (focusableElements.length === 0) {
+          event.preventDefault();
+          paletteRef.current?.focus();
+          return;
+        }
+
+        const firstElement = focusableElements[0];
+        const lastElement = focusableElements[focusableElements.length - 1];
+        const activeElement = document.activeElement as HTMLElement | null;
+        if (event.shiftKey) {
+          if (activeElement === firstElement || activeElement === paletteRef.current) {
+            event.preventDefault();
+            lastElement.focus();
+          }
+          return;
+        }
+        if (activeElement === lastElement) {
+          event.preventDefault();
+          firstElement.focus();
+        }
+        return;
+      }
       if (event.key === 'ArrowDown') {
         event.preventDefault();
         setActiveIndex((current) =>
@@ -235,10 +271,12 @@ export function CommandPalette({ onClose, pages, actions }: CommandPaletteProps)
       }}
     >
       <div
+        ref={paletteRef}
         className="command-palette"
         role="dialog"
         aria-modal="true"
         aria-label={t('command_palette.title')}
+        tabIndex={-1}
         onKeyDown={handleKeyDown}
       >
         <div className="command-palette-input-row">

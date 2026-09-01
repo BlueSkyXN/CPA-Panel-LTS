@@ -46,8 +46,7 @@ import {
 } from '@/stores';
 import { triggerHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
-import { authFilesApi, pluginsApi } from '@/services/api';
-import { AUTH_FILES_CHANGED_EVENT } from '@/features/authFiles/authFilesEvents';
+import { pluginsApi } from '@/services/api';
 import {
   collectPluginResourceEntries,
   PLUGIN_RESOURCES_REFRESH_EVENT,
@@ -191,8 +190,6 @@ export function MainLayout() {
   const supportsPlugin = useAuthStore((state) => state.supportsPlugin);
   const pluginSupportKnown = useAuthStore((state) => state.pluginSupportKnown);
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
-  const apiBase = useAuthStore((state) => state.apiBase);
-
   const config = useConfigStore((state) => state.config);
   const fetchConfig = useConfigStore((state) => state.fetchConfig);
   const clearCache = useConfigStore((state) => state.clearCache);
@@ -214,12 +211,10 @@ export function MainLayout() {
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [pluginResourceEntries, setPluginResourceEntries] = useState<PluginResourceEntry[]>([]);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [authFilesCount, setAuthFilesCount] = useState<number | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const languageMenuRef = useRef<HTMLDivElement | null>(null);
   const themeMenuRef = useRef<HTMLDivElement | null>(null);
   const headerRef = useRef<HTMLElement | null>(null);
-  const authFilesCountRequestRef = useRef(0);
 
   const fullBrandName = 'CLI Proxy API Management Center';
   const abbrBrandName = t('title.abbr');
@@ -250,36 +245,6 @@ export function MainLayout() {
       setPluginResourceEntries([]);
     }
   }, [canLoadPlugins]);
-
-  const loadAuthFilesCount = useCallback(async () => {
-    const requestID = ++authFilesCountRequestRef.current;
-    if (connectionStatus !== 'connected') {
-      setAuthFilesCount(null);
-      return;
-    }
-
-    try {
-      const response = await authFilesApi.list();
-      if (requestID !== authFilesCountRequestRef.current) return;
-      setAuthFilesCount(Array.isArray(response?.files) ? response.files.length : null);
-    } catch {
-      if (requestID !== authFilesCountRequestRef.current) return;
-      setAuthFilesCount(null);
-    }
-  }, [connectionStatus]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void loadAuthFilesCount();
-    }, 0);
-    window.addEventListener(AUTH_FILES_CHANGED_EVENT, loadAuthFilesCount);
-
-    return () => {
-      authFilesCountRequestRef.current += 1;
-      window.clearTimeout(timer);
-      window.removeEventListener(AUTH_FILES_CHANGED_EVENT, loadAuthFilesCount);
-    };
-  }, [apiBase, loadAuthFilesCount]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -556,7 +521,6 @@ export function MainLayout() {
     path: '/auth-files',
     label: t('nav.auth_files'),
     meta: t('nav_meta.auth_files'),
-    badge: authFilesCount ?? undefined,
     icon: sidebarIcons.authFiles,
   };
   const oauthItem: SidebarNavItem = {
@@ -810,7 +774,6 @@ export function MainLayout() {
       fetchConfig(undefined, true),
       triggerHeaderRefresh(),
       loadPluginResources(),
-      loadAuthFilesCount(),
     ]);
     const rejected = results.find((result) => result.status === 'rejected');
     if (rejected && rejected.status === 'rejected') {

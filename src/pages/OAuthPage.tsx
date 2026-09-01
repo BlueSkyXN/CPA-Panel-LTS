@@ -7,7 +7,6 @@ import { Input } from '@/components/ui/Input';
 import { useNotificationStore } from '@/stores';
 import { oauthApi, type OAuthProvider } from '@/services/api/oauth';
 import { vertexApi, type VertexImportResponse } from '@/services/api/vertex';
-import { notifyAuthFilesChanged } from '@/features/authFiles/authFilesEvents';
 import { copyToClipboard } from '@/utils/clipboard';
 import { getErrorMessage, isRecord } from '@/utils/helpers';
 import styles from './OAuthPage.module.scss';
@@ -244,7 +243,6 @@ export function OAuthPage() {
   const completeProviderAuth = (provider: OAuthProvider) => {
     clearPollingTimer(provider);
     clearSuccessResetTimer(provider);
-    notifyAuthFilesChanged();
     updateProviderState(provider, {
       url: undefined,
       state: undefined,
@@ -370,7 +368,6 @@ export function OAuthPage() {
     try {
       await oauthApi.submitCallback(provider, redirectUrl);
       updateProviderState(provider, { callbackSubmitting: false, callbackStatus: 'success' });
-      notifyAuthFilesChanged();
       showNotification(t('auth_login.oauth_callback_success'), 'success');
     } catch (err: unknown) {
       const status = getErrorStatus(err);
@@ -436,7 +433,6 @@ export function OAuthPage() {
         authFile: res['auth-file'] ?? res.auth_file
       };
       setVertexState((prev) => ({ ...prev, loading: false, result }));
-      notifyAuthFilesChanged();
       showNotification(t('vertex_import.success'), 'success');
     } catch (err: unknown) {
       const message = getErrorMessage(err);
