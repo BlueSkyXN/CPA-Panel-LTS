@@ -26,12 +26,18 @@ import { buildSourceInfoMap, resolveSourceDisplay } from '@/utils/sourceResolver
 import { parseTimestampMs } from '@/utils/timestamp';
 import {
   classifyServiceTier,
+  calculateAverageTps,
   calculateCostEstimate,
+  calculateDecodeDurationMs,
+  calculateOutputTps,
   collectUsageDetails,
   extractLatencyMs,
+  extractTTFBMs,
   extractTotalTokens,
   formatDurationMs,
+  formatPerSecondValue,
   LATENCY_SOURCE_FIELD,
+  TTFB_SOURCE_FIELD,
   normalizeAuthIndex,
   resolveServiceTier,
   type CostEstimateStatus,
@@ -58,6 +64,12 @@ const RESULT_FAILED_FILTER = '__result_failed__';
 const CACHE_PRESENT_FILTER = '__cache_present__';
 const CACHE_ABSENT_FILTER = '__cache_absent__';
 const MAX_RENDERED_EVENTS = 500;
+const REQUEST_IDENTITY_ENDPOINT_REGEX = /^(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\s+\/\S*/i;
+const maskRequestKey = (value: string): string => {
+  if (value.length <= 4) return '**';
+  if (value.length <= 7) return `${value.slice(0, 1)}**${value.slice(-1)}`;
+  return `${value.slice(0, 2)}**${value.slice(-2)}`;
+};
 const LEGACY_COLUMN_VISIBILITY_STORAGE_KEYS = [
   'cli-proxy-usage-request-event-columns-v1',
   'cli-proxy-usage-request-event-columns-v2',
@@ -96,11 +108,15 @@ const CACHE_RATE_HIGH_THRESHOLD = 0.6;
 const REQUEST_EVENT_COLUMN_IDS = [
   'timestamp',
   'model',
+  'requestKey',
   'source',
   'authIndex',
   'tier',
   'result',
   'latency',
+  'ttfb',
+  'outputTps',
+  'averageTps',
   'effort',
   'totalInputTokens',
   'nonCacheReadInputTokens',
@@ -115,6 +131,7 @@ const REQUEST_EVENT_COLUMN_IDS = [
 
 type RequestEventColumnId = (typeof REQUEST_EVENT_COLUMN_IDS)[number];
 type RequestEventColumnVisibility = Record<RequestEventColumnId, boolean>;
+type RequestIdentityType = 'configured-key' | 'endpoint' | 'caller' | 'unknown';
 type RequestEventCacheRateTone = 'unavailable' | 'low' | 'medium' | 'high' | 'anomaly';
 type RequestEventCostTone =
   | 'unavailable'
@@ -193,11 +210,15 @@ type RequestEventNumericMetricId = (typeof REQUEST_EVENT_NUMERIC_METRIC_IDS)[num
 const DEFAULT_COLUMN_VISIBILITY: RequestEventColumnVisibility = {
   timestamp: true,
   model: true,
+  requestKey: true,
   source: false,
   authIndex: false,
   tier: true,
   result: true,
   latency: true,
+  ttfb: true,
+  outputTps: true,
+  averageTps: true,
   effort: true,
   totalInputTokens: true,
   nonCacheReadInputTokens: true,
@@ -216,6 +237,11 @@ type RequestEventRow = {
   timestampMs: number;
   timestampLabel: string;
   model: string;
+  requestIdentityToken: string;
+  requestIdentityType: RequestIdentityType;
+  requestIdentityLabel: string;
+  requestKeyHint: string;
+  requestKeyConfigIndex: number | null;
   sourceKey: string;
   sourceRaw: string;
   source: string;
@@ -237,6 +263,10 @@ type RequestEventRow = {
   reasoningEffortLabel: string;
   failed: boolean;
   latencyMs: number | null;
+  ttfbMs: number | null;
+  decodeDurationMs: number | null;
+  outputTps: number | null;
+  averageTps: number | null;
   inputTokens: number;
   nonCacheReadInputTokens: number;
   outputTokens: number;
@@ -329,6 +359,7 @@ export interface RequestEventsDetailsCardProps {
   pageTimeRange: UsageTimeRange;
   referenceNowMs: number;
   priceProfile: PriceProfileV3;
+  requestApiKeys: string[];
   geminiKeys: GeminiKeyConfig[];
   claudeConfigs: ProviderKeyConfig[];
   codexConfigs: ProviderKeyConfig[];
@@ -509,6 +540,7 @@ export function RequestEventsDetailsCard({
   pageTimeRange,
   referenceNowMs,
   priceProfile,
+  requestApiKeys,
   geminiKeys,
   claudeConfigs,
   codexConfigs,
@@ -521,8 +553,15 @@ export function RequestEventsDetailsCard({
     field: LATENCY_SOURCE_FIELD,
     unit: t('usage_stats.duration_unit_ms'),
   });
+  const ttfbHint = t('usage_stats.request_events_ttfb_hint', {
+    field: TTFB_SOURCE_FIELD,
+    unit: t('usage_stats.duration_unit_ms'),
+  });
+  const outputTpsHint = t('usage_stats.request_events_output_tps_hint');
+  const averageTpsHint = t('usage_stats.request_events_average_tps_hint');
   const nonCacheReadInputHint = t('usage_stats.request_events_non_cache_read_input_tokens_hint');
   const displayedOutputHint = t('usage_stats.request_events_output_tokens_hint');
+  const requestKeyColumnHint = t('usage_stats.request_events_request_key_hint');
   const cacheRateFormatter = useMemo(
     () =>
       new Intl.NumberFormat(i18n.language, {
@@ -540,6 +579,7 @@ export function RequestEventsDetailsCard({
   );
 
   const [modelFilter, setModelFilter] = useState(ALL_FILTER);
+  const [requestKeyFilter, setRequestKeyFilter] = useState(ALL_FILTER);
   const [sourceFilter, setSourceFilter] = useState(ALL_FILTER);
   const [authIndexFilter, setAuthIndexFilter] = useState(ALL_FILTER);
   const [serviceTierFilter, setServiceTierFilter] = useState(ALL_FILTER);
@@ -655,7 +695,7 @@ export function RequestEventsDetailsCard({
       }
 
       // v1/v2 were development-era defaults. v3 starts from the formal
-      // Source/Auth-hidden and eight-Token-visible default set.
+      // caller-key-visible, Source/Auth-hidden, and eight-Token-visible default set.
       LEGACY_COLUMN_VISIBILITY_STORAGE_KEYS.forEach((key) => {
         window.localStorage.removeItem(key);
       });
@@ -818,6 +858,72 @@ export function RequestEventsDetailsCard({
 
   const rows = useMemo<RequestEventRow[]>(() => {
     const details = collectUsageDetails(usage);
+    const configuredKeyIndexes = new Map<string, number>();
+    requestApiKeys.forEach((key, index) => {
+      const trimmed = String(key || '').trim();
+      if (trimmed && !configuredKeyIndexes.has(trimmed)) {
+        configuredKeyIndexes.set(trimmed, index + 1);
+      }
+    });
+    const requestIdentityTokens = new Map<string, string>();
+
+    const resolveRequestIdentity = (value: unknown) => {
+      const apiBucket = String(value ?? '').trim();
+      const identityKey = apiBucket || '__unknown__';
+      let requestIdentityToken = requestIdentityTokens.get(identityKey);
+      if (!requestIdentityToken) {
+        requestIdentityToken = `request-identity-${requestIdentityTokens.size}`;
+        requestIdentityTokens.set(identityKey, requestIdentityToken);
+      }
+
+      const configuredIndex = configuredKeyIndexes.get(apiBucket);
+      if (configuredIndex !== undefined) {
+        const requestKeyHint = maskRequestKey(apiBucket);
+        return {
+          requestIdentityToken,
+          requestIdentityType: 'configured-key' as const,
+          requestIdentityLabel: t('usage_stats.request_events_request_key_configured', {
+            index: configuredIndex,
+            key: requestKeyHint,
+          }),
+          requestKeyHint,
+          requestKeyConfigIndex: configuredIndex,
+        };
+      }
+
+      if (REQUEST_IDENTITY_ENDPOINT_REGEX.test(apiBucket)) {
+        return {
+          requestIdentityToken,
+          requestIdentityType: 'endpoint' as const,
+          requestIdentityLabel: t('usage_stats.request_events_request_identity_endpoint', {
+            value: apiBucket,
+          }),
+          requestKeyHint: apiBucket,
+          requestKeyConfigIndex: null,
+        };
+      }
+
+      if (!apiBucket || apiBucket.toLowerCase() === 'unknown') {
+        return {
+          requestIdentityToken,
+          requestIdentityType: 'unknown' as const,
+          requestIdentityLabel: t('usage_stats.request_events_request_identity_unknown'),
+          requestKeyHint: '',
+          requestKeyConfigIndex: null,
+        };
+      }
+
+      const requestKeyHint = maskRequestKey(apiBucket);
+      return {
+        requestIdentityToken,
+        requestIdentityType: 'caller' as const,
+        requestIdentityLabel: t('usage_stats.request_events_request_identity_caller', {
+          value: requestKeyHint,
+        }),
+        requestKeyHint,
+        requestKeyConfigIndex: null,
+      };
+    };
 
     const baseRows = details.map((detail, index) => {
       const timestamp = detail.timestamp;
@@ -837,6 +943,7 @@ export function RequestEventsDetailsCard({
       const sourceKey = sourceInfo.identityKey ?? `source:${sourceRaw || source}`;
       const sourceType = sourceInfo.type;
       const model = String(detail.__modelName ?? '').trim() || '-';
+      const requestIdentity = resolveRequestIdentity(detail.__apiBucket);
       const serviceTier = detail.service_tier ?? null;
       const requestServiceTier = detail.request_service_tier ?? null;
       const outboundServiceTier = detail.outbound_service_tier ?? null;
@@ -908,16 +1015,21 @@ export function RequestEventsDetailsCard({
         extractTotalTokens(detail)
       );
       const latencyMs = extractLatencyMs(detail);
+      const ttfbMs = extractTTFBMs(detail);
+      const decodeDurationMs = calculateDecodeDurationMs(latencyMs, ttfbMs);
+      const outputTps = calculateOutputTps(outputTokens, latencyMs, ttfbMs);
+      const averageTps = calculateAverageTps(outputTokens, latencyMs);
       const costEstimate = calculateCostEstimate(detail, priceProfile);
       const longContext = costEstimate.contextBand === 'long';
       const costAmount = costEstimate.status === 'priced' ? costEstimate.amount : null;
 
       return {
-        id: `${timestamp}-${model}-${sourceKey}-${authIndex}-${index}`,
+        id: `${timestamp}-${model}-${requestIdentity.requestIdentityToken}-${sourceKey}-${authIndex}-${index}`,
         timestamp,
         timestampMs: Number.isNaN(timestampMs) ? 0 : timestampMs,
         timestampLabel: date ? date.toLocaleString(i18n.language) : timestamp || '-',
         model,
+        ...requestIdentity,
         sourceKey,
         sourceRaw: sourceRaw || '-',
         source,
@@ -939,6 +1051,10 @@ export function RequestEventsDetailsCard({
         reasoningEffortLabel,
         failed: detail.failed === true,
         latencyMs,
+        ttfbMs,
+        decodeDurationMs,
+        outputTps,
+        averageTps,
         inputTokens,
         nonCacheReadInputTokens,
         outputTokens,
@@ -990,7 +1106,7 @@ export function RequestEventsDetailsCard({
         source: buildDisambiguatedSourceLabel(row),
       }))
       .sort((a, b) => b.timestampMs - a.timestampMs);
-  }, [authFileMap, i18n.language, priceProfile, sourceInfoMap, t, usage]);
+  }, [authFileMap, i18n.language, priceProfile, requestApiKeys, sourceInfoMap, t, usage]);
 
   const effectiveTimeRangeFilter = isRequestEventTimeRange(timeRangeFilter)
     ? timeRangeFilter
@@ -1023,6 +1139,18 @@ export function RequestEventsDetailsCard({
     () => timeScopedRows.some((row) => row.latencyMs !== null),
     [timeScopedRows]
   );
+  const hasTTFBData = useMemo(
+    () => timeScopedRows.some((row) => row.ttfbMs !== null),
+    [timeScopedRows]
+  );
+  const hasOutputTpsData = useMemo(
+    () => timeScopedRows.some((row) => row.outputTps !== null),
+    [timeScopedRows]
+  );
+  const hasAverageTpsData = useMemo(
+    () => timeScopedRows.some((row) => row.averageTps !== null),
+    [timeScopedRows]
+  );
 
   const modelOptions = useMemo(
     () => [
@@ -1034,6 +1162,20 @@ export function RequestEventsDetailsCard({
     ],
     [t, timeScopedRows]
   );
+
+  const requestKeyOptions = useMemo(() => {
+    const optionMap = new Map<string, string>();
+    timeScopedRows.forEach((row) => {
+      if (!optionMap.has(row.requestIdentityToken)) {
+        optionMap.set(row.requestIdentityToken, row.requestIdentityLabel);
+      }
+    });
+
+    return [
+      { value: ALL_FILTER, label: t('usage_stats.filter_all') },
+      ...Array.from(optionMap.entries()).map(([value, label]) => ({ value, label })),
+    ];
+  }, [t, timeScopedRows]);
 
   const sourceOptions = useMemo(() => {
     const optionMap = new Map<string, string>();
@@ -1155,11 +1297,15 @@ export function RequestEventsDetailsCard({
         label: t('usage_stats.request_events_timestamp'),
       },
       { id: 'model' as const, label: t('usage_stats.model_name') },
+      { id: 'requestKey' as const, label: t('usage_stats.request_events_request_key') },
       { id: 'source' as const, label: t('usage_stats.request_events_source') },
       { id: 'authIndex' as const, label: t('usage_stats.request_events_auth_index') },
       { id: 'tier' as const, label: t('usage_stats.request_events_tier') },
       { id: 'result' as const, label: t('usage_stats.request_events_result') },
       { id: 'latency' as const, label: t('usage_stats.time') },
+      { id: 'ttfb' as const, label: t('usage_stats.request_events_ttfb') },
+      { id: 'outputTps' as const, label: t('usage_stats.request_events_output_tps') },
+      { id: 'averageTps' as const, label: t('usage_stats.request_events_average_tps') },
       { id: 'effort' as const, label: t('usage_stats.request_events_effort') },
       {
         id: 'totalInputTokens' as const,
@@ -1190,6 +1336,10 @@ export function RequestEventsDetailsCard({
     () => new Set(modelOptions.map((option) => option.value)),
     [modelOptions]
   );
+  const requestKeyOptionSet = useMemo(
+    () => new Set(requestKeyOptions.map((option) => option.value)),
+    [requestKeyOptions]
+  );
   const sourceOptionSet = useMemo(
     () => new Set(sourceOptions.map((option) => option.value)),
     [sourceOptions]
@@ -1212,6 +1362,9 @@ export function RequestEventsDetailsCard({
   );
 
   const effectiveModelFilter = modelOptionSet.has(modelFilter) ? modelFilter : ALL_FILTER;
+  const effectiveRequestKeyFilter = requestKeyOptionSet.has(requestKeyFilter)
+    ? requestKeyFilter
+    : ALL_FILTER;
   const effectiveSourceFilter = sourceOptionSet.has(sourceFilter) ? sourceFilter : ALL_FILTER;
   const effectiveAuthIndexFilter = authIndexOptionSet.has(authIndexFilter)
     ? authIndexFilter
@@ -1289,6 +1442,9 @@ export function RequestEventsDetailsCard({
       timeScopedRows.filter((row) => {
         const modelMatched =
           effectiveModelFilter === ALL_FILTER || row.model === effectiveModelFilter;
+        const requestKeyMatched =
+          effectiveRequestKeyFilter === ALL_FILTER ||
+          row.requestIdentityToken === effectiveRequestKeyFilter;
         const sourceMatched =
           effectiveSourceFilter === ALL_FILTER || row.sourceKey === effectiveSourceFilter;
         const authIndexMatched =
@@ -1316,6 +1472,7 @@ export function RequestEventsDetailsCard({
             (numericMaximumValue === null || numericValue! <= numericMaximumValue));
         return (
           modelMatched &&
+          requestKeyMatched &&
           sourceMatched &&
           authIndexMatched &&
           serviceTierMatched &&
@@ -1329,6 +1486,7 @@ export function RequestEventsDetailsCard({
       cacheFilter,
       effectiveAuthIndexFilter,
       effectiveModelFilter,
+      effectiveRequestKeyFilter,
       effectiveReasoningEffortFilter,
       effectiveServiceTierFilter,
       effectiveSourceFilter,
@@ -1344,6 +1502,7 @@ export function RequestEventsDetailsCard({
 
   const hasActiveFilters =
     effectiveModelFilter !== ALL_FILTER ||
+    effectiveRequestKeyFilter !== ALL_FILTER ||
     effectiveSourceFilter !== ALL_FILTER ||
     effectiveAuthIndexFilter !== ALL_FILTER ||
     effectiveServiceTierFilter !== ALL_FILTER ||
@@ -1403,6 +1562,7 @@ export function RequestEventsDetailsCard({
 
   const handleClearFilters = () => {
     setModelFilter(ALL_FILTER);
+    setRequestKeyFilter(ALL_FILTER);
     setSourceFilter(ALL_FILTER);
     setAuthIndexFilter(ALL_FILTER);
     setServiceTierFilter(ALL_FILTER);
@@ -1442,6 +1602,9 @@ export function RequestEventsDetailsCard({
     const csvHeader = [
       'timestamp',
       'model',
+      'request_identity_type',
+      'request_key_hint',
+      'request_key_config_index',
       'source',
       'source_raw',
       'auth_index',
@@ -1452,10 +1615,13 @@ export function RequestEventsDetailsCard({
       'effective_service_tier',
       'resolved_service_tier',
       'service_tier_evidence',
-      'reasoning_effort',
-      'result',
-      ...(hasLatencyData ? ['latency_ms'] : []),
-      'input_tokens',
+        'reasoning_effort',
+        'result',
+        ...(hasLatencyData ? ['latency_ms'] : []),
+        ...(hasTTFBData ? ['ttfb_ms'] : []),
+        ...(hasOutputTpsData ? ['decode_duration_ms', 'output_tps'] : []),
+        ...(hasAverageTpsData ? ['average_tps'] : []),
+        'input_tokens',
       'non_cache_read_input_tokens',
       'output_tokens',
       'reasoning_tokens',
@@ -1471,6 +1637,9 @@ export function RequestEventsDetailsCard({
       [
         row.timestamp,
         row.model,
+        row.requestIdentityType,
+        row.requestKeyHint,
+        row.requestKeyConfigIndex ?? '',
         row.source,
         row.sourceRaw,
         row.authIndex,
@@ -1484,6 +1653,9 @@ export function RequestEventsDetailsCard({
         row.reasoningEffort ?? '',
         row.failed ? 'failed' : 'success',
         ...(hasLatencyData ? [row.latencyMs ?? ''] : []),
+        ...(hasTTFBData ? [row.ttfbMs ?? ''] : []),
+        ...(hasOutputTpsData ? [row.decodeDurationMs ?? '', row.outputTps ?? ''] : []),
+        ...(hasAverageTpsData ? [row.averageTps ?? ''] : []),
         row.inputTokens,
         row.nonCacheReadInputTokens,
         row.outputTokens,
@@ -1513,6 +1685,9 @@ export function RequestEventsDetailsCard({
     const payload = filteredRows.map((row) => ({
       timestamp: row.timestamp,
       model: row.model,
+      request_identity_type: row.requestIdentityType,
+      request_key_hint: row.requestKeyHint,
+      request_key_config_index: row.requestKeyConfigIndex,
       source: row.source,
       source_raw: row.sourceRaw,
       auth_index: row.authIndex,
@@ -1526,6 +1701,11 @@ export function RequestEventsDetailsCard({
       reasoning_effort: row.reasoningEffort,
       failed: row.failed,
       ...(hasLatencyData && row.latencyMs !== null ? { latency_ms: row.latencyMs } : {}),
+      ...(hasTTFBData && row.ttfbMs !== null ? { ttfb_ms: row.ttfbMs } : {}),
+      ...(hasOutputTpsData && row.outputTps !== null
+        ? { decode_duration_ms: row.decodeDurationMs, output_tps: row.outputTps }
+        : {}),
+      ...(hasAverageTpsData && row.averageTps !== null ? { average_tps: row.averageTps } : {}),
       tokens: {
         input_tokens: row.inputTokens,
         non_cache_read_input_tokens: row.nonCacheReadInputTokens,
@@ -1723,7 +1903,13 @@ export function RequestEventsDetailsCard({
                 </div>
                 <div className={styles.requestEventsColumnSettingsGrid}>
                   {columnOptions
-                    .filter((column) => column.id !== 'latency' || hasLatencyData)
+                    .filter(
+                      (column) =>
+                        (column.id !== 'latency' || hasLatencyData) &&
+                        (column.id !== 'ttfb' || hasTTFBData) &&
+                        (column.id !== 'outputTps' || hasOutputTpsData) &&
+                        (column.id !== 'averageTps' || hasAverageTpsData)
+                    )
                     .map((column) => {
                       const checkboxId = `${columnSettingsId}-${column.id}`;
                       const checked = columnVisibility[column.id];
@@ -1774,6 +1960,19 @@ export function RequestEventsDetailsCard({
             onChange={setModelFilter}
             className={styles.requestEventsSelect}
             ariaLabel={t('usage_stats.request_events_filter_model')}
+            fullWidth={false}
+          />
+        </div>
+        <div className={styles.requestEventsFilterItem}>
+          <span className={styles.requestEventsFilterLabel}>
+            {t('usage_stats.request_events_filter_request_key')}
+          </span>
+          <Select
+            value={effectiveRequestKeyFilter}
+            options={requestKeyOptions}
+            onChange={setRequestKeyFilter}
+            className={styles.requestEventsSelect}
+            ariaLabel={t('usage_stats.request_events_filter_request_key')}
             fullWidth={false}
           />
         </div>
@@ -1985,6 +2184,10 @@ export function RequestEventsDetailsCard({
           <div className={styles.requestEventsMeta}>
             <span>{t('usage_stats.request_events_count', { count: filteredRows.length })}</span>
             {hasLatencyData && <span className={styles.requestEventsLimitHint}>{latencyHint}</span>}
+            {hasTTFBData && <span className={styles.requestEventsLimitHint}>{ttfbHint}</span>}
+            {hasOutputTpsData && (
+              <span className={styles.requestEventsLimitHint}>{outputTpsHint}</span>
+            )}
             {filteredRows.length > MAX_RENDERED_EVENTS && (
               <span className={styles.requestEventsLimitHint}>
                 {t('usage_stats.request_events_limit_hint', {
@@ -2008,6 +2211,11 @@ export function RequestEventsDetailsCard({
                     <th>{t('usage_stats.request_events_timestamp')}</th>
                   )}
                   {columnVisibility.model && <th>{t('usage_stats.model_name')}</th>}
+                  {columnVisibility.requestKey && (
+                    <th title={requestKeyColumnHint}>
+                      {t('usage_stats.request_events_request_key')}
+                    </th>
+                  )}
                   {columnVisibility.source && <th>{t('usage_stats.request_events_source')}</th>}
                   {columnVisibility.authIndex && (
                     <th>{t('usage_stats.request_events_auth_index')}</th>
@@ -2016,6 +2224,15 @@ export function RequestEventsDetailsCard({
                   {columnVisibility.result && <th>{t('usage_stats.request_events_result')}</th>}
                   {columnVisibility.latency && hasLatencyData && (
                     <th title={latencyHint}>{t('usage_stats.time')}</th>
+                  )}
+                  {columnVisibility.ttfb && hasTTFBData && (
+                    <th title={ttfbHint}>{t('usage_stats.request_events_ttfb')}</th>
+                  )}
+                  {columnVisibility.outputTps && hasOutputTpsData && (
+                    <th title={outputTpsHint}>{t('usage_stats.request_events_output_tps')}</th>
+                  )}
+                  {columnVisibility.averageTps && hasAverageTpsData && (
+                    <th title={averageTpsHint}>{t('usage_stats.request_events_average_tps')}</th>
                   )}
                   {columnVisibility.effort && <th>{t('usage_stats.request_events_effort')}</th>}
                   {columnVisibility.totalInputTokens && (
@@ -2122,6 +2339,16 @@ export function RequestEventsDetailsCard({
                         </td>
                       )}
                       {columnVisibility.model && <td className={styles.modelCell}>{row.model}</td>}
+                      {columnVisibility.requestKey && (
+                        <td
+                          className={styles.requestEventsRequestKey}
+                          title={row.requestIdentityLabel}
+                          data-request-identity-type={row.requestIdentityType}
+                          data-request-key-config-index={row.requestKeyConfigIndex ?? undefined}
+                        >
+                          {row.requestIdentityLabel}
+                        </td>
+                      )}
                       {columnVisibility.source && (
                         <td className={styles.requestEventsSourceCell} title={row.source}>
                           <span>{row.source}</span>
@@ -2198,6 +2425,39 @@ export function RequestEventsDetailsCard({
                       )}
                       {columnVisibility.latency && hasLatencyData && (
                         <td className={styles.durationCell}>{formatDurationMs(row.latencyMs)}</td>
+                      )}
+                      {columnVisibility.ttfb && hasTTFBData && (
+                        <td
+                          className={styles.durationCell}
+                          data-request-performance="ttfb"
+                          data-ttfb-ms={row.ttfbMs ?? undefined}
+                        >
+                          {formatDurationMs(row.ttfbMs)}
+                        </td>
+                      )}
+                      {columnVisibility.outputTps && hasOutputTpsData && (
+                        <td
+                          className={styles.durationCell}
+                          data-request-performance="output-tps"
+                          data-output-tps={row.outputTps ?? undefined}
+                          title={
+                            row.outputTps === null
+                              ? outputTpsHint
+                              : `${outputTpsHint} (${formatDurationMs(row.decodeDurationMs)})`
+                          }
+                        >
+                          {formatPerSecondValue(row.outputTps)}
+                        </td>
+                      )}
+                      {columnVisibility.averageTps && hasAverageTpsData && (
+                        <td
+                          className={styles.durationCell}
+                          data-request-performance="average-tps"
+                          data-average-tps={row.averageTps ?? undefined}
+                          title={averageTpsHint}
+                        >
+                          {formatPerSecondValue(row.averageTps)}
+                        </td>
                       )}
                       {columnVisibility.effort && (
                         <td>

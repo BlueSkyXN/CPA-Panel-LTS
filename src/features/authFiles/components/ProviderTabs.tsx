@@ -5,7 +5,6 @@ import {
   getThemeSurfaceIconBackground,
   getTypeLabel,
   isThemeSurfaceIconProvider,
-  type ResolvedTheme,
 } from '@/features/authFiles/constants';
 import styles from './ProviderTabs.module.scss';
 
@@ -13,12 +12,11 @@ export type ProviderTabsProps = {
   types: string[];
   counts: Record<string, number>;
   active: string;
-  resolvedTheme: ResolvedTheme;
   onChange: (type: string) => void;
 };
 
 /** Provider filter tabs shared by quota-oriented credential surfaces. */
-export function ProviderTabs({ types, counts, active, resolvedTheme, onChange }: ProviderTabsProps) {
+export function ProviderTabs({ types, counts, active, onChange }: ProviderTabsProps) {
   const { t } = useTranslation();
 
   return (
@@ -26,7 +24,7 @@ export function ProviderTabs({ types, counts, active, resolvedTheme, onChange }:
       {types.map((type) => {
         const isActive = active === type;
         const label = type === 'all' ? t('auth_files.filter_all') : getTypeLabel(t, type);
-        const iconSrc = type === 'all' ? null : getAuthFileIcon(type, resolvedTheme);
+        const iconSrc = type === 'all' ? null : getAuthFileIcon(type);
 
         return (
           <button
@@ -43,7 +41,7 @@ export function ProviderTabs({ types, counts, active, resolvedTheme, onChange }:
                 className={styles.tabIconWrap}
                 style={
                   isThemeSurfaceIconProvider(type)
-                    ? { background: getThemeSurfaceIconBackground(resolvedTheme) }
+                    ? { background: getThemeSurfaceIconBackground() }
                     : undefined
                 }
               >

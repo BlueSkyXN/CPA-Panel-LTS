@@ -15,7 +15,6 @@ import {
   IconX,
 } from '@/components/ui/icons';
 import iconOpenaiLight from '@/assets/icons/openai-light.svg';
-import iconOpenaiDark from '@/assets/icons/openai-dark.svg';
 import type { OpenAIProviderConfig } from '@/types';
 import { maskApiKey } from '@/utils/format';
 import type { KeyStats, StatusBarData } from '@/utils/usage';
@@ -51,7 +50,6 @@ interface OpenAISectionProps {
   loading: boolean;
   disableControls: boolean;
   isSwitching: boolean;
-  resolvedTheme: string;
   onAdd: () => void;
   onEdit: (index: number) => void;
   onDelete: (index: number) => void;
@@ -79,7 +77,6 @@ export function OpenAISection({
   loading,
   disableControls,
   isSwitching,
-  resolvedTheme,
   onAdd,
   onEdit,
   onDelete,
@@ -518,7 +515,7 @@ export function OpenAISection({
   const renderStaticTitle = () => (
     <span className={styles.cardTitle}>
       <img
-        src={resolvedTheme === 'dark' ? iconOpenaiDark : iconOpenaiLight}
+        src={iconOpenaiLight}
         alt=""
         className={styles.cardTitleIcon}
       />

@@ -102,17 +102,6 @@
   box-shadow: none;
 }
 
-// 暗色主题适配
-:global([data-theme='dark']) {
-  .navList {
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
-  }
-
-  .indicator {
-    background: rgba($primary-color, 0.28);
-  }
-}
-
 // 小屏幕进一步收紧尺寸
 @media (max-width: 1200px) {
   .navContainer {

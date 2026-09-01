@@ -10,7 +10,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { animate } from 'motion/mini';
 import type { AnimationPlaybackControlsWithThen } from 'motion-dom';
 import { useInterval } from '@/hooks/useInterval';
@@ -40,7 +40,6 @@ import {
   normalizeProviderKey,
   parsePriorityValue,
   type QuotaProviderType,
-  type ResolvedTheme,
 } from '@/features/authFiles/constants';
 import { AuthFileCard } from '@/features/authFiles/components/AuthFileCard';
 import { AuthFileModelsModal } from '@/features/authFiles/components/AuthFileModelsModal';
@@ -67,7 +66,7 @@ import {
   writePersistedAuthFilesCompactMode,
   type AuthFilesSortMode,
 } from '@/features/authFiles/uiState';
-import { useAuthStore, useNotificationStore, useThemeStore } from '@/stores';
+import { useAuthStore, useNotificationStore } from '@/stores';
 import styles from './AuthFilesPage.module.scss';
 
 const easePower3Out = (progress: number) => 1 - (1 - progress) ** 4;
@@ -89,10 +88,11 @@ export function AuthFilesPage() {
   const { t } = useTranslation();
   const showNotification = useNotificationStore((state) => state.showNotification);
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
-  const resolvedTheme: ResolvedTheme = useThemeStore((state) => state.resolvedTheme);
   const pageTransitionLayer = usePageTransitionLayer();
   const isCurrentLayer = pageTransitionLayer ? pageTransitionLayer.status === 'current' : true;
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedProvider = normalizeProviderKey(searchParams.get('provider') || '');
 
   const [filter, setFilter] = useState<'all' | string>('all');
   const [problemOnly, setProblemOnly] = useState(false);
@@ -279,6 +279,25 @@ export function AuthFilesPage() {
   }, []);
 
   useEffect(() => {
+    if (!requestedProvider) return;
+    setFilter(requestedProvider);
+    setPage(1);
+  }, [requestedProvider]);
+
+  const handleProviderFilterChange = useCallback(
+    (type: string) => {
+      const nextType = normalizeProviderKey(type) || 'all';
+      setFilter(nextType);
+      setPage(1);
+      const nextParams = new URLSearchParams(searchParams);
+      if (nextType === 'all') nextParams.delete('provider');
+      else nextParams.set('provider', nextType);
+      setSearchParams(nextParams, { replace: true });
+    },
+    [searchParams, setSearchParams]
+  );
+
+  useEffect(() => {
     if (!uiStateHydrated) return;
 
     writeAuthFilesUiState({
@@ -387,12 +406,13 @@ export function AuthFilesPage() {
 
   const existingTypes = useMemo(() => {
     const types = new Set<string>(['all']);
+    if (requestedProvider) types.add(requestedProvider);
     files.forEach((file) => {
       const type = normalizeProviderKey(String(file.type ?? file.provider ?? ''));
       if (type) types.add(type);
     });
     return Array.from(types);
-  }, [files]);
+  }, [files, requestedProvider]);
 
   const filesMatchingStatusFilters = useMemo(
     () =>
@@ -606,15 +626,15 @@ export function AuthFilesPage() {
       <div className={styles.filterTags}>
         {existingTypes.map((type) => {
           const isActive = normalizedFilter === type;
-          const iconSrc = getAuthFileIcon(type, resolvedTheme);
+          const iconSrc = getAuthFileIcon(type);
           const color =
             type === 'all'
               ? { bg: 'var(--bg-tertiary)', text: 'var(--text-primary)' }
-              : getTypeColor(type, resolvedTheme);
+              : getTypeColor(type);
           const buttonStyle = {
             '--filter-color': color.text,
             '--filter-surface': color.bg,
-            '--filter-active-text': resolvedTheme === 'dark' ? '#111827' : '#ffffff',
+            '--filter-active-text': '#ffffff',
           } as CSSProperties;
 
           return (
@@ -622,10 +642,7 @@ export function AuthFilesPage() {
               key={type}
               className={`${styles.filterTag} ${isActive ? styles.filterTagActive : ''}`}
               style={buttonStyle}
-              onClick={() => {
-                setFilter(type);
-                setPage(1);
-              }}
+              onClick={() => handleProviderFilterChange(type)}
             >
               <span className={styles.filterTagLabel}>
                 {type === 'all' ? (
@@ -636,10 +653,9 @@ export function AuthFilesPage() {
                   <span
                     className={styles.filterTagIconWrap}
                     style={
-                      // 与 AI 提供商界面一致：Kimi 图标底座随主题切换颜色
                       isThemeSurfaceIconProvider(type)
                         ? {
-                            background: getThemeSurfaceIconBackground(resolvedTheme),
+                            background: getThemeSurfaceIconBackground(),
                             borderColor: 'transparent',
                           }
                         : undefined
@@ -861,7 +877,6 @@ export function AuthFilesPage() {
                     file={file}
                     compact={compactMode}
                     selected={selectedFiles.has(file.name)}
-                    resolvedTheme={resolvedTheme}
                     disableControls={disableControls}
                     deleting={deleting}
                     statusUpdating={statusUpdating}

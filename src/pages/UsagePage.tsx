@@ -19,7 +19,7 @@ import { Select } from '@/components/ui/Select';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { providersApi } from '@/services/api';
-import { useThemeStore, useConfigStore } from '@/stores';
+import { useConfigStore } from '@/stores';
 import type { OpenAIProviderConfig } from '@/types';
 import {
   StatCards,
@@ -125,8 +125,6 @@ export function UsagePage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const isMobile = useMediaQuery('(max-width: 768px)');
-  const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
-  const isDark = resolvedTheme === 'dark';
   const config = useConfigStore((state) => state.config);
   const openaiCompatibilityConfig = config?.openaiCompatibility;
   const [openaiProvidersWithAuthIndex, setOpenaiProvidersWithAuthIndex] = useState<{
@@ -239,7 +237,7 @@ export function UsagePage() {
     tokensChartData,
     requestsChartOptions,
     tokensChartOptions,
-  } = useChartData({ usage: filteredUsage, chartLines, isDark, isMobile, hourWindowHours });
+  } = useChartData({ usage: filteredUsage, chartLines, isMobile, hourWindowHours });
 
   // Derived data
   const modelNames = useMemo(() => getModelNamesFromUsage(usage), [usage]);
@@ -381,7 +379,6 @@ export function UsagePage() {
       <TokenBreakdownChart
         usage={filteredUsage}
         loading={loading}
-        isDark={isDark}
         isMobile={isMobile}
         hourWindowHours={hourWindowHours}
       />
@@ -390,7 +387,6 @@ export function UsagePage() {
       <CostTrendChart
         usage={filteredUsage}
         loading={loading}
-        isDark={isDark}
         isMobile={isMobile}
         priceProfile={priceProfile}
         onOpenPricing={openPricing}
@@ -409,6 +405,7 @@ export function UsagePage() {
         pageTimeRange={timeRange}
         referenceNowMs={nowMs}
         priceProfile={priceProfile}
+        requestApiKeys={config?.apiKeys || []}
         geminiKeys={config?.geminiApiKeys || []}
         claudeConfigs={config?.claudeApiKeys || []}
         codexConfigs={config?.codexApiKeys || []}

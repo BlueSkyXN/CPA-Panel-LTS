@@ -107,10 +107,6 @@
   min-width: 0;
 }
 
-:global([data-theme='dark']) .indexBadge {
-  color: #d5b36d;
-}
-
 @media (prefers-reduced-transparency: reduce) {
   .section {
     background: transparent;

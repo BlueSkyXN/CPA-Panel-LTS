@@ -18,7 +18,7 @@ import {
 import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer';
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { ampcodeApi, getOpenAIProviderMutationIndex, providersApi } from '@/services/api';
-import { useAuthStore, useConfigStore, useNotificationStore, useThemeStore } from '@/stores';
+import { useAuthStore, useConfigStore, useNotificationStore } from '@/stores';
 import type { GeminiKeyConfig, OpenAIProviderConfig, ProviderKeyConfig } from '@/types';
 import { indexUsageDetailsByAuthIndex, indexUsageDetailsBySource } from '@/utils/usageIndex';
 import styles from './AiProvidersPage.module.scss';
@@ -27,7 +27,6 @@ export function AiProvidersPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { showNotification, showConfirmation } = useNotificationStore();
-  const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
 
   const config = useConfigStore((state) => state.config);
@@ -501,7 +500,6 @@ export function AiProvidersPage() {
             loading={loading}
             disableControls={disableControls}
             isSwitching={isSwitching}
-            resolvedTheme={resolvedTheme}
             onAdd={() => openEditor('/ai-providers/legacy/openai/new')}
             onEdit={(index) => openEditor(`/ai-providers/legacy/openai/${index}`)}
             onDelete={deleteOpenai}

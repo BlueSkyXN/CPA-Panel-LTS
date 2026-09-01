@@ -4,9 +4,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { useCountUp, useRevealGroup } from '@/hooks/motion';
-import { useAuthStore, useQuotaStore, useThemeStore } from '@/stores';
+import { useAuthStore, useQuotaStore } from '@/stores';
 import { authFilesApi } from '@/services/api';
 import {
   QuotaSection,
@@ -37,13 +38,18 @@ const QUOTA_TAB_IDS: string[] = ['all', ...QUOTA_PROVIDERS.map(({ id }) => id)];
 
 export function QuotaPage() {
   const { t } = useTranslation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
-  const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
 
   const [files, setFiles] = useState<AuthFileItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [activeProvider, setActiveProvider] = useState<QuotaTabId>('all');
+  const requestedProvider = searchParams.get('provider')?.trim().toLowerCase() || '';
+  const normalizedRequestedProvider = requestedProvider === 'anthropic' ? 'claude' : requestedProvider;
+  const initialProvider = QUOTA_TAB_IDS.includes(normalizedRequestedProvider)
+    ? (normalizedRequestedProvider as QuotaTabId)
+    : 'all';
+  const [activeProvider, setActiveProvider] = useState<QuotaTabId>(initialProvider);
 
   const antigravityQuota = useQuotaStore((state) => state.antigravityQuota);
   const claudeQuota = useQuotaStore((state) => state.claudeQuota);
@@ -75,6 +81,23 @@ export function QuotaPage() {
   useEffect(() => {
     loadFiles();
   }, [loadFiles]);
+
+  useEffect(() => {
+    if (!QUOTA_TAB_IDS.includes(normalizedRequestedProvider)) return;
+    setActiveProvider(normalizedRequestedProvider as QuotaTabId);
+  }, [normalizedRequestedProvider]);
+
+  const handleProviderChange = useCallback(
+    (provider: string) => {
+      const nextProvider = QUOTA_TAB_IDS.includes(provider) ? (provider as QuotaTabId) : 'all';
+      setActiveProvider(nextProvider);
+      const nextParams = new URLSearchParams(searchParams);
+      if (nextProvider === 'all') nextParams.delete('provider');
+      else nextParams.set('provider', nextProvider);
+      setSearchParams(nextParams, { replace: true });
+    },
+    [searchParams, setSearchParams]
+  );
 
   const providerCounts = useMemo(() => {
     const counts: Record<string, number> = { all: 0 };
@@ -154,8 +177,7 @@ export function QuotaPage() {
           types={QUOTA_TAB_IDS}
           counts={providerCounts}
           active={activeProvider}
-          resolvedTheme={resolvedTheme}
-          onChange={(provider) => setActiveProvider(provider as QuotaTabId)}
+          onChange={handleProviderChange}
         />
       </div>
 

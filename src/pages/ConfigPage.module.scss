@@ -18,7 +18,8 @@
   gap: clamp(18px, 2.4vw, 28px);
   margin: 0 auto;
   padding-bottom: calc(
-    var(--config-action-bar-height, 0px) + 18px + env(safe-area-inset-bottom) + #{$spacing-md}
+    var(--config-action-bar-height, 0px) + var(--shell-bottom-inset, 0px) + 18px +
+      env(safe-area-inset-bottom) + #{$spacing-md}
   );
 }
 
@@ -359,7 +360,7 @@
 
   position: fixed;
   left: var(--content-center-x, 50%);
-  bottom: calc(12px + env(safe-area-inset-bottom));
+  bottom: calc(var(--shell-bottom-inset, 0px) + 12px + env(safe-area-inset-bottom));
   z-index: 50;
   display: flex;
   align-items: center;
@@ -501,7 +502,7 @@
 
 @media (max-width: 480px) {
   .actionBar {
-    bottom: calc(6px + env(safe-area-inset-bottom));
+    bottom: calc(var(--shell-bottom-inset, 0px) + 6px + env(safe-area-inset-bottom));
     gap: 8px;
     width: calc(100vw - 32px);
     padding: 8px;
@@ -525,16 +526,6 @@
   .searchInput {
     padding-right: 108px !important;
   }
-}
-
-:global([data-theme='dark']) .container,
-:global([data-theme='dark']) .actionBar {
-  --config-accent: #58719a;
-  --config-accent-strong: #b6c3dc;
-  --config-accent-hover: #425b86;
-  --config-accent-surface: color-mix(in srgb, var(--bg-primary) 88%, var(--config-accent) 12%);
-  --config-accent-border: color-mix(in srgb, var(--border-color) 62%, var(--config-accent) 38%);
-  --config-focus-ring: color-mix(in srgb, var(--config-accent) 24%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {

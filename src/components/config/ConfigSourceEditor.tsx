@@ -8,7 +8,7 @@ type ConfigSourceEditorProps = {
   value: string;
   onChange: (value: string) => void;
   editorRef?: Ref<ReactCodeMirrorRef>;
-  theme: 'light' | 'dark';
+  theme?: 'light';
   editable: boolean;
   placeholder: string;
 };
@@ -17,7 +17,7 @@ export default function ConfigSourceEditor({
   value,
   onChange,
   editorRef,
-  theme,
+  theme = 'light',
   editable,
   placeholder,
 }: ConfigSourceEditorProps) {

@@ -2,10 +2,8 @@ import { CSSProperties, useCallback, useEffect, useLayoutEffect, useRef, useStat
 import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
 import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer';
-import { useThemeStore } from '@/stores';
 import iconGemini from '@/assets/icons/gemini.svg';
 import iconOpenaiLight from '@/assets/icons/openai-light.svg';
-import iconOpenaiDark from '@/assets/icons/openai-dark.svg';
 import iconCodex from '@/assets/icons/codex.svg';
 import iconClaude from '@/assets/icons/claude.svg';
 import iconVertex from '@/assets/icons/vertex.svg';
@@ -17,16 +15,16 @@ export type ProviderId = 'gemini' | 'codex' | 'claude' | 'vertex' | 'ampcode' | 
 interface ProviderNavItem {
   id: ProviderId;
   label: string;
-  getIcon: (theme: string) => string;
+  icon: string;
 }
 
 const PROVIDERS: ProviderNavItem[] = [
-  { id: 'gemini', label: 'Gemini', getIcon: () => iconGemini },
-  { id: 'codex', label: 'Codex', getIcon: () => iconCodex },
-  { id: 'claude', label: 'Claude', getIcon: () => iconClaude },
-  { id: 'vertex', label: 'Vertex', getIcon: () => iconVertex },
-  { id: 'ampcode', label: 'Ampcode', getIcon: () => iconAmp },
-  { id: 'openai', label: 'OpenAI', getIcon: (theme) => (theme === 'dark' ? iconOpenaiDark : iconOpenaiLight) },
+  { id: 'gemini', label: 'Gemini', icon: iconGemini },
+  { id: 'codex', label: 'Codex', icon: iconCodex },
+  { id: 'claude', label: 'Claude', icon: iconClaude },
+  { id: 'vertex', label: 'Vertex', icon: iconVertex },
+  { id: 'ampcode', label: 'Ampcode', icon: iconAmp },
+  { id: 'openai', label: 'OpenAI', icon: iconOpenaiLight },
 ];
 
 const HEADER_OFFSET = 24;
@@ -36,7 +34,6 @@ export function ProviderNav() {
   const location = useLocation();
   const pageTransitionLayer = usePageTransitionLayer();
   const isCurrentLayer = pageTransitionLayer ? pageTransitionLayer.status === 'current' : true;
-  const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
   const [activeProvider, setActiveProvider] = useState<ProviderId | null>(null);
   const contentScrollerRef = useRef<HTMLElement | null>(null);
   const navListRef = useRef<HTMLDivElement | null>(null);
@@ -267,7 +264,7 @@ export function ProviderNav() {
               aria-pressed={isActive}
             >
               <img
-                src={provider.getIcon(resolvedTheme)}
+                src={provider.icon}
                 alt={provider.label}
                 className={styles.icon}
               />

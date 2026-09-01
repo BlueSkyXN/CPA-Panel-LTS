@@ -23,15 +23,6 @@ export function ProviderCategoryList({ groups, activeBrand, onSelect }: Provider
         const logoClassName = [
           styles.logo,
           logo?.transparent ? styles.logoTransparent : '',
-          logo?.darkSrc ? styles.logoThemeLight : '',
-          logo?.invertOnDark ? styles.logoInvertOnDark : '',
-        ]
-          .filter(Boolean)
-          .join(' ');
-        const darkLogoClassName = [
-          styles.logo,
-          logo?.transparent ? styles.logoTransparent : '',
-          styles.logoThemeDark,
         ]
           .filter(Boolean)
           .join(' ');
@@ -46,17 +37,7 @@ export function ProviderCategoryList({ groups, activeBrand, onSelect }: Provider
           >
             <span className={styles.itemLeft}>
               {logo ? (
-                <>
-                  <img src={logo.src} alt="" aria-hidden="true" className={logoClassName} />
-                  {logo.darkSrc ? (
-                    <img
-                      src={logo.darkSrc}
-                      alt=""
-                      aria-hidden="true"
-                      className={darkLogoClassName}
-                    />
-                  ) : null}
-                </>
+                <img src={logo.src} alt="" aria-hidden="true" className={logoClassName} />
               ) : null}
               <span className={styles.itemText}>
                 <span className={styles.itemTitle}>

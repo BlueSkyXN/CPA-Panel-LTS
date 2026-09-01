@@ -115,7 +115,7 @@ npm run build
   - OpenAI 兼容提供商（多 Key、Header、自助从 `/v1/models` 拉取并导入模型别名、可选浏览器侧 `chat/completions` 测试）。
   - Ampcode 集成（上游地址/密钥、强制映射、模型映射表）。
 - **认证文件**：上传/下载/删除 JSON 凭据，筛选/搜索/分页，标记 runtime-only；查看单个凭据可用模型（依赖后端支持）；管理 OAuth 排除模型（支持 `*` 通配符）；配置 OAuth 模型别名映射。
-- **OAuth**：对支持的提供商发起 OAuth/设备码流程，轮询状态；可选提交回调 `redirect_url`；包含 iFlow Cookie 导入。
+- **OAuth**：对支持的提供商发起 OAuth/设备码流程，轮询状态，并可选提交回调 `redirect_url`。当所连接 Core 暴露 iFlow 运行时凭证文件时，面板仍会在凭证作用域中展示；本面板不再宣称存在未经当前 Core 管理 API 验证的导入端点。
 - **配额管理**：管理 Claude、Antigravity、Codex、Gemini CLI 等提供商的配额上限与使用情况。
 - **使用统计**：按小时/天图表、按 API 与按模型统计、缓存/推理 Token 拆分、RPM/TPM 时间窗、可选本地保存的模型价格用于费用估算。
 - **配置文件**：浏览器内用源码/可视化模式编辑 `/config.yaml`（YAML 高亮 + 搜索），保存/重载；可配置 plugin store sources，以及 Core LTS 的 Codex 异常推理重试策略（命中动作、命中条件、流式缓存、对冲重试、耗尽策略、客户端用量聚合、交付/兜底策略、认证范围）。

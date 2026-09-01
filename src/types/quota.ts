@@ -4,8 +4,6 @@
 
 // Theme types
 export type ThemeColors = { bg: string; text: string; border?: string };
-export type TypeColorSet = { light: ThemeColors; dark?: ThemeColors };
-export type ResolvedTheme = 'light' | 'dark';
 
 // API payload types
 export interface GeminiCliQuotaBucket {

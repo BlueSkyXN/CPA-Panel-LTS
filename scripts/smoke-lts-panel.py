@@ -319,7 +319,8 @@ def build_usage_payload() -> dict[str, Any]:
             "response_service_tier": " priority ",
             "effective_service_tier": " priority ",
             "reasoning_effort": " max ",
-            "latency": 110,
+            "latency_ms": 110,
+            "ttfb_ms": 70,
             "tokens": {
                 "input_tokens": 12,
                 "output_tokens": 8,
@@ -3604,6 +3605,17 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         raise AssertionError("Request-event table region has no keyboard focus indicator")
     card.get_by_role("columnheader", name="Tier", exact=True).wait_for()
     card.get_by_role("columnheader", name="Effort", exact=True).wait_for()
+    card.get_by_role("columnheader", name="Caller Key", exact=True).wait_for()
+    card.get_by_role("columnheader", name="TTFB", exact=True).wait_for()
+    card.get_by_role("columnheader", name="Output TPS", exact=True).wait_for()
+    card.get_by_role("columnheader", name="Avg TPS", exact=True).wait_for()
+    card.locator('td[data-request-performance="ttfb"][data-ttfb-ms="70"]').wait_for()
+    card.locator('td[data-request-performance="output-tps"][data-output-tps="200"]').wait_for()
+    endpoint_identity_cells = card.locator('td[data-request-identity-type="endpoint"]')
+    if endpoint_identity_cells.count() != 8:
+        raise AssertionError(
+            "Request events did not preserve the outer usage API bucket as an endpoint identity"
+        )
     if card.get_by_role("columnheader", name="Source", exact=True).count() != 0:
         raise AssertionError("Request events must hide the Source column by default")
     if card.get_by_role("columnheader", name="Auth Index", exact=True).count() != 0:
@@ -3644,8 +3656,11 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     column_dialog.wait_for()
     source_column = column_dialog.get_by_role("checkbox", name="Source", exact=True)
     auth_index_column = column_dialog.get_by_role("checkbox", name="Auth Index", exact=True)
+    request_key_column = column_dialog.get_by_role("checkbox", name="Caller Key", exact=True)
     if source_column.is_checked() or auth_index_column.is_checked():
         raise AssertionError("Default request-event columns exposed Source or Auth Index")
+    if not request_key_column.is_checked():
+        raise AssertionError("Default request-event columns hid the caller key")
     source_column.check()
     auth_index_column.check()
     card.get_by_role("columnheader", name="Source", exact=True).wait_for()
@@ -3673,11 +3688,15 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     expected_column_defaults = {
         "timestamp": True,
         "model": True,
+        "requestKey": True,
         "source": False,
         "authIndex": False,
         "tier": True,
         "result": True,
         "latency": True,
+        "ttfb": True,
+        "outputTps": True,
+        "averageTps": True,
         "effort": True,
         "totalInputTokens": True,
         "nonCacheReadInputTokens": True,
@@ -3718,6 +3737,11 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         raise AssertionError(
             f"Expected {expected} request event row(s), found {rows.count()}"
         )
+
+    request_key_select = card.get_by_label("Caller Key", exact=True)
+    request_key_select.click()
+    page.get_by_role("option", name="Endpoint · POST /v1/responses", exact=True).click()
+    wait_for_row_count(8)
 
     model_select = card.get_by_label("Model", exact=True)
     model_select.click()
@@ -3939,6 +3963,13 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         csv_rows = list(csv.DictReader(csv_file))
     if any(column.startswith("thinking_") for column in csv_rows[0]):
         raise AssertionError("Request-event CSV must not export legacy thinking fields")
+    if any(
+        row.get("request_identity_type") != "endpoint"
+        or row.get("request_key_hint") != "POST /v1/responses"
+        or row.get("request_key_config_index") not in {"", None}
+        for row in csv_rows
+    ):
+        raise AssertionError("Request-event CSV lost the safe caller identity fields")
     csv_tiers = sorted(row.get("service_tier", "") for row in csv_rows)
     if csv_tiers != ["", "cache-import", "flex", "priority", "priority"]:
         raise AssertionError(f"Request-event CSV lost raw service_tier values: {csv_tiers!r}")
@@ -4008,6 +4039,13 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     json_rows = json.loads(Path(json_path).read_text(encoding="utf-8"))
     if any("thinking" in row for row in json_rows):
         raise AssertionError("Request-event JSON must not export legacy thinking data")
+    if any(
+        row.get("request_identity_type") != "endpoint"
+        or row.get("request_key_hint") != "POST /v1/responses"
+        or row.get("request_key_config_index") is not None
+        for row in json_rows
+    ):
+        raise AssertionError("Request-event JSON lost the safe caller identity fields")
     json_tiers = sorted(
         "<null>" if row.get("service_tier") is None else str(row.get("service_tier"))
         for row in json_rows
@@ -4152,6 +4190,20 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         "() => document.documentElement.getAttribute('data-theme')"
     )
     page.evaluate("() => document.documentElement.removeAttribute('data-theme')")
+    default_theme_surfaces = page.evaluate(
+        """() => {
+          const style = getComputedStyle(document.documentElement);
+          return {
+            page: style.getPropertyValue('--bg-secondary').trim().toLowerCase(),
+            card: style.getPropertyValue('--bg-primary').trim().toLowerCase(),
+          };
+        }"""
+    )
+    if default_theme_surfaces != {"page": "#ffffff", "card": "#ffffff"}:
+        raise AssertionError(
+            "Default theme restored a tinted paper surface: "
+            f"{default_theme_surfaces!r}"
+        )
     cache_tone_signatures = {}
     for tone in ["unavailable", "low", "medium", "high", "anomaly"]:
         cache_cell = card.locator(f'td[data-cache-rate-tone="{tone}"]').first
@@ -4200,7 +4252,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
             )
 
     try:
-        for theme in ["white", "dark"]:
+        for theme in ["mist"]:
             page.evaluate(
                 "theme => document.documentElement.setAttribute('data-theme', theme)",
                 theme,
@@ -4796,12 +4848,14 @@ def run_usage_request_event_column_storage_smoke(context: Any, app_url: str) -> 
               const stored = JSON.parse(localStorage.getItem(current) || '{}');
               return legacy.every((key) => localStorage.getItem(key) === null) &&
                 stored.source === false && stored.authIndex === false &&
+                stored.requestKey === true &&
                 stored.totalInputTokens === true &&
                 stored.nonCacheReadInputTokens === true &&
                 stored.totalOutputTokens === true &&
                 stored.displayedOutputTokens === true &&
                 stored.reasoningTokens === true && stored.cacheReadTokens === true &&
                 stored.cacheWriteTokens === true && stored.totalTokens === true &&
+                stored.ttfb === true && stored.outputTps === true && stored.averageTps === true &&
                 stored.cost === true;
             }""",
             arg={"current": storage_key, "legacy": legacy_keys},
@@ -4821,11 +4875,15 @@ def run_usage_request_event_column_storage_smoke(context: Any, app_url: str) -> 
               localStorage.setItem(key, JSON.stringify({
                 timestamp: false,
                 model: false,
+                requestKey: false,
                 source: false,
                 authIndex: false,
                 tier: false,
                 result: false,
                 latency: true,
+                ttfb: false,
+                outputTps: false,
+                averageTps: false,
                 effort: false,
                 totalInputTokens: false,
                 nonCacheReadInputTokens: false,
@@ -5354,10 +5412,109 @@ def run_sidebar_navigation_smoke(page: Any, state: MockCoreState) -> None:
     navigation = page.get_by_role("navigation", name="Primary navigation")
     navigation.wait_for()
 
-    for group_label in ["Operate", "Gateway", "Observe", "Control", "Plugins"]:
+    for group_label in ["Command", "Gateway", "Observe", "Runtime", "Plugins"]:
         navigation.locator(
             ".nav-group-label", has_text=re.compile(f"^{re.escape(group_label)}$")
         ).wait_for()
+
+    app_shell = page.locator(".app-shell")
+    if "sidebar-mode-compact" not in (app_shell.get_attribute("class") or "").split():
+        raise AssertionError("Fresh sessions did not default to the compact sidebar")
+    page.get_by_role("button", name="Switch to classic sidebar", exact=True).click()
+    page.wait_for_function(
+        "() => document.querySelector('.app-shell')?.classList.contains('sidebar-mode-classic')"
+    )
+    page.get_by_role("button", name="Switch to compact sidebar", exact=True).click()
+    page.wait_for_function(
+        "() => document.querySelector('.app-shell')?.classList.contains('sidebar-mode-compact')"
+    )
+
+    if app_shell.get_attribute("data-workspace-layout") != "tower":
+        raise AssertionError("Fresh sessions did not default to the Tower workspace")
+
+    migrated_theme = page.evaluate(
+        "() => JSON.parse(localStorage.getItem('cli-proxy-theme') || 'null')"
+    )
+    if migrated_theme != {"state": {"theme": "white"}, "version": 3}:
+        raise AssertionError(
+            f"Legacy paper theme did not migrate permanently to white: {migrated_theme!r}"
+        )
+
+    theme_button = page.get_by_role("button", name="Theme", exact=True)
+    theme_button.click()
+    appearance_menu = page.get_by_role("menu", name="Workspace appearance")
+    appearance_menu.wait_for()
+    if appearance_menu.get_by_role(
+        "menuitemradio", name="Wool Paper", exact=True
+    ).count():
+        raise AssertionError("Removed paper theme is still exposed in the appearance menu")
+    appearance_menu.get_by_role("menuitemradio", name=re.compile(r"^Studio\b")).click()
+    page.wait_for_function(
+        "() => document.querySelector('.app-shell')?.getAttribute('data-workspace-layout') === 'studio'"
+    )
+    stored_layout = page.evaluate(
+        "() => JSON.parse(localStorage.getItem('cli-proxy-workspace-layout') || 'null')"
+    )
+    if stored_layout != {"state": {"layout": "studio"}, "version": 1}:
+        raise AssertionError(f"Studio workspace did not persist: {stored_layout!r}")
+
+    theme_button.click()
+    page.get_by_role("menu", name="Workspace appearance").get_by_role(
+        "menuitemradio", name=re.compile(r"^Console\b")
+    ).click()
+    page.wait_for_function(
+        "() => document.querySelector('.app-shell')?.getAttribute('data-workspace-layout') === 'console'"
+    )
+    theme_button.click()
+    page.get_by_role("menu", name="Workspace appearance").get_by_role(
+        "menuitemradio", name=re.compile(r"^Tower\b")
+    ).click()
+    page.wait_for_function(
+        "() => document.querySelector('.app-shell')?.getAttribute('data-workspace-layout') === 'tower'"
+    )
+
+    theme_button.click()
+    appearance_menu = page.get_by_role("menu", name="Workspace appearance")
+    appearance_menu.get_by_role(
+        "menuitemradio", name="Soft Mist", exact=True
+    ).click()
+    page.wait_for_function(
+        "() => document.documentElement.getAttribute('data-theme') === 'mist'"
+    )
+    theme_button.click()
+    page.get_by_role("menu", name="Workspace appearance").get_by_role(
+        "menuitemradio", name="Pure White", exact=True
+    ).click()
+    page.wait_for_function(
+        "() => document.documentElement.getAttribute('data-theme') === null"
+    )
+
+    palette_trigger = page.get_by_role("button", name="Quick search", exact=True)
+    palette_trigger.click()
+    palette = page.get_by_role("dialog", name="Command palette", exact=True)
+    palette.wait_for()
+    palette_input = palette.get_by_role("combobox")
+    page.wait_for_function(
+        "() => document.activeElement?.getAttribute('role') === 'combobox'"
+    )
+    palette_input.press("Tab")
+    if not palette.evaluate("element => element.contains(document.activeElement)"):
+        raise AssertionError("Command palette allowed Tab focus to escape the modal")
+    palette_input.press("Shift+Tab")
+    if not palette.evaluate("element => element.contains(document.activeElement)"):
+        raise AssertionError("Command palette allowed reverse Tab focus to escape the modal")
+    palette_input.fill("Core Workspace")
+    palette_input.press("Enter")
+    page.wait_for_function("() => window.location.hash.endsWith('/core')")
+    page.get_by_role("heading", name="Core Workspace", exact=True).wait_for()
+    page.get_by_role("region", name="Core summary", exact=True).wait_for()
+
+    codex_scope = page.locator('[data-provider="codex"]')
+    codex_scope.get_by_role("link", name="OAuth", exact=True).click()
+    page.wait_for_function("() => window.location.hash.endsWith('/oauth?provider=codex')")
+    page.locator('[data-focused="true"]').get_by_text("Codex OAuth", exact=True).wait_for()
+    navigation.get_by_role("link", name="Dashboard", exact=True).click()
+    page.wait_for_function("() => window.location.hash.endsWith('#/')")
 
     state.logging_to_file = False
     try:
@@ -5366,8 +5523,10 @@ def run_sidebar_navigation_smoke(page: Any, state: MockCoreState) -> None:
             and response.url.endswith("/v0/management/config")
         ):
             page.reload(wait_until="domcontentloaded")
+        page.wait_for_url(re.compile(r".*/#/$"), timeout=20_000)
         page.get_by_text("Where to go from here", exact=False).first.wait_for()
         navigation = page.get_by_role("navigation", name="Primary navigation")
+        navigation.wait_for()
         if navigation.get_by_role("link", name="Logs Viewer", exact=True).count() != 1:
             raise AssertionError(
                 "Logs navigation disappeared when logging-to-file was disabled"
@@ -5379,8 +5538,10 @@ def run_sidebar_navigation_smoke(page: Any, state: MockCoreState) -> None:
             and response.url.endswith("/v0/management/config")
         ):
             page.reload(wait_until="domcontentloaded")
+        page.wait_for_url(re.compile(r".*/#/$"), timeout=20_000)
         page.get_by_text("Where to go from here", exact=False).first.wait_for()
         navigation = page.get_by_role("navigation", name="Primary navigation")
+        navigation.wait_for()
 
     providers_drawer = navigation.get_by_role("button", name="AI Providers", exact=True)
     if providers_drawer.count() != 1:
@@ -5427,7 +5588,7 @@ def run_sidebar_navigation_smoke(page: Any, state: MockCoreState) -> None:
         raise AssertionError("Active plugin drawer could not be manually collapsed")
 
     page.locator(".sidebar-toggle-floating").click()
-    if navigation.locator(".nav-group-label", has_text=re.compile(r"^Operate$")).count() != 0:
+    if navigation.locator(".nav-group-label", has_text=re.compile(r"^Command$")).count() != 0:
         raise AssertionError("Collapsed sidebar still exposed group labels")
     page.get_by_title("Mock Resource Plugin").click()
     navigation.get_by_role("link", name="Mock Resource Settings", exact=True).wait_for()
@@ -5470,6 +5631,10 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             localStorage.setItem(
               'cli-proxy-language',
               JSON.stringify({ state: { language: 'en' }, version: 0 })
+            );
+            localStorage.setItem(
+              'cli-proxy-theme',
+              JSON.stringify({ state: { theme: 'paper' }, version: 2 })
             );
             localStorage.setItem(
               'cli-proxy-usage-request-event-columns-v1',
@@ -5752,9 +5917,12 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             openrouter_row.get_by_role("button", name="Edit", exact=True).click()
             sheet = page.get_by_role("dialog").last
 
-            sheet.get_by_text("API key entries", exact=True).click()
+            api_key_entries_label = sheet.get_by_text("API key entries", exact=True)
+            api_key_entries_details = api_key_entries_label.locator("xpath=ancestor::details[1]")
+            if api_key_entries_details.get_attribute("open") is None:
+                api_key_entries_label.click()
             key2_card = sheet.get_by_text("Key #2", exact=True).locator(
-                "xpath=ancestor::div[contains(@class, 'entryCard')][1]"
+                "xpath=ancestor::div[contains(@class, 'entryCard___')][1]"
             )
             key2_card.wait_for()
             with page.expect_response(

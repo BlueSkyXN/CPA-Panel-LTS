@@ -419,6 +419,21 @@ export function PageTransition({
 
         return layers.map((layer, index) => {
           const shouldKeepStacked = layer.status === 'stacked' && index === keepStackedIndex;
+          const hasPendingPathChange =
+            !isAnimating &&
+            layer.status === 'current' &&
+            layer.location.pathname !== location.pathname;
+          const renderLocation =
+            layer.status === 'current' &&
+            (layer.location.pathname === location.pathname || hasPendingPathChange)
+              ? location
+              : layer.location;
+          const layerContextValue = hasPendingPathChange
+            ? PAGE_TRANSITION_LAYER_CONTEXT_VALUES.current
+            : {
+                ...PAGE_TRANSITION_LAYER_CONTEXT_VALUES[layer.status],
+                isAnimating,
+              };
           return (
             <div
               key={layer.key}
@@ -440,13 +455,8 @@ export function PageTransition({
                     : undefined
               }
             >
-              <PageTransitionLayerContext.Provider
-                value={{
-                  ...PAGE_TRANSITION_LAYER_CONTEXT_VALUES[layer.status],
-                  isAnimating,
-                }}
-              >
-                {render(layer.location)}
+              <PageTransitionLayerContext.Provider value={layerContextValue}>
+                {render(renderLocation)}
               </PageTransitionLayerContext.Provider>
             </div>
           );

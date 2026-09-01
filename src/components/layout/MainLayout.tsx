@@ -7,11 +7,13 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { PageTransition } from '@/components/common/PageTransition';
 import { SidebarNavigation } from '@/components/layout/SidebarNavigation';
+import { CommandPalette } from '@/components/layout/CommandPalette';
+import { CoreScopeRail } from '@/components/layout/CoreScopeRail';
 import {
   flattenSidebarNavPaths,
   type SidebarNavGroup,
@@ -22,12 +24,14 @@ import {
   IconSidebarAuthFiles,
   IconSidebarConfig,
   IconSidebarDashboard,
+  IconModelCluster,
   IconSidebarLogs,
+  IconMaximize2,
+  IconMinimize2,
   IconSidebarOauth,
   IconSidebarPlugins,
   IconSidebarProviders,
   IconSidebarQuota,
-  IconSidebarStore,
   IconSidebarSystem,
   IconSidebarUsage,
 } from '@/components/ui/icons';
@@ -38,8 +42,10 @@ import {
   useLanguageStore,
   useNotificationStore,
   useThemeStore,
+  useWorkspaceStore,
 } from '@/stores';
 import { triggerHeaderRefresh } from '@/hooks/useHeaderRefresh';
+import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { pluginsApi } from '@/services/api';
 import {
   collectPluginResourceEntries,
@@ -48,17 +54,21 @@ import {
 } from '@/features/plugins/pluginResources';
 import { LANGUAGE_LABEL_KEYS, LANGUAGE_ORDER } from '@/utils/constants';
 import { isSupportedLanguage } from '@/utils/language';
-import type { Theme } from '@/types';
+import type { Theme, WorkspaceLayout } from '@/types';
+
+type SidebarMode = 'classic' | 'compact';
+
+const SIDEBAR_MODE_STORAGE_KEY = 'mainLayout.sidebarMode';
 
 const sidebarIcons: Record<string, ReactNode> = {
   dashboard: <IconSidebarDashboard size={18} />,
+  coreWorkspace: <IconModelCluster size={18} />,
   aiProviders: <IconSidebarProviders size={18} />,
   authFiles: <IconSidebarAuthFiles size={18} />,
   oauth: <IconSidebarOauth size={18} />,
   quota: <IconSidebarQuota size={18} />,
   usage: <IconSidebarUsage size={18} />,
   plugins: <IconSidebarPlugins size={18} />,
-  pluginStore: <IconSidebarStore size={18} />,
   config: <IconSidebarConfig size={18} />,
   logs: <IconSidebarLogs size={18} />,
   system: <IconSidebarSystem size={18} />,
@@ -83,6 +93,13 @@ const headerIcons = {
     <svg {...headerIconProps}>
       <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
       <path d="M21 3v5h-5" />
+    </svg>
+  ),
+  layout: (
+    <svg {...headerIconProps}>
+      <rect x="3" y="3" width="7" height="18" rx="2" />
+      <rect x="14" y="3" width="7" height="8" rx="2" />
+      <rect x="14" y="15" width="7" height="6" rx="2" />
     </svg>
   ),
   menu: (
@@ -128,42 +145,6 @@ const headerIcons = {
       <path d="m19.07 4.93-1.41 1.41" />
     </svg>
   ),
-  moon: (
-    <svg {...headerIconProps}>
-      <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z" />
-    </svg>
-  ),
-  whiteTheme: (
-    <svg {...headerIconProps}>
-      <circle cx="12" cy="12" r="7" />
-      <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" />
-    </svg>
-  ),
-  autoTheme: (
-    <svg {...headerIconProps}>
-      <defs>
-        <clipPath id="mainLayoutAutoThemeSunLeftHalf">
-          <rect x="0" y="0" width="12" height="24" />
-        </clipPath>
-      </defs>
-      <circle cx="12" cy="12" r="4" />
-      <circle
-        cx="12"
-        cy="12"
-        r="4"
-        clipPath="url(#mainLayoutAutoThemeSunLeftHalf)"
-        fill="currentColor"
-      />
-      <path d="M12 2v2" />
-      <path d="M12 20v2" />
-      <path d="M4.93 4.93l1.41 1.41" />
-      <path d="M17.66 17.66l1.41 1.41" />
-      <path d="M2 12h2" />
-      <path d="M20 12h2" />
-      <path d="M6.34 17.66l-1.41 1.41" />
-      <path d="M19.07 4.93l-1.41 1.41" />
-    </svg>
-  ),
   logout: (
     <svg {...headerIconProps}>
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -176,52 +157,28 @@ const headerIcons = {
 const THEME_CARDS: Array<{
   key: Theme;
   labelKey: string;
-  colors: { bg: string; card: string; border: string; text: string; textMuted: string };
+  colors: { bg: string; card: string; border: string; textMuted: string };
 }> = [
-  {
-    key: 'auto',
-    labelKey: 'theme.auto',
-    colors: {
-      bg: 'linear-gradient(135deg, #ffffff 0 50%, #111111 50% 100%)',
-      card: 'linear-gradient(135deg, #ffffff 0 50%, #1a1a1a 50% 100%)',
-      border: '#bdbdbd',
-      text: '#2d2a26',
-      textMuted: 'linear-gradient(135deg, #c9c9c9 0 50%, #5a5a5a 50% 100%)',
-    },
-  },
   {
     key: 'white',
     labelKey: 'theme.white',
-    colors: {
-      bg: '#ffffff',
-      card: '#ffffff',
-      border: '#e5e5e5',
-      text: '#2d2a26',
-      textMuted: '#a29c95',
-    },
+    colors: { bg: '#ffffff', card: '#ffffff', border: '#e5e7eb', textMuted: '#9ca3af' },
   },
   {
-    key: 'light',
-    labelKey: 'theme.light',
-    colors: {
-      bg: '#faf9f5',
-      card: '#f0eee8',
-      border: '#e3e1db',
-      text: '#2d2a26',
-      textMuted: '#a29c95',
-    },
+    key: 'mist',
+    labelKey: 'theme.mist',
+    colors: { bg: '#f3f5f7', card: '#fbfcfd', border: '#dce1e7', textMuted: '#87909c' },
   },
-  {
-    key: 'dark',
-    labelKey: 'theme.dark',
-    colors: {
-      bg: '#151412',
-      card: '#1d1b18',
-      border: '#3a3530',
-      text: '#f6f4f1',
-      textMuted: '#9c958d',
-    },
-  },
+];
+
+const LAYOUT_CARDS: Array<{
+  key: WorkspaceLayout;
+  labelKey: string;
+  descriptionKey: string;
+}> = [
+  { key: 'tower', labelKey: 'workspace.tower', descriptionKey: 'workspace.tower_desc' },
+  { key: 'studio', labelKey: 'workspace.studio', descriptionKey: 'workspace.studio_desc' },
+  { key: 'console', labelKey: 'workspace.console', descriptionKey: 'workspace.console_desc' },
 ];
 
 export function MainLayout() {
@@ -233,21 +190,27 @@ export function MainLayout() {
   const supportsPlugin = useAuthStore((state) => state.supportsPlugin);
   const pluginSupportKnown = useAuthStore((state) => state.pluginSupportKnown);
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
-
   const config = useConfigStore((state) => state.config);
   const fetchConfig = useConfigStore((state) => state.fetchConfig);
   const clearCache = useConfigStore((state) => state.clearCache);
 
   const theme = useThemeStore((state) => state.theme);
   const setTheme = useThemeStore((state) => state.setTheme);
+  const layout = useWorkspaceStore((state) => state.layout);
+  const setLayout = useWorkspaceStore((state) => state.setLayout);
   const language = useLanguageStore((state) => state.language);
   const setLanguage = useLanguageStore((state) => state.setLanguage);
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarMode, setSidebarMode] = useLocalStorage<SidebarMode>(
+    SIDEBAR_MODE_STORAGE_KEY,
+    'compact'
+  );
   const [languageMenuOpen, setLanguageMenuOpen] = useState(false);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [pluginResourceEntries, setPluginResourceEntries] = useState<PluginResourceEntry[]>([]);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const languageMenuRef = useRef<HTMLDivElement | null>(null);
   const themeMenuRef = useRef<HTMLDivElement | null>(null);
@@ -256,7 +219,12 @@ export function MainLayout() {
   const fullBrandName = 'CLI Proxy API Management Center';
   const abbrBrandName = t('title.abbr');
   const isLogsPage = location.pathname.startsWith('/logs');
+  const effectiveSidebarMode: SidebarMode = sidebarMode === 'compact' ? 'compact' : 'classic';
+  const isCompactSidebar = effectiveSidebarMode === 'compact';
   const showSidebarLabels = !sidebarCollapsed || sidebarOpen;
+  const sidebarModeToggleLabel = isCompactSidebar
+    ? t('sidebar.switch_to_classic', { defaultValue: 'Switch to classic sidebar' })
+    : t('sidebar.switch_to_compact', { defaultValue: 'Switch to compact sidebar' });
   const canLoadPlugins = supportsPlugin && connectionStatus === 'connected';
   const showPluginRuntimeDiagnostic =
     connectionStatus === 'connected' &&
@@ -277,6 +245,19 @@ export function MainLayout() {
       setPluginResourceEntries([]);
     }
   }, [canLoadPlugins]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat || event.defaultPrevented || event.isComposing) return;
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
+      if (event.key.toLowerCase() !== 'k') return;
+      event.preventDefault();
+      setPaletteOpen((prev) => !prev);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // 将顶部悬浮控制区高度写入 CSS 变量，供移动端粘性元素和浮层避让。
   useLayoutEffect(() => {
@@ -409,6 +390,14 @@ export function MainLayout() {
     [setTheme]
   );
 
+  const handleLayoutSelect = useCallback(
+    (nextLayout: WorkspaceLayout) => {
+      setLayout(nextLayout);
+      setThemeMenuOpen(false);
+    },
+    [setLayout]
+  );
+
   const handleLanguageSelect = useCallback(
     (nextLanguage: string) => {
       if (!isSupportedLanguage(nextLanguage)) {
@@ -494,145 +483,181 @@ export function MainLayout() {
       })
     : [];
 
+  const dashboardItem: SidebarNavItem = {
+    kind: 'link',
+    path: '/',
+    label: t('nav.dashboard'),
+    meta: t('nav_meta.dashboard'),
+    icon: sidebarIcons.dashboard,
+    end: true,
+  };
+  const coreItem: SidebarNavItem = {
+    kind: 'link',
+    path: '/core',
+    label: t('nav.core_workspace'),
+    meta: t('nav_meta.core_workspace'),
+    icon: sidebarIcons.coreWorkspace,
+    end: true,
+  };
+  const providersItem: SidebarNavItem = {
+    kind: 'drawer',
+    id: 'ai-providers',
+    path: '/ai-providers',
+    label: t('nav.ai_providers'),
+    meta: t('nav_meta.ai_providers'),
+    icon: sidebarIcons.aiProviders,
+    children: [
+      {
+        kind: 'link',
+        path: '/ai-providers/legacy',
+        label: t('nav.provider_legacy'),
+        icon: <span className="nav-sub-dot" aria-hidden="true" />,
+        end: true,
+      },
+    ],
+  };
+  const authFilesItem: SidebarNavItem = {
+    kind: 'link',
+    path: '/auth-files',
+    label: t('nav.auth_files'),
+    meta: t('nav_meta.auth_files'),
+    icon: sidebarIcons.authFiles,
+  };
+  const oauthItem: SidebarNavItem = {
+    kind: 'link',
+    path: '/oauth',
+    label: t('nav.oauth', { defaultValue: 'OAuth' }),
+    meta: t('nav_meta.oauth'),
+    icon: sidebarIcons.oauth,
+  };
+  const quotaItem: SidebarNavItem = {
+    kind: 'link',
+    path: '/quota',
+    label: t('nav.quota_management'),
+    meta: t('nav_meta.quota_management'),
+    icon: sidebarIcons.quota,
+  };
+  const usageItem: SidebarNavItem = {
+    kind: 'drawer',
+    id: 'usage',
+    path: '/usage',
+    label: t('nav.usage_stats'),
+    meta: t('nav_meta.usage_stats'),
+    icon: sidebarIcons.usage,
+    children: [
+      {
+        kind: 'link',
+        path: '/usage/pricing',
+        label: t('usage_stats.pricing_title'),
+        icon: <span className="nav-sub-dot" aria-hidden="true" />,
+        end: true,
+      },
+    ],
+  };
+  const logsItem: SidebarNavItem = {
+    kind: 'link',
+    path: '/logs',
+    label: t('nav.logs'),
+    meta: t('nav_meta.logs'),
+    icon: sidebarIcons.logs,
+  };
+  const configItem: SidebarNavItem = {
+    kind: 'link',
+    path: '/config',
+    label: t('nav.config_management'),
+    meta: t('nav_meta.config_management'),
+    icon: sidebarIcons.config,
+  };
+  const pluginItems: SidebarNavItem[] = supportsPlugin
+    ? [
+        {
+          kind: 'drawer',
+          id: 'plugins',
+          path: '/plugins',
+          label: t('nav.plugins'),
+          meta: t('nav_meta.plugins'),
+          icon: sidebarIcons.plugins,
+          children: [
+            {
+              kind: 'link',
+              path: '/plugin-store',
+              label: t('nav.plugin_store'),
+              icon: <span className="nav-sub-dot" aria-hidden="true" />,
+              end: true,
+            },
+          ],
+        },
+      ]
+    : showPluginRuntimeDiagnostic
+      ? [
+          {
+            kind: 'link',
+            path: '/plugins',
+            label: t('nav.plugins_runtime_unavailable'),
+            icon: sidebarIcons.plugins,
+          },
+        ]
+      : [];
+  const systemItem: SidebarNavItem = {
+    kind: 'link',
+    path: '/system',
+    label: t('nav.system_info'),
+    meta: t('nav_meta.system_info'),
+    icon: sidebarIcons.system,
+  };
+
+  const groupsByLayout: Record<WorkspaceLayout, SidebarNavGroup[]> = {
+    tower: [
+      { id: 'command', label: t('workspace.group_command'), items: [dashboardItem, coreItem] },
+      {
+        id: 'gateway',
+        label: t('workspace.group_gateway'),
+        items: [providersItem, authFilesItem, oauthItem, configItem],
+      },
+      {
+        id: 'observe',
+        label: t('workspace.group_observe'),
+        items: [quotaItem, usageItem, logsItem],
+      },
+      {
+        id: 'runtime',
+        label: t('workspace.group_runtime'),
+        items: [...pluginItems, systemItem],
+      },
+    ],
+    studio: [
+      {
+        id: 'studio',
+        label: t('workspace.group_workspace'),
+        items: [dashboardItem, coreItem, providersItem],
+      },
+      {
+        id: 'accounts',
+        label: t('workspace.group_accounts'),
+        items: [oauthItem, authFilesItem, quotaItem],
+      },
+      { id: 'insights', label: t('workspace.group_insights'), items: [usageItem, logsItem] },
+      {
+        id: 'settings',
+        label: t('workspace.group_settings'),
+        items: [configItem, ...pluginItems, systemItem],
+      },
+    ],
+    console: [
+      { id: 'access', label: t('workspace.scope_access'), items: [dashboardItem, configItem] },
+      {
+        id: 'credentials',
+        label: t('workspace.scope_credentials'),
+        items: [oauthItem, authFilesItem, providersItem],
+      },
+      { id: 'policy', label: t('workspace.scope_policy'), items: [coreItem, quotaItem] },
+      { id: 'observe', label: t('workspace.scope_observe'), items: [usageItem, logsItem] },
+      { id: 'extend', label: t('workspace.scope_extend'), items: [...pluginItems, systemItem] },
+    ],
+  };
+
   const navGroups: SidebarNavGroup[] = [
-    {
-      id: 'operate',
-      label: t('nav_groups.operate'),
-      items: [
-        {
-          kind: 'link',
-          path: '/',
-          label: t('nav.dashboard'),
-          meta: t('nav_meta.dashboard'),
-          icon: sidebarIcons.dashboard,
-          end: true,
-        },
-      ],
-    },
-    {
-      id: 'gateway',
-      label: t('nav_groups.gateway'),
-      items: [
-        {
-          kind: 'drawer',
-          id: 'ai-providers',
-          path: '/ai-providers',
-          label: t('nav.ai_providers'),
-          meta: t('nav_meta.ai_providers'),
-          icon: sidebarIcons.aiProviders,
-          children: [
-            {
-              kind: 'link',
-              path: '/ai-providers/legacy',
-              label: t('nav.provider_legacy'),
-              icon: <span className="nav-sub-dot" aria-hidden="true" />,
-              end: true,
-            },
-          ],
-        },
-        {
-          kind: 'link',
-          path: '/auth-files',
-          label: t('nav.auth_files'),
-          meta: t('nav_meta.auth_files'),
-          icon: sidebarIcons.authFiles,
-        },
-        {
-          kind: 'link',
-          path: '/oauth',
-          label: t('nav.oauth', { defaultValue: 'OAuth' }),
-          meta: t('nav_meta.oauth'),
-          icon: sidebarIcons.oauth,
-        },
-      ],
-    },
-    {
-      id: 'observe',
-      label: t('nav_groups.observe'),
-      items: [
-        {
-          kind: 'link',
-          path: '/quota',
-          label: t('nav.quota_management'),
-          meta: t('nav_meta.quota_management'),
-          icon: sidebarIcons.quota,
-        },
-        {
-          kind: 'drawer',
-          id: 'usage',
-          path: '/usage',
-          label: t('nav.usage_stats'),
-          meta: t('nav_meta.usage_stats'),
-          icon: sidebarIcons.usage,
-          children: [
-            {
-              kind: 'link',
-              path: '/usage/pricing',
-              label: t('usage_stats.pricing_title'),
-              icon: <span className="nav-sub-dot" aria-hidden="true" />,
-              end: true,
-            },
-          ],
-        },
-        {
-          kind: 'link',
-          path: '/logs',
-          label: t('nav.logs'),
-          meta: t('nav_meta.logs'),
-          icon: sidebarIcons.logs,
-        },
-      ],
-    },
-    {
-      id: 'control',
-      label: t('nav_groups.control'),
-      items: [
-        {
-          kind: 'link',
-          path: '/config',
-          label: t('nav.config_management'),
-          meta: t('nav_meta.config_management'),
-          icon: sidebarIcons.config,
-        },
-        ...(supportsPlugin
-          ? [
-              {
-                kind: 'drawer' as const,
-                id: 'plugins',
-                path: '/plugins',
-                label: t('nav.plugins'),
-                meta: t('nav_meta.plugins'),
-                icon: sidebarIcons.plugins,
-                children: [
-                  {
-                    kind: 'link' as const,
-                    path: '/plugin-store',
-                    label: t('nav.plugin_store'),
-                    icon: <span className="nav-sub-dot" aria-hidden="true" />,
-                    end: true,
-                  },
-                ],
-              },
-            ]
-          : showPluginRuntimeDiagnostic
-            ? [
-                {
-                  kind: 'link' as const,
-                  path: '/plugins',
-                  label: t('nav.plugins_runtime_unavailable'),
-                  icon: sidebarIcons.plugins,
-                },
-              ]
-            : []),
-        {
-          kind: 'link',
-          path: '/system',
-          label: t('nav.system_info'),
-          meta: t('nav_meta.system_info'),
-          icon: sidebarIcons.system,
-        },
-      ],
-    },
+    ...groupsByLayout[layout],
     ...(pluginPageNavItems.length > 0
       ? [
           {
@@ -646,6 +671,33 @@ export function MainLayout() {
   ];
   const navOrder = flattenSidebarNavPaths(navGroups);
   const sidebarNavigationKey = navOrder.join('|');
+
+  const palettePages: Array<{
+    path: string;
+    label: string;
+    meta?: string;
+    icon: ReactNode;
+  }> = [];
+  navGroups.forEach((group) => {
+    group.items.forEach((item) => {
+      if (item.kind === 'link') {
+        palettePages.push({ path: item.path, label: item.label, meta: item.meta, icon: item.icon });
+        return;
+      }
+      if (item.path) {
+        palettePages.push({ path: item.path, label: item.label, meta: item.meta, icon: item.icon });
+      }
+      item.children.forEach((child) => {
+        palettePages.push({
+          path: child.path,
+          label: child.label,
+          meta: child.meta,
+          icon: child.icon,
+        });
+      });
+    });
+  });
+
   const getRouteOrder = (pathname: string) => {
     const trimmedPath =
       pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
@@ -736,12 +788,64 @@ export function MainLayout() {
     }
     showNotification(t('notification.data_refreshed'), 'success');
   };
+
+  const paletteActions = [
+    {
+      id: 'refresh',
+      label: t('header.refresh_all'),
+      icon: headerIcons.refresh,
+      run: () => void handleRefreshAll(),
+    },
+    ...LAYOUT_CARDS.map((item) => ({
+      id: `layout-${item.key}`,
+      label: `${t('workspace.switch')} · ${t(item.labelKey)}`,
+      icon: headerIcons.layout,
+      run: () => setLayout(item.key),
+    })),
+    ...THEME_CARDS.map((item) => ({
+      id: `theme-${item.key}`,
+      label: `${t('theme.switch')} · ${t(item.labelKey)}`,
+      icon: headerIcons.sun,
+      run: () => setTheme(item.key),
+    })),
+    ...LANGUAGE_ORDER.map((lang) => ({
+      id: `language-${lang}`,
+      label: `${t('language.switch')} · ${t(LANGUAGE_LABEL_KEYS[lang])}`,
+      icon: headerIcons.language,
+      run: () => setLanguage(lang),
+    })),
+    {
+      id: 'logout',
+      label: t('header.logout'),
+      icon: headerIcons.logout,
+      run: () => logout(),
+    },
+  ];
   const mobileSidebarToggleLabel = sidebarOpen
     ? t('sidebar.toggle_collapse', { defaultValue: 'Close navigation' })
     : t('sidebar.toggle_expand', { defaultValue: 'Open navigation' });
+  const routingStatusText = config?.routingStrategy?.trim() || 'round-robin';
+  const requestRetryText = String(config?.requestRetry ?? 0);
+  const quotaFallbackEnabled = Boolean(
+    config?.quotaExceeded?.switchProject ||
+      config?.quotaExceeded?.switchPreviewModel ||
+      config?.quotaExceeded?.antigravityCredits
+  );
+  const toggleSidebarMode = () => {
+    setSidebarMode((current) => (current === 'compact' ? 'classic' : 'compact'));
+  };
+  const paletteShortcutLabel =
+    typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/i.test(navigator.userAgent)
+      ? '⌘K'
+      : 'Ctrl K';
 
   return (
-    <div className={`app-shell ${sidebarCollapsed ? 'sidebar-is-collapsed' : ''}`}>
+    <div
+      className={`app-shell layout-${layout} sidebar-mode-${effectiveSidebarMode} ${
+        sidebarCollapsed ? 'sidebar-is-collapsed' : ''
+      }`}
+      data-workspace-layout={layout}
+    >
       <div className="top-gradient-blur" aria-hidden="true" />
 
       <header className="main-header" ref={headerRef}>
@@ -777,6 +881,47 @@ export function MainLayout() {
         </div>
 
         <div className="header-actions floating-actions">
+          <button
+            type="button"
+            className="palette-trigger"
+            onClick={() => setPaletteOpen(true)}
+            aria-label={t('command_palette.open')}
+            title={t('command_palette.open')}
+          >
+            <span className="palette-trigger-icon">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.3-4.3" />
+              </svg>
+            </span>
+            <span className="palette-trigger-label">{t('command_palette.open')}</span>
+            <kbd className="palette-trigger-kbd">{paletteShortcutLabel}</kbd>
+          </button>
+          <span
+            className="connection-pill"
+            data-status={connectionStatus}
+            title={t('header.connection_status')}
+          >
+            <span className="connection-pill-dot" aria-hidden="true" />
+            <span className="connection-pill-label">
+              {connectionStatus === 'connected'
+                ? t('common.connected')
+                : connectionStatus === 'connecting'
+                  ? t('common.connecting')
+                  : t('common.disconnected')}
+            </span>
+          </span>
           <Button
             variant="ghost"
             size="sm"
@@ -784,6 +929,17 @@ export function MainLayout() {
             title={t('header.refresh_all')}
           >
             {headerIcons.refresh}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="sidebar-mode-toggle"
+            onClick={toggleSidebarMode}
+            title={sidebarModeToggleLabel}
+            aria-label={sidebarModeToggleLabel}
+            aria-pressed={isCompactSidebar}
+          >
+            {isCompactSidebar ? <IconMaximize2 size={16} /> : <IconMinimize2 size={16} />}
           </Button>
           <div className={`language-menu ${languageMenuOpen ? 'open' : ''}`} ref={languageMenuRef}>
             <Button
@@ -829,66 +985,96 @@ export function MainLayout() {
               aria-haspopup="menu"
               aria-expanded={themeMenuOpen}
             >
-              {theme === 'auto'
-                ? headerIcons.autoTheme
-                : theme === 'dark'
-                  ? headerIcons.moon
-                  : theme === 'white'
-                    ? headerIcons.whiteTheme
-                    : headerIcons.sun}
+              {headerIcons.layout}
             </Button>
             {themeMenuOpen && (
               <div
-                className="notification entering theme-menu-popover"
+                className="notification entering theme-menu-popover appearance-menu-popover"
                 role="menu"
-                aria-label={t('theme.switch')}
+                aria-label={t('workspace.appearance')}
               >
-                {THEME_CARDS.map((tc) => (
-                  <button
-                    key={tc.key}
-                    type="button"
-                    className={`theme-card ${theme === tc.key ? 'active' : ''}`}
-                    onClick={() => handleThemeSelect(tc.key)}
-                    role="menuitemradio"
-                    aria-checked={theme === tc.key}
-                  >
-                    <div
-                      className="theme-card-preview"
-                      style={{
-                        background: tc.colors.bg,
-                        border: `1px solid ${tc.colors.border}`,
-                      }}
-                    >
-                      <div
-                        className="theme-card-header"
-                        style={{
-                          background: tc.colors.card,
-                          borderBottom: `1px solid ${tc.colors.border}`,
-                        }}
-                      />
-                      <div className="theme-card-body">
+                <section className="appearance-menu-section">
+                  <div className="appearance-menu-heading">{t('workspace.layout_heading')}</div>
+                  <div className="layout-card-grid">
+                    {LAYOUT_CARDS.map((item) => (
+                      <button
+                        key={item.key}
+                        type="button"
+                        className={`layout-card ${layout === item.key ? 'active' : ''}`}
+                        onClick={() => handleLayoutSelect(item.key)}
+                        role="menuitemradio"
+                        aria-checked={layout === item.key}
+                      >
+                        <span
+                          className={`layout-card-preview preview-${item.key}`}
+                          aria-hidden="true"
+                        >
+                          <i />
+                          <i />
+                          <i />
+                        </span>
+                        <span className="layout-card-copy">
+                          <strong>{t(item.labelKey)}</strong>
+                          <small>{t(item.descriptionKey)}</small>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+                <section className="appearance-menu-section">
+                  <div className="appearance-menu-heading">{t('workspace.theme_heading')}</div>
+                  <div className="theme-card-grid">
+                    {THEME_CARDS.map((tc) => (
+                      <button
+                        key={tc.key}
+                        type="button"
+                        className={`theme-card ${theme === tc.key ? 'active' : ''}`}
+                        onClick={() => handleThemeSelect(tc.key)}
+                        role="menuitemradio"
+                        aria-checked={theme === tc.key}
+                      >
                         <div
-                          className="theme-card-sidebar"
+                          className="theme-card-preview"
                           style={{
-                            background: tc.colors.card,
-                            borderRight: `1px solid ${tc.colors.border}`,
+                            background: tc.colors.bg,
+                            border: `1px solid ${tc.colors.border}`,
                           }}
-                        />
-                        <div className="theme-card-content" style={{ background: tc.colors.bg }}>
+                        >
                           <div
-                            className="theme-card-line"
-                            style={{ background: tc.colors.textMuted }}
+                            className="theme-card-header"
+                            style={{
+                              background: tc.colors.card,
+                              borderBottom: `1px solid ${tc.colors.border}`,
+                            }}
                           />
-                          <div
-                            className="theme-card-line short"
-                            style={{ background: tc.colors.textMuted }}
-                          />
+                          <div className="theme-card-body">
+                            <div
+                              className="theme-card-sidebar"
+                              style={{
+                                background: tc.colors.card,
+                                borderRight: `1px solid ${tc.colors.border}`,
+                              }}
+                            />
+                            <div
+                              className="theme-card-content"
+                              style={{ background: tc.colors.bg }}
+                            >
+                              <div
+                                className="theme-card-line"
+                                style={{ background: tc.colors.textMuted }}
+                              />
+                              <div
+                                className="theme-card-line short"
+                                style={{ background: tc.colors.textMuted }}
+                              />
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                    <span className="theme-card-label">{t(tc.labelKey)}</span>
-                  </button>
-                ))}
+                        <span className="theme-card-label">{t(tc.labelKey)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
               </div>
             )}
           </div>
@@ -913,7 +1099,12 @@ export function MainLayout() {
         >
           <div className="sidebar-brand" title={fullBrandName}>
             <img src={INLINE_LOGO_JPEG} alt="CPAMC logo" className="sidebar-brand-logo" />
-            {showSidebarLabels && <span className="sidebar-brand-title">{abbrBrandName}</span>}
+            {showSidebarLabels && (
+              <span className="sidebar-brand-text">
+                <span className="sidebar-brand-title">{abbrBrandName}</span>
+                <span className="sidebar-brand-subtitle">{t('sidebar.subtitle')}</span>
+              </span>
+            )}
           </div>
 
           <SidebarNavigation
@@ -921,11 +1112,47 @@ export function MainLayout() {
             groups={navGroups}
             collapsed={sidebarCollapsed}
             showLabels={showSidebarLabels}
+            showMeta={!isCompactSidebar}
             ariaLabel={t('sidebar.primary_navigation')}
             onNavigate={() => setSidebarOpen(false)}
             onRequestExpand={() => setSidebarCollapsed(false)}
           />
+
+          {layout === 'studio' && showSidebarLabels && (
+            <div className="studio-provider-dock">
+              <span className="studio-provider-dock-label">{t('workspace.provider_dock')}</span>
+              <div className="studio-provider-dock-grid">
+                <Link
+                  to="/oauth?provider=anthropic"
+                  title="Claude Code OAuth"
+                  data-provider="claude"
+                >
+                  CC
+                </Link>
+                <Link to="/oauth?provider=codex" title="Codex OAuth" data-provider="codex">
+                  CX
+                </Link>
+                <Link
+                  to="/oauth?provider=gemini-cli"
+                  title="Gemini CLI OAuth"
+                  data-provider="gemini"
+                >
+                  GM
+                </Link>
+                <Link
+                  to="/ai-providers?provider=claudeApi"
+                  title={t('nav.ai_providers')}
+                  data-provider="api"
+                >
+                  API
+                </Link>
+              </div>
+              <small>{t('workspace.provider_dock_hint')}</small>
+            </div>
+          )}
         </aside>
+
+        {layout === 'console' && <CoreScopeRail supportsPlugin={supportsPlugin} />}
 
         <div className={`content${isLogsPage ? ' content-logs' : ''}`} ref={contentRef}>
           <main className={`main-content${isLogsPage ? ' main-content-logs' : ''}`}>
@@ -938,6 +1165,47 @@ export function MainLayout() {
           </main>
         </div>
       </div>
+
+      {layout === 'tower' && (
+        <footer className="tower-runtime-bar" aria-label={t('workspace.runtime_status')}>
+          <span className="tower-runtime-label">CPA-Core-LTS</span>
+          <Link to="/config" className="tower-runtime-item">
+            <span>{t('workspace.runtime_routing')}</span>
+            <strong>{routingStatusText}</strong>
+          </Link>
+          <Link to="/config" className="tower-runtime-item">
+            <span>{t('workspace.runtime_retry')}</span>
+            <strong>{requestRetryText}</strong>
+          </Link>
+          <Link to="/config" className="tower-runtime-item">
+            <span>{t('workspace.runtime_fallback')}</span>
+            <strong>
+              {quotaFallbackEnabled
+                ? t('workspace.runtime_enabled')
+                : t('workspace.runtime_disabled')}
+            </strong>
+          </Link>
+          <Link to="/system" className="tower-runtime-item" data-status={connectionStatus}>
+            <span>{t('workspace.runtime_connection')}</span>
+            <strong>
+              <i aria-hidden="true" />
+              {connectionStatus === 'connected'
+                ? t('common.connected')
+                : connectionStatus === 'connecting'
+                  ? t('common.connecting_status')
+                  : t('common.disconnected')}
+            </strong>
+          </Link>
+        </footer>
+      )}
+
+      {paletteOpen && (
+        <CommandPalette
+          onClose={() => setPaletteOpen(false)}
+          pages={palettePages}
+          actions={paletteActions}
+        />
+      )}
     </div>
   );
 }

@@ -32,7 +32,6 @@ function formatTokens(num: number): string {
 export interface TokenBreakdownChartProps {
   usage: UsagePayload | null;
   loading: boolean;
-  isDark: boolean;
   isMobile: boolean;
   hourWindowHours?: number;
 }
@@ -40,7 +39,6 @@ export interface TokenBreakdownChartProps {
 export function TokenBreakdownChart({
   usage,
   loading,
-  isDark,
   isMobile,
   hourWindowHours,
 }: TokenBreakdownChartProps) {
@@ -66,7 +64,7 @@ export function TokenBreakdownChart({
         label: categoryLabels[cat],
         data: series.dataByCategory[cat],
         backgroundColor: TOKEN_COLORS[cat],
-        borderColor: isDark ? '#0f172a' : '#ffffff',
+        borderColor: '#ffffff',
         borderWidth: 1,
         borderSkipped: false,
         grouped: true,
@@ -78,7 +76,6 @@ export function TokenBreakdownChart({
     const baseOptions = buildChartOptions({
       period,
       labels: series.labels,
-      isDark,
       isMobile,
     }) as ChartOptions<'bar'>;
     const options: ChartOptions<'bar'> = {
@@ -121,7 +118,7 @@ export function TokenBreakdownChart({
     };
 
     return { chartData: data, chartOptions: options };
-  }, [usage, period, isDark, isMobile, hourWindowHours, t]);
+  }, [usage, period, isMobile, hourWindowHours, t]);
   const labels = chartData.labels ?? [];
 
   return (

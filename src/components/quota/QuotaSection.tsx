@@ -13,9 +13,8 @@ import {
   commitIfQuotaCacheCurrent,
   useNotificationStore,
   useQuotaStore,
-  useThemeStore,
 } from '@/stores';
-import type { AuthFileItem, ResolvedTheme } from '@/types';
+import type { AuthFileItem } from '@/types';
 import { getStatusFromError } from '@/utils/quota';
 import { QuotaCard } from './QuotaCard';
 import type { QuotaStatusState } from './QuotaCard';
@@ -112,7 +111,6 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
   disabled,
 }: QuotaSectionProps<TState, TData>) {
   const { t } = useTranslation();
-  const resolvedTheme: ResolvedTheme = useThemeStore((state) => state.resolvedTheme);
   const showNotification = useNotificationStore((state) => state.showNotification);
   const showConfirmation = useNotificationStore((state) => state.showConfirmation);
   const setQuota = useQuotaStore((state) => state[config.storeSetter]) as QuotaSetter<
@@ -389,7 +387,6 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
                   key={item.name}
                   item={item}
                   quota={itemQuota}
-                  resolvedTheme={resolvedTheme}
                   i18nPrefix={config.i18nPrefix}
                   cardIdleMessageKey={config.cardIdleMessageKey}
                   cardClassName={config.cardClassName}

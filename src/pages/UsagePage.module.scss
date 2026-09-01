@@ -1206,36 +1206,6 @@
   font-weight: 840;
 }
 
-:global([data-theme='dark'])
-  .requestEventsTable
-  td.requestEventsCostCell[data-request-cost-tone='micro'] {
-  color: #5eead4;
-}
-
-:global([data-theme='dark'])
-  .requestEventsTable
-  td.requestEventsCostCell[data-request-cost-tone='low'] {
-  color: #93c5fd;
-}
-
-:global([data-theme='dark'])
-  .requestEventsTable
-  td.requestEventsCostCell[data-request-cost-tone='medium'] {
-  color: #c4b5fd;
-}
-
-:global([data-theme='dark'])
-  .requestEventsTable
-  td.requestEventsCostCell[data-request-cost-tone='elevated'] {
-  color: #fde047;
-}
-
-:global([data-theme='dark'])
-  .requestEventsTable
-  td.requestEventsCostCell[data-request-cost-tone='high'] {
-  color: #fdba74;
-}
-
 .requestEventsTokenHeaderHint {
   cursor: help;
   text-decoration: underline dotted;
@@ -1354,6 +1324,7 @@
   min-width: 160px;
 }
 
+.requestEventsRequestKey,
 .requestEventsSourceCell,
 .requestEventsAuthIndex {
   font-family:

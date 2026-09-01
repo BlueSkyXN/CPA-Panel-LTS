@@ -47,6 +47,8 @@ protected_deltas:
       - visual config support for codex.abnormal-reasoning-retry unless intentionally replaced
       - commercial-neutral documentation and runtime UI with no referral incentives, paid placement, or empty-state provider recommendations
       - local i18n and panel compatibility fixes
+      - light-only theme policy with Pure White as the default, Soft Mist as the only alternate, and removed Paper/Dark/Auto values migrated to White
+      - Next workspace shell with Tower/Studio/Console layouts, /core, Command Palette, and compact/classic navigation
 
 upstream_boundaries:
   baseline_tag: v1.8.4

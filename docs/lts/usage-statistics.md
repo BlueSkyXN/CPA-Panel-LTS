@@ -12,6 +12,7 @@
 - requests/tokens、hour/day trend、RPM/TPM 等完整聚合。
 - API、model、credential/source 维度 breakdown。
 - request events、latency、result、reasoning effort、token breakdown 和逐事件本地费用估算。
+- request events 可显示 Core 提供的 `ttfb_ms`，并在数据完整时派生 `Output TPS` 与 `Avg TPS`。
 - cache read、cache write、non-cache-read input 和 reasoning token 语义。
 - usage export/import、预检查、版本迁移、重复/重叠处理和失败回执。
 - 本地 pricing catalog/profile、来源链接、Fast/Std 和 long-context 策略。
@@ -62,6 +63,18 @@ version 1 只在语义可证明时迁移到 v2：
 - 无法稳定识别的记录应披露 uncertain identity，而不是假装精确去重。
 - import preflight 是风险说明和输入检查，不代替 Core 的最终原子验证。
 - “选择了文件”不等于“已导入”；成功必须来自 Core response 和必要的后续 readback。
+
+## Request performance metrics
+
+Core 的 request detail 使用可选字段 `ttfb_ms` 表示从 Core 发起上游请求到收到首个上游 response byte/payload 的时长，单位为毫秒。历史记录或不支持该测量的请求不会补造该字段。
+
+Panel 在浏览器本地按同一条明细派生以下指标：
+
+- `Output TPS` = `output_tokens / ((latency_ms - ttfb_ms) / 1000)`，且包含 provider 报告的 reasoning tokens。
+- `Avg TPS` = `output_tokens / (latency_ms / 1000)`，表示端到端输出速度。
+- 当时间字段缺失、非正、或 `ttfb_ms >= latency_ms` 时，TPS 显示为 `--`。
+
+这些是按 Core request detail 边界计算的有效吞吐，不是供应商账单字段，也不保证等同于 CLI stdout 的首事件或模型内部逐 token decode 速度。聚合时应使用 token 总数除以有效时长总和，不能简单平均每条 TPS。
 
 ## Token 和 pricing 语义
 

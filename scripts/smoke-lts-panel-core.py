@@ -447,6 +447,8 @@ def build_service_tier_usage_snapshot() -> dict[str, Any]:
             "outbound_service_tier": "priority",
             "response_service_tier": "standard",
             "effective_service_tier": "standard",
+            "latency_ms": 120,
+            "ttfb_ms": 40,
             "tokens": {
                 "input_tokens": 5,
                 "output_tokens": 7,
@@ -1737,6 +1739,14 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
         )
     seen.append("BROWSER visual reload parsed disable-image-generation passthrough")
 
+    # The Core config watcher applies file writes asynchronously. Wait for the
+    # visual-save value to reach the live config before the next smoke phase,
+    # otherwise a delayed write can overwrite the log fixtures it is about to
+    # inspect.
+    wait_for_config_value(api_url, "logging-to-file", expected_logging)
+    if not expected_logging:
+        set_core_config_booleans(api_url, {"logging-to-file": True})
+
     return seen
 
 
@@ -2533,6 +2543,11 @@ def run_browser_smoke(
                             "Real Core migration/tier fixtures rendered "
                             f"{rows.count()} rows, want {expected_usage_rows}"
                         )
+                    events_card.get_by_role("columnheader", name="TTFB", exact=True).wait_for()
+                    events_card.get_by_role("columnheader", name="Output TPS", exact=True).wait_for()
+                    events_card.locator(
+                        'td[data-request-performance="ttfb"][data-ttfb-ms="40"]'
+                    ).wait_for()
                     resolved_fast_flows = events_card.locator(
                         '[data-service-tier-flow][aria-label*="Resolved: Fast"]'
                     )

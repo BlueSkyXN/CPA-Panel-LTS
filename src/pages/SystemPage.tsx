@@ -10,7 +10,6 @@ import {
   useConfigStore,
   useNotificationStore,
   useModelsStore,
-  useThemeStore,
 } from '@/stores';
 import { configApi, versionApi } from '@/services/api';
 import { useApiKeysForModels } from '@/hooks/useApiKeysForModels';
@@ -21,25 +20,22 @@ import { INLINE_LOGO_JPEG } from '@/assets/logoInline';
 import iconGemini from '@/assets/icons/gemini.svg';
 import iconClaude from '@/assets/icons/claude.svg';
 import iconOpenaiLight from '@/assets/icons/openai-light.svg';
-import iconOpenaiDark from '@/assets/icons/openai-dark.svg';
 import iconQwen from '@/assets/icons/qwen.svg';
 import iconKimiLight from '@/assets/icons/kimi-light.svg';
-import iconKimiDark from '@/assets/icons/kimi-dark.svg';
 import iconGlm from '@/assets/icons/glm.svg';
 import iconGrok from '@/assets/icons/grok.svg';
-import iconGrokDark from '@/assets/icons/grok-dark.svg';
 import iconDeepseek from '@/assets/icons/deepseek.svg';
 import iconMinimax from '@/assets/icons/minimax.svg';
 import styles from './SystemPage.module.scss';
 
-const MODEL_CATEGORY_ICONS: Record<string, string | { light: string; dark: string }> = {
-  gpt: { light: iconOpenaiLight, dark: iconOpenaiDark },
+const MODEL_CATEGORY_ICONS: Record<string, string> = {
+  gpt: iconOpenaiLight,
   claude: iconClaude,
   gemini: iconGemini,
   qwen: iconQwen,
-  kimi: { light: iconKimiLight, dark: iconKimiDark },
+  kimi: iconKimiLight,
   glm: iconGlm,
-  grok: { light: iconGrok, dark: iconGrokDark },
+  grok: iconGrok,
   deepseek: iconDeepseek,
   minimax: iconMinimax,
 };
@@ -73,7 +69,6 @@ const compareVersions = (latest?: string | null, current?: string | null) => {
 export function SystemPage() {
   const { t, i18n } = useTranslation();
   const { showNotification, showConfirmation } = useNotificationStore();
-  const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
   const auth = useAuthStore();
   const config = useConfigStore((state) => state.config);
   const fetchConfig = useConfigStore((state) => state.fetchConfig);
@@ -112,12 +107,8 @@ export function SystemPage() {
   const buildTime =
     formatDateTimeValue(auth.serverBuildDate, i18n.language) || t('system_info.version_unknown');
 
-  const getIconForCategory = (categoryId: string): string | null => {
-    const iconEntry = MODEL_CATEGORY_ICONS[categoryId];
-    if (!iconEntry) return null;
-    if (typeof iconEntry === 'string') return iconEntry;
-    return resolvedTheme === 'dark' ? iconEntry.dark : iconEntry.light;
-  };
+  const getIconForCategory = (categoryId: string): string | null =>
+    MODEL_CATEGORY_ICONS[categoryId] || null;
 
   const resolveApiKeysForModels = useApiKeysForModels();
 

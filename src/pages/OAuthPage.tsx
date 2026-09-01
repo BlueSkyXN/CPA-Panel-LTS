@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { useNotificationStore, useThemeStore } from '@/stores';
+import { useNotificationStore } from '@/stores';
 import { oauthApi, type OAuthProvider } from '@/services/api/oauth';
 import { vertexApi, type VertexImportResponse } from '@/services/api/vertex';
 import { copyToClipboard } from '@/utils/clipboard';
@@ -15,10 +15,8 @@ import iconClaude from '@/assets/icons/claude.svg';
 import iconAntigravity from '@/assets/icons/antigravity.svg';
 import iconGemini from '@/assets/icons/gemini.svg';
 import iconKimiLight from '@/assets/icons/kimi-light.svg';
-import iconKimiDark from '@/assets/icons/kimi-dark.svg';
 import iconVertex from '@/assets/icons/vertex.svg';
 import iconGrok from '@/assets/icons/grok.svg';
-import iconGrokDark from '@/assets/icons/grok-dark.svg';
 
 interface ProviderState {
   url?: string;
@@ -55,13 +53,13 @@ function getErrorStatus(error: unknown): number | undefined {
   return typeof error.status === 'number' ? error.status : undefined;
 }
 
-const PROVIDERS: { id: OAuthProvider; titleKey: string; hintKey: string; urlLabelKey: string; icon: string | { light: string; dark: string } }[] = [
+const PROVIDERS: { id: OAuthProvider; titleKey: string; hintKey: string; urlLabelKey: string; icon: string }[] = [
   { id: 'codex', titleKey: 'auth_login.codex_oauth_title', hintKey: 'auth_login.codex_oauth_hint', urlLabelKey: 'auth_login.codex_oauth_url_label', icon: iconCodex },
   { id: 'anthropic', titleKey: 'auth_login.anthropic_oauth_title', hintKey: 'auth_login.anthropic_oauth_hint', urlLabelKey: 'auth_login.anthropic_oauth_url_label', icon: iconClaude },
   { id: 'antigravity', titleKey: 'auth_login.antigravity_oauth_title', hintKey: 'auth_login.antigravity_oauth_hint', urlLabelKey: 'auth_login.antigravity_oauth_url_label', icon: iconAntigravity },
   { id: 'gemini-cli', titleKey: 'auth_login.gemini_cli_oauth_title', hintKey: 'auth_login.gemini_cli_oauth_hint', urlLabelKey: 'auth_login.gemini_cli_oauth_url_label', icon: iconGemini },
-  { id: 'kimi', titleKey: 'auth_login.kimi_oauth_title', hintKey: 'auth_login.kimi_oauth_hint', urlLabelKey: 'auth_login.kimi_oauth_url_label', icon: { light: iconKimiLight, dark: iconKimiDark } },
-  { id: 'xai', titleKey: 'auth_login.xai_oauth_title', hintKey: 'auth_login.xai_oauth_hint', urlLabelKey: 'auth_login.xai_oauth_url_label', icon: { light: iconGrok, dark: iconGrokDark } }
+  { id: 'kimi', titleKey: 'auth_login.kimi_oauth_title', hintKey: 'auth_login.kimi_oauth_hint', urlLabelKey: 'auth_login.kimi_oauth_url_label', icon: iconKimiLight },
+  { id: 'xai', titleKey: 'auth_login.xai_oauth_title', hintKey: 'auth_login.xai_oauth_hint', urlLabelKey: 'auth_login.xai_oauth_url_label', icon: iconGrok }
 ];
 
 const CALLBACK_SUPPORTED: OAuthProvider[] = [
@@ -76,10 +74,6 @@ const SUCCESS_RESET_DELAY_MS = 5000;
 const getProviderI18nPrefix = (provider: OAuthProvider) => provider.replace('-', '_');
 const getAuthKey = (provider: OAuthProvider, suffix: string) =>
   `auth_login.${getProviderI18nPrefix(provider)}_${suffix}`;
-
-const getIcon = (icon: string | { light: string; dark: string }, theme: 'light' | 'dark') => {
-  return typeof icon === 'string' ? icon : icon[theme];
-};
 
 const isAbsoluteUrl = (value: string): boolean => {
   try {
@@ -155,8 +149,8 @@ const resolveCallbackUrl = (
 export function OAuthPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { showNotification } = useNotificationStore();
-  const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
   const [states, setStates] = useState<Record<OAuthProvider, ProviderState>>({} as Record<OAuthProvider, ProviderState>);
   const [vertexState, setVertexState] = useState<VertexImportState>({
     fileName: '',
@@ -166,6 +160,14 @@ export function OAuthPage() {
   const pollingTimers = useRef<Partial<Record<OAuthProvider, number>>>({});
   const successResetTimers = useRef<Partial<Record<OAuthProvider, number>>>({});
   const vertexFileInputRef = useRef<HTMLInputElement | null>(null);
+  const providerCardRefs = useRef<Partial<Record<OAuthProvider, HTMLDivElement | null>>>({});
+  const providerQuery = searchParams.get('provider')?.trim().toLowerCase() || '';
+  const focusedProvider = (providerQuery === 'claude'
+    ? 'anthropic'
+    : providerQuery === 'gemini'
+      ? 'gemini-cli'
+      : providerQuery) as OAuthProvider;
+  const hasFocusedProvider = PROVIDERS.some((provider) => provider.id === focusedProvider);
 
   const clearTimers = useCallback(() => {
     Object.values(pollingTimers.current).forEach((timer) => {
@@ -183,6 +185,17 @@ export function OAuthPage() {
       clearTimers();
     };
   }, [clearTimers]);
+
+  useEffect(() => {
+    if (!hasFocusedProvider) return;
+    const frame = window.requestAnimationFrame(() => {
+      providerCardRefs.current[focusedProvider]?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [focusedProvider, hasFocusedProvider]);
 
   const updateProviderState = (provider: OAuthProvider, next: Partial<ProviderState>) => {
     setStates((prev) => ({
@@ -455,12 +468,19 @@ export function OAuthPage() {
             .filter(Boolean)
             .join(' ');
           return (
-            <div key={provider.id}>
+            <div
+              key={provider.id}
+              ref={(element) => {
+                providerCardRefs.current[provider.id] = element;
+              }}
+              className={styles.providerAnchor}
+              data-focused={hasFocusedProvider && focusedProvider === provider.id ? 'true' : undefined}
+            >
               <Card
                 title={
                   <span className={styles.cardTitle}>
                     <img
-                      src={getIcon(provider.icon, resolvedTheme)}
+                      src={provider.icon}
                       alt=""
                       className={styles.cardTitleIcon}
                     />
@@ -571,7 +591,7 @@ export function OAuthPage() {
                   )}
                   {state.status === 'success' && (
                     <div className={styles.successActions}>
-                      <Button variant="secondary" size="sm" onClick={() => navigate('/auth-files')}>
+                      <Button variant="secondary" size="sm" onClick={() => navigate(`/auth-files?provider=${provider.id === 'anthropic' ? 'claude' : provider.id}`)}>
                         {t('auth_login.view_auth_files')}
                       </Button>
                     </div>

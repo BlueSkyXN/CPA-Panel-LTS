@@ -1393,14 +1393,6 @@
   }
 }
 
-:global([data-theme='dark']) .visualEditor {
-  --config-accent: #58719a;
-  --config-accent-strong: #b6c3dc;
-  --config-accent-surface: color-mix(in srgb, var(--bg-primary) 88%, var(--config-accent) 12%);
-  --config-accent-border: color-mix(in srgb, var(--border-color) 62%, var(--config-accent) 38%);
-  --config-gold: #d5b36d;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .sections > :not([hidden]),
   .systemPanel:not([hidden]) {

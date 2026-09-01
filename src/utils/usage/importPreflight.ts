@@ -88,7 +88,7 @@ const DETAIL_STRING_FIELDS = [
   'failure_reason',
 ] as const;
 
-const DETAIL_INTEGER_FIELDS = ['latency_ms', 'failure_status'] as const;
+const DETAIL_INTEGER_FIELDS = ['latency_ms', 'ttfb_ms', 'failure_status'] as const;
 const DETAIL_BOOLEAN_FIELDS = ['failed', 'generate'] as const;
 
 const RFC3339_PATTERN =

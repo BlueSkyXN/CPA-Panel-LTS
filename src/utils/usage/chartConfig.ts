@@ -19,7 +19,6 @@ export const sparklineOptions: ChartOptions<'line'> = {
 export interface ChartConfigOptions {
   period: 'hour' | 'day';
   labels: string[];
-  isDark: boolean;
   isMobile: boolean;
 }
 
@@ -29,19 +28,18 @@ export interface ChartConfigOptions {
 export function buildChartOptions({
   period,
   labels,
-  isDark,
   isMobile
 }: ChartConfigOptions): ChartOptions<'line'> {
   const pointRadius = isMobile && period === 'hour' ? 0 : isMobile ? 2 : 4;
   const tickFontSize = isMobile ? 10 : 12;
   const maxTickLabelCount = isMobile ? (period === 'hour' ? 8 : 6) : period === 'hour' ? 12 : 10;
-  const gridColor = isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(17, 24, 39, 0.06)';
-  const axisBorderColor = isDark ? 'rgba(255, 255, 255, 0.10)' : 'rgba(17, 24, 39, 0.10)';
-  const tickColor = isDark ? 'rgba(255, 255, 255, 0.72)' : 'rgba(17, 24, 39, 0.72)';
-  const tooltipBg = isDark ? 'rgba(17, 24, 39, 0.92)' : 'rgba(255, 255, 255, 0.98)';
-  const tooltipTitle = isDark ? '#ffffff' : '#111827';
-  const tooltipBody = isDark ? 'rgba(255, 255, 255, 0.86)' : '#374151';
-  const tooltipBorder = isDark ? 'rgba(255, 255, 255, 0.10)' : 'rgba(17, 24, 39, 0.10)';
+  const gridColor = 'rgba(17, 24, 39, 0.06)';
+  const axisBorderColor = 'rgba(17, 24, 39, 0.10)';
+  const tickColor = 'rgba(17, 24, 39, 0.72)';
+  const tooltipBg = 'rgba(255, 255, 255, 0.98)';
+  const tooltipTitle = '#111827';
+  const tooltipBody = '#374151';
+  const tooltipBorder = 'rgba(17, 24, 39, 0.10)';
 
   return {
     responsive: true,

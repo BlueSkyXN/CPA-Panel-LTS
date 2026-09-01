@@ -31,6 +31,8 @@ test('usage parsing ignores legacy server metadata and prices complete token rec
               {
                 timestamp: '2026-07-21T00:00:00Z',
                 effective_service_tier: 'standard',
+                latency_ms: 1_000,
+                ttfb_ms: 250,
                 [ignoredLegacyField]: 'legacy-value',
                 tokens: { input_tokens: 1_000, total_tokens: 1_000 },
               },
@@ -48,6 +50,8 @@ test('usage parsing ignores legacy server metadata and prices complete token rec
 
   const details = usage.collectUsageDetails(fixture);
   assert.equal(details.length, 2);
+  assert.equal(details[0].__apiBucket, 'POST /v1/responses');
+  assert.equal(details[0].ttfb_ms, 250);
   assert.equal(ignoredLegacyField in details[0], false);
   const coverage = usage.calculatePricingCoverage(fixture);
   assert.equal(coverage.totalRequests, 2);
