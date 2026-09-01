@@ -5429,6 +5429,9 @@ def run_sidebar_navigation_smoke(page: Any, state: MockCoreState) -> None:
         "() => document.querySelector('.app-shell')?.classList.contains('sidebar-mode-compact')"
     )
 
+    if app_shell.get_attribute("data-workspace-layout") != "tower":
+        raise AssertionError("Fresh sessions did not default to the Tower workspace")
+
     migrated_theme = page.evaluate(
         "() => JSON.parse(localStorage.getItem('cli-proxy-theme') || 'null')"
     )
@@ -5445,6 +5448,33 @@ def run_sidebar_navigation_smoke(page: Any, state: MockCoreState) -> None:
         "menuitemradio", name="Wool Paper", exact=True
     ).count():
         raise AssertionError("Removed paper theme is still exposed in the appearance menu")
+    appearance_menu.get_by_role("menuitemradio", name=re.compile(r"^Studio\b")).click()
+    page.wait_for_function(
+        "() => document.querySelector('.app-shell')?.getAttribute('data-workspace-layout') === 'studio'"
+    )
+    stored_layout = page.evaluate(
+        "() => JSON.parse(localStorage.getItem('cli-proxy-workspace-layout') || 'null')"
+    )
+    if stored_layout != {"state": {"layout": "studio"}, "version": 1}:
+        raise AssertionError(f"Studio workspace did not persist: {stored_layout!r}")
+
+    theme_button.click()
+    page.get_by_role("menu", name="Workspace appearance").get_by_role(
+        "menuitemradio", name=re.compile(r"^Console\b")
+    ).click()
+    page.wait_for_function(
+        "() => document.querySelector('.app-shell')?.getAttribute('data-workspace-layout') === 'console'"
+    )
+    theme_button.click()
+    page.get_by_role("menu", name="Workspace appearance").get_by_role(
+        "menuitemradio", name=re.compile(r"^Tower\b")
+    ).click()
+    page.wait_for_function(
+        "() => document.querySelector('.app-shell')?.getAttribute('data-workspace-layout') === 'tower'"
+    )
+
+    theme_button.click()
+    appearance_menu = page.get_by_role("menu", name="Workspace appearance")
     appearance_menu.get_by_role(
         "menuitemradio", name="Soft Mist", exact=True
     ).click()
@@ -5458,6 +5488,33 @@ def run_sidebar_navigation_smoke(page: Any, state: MockCoreState) -> None:
     page.wait_for_function(
         "() => document.documentElement.getAttribute('data-theme') === null"
     )
+
+    palette_trigger = page.get_by_role("button", name="Quick search", exact=True)
+    palette_trigger.click()
+    palette = page.get_by_role("dialog", name="Command palette", exact=True)
+    palette.wait_for()
+    palette_input = palette.get_by_role("combobox")
+    page.wait_for_function(
+        "() => document.activeElement?.getAttribute('role') === 'combobox'"
+    )
+    palette_input.press("Tab")
+    if not palette.evaluate("element => element.contains(document.activeElement)"):
+        raise AssertionError("Command palette allowed Tab focus to escape the modal")
+    palette_input.press("Shift+Tab")
+    if not palette.evaluate("element => element.contains(document.activeElement)"):
+        raise AssertionError("Command palette allowed reverse Tab focus to escape the modal")
+    palette_input.fill("Core Workspace")
+    palette_input.press("Enter")
+    page.wait_for_function("() => window.location.hash.endsWith('/core')")
+    page.get_by_role("heading", name="Core Workspace", exact=True).wait_for()
+    page.get_by_role("region", name="Core summary", exact=True).wait_for()
+
+    codex_scope = page.locator('[data-provider="codex"]')
+    codex_scope.get_by_role("link", name="OAuth", exact=True).click()
+    page.wait_for_function("() => window.location.hash.endsWith('/oauth?provider=codex')")
+    page.locator('[data-focused="true"]').get_by_text("Codex OAuth", exact=True).wait_for()
+    navigation.get_by_role("link", name="Dashboard", exact=True).click()
+    page.wait_for_function("() => window.location.hash.endsWith('#/')")
 
     state.logging_to_file = False
     try:
@@ -5577,7 +5634,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             );
             localStorage.setItem(
               'cli-proxy-theme',
-              JSON.stringify({ state: { theme: 'light' }, version: 2 })
+              JSON.stringify({ state: { theme: 'paper' }, version: 2 })
             );
             localStorage.setItem(
               'cli-proxy-usage-request-event-columns-v1',

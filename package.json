@@ -31,7 +31,7 @@
     "test:quota": "node --test src/utils/quota/upstreamQuotaPort.test.mjs",
     "test:api-client": "node --test src/services/api/client.test.mjs",
     "test:logs": "node --test src/utils/logLines.test.mjs",
-    "test:ui": "node --test src/components/ui/Collapsible/Collapsible.test.mjs",
+    "test:ui": "node --test src/components/ui/Collapsible/Collapsible.test.mjs src/stores/themeWorkspace.test.mjs",
     "test:usage": "npm run test:usage-cache && npm run test:usage-prices && npm run test:usage-import && npm run test:usage-effort && npm run test:usage-tier && npm run test:usage-performance && npm run test:usage-pricing-v3 && npm run test:usage-pricing-catalog && npm run test:usage-pricing-storage && npm run test:usage-pricing-integration",
     "check:feature-contract": "node scripts/check-panel-feature-contracts.mjs",
     "check:lts": "scripts/check-lts-panel-contract.sh",

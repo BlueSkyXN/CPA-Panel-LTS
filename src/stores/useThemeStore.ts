@@ -9,7 +9,7 @@ interface ThemeState {
   initializeTheme: () => () => void;
 }
 
-const normalizeTheme = (value: unknown): Theme => {
+export const normalizeTheme = (value: unknown): Theme => {
   if (value === 'mist') return value;
   return 'white';
 };

@@ -9,7 +9,7 @@ interface WorkspaceState {
   initializeLayout: () => () => void;
 }
 
-const normalizeLayout = (value: unknown): WorkspaceLayout => {
+export const normalizeWorkspaceLayout = (value: unknown): WorkspaceLayout => {
   if (value === 'studio' || value === 'console') return value;
   return 'tower';
 };
@@ -23,12 +23,12 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     (set, get) => ({
       layout: 'tower',
       setLayout: (layout) => {
-        const normalized = normalizeLayout(layout);
+        const normalized = normalizeWorkspaceLayout(layout);
         applyLayout(normalized);
         set({ layout: normalized });
       },
       initializeLayout: () => {
-        get().setLayout(normalizeLayout(get().layout));
+        get().setLayout(normalizeWorkspaceLayout(get().layout));
         return () => {};
       },
     }),
@@ -37,7 +37,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       version: 1,
       migrate: (persistedState) => {
         const state = (persistedState ?? {}) as Partial<WorkspaceState> & { layout?: unknown };
-        return { ...state, layout: normalizeLayout(state.layout) };
+        return { ...state, layout: normalizeWorkspaceLayout(state.layout) };
       },
     }
   )
