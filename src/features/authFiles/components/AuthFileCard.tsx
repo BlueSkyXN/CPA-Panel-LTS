@@ -40,7 +40,6 @@ import {
   normalizeProviderKey,
   parsePriorityValue,
   type QuotaProviderType,
-  type ResolvedTheme,
 } from '@/features/authFiles/constants';
 import type { AuthFileStatusBarData } from '@/features/authFiles/hooks/useAuthFilesStatusBarCache';
 import { AuthFileQuotaSection } from '@/features/authFiles/components/AuthFileQuotaSection';
@@ -50,7 +49,6 @@ export type AuthFileCardProps = {
   file: AuthFileItem;
   compact: boolean;
   selected: boolean;
-  resolvedTheme: ResolvedTheme;
   disableControls: boolean;
   deleting: string | null;
   statusUpdating: Record<string, boolean>;
@@ -78,7 +76,6 @@ export function AuthFileCard(props: AuthFileCardProps) {
     file,
     compact,
     selected,
-    resolvedTheme,
     disableControls,
     deleting,
     statusUpdating,
@@ -103,10 +100,9 @@ export function AuthFileCard(props: AuthFileCardProps) {
   const providerKey = normalizeProviderKey(String(file.type ?? file.provider ?? 'unknown'));
   const isAistudio = providerKey === 'aistudio';
   const showModelsButton = !isRuntimeOnly || isAistudio;
-  const typeColor = getTypeColor(providerKey, resolvedTheme);
+  const typeColor = getTypeColor(providerKey);
   const typeLabel = getTypeLabel(t, providerKey);
-  const providerIcon = getAuthFileIcon(providerKey, resolvedTheme);
-  // 与 AI 提供商界面一致：Kimi 图标底座随主题切换颜色
+  const providerIcon = getAuthFileIcon(providerKey);
   const useThemeSurfaceIcon = isThemeSurfaceIconProvider(providerKey);
 
   const quotaType =
@@ -180,7 +176,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
               style={
                 useThemeSurfaceIcon
                   ? {
-                      backgroundColor: getThemeSurfaceIconBackground(resolvedTheme),
+                      backgroundColor: getThemeSurfaceIconBackground(),
                       color: typeColor.text,
                     }
                   : {

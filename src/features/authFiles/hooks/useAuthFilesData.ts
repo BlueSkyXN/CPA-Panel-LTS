@@ -12,6 +12,7 @@ import {
   isRuntimeOnlyAuthFile,
   normalizeProviderKey,
 } from '@/features/authFiles/constants';
+import { notifyAuthFilesChanged } from '@/features/authFiles/authFilesEvents';
 
 type DeleteAllOptions = {
   filter: string;
@@ -143,6 +144,7 @@ export function useAuthFilesData(options?: UseAuthFilesDataOptions): UseAuthFile
 
       invalidateInFlightLoads();
       onFilesMutatedRef.current?.(deletedNames);
+      notifyAuthFilesChanged();
       const deletedSet = new Set(deletedNames);
       setFiles((prev) => prev.filter((file) => !deletedSet.has(file.name)));
       setSelectedFiles((prev) => {
@@ -196,6 +198,7 @@ export function useAuthFilesData(options?: UseAuthFilesDataOptions): UseAuthFile
         if (requestId !== loadRequestIdRef.current) return;
         setFiles(data?.files || []);
         setError('');
+        notifyAuthFilesChanged();
       } catch (err: unknown) {
         if (requestId !== loadRequestIdRef.current) return;
         const errorMessage = err instanceof Error ? err.message : t('notification.refresh_failed');

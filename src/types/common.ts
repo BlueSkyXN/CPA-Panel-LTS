@@ -2,7 +2,9 @@
  * 通用类型定义
  */
 
-export type Theme = 'light' | 'white' | 'dark' | 'auto';
+export type Theme = 'white' | 'mist';
+
+export type WorkspaceLayout = 'tower' | 'studio' | 'console';
 
 export type Language = 'zh-CN' | 'zh-TW' | 'en' | 'ru';
 

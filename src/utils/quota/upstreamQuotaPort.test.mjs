@@ -737,6 +737,5 @@ test('keeps the legacy Claude Fable field when modern scoped data is unusable', 
 test('uses the Kimi theme surface without changing other auth providers', () => {
   assert.equal(authFileConstants.isThemeSurfaceIconProvider(' KIMI '), true);
   assert.equal(authFileConstants.isThemeSurfaceIconProvider('codex'), false);
-  assert.equal(authFileConstants.getThemeSurfaceIconBackground('light'), '#000000');
-  assert.equal(authFileConstants.getThemeSurfaceIconBackground('dark'), '#ffffff');
+  assert.equal(authFileConstants.getThemeSurfaceIconBackground(), '#000000');
 });

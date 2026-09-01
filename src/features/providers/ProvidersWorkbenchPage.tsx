@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer';
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -17,6 +18,7 @@ import { ProviderCategoryList } from './components/ProviderCategoryList';
 import { ProviderResourcePanel } from './components/ProviderResourcePanel';
 import type { ProviderPanelControls } from './components/ProviderResourcePanel';
 import { ProviderSheet, type ProviderSheetHandle } from './sheets/ProviderSheet';
+import { PROVIDER_BRAND_ORDER } from './descriptors';
 import { isMultiProtocolSponsorBrand } from './sponsorDefinitions';
 import { isSponsorPartialMutationError } from './sponsorMutationRecovery';
 import { useProviderWorkbench } from './useProviderWorkbench';
@@ -93,6 +95,7 @@ const getResourceRecentSuccess = (
 
 export function ProvidersWorkbenchPage() {
   const { t, i18n } = useTranslation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const connectionStatus = useAuthStore((s) => s.connectionStatus);
   const { showNotification, showConfirmation } = useNotificationStore();
 
@@ -100,7 +103,14 @@ export function ProvidersWorkbenchPage() {
   const isCurrentLayer = pageTransitionLayer ? pageTransitionLayer.status === 'current' : true;
 
   const workbench = useProviderWorkbench();
-  const [uiState, setUiState] = useState<ProvidersWorkbenchUiState>(readProvidersWorkbenchUiState);
+  const requestedProvider = searchParams.get('provider')?.trim() || '';
+  const requestedBrand = PROVIDER_BRAND_ORDER.includes(requestedProvider as ProviderBrand)
+    ? (requestedProvider as ProviderBrand)
+    : null;
+  const [uiState, setUiState] = useState<ProvidersWorkbenchUiState>(() => {
+    const persisted = readProvidersWorkbenchUiState();
+    return requestedBrand ? { ...persisted, activeBrand: requestedBrand } : persisted;
+  });
   const [sheetState, setSheetState] = useState<SheetState>({
     open: false,
     brand: 'gemini',
@@ -142,14 +152,18 @@ export function ProvidersWorkbenchPage() {
       persistUiState((prev) =>
         prev.activeBrand === brand ? prev : { ...prev, activeBrand: brand }
       );
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set('provider', brand);
+      setSearchParams(nextParams, { replace: true });
     },
-    [persistUiState]
+    [persistUiState, searchParams, setSearchParams]
   );
 
   const groups = useMemo(() => workbench.snapshot?.groups ?? [], [workbench.snapshot]);
   const firstVisibleBrand = groups[0]?.id ?? 'gemini';
-  const activeBrand = groups.some((group) => group.id === uiState.activeBrand)
-    ? uiState.activeBrand
+  const preferredBrand = requestedBrand ?? uiState.activeBrand;
+  const activeBrand = groups.some((group) => group.id === preferredBrand)
+    ? preferredBrand
     : firstVisibleBrand;
   const activeFilterState = getProviderFilterState(uiState, activeBrand);
   const filter = activeFilterState.filter;

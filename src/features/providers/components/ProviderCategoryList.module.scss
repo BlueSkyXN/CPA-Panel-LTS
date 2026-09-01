@@ -91,26 +91,6 @@
   background: transparent;
 }
 
-.logoThemeDark {
-  display: none;
-
-  [data-theme='dark'] & {
-    display: block;
-  }
-}
-
-.logoThemeLight {
-  [data-theme='dark'] & {
-    display: none;
-  }
-}
-
-.logoInvertOnDark {
-  [data-theme='dark'] & {
-    filter: invert(1) hue-rotate(180deg);
-  }
-}
-
 .itemText {
   display: flex;
   flex-direction: column;

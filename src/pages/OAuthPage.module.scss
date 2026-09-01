@@ -245,3 +245,16 @@
   word-break: break-all;
   overflow-wrap: anywhere;
 }
+
+.providerAnchor {
+  scroll-margin: 120px 0;
+  border-radius: 14px;
+  transition:
+    box-shadow 220ms ease,
+    transform 220ms ease;
+}
+
+.providerAnchor[data-focused='true'] {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 22%, transparent);
+  transform: translateY(-1px);
+}

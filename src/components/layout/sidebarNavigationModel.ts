@@ -7,6 +7,7 @@ export interface SidebarNavLinkItem {
   meta?: string;
   icon: ReactNode;
   end?: boolean;
+  badge?: number;
 }
 
 export interface SidebarNavDrawerItem {

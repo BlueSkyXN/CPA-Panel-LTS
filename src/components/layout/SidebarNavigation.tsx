@@ -11,6 +11,7 @@ interface SidebarNavigationProps {
   groups: SidebarNavGroup[];
   collapsed: boolean;
   showLabels: boolean;
+  showMeta: boolean;
   ariaLabel: string;
   onNavigate: () => void;
   onRequestExpand: () => void;
@@ -23,10 +24,14 @@ const isDrawerActive = (pathname: string, item: SidebarNavDrawerItem) =>
   (item.path ? isPathActive(pathname, item.path) : false) ||
   item.children.some((child) => isPathActive(pathname, child.path, child.end));
 
+const getCollapsedTitle = (item: SidebarNavLinkItem | SidebarNavDrawerItem) =>
+  [item.label, item.meta].filter(Boolean).join(' — ');
+
 export function SidebarNavigation({
   groups,
   collapsed,
   showLabels,
+  showMeta,
   ariaLabel,
   onNavigate,
   onRequestExpand,
@@ -84,14 +89,19 @@ export function SidebarNavigation({
       end={item.end}
       className={({ isActive }) => `${className} ${isActive ? 'active' : ''}`}
       onClick={handleLinkNavigate}
-      title={showLabels ? undefined : item.label}
+      title={showLabels ? undefined : getCollapsedTitle(item)}
       aria-label={item.label}
     >
       <span className="nav-icon">{item.icon}</span>
       {showLabels ? (
         <span className="nav-text">
           <span className="nav-label">{item.label}</span>
-          {item.meta ? <span className="nav-meta">{item.meta}</span> : null}
+          {showMeta && item.meta ? <span className="nav-meta">{item.meta}</span> : null}
+        </span>
+      ) : null}
+      {typeof item.badge === 'number' && item.badge > 0 ? (
+        <span className="nav-badge" aria-hidden="true">
+          {item.badge > 99 ? '99+' : item.badge}
         </span>
       ) : null}
     </NavLink>
@@ -114,14 +124,14 @@ export function SidebarNavigation({
               to={item.path}
               className={`nav-item nav-drawer-link ${isActive ? 'active' : ''}`}
               onClick={handleLinkNavigate}
-              title={showLabels ? undefined : item.label}
+              title={showLabels ? undefined : getCollapsedTitle(item)}
               aria-label={item.label}
             >
               <span className="nav-icon">{item.icon}</span>
               {showLabels ? (
                 <span className="nav-text">
                   <span className="nav-label">{item.label}</span>
-                  {item.meta ? <span className="nav-meta">{item.meta}</span> : null}
+                  {showMeta && item.meta ? <span className="nav-meta">{item.meta}</span> : null}
                 </span>
               ) : null}
             </NavLink>
@@ -145,7 +155,7 @@ export function SidebarNavigation({
               isOpen ? 'open' : ''
             }`}
             onClick={() => toggleDrawer(item.id)}
-            title={showLabels ? undefined : item.label}
+            title={showLabels ? undefined : getCollapsedTitle(item)}
             aria-label={item.label}
             aria-expanded={isOpen}
             aria-controls={panelID}
@@ -155,7 +165,7 @@ export function SidebarNavigation({
               <>
                 <span className="nav-text">
                   <span className="nav-label">{item.label}</span>
-                  {item.meta ? <span className="nav-meta">{item.meta}</span> : null}
+                  {showMeta && item.meta ? <span className="nav-meta">{item.meta}</span> : null}
                 </span>
                 <span className="nav-drawer-caret" aria-hidden="true">
                   <IconChevronDown size={14} />

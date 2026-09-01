@@ -7,7 +7,6 @@ import type { UsagePayload } from './useUsageData';
 export interface UseChartDataOptions {
   usage: UsagePayload | null;
   chartLines: string[];
-  isDark: boolean;
   isMobile: boolean;
   hourWindowHours?: number;
 }
@@ -26,7 +25,6 @@ export interface UseChartDataReturn {
 export function useChartData({
   usage,
   chartLines,
-  isDark,
   isMobile,
   hourWindowHours
 }: UseChartDataOptions): UseChartDataReturn {
@@ -48,10 +46,9 @@ export function useChartData({
       buildChartOptions({
         period: requestsPeriod,
         labels: requestsChartData.labels,
-        isDark,
         isMobile
       }),
-    [requestsPeriod, requestsChartData.labels, isDark, isMobile]
+    [requestsPeriod, requestsChartData.labels, isMobile]
   );
 
   const tokensChartOptions = useMemo(
@@ -59,10 +56,9 @@ export function useChartData({
       buildChartOptions({
         period: tokensPeriod,
         labels: tokensChartData.labels,
-        isDark,
         isMobile
       }),
-    [tokensPeriod, tokensChartData.labels, isDark, isMobile]
+    [tokensPeriod, tokensChartData.labels, isMobile]
   );
 
   return {

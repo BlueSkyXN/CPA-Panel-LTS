@@ -52,24 +52,12 @@ export function ProviderResourcePanel({
   const { t } = useTranslation();
   const logo = PROVIDER_LOGOS[group.id];
   const providerTitle = t(`providersPage.providerNames.${group.id}`);
-  const logoClassName = [
-    styles.logo,
-    logo?.darkSrc ? styles.logoThemeLight : '',
-    logo?.invertOnDark ? styles.logoInvertOnDark : '',
-  ]
-    .filter(Boolean)
-    .join(' ');
-  const darkLogoClassName = [styles.logo, styles.logoThemeDark].filter(Boolean).join(' ');
+  const logoClassName = styles.logo;
 
   const titleContent = (
     <>
       {logo ? (
-        <>
-          <img src={logo.src} alt="" aria-hidden="true" className={logoClassName} />
-          {logo.darkSrc ? (
-            <img src={logo.darkSrc} alt="" aria-hidden="true" className={darkLogoClassName} />
-          ) : null}
-        </>
+        <img src={logo.src} alt="" aria-hidden="true" className={logoClassName} />
       ) : null}
       <h2 className={styles.title}>{providerTitle}</h2>
     </>

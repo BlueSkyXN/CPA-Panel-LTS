@@ -1,6 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
+import { useSearchParams } from 'react-router-dom';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { parse as parseYaml, parseDocument } from 'yaml';
 import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer';
@@ -19,7 +20,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useActionBarHeightVar } from '@/hooks/useActionBarHeightVar';
 import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard';
 import { useVisualConfig } from '@/hooks/useVisualConfig';
-import { useNotificationStore, useAuthStore, useThemeStore, useConfigStore } from '@/stores';
+import { useNotificationStore, useAuthStore, useConfigStore } from '@/stores';
 import { configFileApi } from '@/services/api/configFile';
 import styles from './ConfigPage.module.scss';
 
@@ -48,12 +49,14 @@ function normalizeYamlForVisualDiff(yamlContent: string): string {
 
 export function ConfigPage() {
   const { t } = useTranslation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedSection = searchParams.get('section');
+  const requestedSubsection = searchParams.get('subsection');
   const pageTransitionLayer = usePageTransitionLayer();
   const isCurrentLayer = pageTransitionLayer ? pageTransitionLayer.isCurrentLayer : true;
   const showNotification = useNotificationStore((state) => state.showNotification);
   const showConfirmation = useNotificationStore((state) => state.showConfirmation);
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
-  const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
   const isMobile = useMediaQuery('(max-width: 768px)');
 
   const {
@@ -72,6 +75,8 @@ export function ConfigPage() {
     if (saved === 'visual' || saved === 'source') return saved;
     return 'visual';
   });
+
+  const effectiveTab: ConfigEditorTab = requestedSection ? 'visual' : activeTab;
 
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
@@ -99,7 +104,7 @@ export function ConfigPage() {
   const shouldRenderActionBar = isCurrentLayer;
   const hasVisualModeError = !!visualParseError;
   const hasVisualValidationErrors =
-    activeTab === 'visual' &&
+    effectiveTab === 'visual' &&
     (Object.values(visualValidationErrors).some(Boolean) || visualHasPayloadValidationErrors);
   const unsavedChangesDialog = useMemo(
     () => ({
@@ -142,7 +147,7 @@ export function ConfigPage() {
   }, [loadConfig]);
 
   useEffect(() => {
-    if (activeTab !== 'visual' || !visualParseError) return;
+    if (effectiveTab !== 'visual' || !visualParseError) return;
 
     setActiveTab('source');
     localStorage.setItem('config-management:tab', 'source');
@@ -150,7 +155,7 @@ export function ConfigPage() {
       t('config_management.visual_mode_unavailable_detail', { message: visualParseError }),
       'error'
     );
-  }, [activeTab, showNotification, t, visualParseError]);
+  }, [effectiveTab, showNotification, t, visualParseError]);
 
   const handleConfirmSave = async () => {
     setSaving(true);
@@ -222,7 +227,7 @@ export function ConfigPage() {
   };
 
   const handleSave = async () => {
-    if (activeTab === 'visual' && visualParseError) {
+    if (effectiveTab === 'visual' && visualParseError) {
       showNotification(t('config_management.visual_mode_save_blocked'), 'error');
       return;
     }
@@ -233,7 +238,7 @@ export function ConfigPage() {
 
       const visualBaseYaml = dirty ? content : latestServerYaml;
 
-      if (activeTab !== 'source') {
+      if (effectiveTab !== 'source') {
         const latestDocument = parseDocument(latestServerYaml);
         if (latestDocument.errors.length > 0) {
           showNotification(
@@ -266,13 +271,13 @@ export function ConfigPage() {
       // In source mode, save exactly what the user edited. In visual mode, preserve the
       // local source draft when it has unsaved edits so source-only backend fields are not dropped.
       const nextMergedYaml =
-        activeTab === 'source' ? content : applyVisualChangesToYaml(visualBaseYaml);
+        effectiveTab === 'source' ? content : applyVisualChangesToYaml(visualBaseYaml);
 
       // In visual mode, applyVisualChangesToYaml re-serializes YAML via parseDocument → toString,
       // which may reformat comments/whitespace. Normalize the server YAML through the same pipeline
       // so the diff only shows actual value changes, not cosmetic reformatting.
       let diffOriginal = latestServerYaml;
-      if (activeTab !== 'source') {
+      if (effectiveTab !== 'source') {
         diffOriginal = normalizeYamlForVisualDiff(latestServerYaml);
       }
 
@@ -290,7 +295,7 @@ export function ConfigPage() {
       setServerYaml(diffOriginal);
       setMergedYaml(nextMergedYaml);
       setPreviewServerYaml(latestServerYaml);
-      setPreviewTab(activeTab);
+      setPreviewTab(effectiveTab);
       setDiffModalOpen(true);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '';
@@ -307,7 +312,7 @@ export function ConfigPage() {
 
   const handleTabChange = useCallback(
     (tab: ConfigEditorTab) => {
-      if (tab === activeTab) return;
+      if (tab === effectiveTab) return;
 
       if (tab === 'source') {
         // Only rewrite YAML when there are pending visual changes; otherwise preserve raw YAML + comments.
@@ -331,12 +336,21 @@ export function ConfigPage() {
 
       setActiveTab(tab);
       localStorage.setItem('config-management:tab', tab);
+      if (tab === 'source' && requestedSection) {
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.delete('section');
+        nextParams.delete('subsection');
+        setSearchParams(nextParams, { replace: true });
+      }
     },
     [
-      activeTab,
+      effectiveTab,
       applyVisualChangesToYaml,
       content,
       loadVisualValuesFromYaml,
+      requestedSection,
+      searchParams,
+      setSearchParams,
       showNotification,
       t,
       visualDirty,
@@ -557,7 +571,7 @@ export function ConfigPage() {
         <div className={styles.tabBar}>
           <button
             type="button"
-            className={`${styles.tabItem} ${activeTab === 'visual' ? styles.tabActive : ''}`}
+            className={`${styles.tabItem} ${effectiveTab === 'visual' ? styles.tabActive : ''}`}
             onClick={() => handleTabChange('visual')}
             disabled={saving || loading}
           >
@@ -565,7 +579,7 @@ export function ConfigPage() {
           </button>
           <button
             type="button"
-            className={`${styles.tabItem} ${activeTab === 'source' ? styles.tabActive : ''}`}
+            className={`${styles.tabItem} ${effectiveTab === 'source' ? styles.tabActive : ''}`}
             onClick={() => handleTabChange('source')}
             disabled={saving || loading}
           >
@@ -583,9 +597,12 @@ export function ConfigPage() {
             </div>
           )}
 
-          {activeTab === 'visual' ? (
+          {effectiveTab === 'visual' ? (
             <VisualConfigEditor
+              key={`${requestedSection ?? 'default'}:${requestedSubsection ?? 'default'}`}
               values={visualValues}
+              initialSection={requestedSection}
+              initialSubsection={requestedSubsection}
               validationErrors={visualValidationErrors}
               hasPayloadValidationErrors={visualHasPayloadValidationErrors}
               disabled={disableControls || loading}
@@ -661,7 +678,7 @@ export function ConfigPage() {
                     editorRef={editorRef}
                     value={content}
                     onChange={handleChange}
-                    theme={resolvedTheme}
+                    theme="light"
                     editable={!disableControls && !loading}
                     placeholder={t('config_management.editor_placeholder')}
                   />

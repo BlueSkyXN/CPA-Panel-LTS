@@ -91,8 +91,42 @@ interface VisualConfigEditorProps {
   validationErrors?: VisualConfigValidationErrors;
   hasPayloadValidationErrors?: boolean;
   disabled?: boolean;
+  initialSection?: string | null;
+  initialSubsection?: string | null;
   onChange: (values: Partial<VisualConfigValues>) => void;
 }
+
+const VISUAL_SECTION_IDS = new Set<VisualSectionId>([
+  'server',
+  'auth',
+  'system',
+  'quota',
+  'streaming',
+  'payload',
+]);
+const SYSTEM_SECTION_IDS = new Set<SystemSectionId>(['runtime', 'plugins', 'headers', 'network']);
+const VISUAL_SUBSECTION_IDS = new Set<VisualSubsectionId>([
+  'server-listener',
+  'server-tls',
+  'auth-remote',
+  'auth-credentials',
+  'runtime',
+  'plugins',
+  'headers',
+  'network',
+  'payload-defaults',
+  'payload-overrides',
+  'payload-filters',
+]);
+
+const asVisualSectionId = (value?: string | null): VisualSectionId | null =>
+  value && VISUAL_SECTION_IDS.has(value as VisualSectionId) ? (value as VisualSectionId) : null;
+const asSystemSectionId = (value?: string | null): SystemSectionId | null =>
+  value && SYSTEM_SECTION_IDS.has(value as SystemSectionId) ? (value as SystemSectionId) : null;
+const asVisualSubsectionId = (value?: string | null): VisualSubsectionId | null =>
+  value && VISUAL_SUBSECTION_IDS.has(value as VisualSubsectionId)
+    ? (value as VisualSubsectionId)
+    : null;
 
 function getValidationMessage(
   t: ReturnType<typeof useTranslation>['t'],
@@ -304,6 +338,8 @@ export function VisualConfigEditor({
   validationErrors,
   hasPayloadValidationErrors = false,
   disabled = false,
+  initialSection,
+  initialSubsection,
   onChange,
 }: VisualConfigEditorProps) {
   const { t } = useTranslation();
@@ -332,15 +368,29 @@ export function VisualConfigEditor({
   const nonstreamKeepaliveInputId = useId();
   const nonstreamKeepaliveHintId = `${nonstreamKeepaliveInputId}-hint`;
   const nonstreamKeepaliveErrorId = `${nonstreamKeepaliveInputId}-error`;
-  const [activeSectionId, setActiveSectionId] = useState<VisualSectionId>('system');
-  const [activeSystemSectionId, setActiveSystemSectionId] = useState<SystemSectionId>('runtime');
+  const requestedSection = asVisualSectionId(initialSection);
+  const requestedSystemSection = asSystemSectionId(initialSubsection);
+  const requestedSubsection = asVisualSubsectionId(initialSubsection);
+  const [activeSectionId, setActiveSectionId] = useState<VisualSectionId>(
+    requestedSection ?? 'system'
+  );
+  const [activeSystemSectionId, setActiveSystemSectionId] = useState<SystemSectionId>(
+    requestedSection === 'system' && requestedSystemSection ? requestedSystemSection : 'runtime'
+  );
   const [activeSubsections, setActiveSubsections] = useState<
     Partial<Record<VisualSectionId, VisualSubsectionId>>
   >({
-    server: 'server-listener',
-    auth: 'auth-remote',
-    system: 'runtime',
-    payload: 'payload-defaults',
+    server:
+      requestedSection === 'server' && requestedSubsection
+        ? requestedSubsection
+        : 'server-listener',
+    auth: requestedSection === 'auth' && requestedSubsection ? requestedSubsection : 'auth-remote',
+    system:
+      requestedSection === 'system' && requestedSystemSection ? requestedSystemSection : 'runtime',
+    payload:
+      requestedSection === 'payload' && requestedSubsection
+        ? requestedSubsection
+        : 'payload-defaults',
   });
 
   const isKeepaliveDisabled =

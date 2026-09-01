@@ -752,12 +752,6 @@
   text-transform: capitalize;
 }
 
-:global([data-theme='dark']) .premiumPlanValue {
-  background: rgba(226, 180, 50, 0.12);
-  border-color: rgba(226, 180, 50, 0.28);
-  color: #ffd862;
-}
-
 // codexDetails structure is LTS-owned (src/lts/codexQuota/styles.module.scss);
 // this page injects only the surface background for the auth-file-card context.
 .codexDetailsSurface {

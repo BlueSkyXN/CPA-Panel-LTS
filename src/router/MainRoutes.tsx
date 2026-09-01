@@ -22,6 +22,7 @@ import { UsagePricingPage } from '@/pages/UsagePricingPage';
 import { ConfigPage } from '@/pages/ConfigPage';
 import { LogsPage } from '@/pages/LogsPage';
 import { SystemPage } from '@/pages/SystemPage';
+import { CoreWorkspace } from '@/pages/CoreWorkspace';
 import { PluginsPage } from '@/features/plugins/PluginsPage';
 import { PluginStorePage } from '@/features/plugins/PluginStorePage';
 import { PluginResourcePage } from '@/features/plugins/PluginResourcePage';
@@ -77,6 +78,8 @@ function LegacyProviderPathRedirect() {
 const mainRoutes = [
   { path: '/', element: <DashboardPage /> },
   { path: '/dashboard', element: <DashboardPage /> },
+  { path: '/core', element: <CoreWorkspace /> },
+  { path: '/core/workspace', element: <Navigate to="/core" replace /> },
   { path: '/lts/usage', element: <Navigate to="/usage" replace /> },
   { path: '/lts/providers', element: <Navigate to="/ai-providers/legacy" replace /> },
   { path: '/lts/ampcode', element: <Navigate to="/ai-providers/legacy/ampcode" replace /> },

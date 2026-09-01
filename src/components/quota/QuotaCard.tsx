@@ -13,7 +13,7 @@ import {
   getTypeLabel,
   isThemeSurfaceIconProvider,
 } from '@/features/authFiles/constants';
-import type { AuthFileItem, ResolvedTheme } from '@/types';
+import type { AuthFileItem } from '@/types';
 import styles from '@/pages/QuotaPage.module.scss';
 
 type QuotaStatus = 'idle' | 'loading' | 'success' | 'error';
@@ -72,7 +72,6 @@ export interface QuotaRenderHelpers {
 interface QuotaCardProps<TState extends QuotaStatusState> {
   item: AuthFileItem;
   quota?: TState;
-  resolvedTheme: ResolvedTheme;
   i18nPrefix: string;
   cardIdleMessageKey?: string;
   cardClassName: string;
@@ -86,7 +85,6 @@ interface QuotaCardProps<TState extends QuotaStatusState> {
 export function QuotaCard<TState extends QuotaStatusState>({
   item,
   quota,
-  resolvedTheme,
   i18nPrefix,
   cardIdleMessageKey,
   cardClassName,
@@ -100,7 +98,7 @@ export function QuotaCard<TState extends QuotaStatusState>({
 
   const displayType = item.type || item.provider || defaultType;
   const typeLabel = getTypeLabel(t, displayType);
-  const iconSrc = getAuthFileIcon(displayType, resolvedTheme);
+  const iconSrc = getAuthFileIcon(displayType);
 
   const quotaStatus = quota?.status ?? 'idle';
   const quotaLoading = quotaStatus === 'loading';
@@ -121,7 +119,7 @@ export function QuotaCard<TState extends QuotaStatusState>({
           title={typeLabel}
           style={
             isThemeSurfaceIconProvider(displayType)
-              ? { background: getThemeSurfaceIconBackground(resolvedTheme) }
+              ? { background: getThemeSurfaceIconBackground() }
               : undefined
           }
         >

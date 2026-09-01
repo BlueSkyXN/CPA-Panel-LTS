@@ -19,7 +19,6 @@ import styles from '@/pages/UsagePage.module.scss';
 export interface CostTrendChartProps {
   usage: UsagePayload | null;
   loading: boolean;
-  isDark: boolean;
   isMobile: boolean;
   priceProfile: PriceProfileV3;
   onOpenPricing: () => void;
@@ -43,7 +42,6 @@ function buildGradient(ctx: ScriptableContext<'line'>) {
 export function CostTrendChart({
   usage,
   loading,
-  isDark,
   isMobile,
   priceProfile,
   onOpenPricing,
@@ -82,7 +80,7 @@ export function CostTrendChart({
       ],
     };
 
-    const baseOptions = buildChartOptions({ period, labels: series.labels, isDark, isMobile });
+    const baseOptions = buildChartOptions({ period, labels: series.labels, isMobile });
     const options = {
       ...baseOptions,
       scales: {
@@ -105,7 +103,7 @@ export function CostTrendChart({
       hasData: series.hasData,
       pricingCoverage: series.pricingCoverage,
     };
-  }, [usage, period, isDark, isMobile, priceProfile, hourWindowHours, t]);
+  }, [usage, period, isMobile, priceProfile, hourWindowHours, t]);
 
   const pricingComplete = pricingCoverage !== null && isLocalEstimateComplete(pricingCoverage);
   const hasUnpricedUsage =

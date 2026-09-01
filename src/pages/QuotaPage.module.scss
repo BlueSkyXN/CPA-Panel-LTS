@@ -287,22 +287,13 @@
   }
 }
 
-:global([data-theme='dark']) .viewModeToggle {
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-}
-
-:global([data-theme='dark']) .refreshAllButton:global(.btn.btn-sm) {
-  background: color-mix(in srgb, var(--primary-color) 18%, var(--bg-secondary));
-  border-color: color-mix(in srgb, var(--primary-color) 32%, var(--border-color));
-}
-
 @include mobile {
   .headerActions {
     gap: $spacing-xs;
   }
 }
 
-// 卡片渐变背景 — 基于 TYPE_COLORS light.bg 转 rgba
+// 卡片渐变背景 — 基于 TYPE_COLORS.bg 转 rgba
 .claudeCard {
   background-image: linear-gradient(180deg, rgba(251, 236, 228, 0.18), rgba(251, 236, 228, 0));
 }
@@ -728,77 +719,6 @@
   }
 }
 
-:global([data-theme='dark']) .premiumPlanValue {
-  background:
-    radial-gradient(
-      circle at 18% 24%,
-      rgba(255, 229, 138, 0.32) 0%,
-      rgba(255, 214, 98, 0.18) 18%,
-      rgba(255, 214, 98, 0) 44%
-    ),
-    linear-gradient(135deg, #4f3d0b 0%, #6e5510 48%, #8f6d10 100%);
-  border-color: rgba(226, 180, 50, 0.7);
-  box-shadow:
-    0 1px 6px rgba(0, 0, 0, 0.28),
-    0 0 0 1px rgba(255, 220, 120, 0.16) inset,
-    0 0 18px rgba(255, 196, 44, 0.22);
-  color: #fff0a8;
-  text-shadow: 0 0 10px rgba(255, 212, 79, 0.22);
-
-  &::before {
-    background: radial-gradient(
-      circle at 18% 24%,
-      rgba(255, 229, 138, 0.42) 0%,
-      rgba(255, 197, 66, 0.28) 34%,
-      rgba(255, 187, 0, 0) 74%
-    );
-    opacity: 0.8;
-  }
-
-  @media (dynamic-range: high) {
-    background:
-      radial-gradient(
-        circle at 18% 24%,
-        color(display-p3 1 0.89 0.38 / 0.38) 0%,
-        color(display-p3 1 0.82 0.2 / 0.2) 18%,
-        color(display-p3 1 0.82 0.2 / 0) 44%
-      ),
-      linear-gradient(
-        135deg,
-        color(display-p3 0.33 0.25 0.04),
-        color(display-p3 0.48 0.36 0.08),
-        color(display-p3 0.62 0.46 0.09)
-      );
-    border-color: color(display-p3 0.78 0.6 0.16 / 0.78);
-    box-shadow:
-      0 1px 8px color(display-p3 0 0 0 / 0.32),
-      0 0 0 1px color(display-p3 0.95 0.8 0.24 / 0.18) inset,
-      0 0 20px color(display-p3 1 0.76 0.1 / 0.28);
-    color: color(display-p3 1 0.93 0.58);
-  }
-
-  @supports (color: #{'color(rec2100-linear 1 1 1)'}) {
-    @media (dynamic-range: high) {
-      dynamic-range-limit: no-limit;
-      box-shadow:
-        0 1px 8px color(display-p3 0 0 0 / 0.32),
-        0 0 0 1px color(display-p3 0.95 0.8 0.24 / 0.18) inset,
-        0 0 16px color(display-p3 1 0.76 0.1 / 0.28),
-        0 0 28px #{'color(rec2100-linear 4.8 3.5 0.45 / 0.4)'};
-
-      &::before {
-        background: radial-gradient(
-          circle at 18% 24%,
-          #{'color(rec2100-linear 5.6 4.1 0.75 / 0.64)'} 0%,
-          #{'color(rec2100-linear 2.2 1.5 0.2 / 0.34)'} 34%,
-          #{'color(rec2100-linear 1.2 0.9 0.06 / 0)'} 74%
-        );
-        opacity: 0.95;
-      }
-    }
-  }
-}
-
 // codexDetails structure is LTS-owned (src/lts/codexQuota/styles.module.scss);
 // this page injects only the surface background for the quota-page context.
 .codexDetailsSurface {
@@ -824,21 +744,6 @@
     &::before {
       content: none;
     }
-  }
-
-  :global([data-theme='dark']) .premiumPlanValue {
-    background:
-      radial-gradient(
-        circle at 18% 24%,
-        rgba(255, 229, 138, 0.28) 0%,
-        rgba(255, 214, 98, 0.14) 18%,
-        rgba(255, 214, 98, 0) 44%
-      ),
-      linear-gradient(135deg, #4f3d0b 0%, #6e5510 48%, #8f6d10 100%);
-    box-shadow:
-      0 1px 6px rgba(0, 0, 0, 0.28),
-      0 0 0 1px rgba(255, 220, 120, 0.16) inset,
-      0 0 10px rgba(255, 196, 44, 0.18);
   }
 }
 
