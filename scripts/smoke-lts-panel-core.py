@@ -1739,6 +1739,14 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
         )
     seen.append("BROWSER visual reload parsed disable-image-generation passthrough")
 
+    # The Core config watcher applies file writes asynchronously. Wait for the
+    # visual-save value to reach the live config before the next smoke phase,
+    # otherwise a delayed write can overwrite the log fixtures it is about to
+    # inspect.
+    wait_for_config_value(api_url, "logging-to-file", expected_logging)
+    if not expected_logging:
+        set_core_config_booleans(api_url, {"logging-to-file": True})
+
     return seen
 
 
