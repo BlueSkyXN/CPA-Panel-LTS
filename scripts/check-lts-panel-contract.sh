@@ -80,8 +80,15 @@ for path in \
   src/components/providers/AmpcodeSection \
   src/components/providers/ProviderStatusBar.tsx \
   src/components/providers/hooks/useProviderRecentRequests.ts \
+  src/components/layout/CommandPalette.tsx \
+  src/components/layout/CoreScopeRail.tsx \
+  src/components/layout/MainLayout.tsx \
+  src/components/layout/SidebarNavigation.tsx \
+  src/components/layout/sidebarNavigationModel.ts \
   src/assets/icons/amp.svg \
   src/pages/AiProvidersPage.tsx \
+  src/pages/CoreWorkspace.tsx \
+  src/pages/CoreWorkspace.module.scss \
   src/pages/AiProvidersAmpcodeEditPage.tsx \
   src/assets/icons/claudeapi.png \
   src/assets/icons/grok.svg \
@@ -155,6 +162,9 @@ for path in \
   src/stores/useConfigStore.ts \
   src/stores/useModelsStore.ts \
   src/stores/useQuotaStore.ts \
+  src/stores/useThemeStore.ts \
+  src/stores/useWorkspaceStore.ts \
+  src/stores/themeWorkspace.test.mjs \
   src/types/usage.ts \
   src/types/ampcode.ts \
   src/types/auth.ts \
@@ -184,6 +194,9 @@ for path in \
   src/utils/recentRequests.ts \
   src/utils/quota \
   src/utils/constants.ts \
+  src/styles/layout.scss \
+  src/styles/next.scss \
+  src/styles/themes.scss \
   docs/lts/panel-feature-contracts.yaml \
   docs/lts/panel-protected-deltas.yaml \
   docs/lts/sync-runbook.md \
@@ -203,6 +216,8 @@ done
 
 # Hard LTS contract.
 require_file_contains src/router/MainRoutes.tsx "path: '/usage'"
+require_file_contains src/router/MainRoutes.tsx "path: '/core'"
+require_file_contains src/router/MainRoutes.tsx "path: '/core/workspace'"
 require_file_contains src/router/MainRoutes.tsx "path: '/usage/pricing'"
 require_file_contains src/router/MainRoutes.tsx "path: '/lts/usage'"
 require_file_contains src/router/MainRoutes.tsx "path: '/lts/providers'"
@@ -228,6 +243,31 @@ require_file_contains src/router/MainRoutes.tsx "AiProvidersAmpcodeEditPage"
 require_file_contains src/components/layout/MainLayout.tsx "path: '/usage'"
 require_file_contains src/components/layout/MainLayout.tsx "path: '/ai-providers/legacy'"
 require_file_contains src/components/layout/MainLayout.tsx "nav.provider_legacy"
+require_file_contains src/components/layout/MainLayout.tsx "data-workspace-layout"
+require_file_contains src/components/layout/MainLayout.tsx 'sidebar-mode-${effectiveSidebarMode}'
+require_file_contains src/components/layout/MainLayout.tsx "CommandPalette"
+require_file_contains src/components/layout/MainLayout.tsx "CoreScopeRail"
+require_file_contains src/stores/useThemeStore.ts "normalizeTheme"
+require_file_contains src/stores/useThemeStore.ts "version: 3"
+require_file_contains src/stores/useThemeStore.ts "removeAttribute('data-theme')"
+require_file_contains src/stores/useWorkspaceStore.ts "normalizeWorkspaceLayout"
+require_file_contains src/stores/useWorkspaceStore.ts "version: 1"
+require_file_contains src/types/common.ts "Theme = 'white' | 'mist'"
+require_file_contains src/types/common.ts "WorkspaceLayout = 'tower' | 'studio' | 'console'"
+require_file_contains src/styles/themes.scss "[data-theme='mist']"
+require_file_contains src/components/layout/CommandPalette.tsx "FOCUSABLE_SELECTOR"
+require_file_contains src/components/layout/CommandPalette.tsx "event.key === 'Tab'"
+require_file_contains src/stores/themeWorkspace.test.mjs "permanently migrates removed and invalid themes to white"
+require_file_contains src/stores/themeWorkspace.test.mjs "keeps only the three supported workspace layouts"
+require_file_contains scripts/smoke-lts-panel.py "Legacy paper theme did not migrate permanently to white"
+require_file_contains scripts/smoke-lts-panel.py "Studio workspace did not persist"
+require_file_contains scripts/smoke-lts-panel.py "Command palette allowed Tab focus to escape the modal"
+require_file_not_contains src/styles/themes.scss "[data-theme='dark']"
+require_file_not_contains src/components/layout/MainLayout.tsx "theme.paper"
+require_file_not_contains src/components/layout/MainLayout.tsx "theme.dark"
+require_file_not_contains src/components/layout/MainLayout.tsx "theme.auto"
+require_file_not_contains src/stores/useThemeStore.ts "cycleTheme"
+require_file_not_contains src/stores/useThemeStore.ts "prefers-color-scheme"
 require_file_contains src/services/api/usage.ts "'/usage'"
 require_file_contains src/services/api/usage.ts "'/usage/export'"
 require_file_contains src/services/api/usage.ts "'/usage/import'"
