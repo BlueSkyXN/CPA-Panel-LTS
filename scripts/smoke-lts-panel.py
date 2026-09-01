@@ -319,7 +319,8 @@ def build_usage_payload() -> dict[str, Any]:
             "response_service_tier": " priority ",
             "effective_service_tier": " priority ",
             "reasoning_effort": " max ",
-            "latency": 110,
+            "latency_ms": 110,
+            "ttfb_ms": 70,
             "tokens": {
                 "input_tokens": 12,
                 "output_tokens": 8,
@@ -3604,6 +3605,17 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         raise AssertionError("Request-event table region has no keyboard focus indicator")
     card.get_by_role("columnheader", name="Tier", exact=True).wait_for()
     card.get_by_role("columnheader", name="Effort", exact=True).wait_for()
+    card.get_by_role("columnheader", name="Caller Key", exact=True).wait_for()
+    card.get_by_role("columnheader", name="TTFB", exact=True).wait_for()
+    card.get_by_role("columnheader", name="Output TPS", exact=True).wait_for()
+    card.get_by_role("columnheader", name="Avg TPS", exact=True).wait_for()
+    card.locator('td[data-request-performance="ttfb"][data-ttfb-ms="70"]').wait_for()
+    card.locator('td[data-request-performance="output-tps"][data-output-tps="200"]').wait_for()
+    endpoint_identity_cells = card.locator('td[data-request-identity-type="endpoint"]')
+    if endpoint_identity_cells.count() != 8:
+        raise AssertionError(
+            "Request events did not preserve the outer usage API bucket as an endpoint identity"
+        )
     if card.get_by_role("columnheader", name="Source", exact=True).count() != 0:
         raise AssertionError("Request events must hide the Source column by default")
     if card.get_by_role("columnheader", name="Auth Index", exact=True).count() != 0:
@@ -3644,8 +3656,11 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     column_dialog.wait_for()
     source_column = column_dialog.get_by_role("checkbox", name="Source", exact=True)
     auth_index_column = column_dialog.get_by_role("checkbox", name="Auth Index", exact=True)
+    request_key_column = column_dialog.get_by_role("checkbox", name="Caller Key", exact=True)
     if source_column.is_checked() or auth_index_column.is_checked():
         raise AssertionError("Default request-event columns exposed Source or Auth Index")
+    if not request_key_column.is_checked():
+        raise AssertionError("Default request-event columns hid the caller key")
     source_column.check()
     auth_index_column.check()
     card.get_by_role("columnheader", name="Source", exact=True).wait_for()
@@ -3673,11 +3688,15 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     expected_column_defaults = {
         "timestamp": True,
         "model": True,
+        "requestKey": True,
         "source": False,
         "authIndex": False,
         "tier": True,
         "result": True,
         "latency": True,
+        "ttfb": True,
+        "outputTps": True,
+        "averageTps": True,
         "effort": True,
         "totalInputTokens": True,
         "nonCacheReadInputTokens": True,
@@ -3718,6 +3737,11 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         raise AssertionError(
             f"Expected {expected} request event row(s), found {rows.count()}"
         )
+
+    request_key_select = card.get_by_label("Caller Key", exact=True)
+    request_key_select.click()
+    page.get_by_role("option", name="Endpoint · POST /v1/responses", exact=True).click()
+    wait_for_row_count(8)
 
     model_select = card.get_by_label("Model", exact=True)
     model_select.click()
@@ -3939,6 +3963,13 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         csv_rows = list(csv.DictReader(csv_file))
     if any(column.startswith("thinking_") for column in csv_rows[0]):
         raise AssertionError("Request-event CSV must not export legacy thinking fields")
+    if any(
+        row.get("request_identity_type") != "endpoint"
+        or row.get("request_key_hint") != "POST /v1/responses"
+        or row.get("request_key_config_index") not in {"", None}
+        for row in csv_rows
+    ):
+        raise AssertionError("Request-event CSV lost the safe caller identity fields")
     csv_tiers = sorted(row.get("service_tier", "") for row in csv_rows)
     if csv_tiers != ["", "cache-import", "flex", "priority", "priority"]:
         raise AssertionError(f"Request-event CSV lost raw service_tier values: {csv_tiers!r}")
@@ -4008,6 +4039,13 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     json_rows = json.loads(Path(json_path).read_text(encoding="utf-8"))
     if any("thinking" in row for row in json_rows):
         raise AssertionError("Request-event JSON must not export legacy thinking data")
+    if any(
+        row.get("request_identity_type") != "endpoint"
+        or row.get("request_key_hint") != "POST /v1/responses"
+        or row.get("request_key_config_index") is not None
+        for row in json_rows
+    ):
+        raise AssertionError("Request-event JSON lost the safe caller identity fields")
     json_tiers = sorted(
         "<null>" if row.get("service_tier") is None else str(row.get("service_tier"))
         for row in json_rows
@@ -4796,12 +4834,14 @@ def run_usage_request_event_column_storage_smoke(context: Any, app_url: str) -> 
               const stored = JSON.parse(localStorage.getItem(current) || '{}');
               return legacy.every((key) => localStorage.getItem(key) === null) &&
                 stored.source === false && stored.authIndex === false &&
+                stored.requestKey === true &&
                 stored.totalInputTokens === true &&
                 stored.nonCacheReadInputTokens === true &&
                 stored.totalOutputTokens === true &&
                 stored.displayedOutputTokens === true &&
                 stored.reasoningTokens === true && stored.cacheReadTokens === true &&
                 stored.cacheWriteTokens === true && stored.totalTokens === true &&
+                stored.ttfb === true && stored.outputTps === true && stored.averageTps === true &&
                 stored.cost === true;
             }""",
             arg={"current": storage_key, "legacy": legacy_keys},
@@ -4821,11 +4861,15 @@ def run_usage_request_event_column_storage_smoke(context: Any, app_url: str) -> 
               localStorage.setItem(key, JSON.stringify({
                 timestamp: false,
                 model: false,
+                requestKey: false,
                 source: false,
                 authIndex: false,
                 tier: false,
                 result: false,
                 latency: true,
+                ttfb: false,
+                outputTps: false,
+                averageTps: false,
                 effort: false,
                 totalInputTokens: false,
                 nonCacheReadInputTokens: false,

@@ -32,6 +32,7 @@ import {
 import { estimateUsageDetailCost, pricedAmountOrZero } from './usage/pricing/usagePricing';
 import { normalizeReasoningEffort } from './usage/reasoningEffort';
 import { normalizeServiceTier } from './usage/serviceTier';
+import { extractTTFBMs } from './usage/performance';
 import { maskApiKey } from './format';
 import { parseTimestampMs } from './timestamp';
 
@@ -43,6 +44,15 @@ export {
   extractLatencyMs,
   formatDurationMs,
 } from './usage/latency';
+export {
+  calculateAverageTps,
+  calculateDecodeDurationMs,
+  calculateOutputTps,
+  extractTTFBMs,
+  formatPerSecondValue,
+  TTFB_SOURCE_FIELD,
+  TTFB_SOURCE_UNIT,
+} from './usage/performance';
 
 export interface KeyStatBucket {
   success: number;
@@ -155,8 +165,11 @@ export interface UsageDetail {
   effective_service_tier?: string | null;
   reasoning_effort?: string | null;
   latency_ms?: number;
+  ttfb_ms?: number;
   tokens: UsageTokenStats;
   failed: boolean;
+  /** Parent key from usage.apis; may be a caller key, endpoint, provider, or unknown fallback. */
+  __apiBucket?: string;
   __modelName?: string;
   __timestampMs?: number;
 }
@@ -805,7 +818,7 @@ export function collectUsageDetails(usageData: unknown): UsageDetail[] {
     return normalized;
   };
 
-  Object.values(apis).forEach((apiEntry) => {
+  Object.entries(apis).forEach(([apiBucket, apiEntry]) => {
     if (!isRecord(apiEntry)) return;
     const modelsRaw = apiEntry.models;
     const models = isRecord(modelsRaw) ? modelsRaw : null;
@@ -822,6 +835,7 @@ export function collectUsageDetails(usageData: unknown): UsageDetail[] {
         const timestampMs = parseTimestampMs(timestamp);
         const tokensRaw = isRecord(detailRaw.tokens) ? detailRaw.tokens : {};
         const latencyMs = extractLatencyMs(detailRaw);
+        const ttfbMs = extractTTFBMs(detailRaw);
         details.push({
           timestamp,
           source: normalizeSource(detailRaw.source),
@@ -836,8 +850,10 @@ export function collectUsageDetails(usageData: unknown): UsageDetail[] {
           effective_service_tier: extractEffectiveServiceTier(detailRaw),
           reasoning_effort: extractReasoningEffort(detailRaw),
           latency_ms: latencyMs ?? undefined,
+          ttfb_ms: ttfbMs ?? undefined,
           tokens: normalizeUsageDetailTokens(tokensRaw),
           failed: detailRaw.failed === true,
+          __apiBucket: apiBucket,
           __modelName: modelName,
           __timestampMs: Number.isNaN(timestampMs) ? 0 : timestampMs,
         });
@@ -904,6 +920,7 @@ export function collectUsageDetailsWithEndpoint(usageData: unknown): UsageDetail
         const timestampMs = parseTimestampMs(timestamp);
         const tokensRaw = isRecord(detailRaw.tokens) ? detailRaw.tokens : {};
         const latencyMs = extractLatencyMs(detailRaw);
+        const ttfbMs = extractTTFBMs(detailRaw);
         details.push({
           timestamp,
           source: normalizeSource(detailRaw.source),
@@ -918,8 +935,10 @@ export function collectUsageDetailsWithEndpoint(usageData: unknown): UsageDetail
           effective_service_tier: extractEffectiveServiceTier(detailRaw),
           reasoning_effort: extractReasoningEffort(detailRaw),
           latency_ms: latencyMs ?? undefined,
+          ttfb_ms: ttfbMs ?? undefined,
           tokens: normalizeUsageDetailTokens(tokensRaw),
           failed: detailRaw.failed === true,
+          __apiBucket: endpoint,
           __modelName: modelName,
           __endpoint: endpoint,
           __endpointMethod: endpointMethod,

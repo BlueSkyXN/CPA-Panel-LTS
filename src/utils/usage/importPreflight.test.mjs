@@ -30,6 +30,7 @@ const {
 const detail = (tokens, overrides = {}) => ({
   timestamp: '2026-07-10T12:00:00.123456789Z',
   latency_ms: 10,
+  ttfb_ms: 3,
   source: 'auths/codex.json',
   auth_index: '0',
   tokens,
@@ -159,6 +160,8 @@ test('rejects malformed nested containers and known field types', () => {
       (payload.usage.apis['POST /v1/responses'].models[
         'gpt-5.6-sol'
       ].details[0].outbound_service_tier = 7),
+    (payload) =>
+      (payload.usage.apis['POST /v1/responses'].models['gpt-5.6-sol'].details[0].ttfb_ms = '3'),
     (payload) =>
       (payload.usage.apis['POST /v1/responses'].models['gpt-5.6-sol'].details[0].failed = 'false'),
     (payload) => (payload.usage.requests_by_day = []),
