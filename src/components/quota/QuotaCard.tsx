@@ -7,12 +7,8 @@ import type { ReactElement, ReactNode } from 'react';
 import type { TFunction } from 'i18next';
 import { Button } from '@/components/ui/Button';
 import { IconRefreshCw } from '@/components/ui/icons';
-import {
-  getAuthFileIcon,
-  getThemeSurfaceIconBackground,
-  getTypeLabel,
-  isThemeSurfaceIconProvider,
-} from '@/features/authFiles/constants';
+import { getTypeLabel } from '@/features/authFiles/constants';
+import { ProviderIcon } from '@/features/authFiles/components/ProviderIcon';
 import type { AuthFileItem } from '@/types';
 import styles from '@/pages/QuotaPage.module.scss';
 
@@ -98,7 +94,6 @@ export function QuotaCard<TState extends QuotaStatusState>({
 
   const displayType = item.type || item.provider || defaultType;
   const typeLabel = getTypeLabel(t, displayType);
-  const iconSrc = getAuthFileIcon(displayType);
 
   const quotaStatus = quota?.status ?? 'idle';
   const quotaLoading = quotaStatus === 'loading';
@@ -114,23 +109,12 @@ export function QuotaCard<TState extends QuotaStatusState>({
   return (
     <div className={`${styles.fileCard} ${cardClassName}`} role="article">
       <div className={styles.cardHeader}>
-        <span
+        <ProviderIcon
+          provider={displayType}
+          size="card"
           className={styles.providerIconWrap}
           title={typeLabel}
-          style={
-            isThemeSurfaceIconProvider(displayType)
-              ? { background: getThemeSurfaceIconBackground() }
-              : undefined
-          }
-        >
-          {iconSrc ? (
-            <img src={iconSrc} alt="" className={styles.providerIcon} />
-          ) : (
-            <span className={styles.providerIconFallback}>
-              {typeLabel.slice(0, 1).toUpperCase()}
-            </span>
-          )}
-        </span>
+        />
         <span className={styles.cardIdentity}>
           <span className={styles.fileName} title={item.name}>
             {item.name}
