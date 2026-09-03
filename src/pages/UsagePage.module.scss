@@ -1093,6 +1093,56 @@
   flex-wrap: wrap;
 }
 
+.requestEventsPerformanceSummary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: $spacing-sm;
+  margin-bottom: $spacing-sm;
+}
+
+.requestEventsPerformanceSummaryCard {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  padding: $spacing-sm;
+  border: 1px solid var(--border-color);
+  border-radius: $radius-md;
+  background: var(--bg-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.requestEventsPerformanceSummaryLabel {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.requestEventsPerformanceSummaryValue {
+  color: var(--text-primary);
+  font-size: 20px;
+  line-height: 1.15;
+}
+
+.requestEventsPerformanceSummarySamples {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+@media (max-width: 960px) {
+  .requestEventsPerformanceSummary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .requestEventsPerformanceSummary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .requestEventsLimitHint {
   color: var(--text-tertiary);
 }

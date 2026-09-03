@@ -159,8 +159,23 @@ features:
       - calculateOutputTps
       - calculateAverageTps
       - request_events_ttfb
+      - request_events_ttft
+      - request_events_ttfa
       - request_events_output_tps
       - request_events_average_tps
+      - request_events_visible_average_tps
+      - request_events_reasoning_ratio
+      - request_events_weighted_output_tps
+      - request_events_weighted_average_tps
+      - request_events_performance_samples
+      - timing_version
+      - ttft_ms
+      - ttfa_ms
+      - summarizeUsagePerformance
+      - usage_v1_timing_semantics_ambiguous
+      - usage_v2_timing_semantics_ambiguous
+      - usage_v3_token_contract_invalid
+      - usage_v3_timing_contract_invalid
       - request_events_cost_estimate
       - estimated_cost_usd
       - pricing_status

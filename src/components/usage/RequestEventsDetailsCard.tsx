@@ -29,17 +29,24 @@ import {
   calculateAverageTps,
   calculateCostEstimate,
   calculateDecodeDurationMs,
+  calculateReasoningRatio,
   calculateOutputTps,
+  calculateVisibleAverageTps,
   collectUsageDetails,
   extractLatencyMs,
+  extractTTFAMs,
   extractTTFBMs,
+  extractTTFTMs,
+  extractTimingVersion,
   extractTotalTokens,
   formatDurationMs,
   formatPerSecondValue,
   LATENCY_SOURCE_FIELD,
   TTFB_SOURCE_FIELD,
   normalizeAuthIndex,
+  normalizeSemanticTimingMs,
   resolveServiceTier,
+  summarizeUsagePerformance,
   type CostEstimateStatus,
   type DisplayServiceTier,
   type PriceProfileV3,
@@ -115,8 +122,12 @@ const REQUEST_EVENT_COLUMN_IDS = [
   'result',
   'latency',
   'ttfb',
+  'ttft',
+  'ttfa',
   'outputTps',
   'averageTps',
+  'visibleAverageTps',
+  'reasoningRatio',
   'effort',
   'totalInputTokens',
   'nonCacheReadInputTokens',
@@ -217,8 +228,12 @@ const DEFAULT_COLUMN_VISIBILITY: RequestEventColumnVisibility = {
   result: true,
   latency: true,
   ttfb: true,
+  ttft: true,
+  ttfa: true,
   outputTps: true,
   averageTps: true,
+  visibleAverageTps: false,
+  reasoningRatio: false,
   effort: true,
   totalInputTokens: true,
   nonCacheReadInputTokens: true,
@@ -264,9 +279,14 @@ type RequestEventRow = {
   failed: boolean;
   latencyMs: number | null;
   ttfbMs: number | null;
+  timingVersion: number | null;
+  ttftMs: number | null;
+  ttfaMs: number | null;
   decodeDurationMs: number | null;
   outputTps: number | null;
   averageTps: number | null;
+  visibleAverageTps: number | null;
+  reasoningRatio: number | null;
   inputTokens: number;
   nonCacheReadInputTokens: number;
   outputTokens: number;
@@ -519,6 +539,14 @@ const formatRequestEventCostUsd = (value: number, locale: string): string => {
   })}`;
 };
 
+const formatReasoningRatioValue = (value: number | null, locale: string): string => {
+  if (value === null || !Number.isFinite(value) || value < 0) return '--';
+  return new Intl.NumberFormat(locale, {
+    style: 'percent',
+    maximumFractionDigits: 1,
+  }).format(value);
+};
+
 const getRequestEventCostTone = (
   amount: number | null,
   status: CostEstimateStatus,
@@ -557,6 +585,10 @@ export function RequestEventsDetailsCard({
     field: TTFB_SOURCE_FIELD,
     unit: t('usage_stats.duration_unit_ms'),
   });
+  const ttftHint = t('usage_stats.request_events_ttft_hint');
+  const ttfaHint = t('usage_stats.request_events_ttfa_hint');
+  const visibleAverageTpsHint = t('usage_stats.request_events_visible_average_tps_hint');
+  const reasoningRatioHint = t('usage_stats.request_events_reasoning_ratio_hint');
   const outputTpsHint = t('usage_stats.request_events_output_tps_hint');
   const averageTpsHint = t('usage_stats.request_events_average_tps_hint');
   const nonCacheReadInputHint = t('usage_stats.request_events_non_cache_read_input_tokens_hint');
@@ -1016,9 +1048,18 @@ export function RequestEventsDetailsCard({
       );
       const latencyMs = extractLatencyMs(detail);
       const ttfbMs = extractTTFBMs(detail);
+      const timingVersion = extractTimingVersion(detail);
+      const ttftMs = normalizeSemanticTimingMs(extractTTFTMs(detail), latencyMs, ttfbMs);
+      const ttfaMs = normalizeSemanticTimingMs(extractTTFAMs(detail), latencyMs, ttfbMs);
       const decodeDurationMs = calculateDecodeDurationMs(latencyMs, ttfbMs);
       const outputTps = calculateOutputTps(outputTokens, latencyMs, ttfbMs);
       const averageTps = calculateAverageTps(outputTokens, latencyMs);
+      const visibleAverageTps = calculateVisibleAverageTps(
+        outputTokens,
+        reasoningTokens,
+        latencyMs
+      );
+      const reasoningRatio = calculateReasoningRatio(outputTokens, reasoningTokens);
       const costEstimate = calculateCostEstimate(detail, priceProfile);
       const longContext = costEstimate.contextBand === 'long';
       const costAmount = costEstimate.status === 'priced' ? costEstimate.amount : null;
@@ -1052,9 +1093,14 @@ export function RequestEventsDetailsCard({
         failed: detail.failed === true,
         latencyMs,
         ttfbMs,
+        timingVersion,
+        ttftMs,
+        ttfaMs,
         decodeDurationMs,
         outputTps,
         averageTps,
+        visibleAverageTps,
+        reasoningRatio,
         inputTokens,
         nonCacheReadInputTokens,
         outputTokens,
@@ -1304,8 +1350,18 @@ export function RequestEventsDetailsCard({
       { id: 'result' as const, label: t('usage_stats.request_events_result') },
       { id: 'latency' as const, label: t('usage_stats.time') },
       { id: 'ttfb' as const, label: t('usage_stats.request_events_ttfb') },
+      { id: 'ttft' as const, label: t('usage_stats.request_events_ttft') },
+      { id: 'ttfa' as const, label: t('usage_stats.request_events_ttfa') },
       { id: 'outputTps' as const, label: t('usage_stats.request_events_output_tps') },
       { id: 'averageTps' as const, label: t('usage_stats.request_events_average_tps') },
+      {
+        id: 'visibleAverageTps' as const,
+        label: t('usage_stats.request_events_visible_average_tps'),
+      },
+      {
+        id: 'reasoningRatio' as const,
+        label: t('usage_stats.request_events_reasoning_ratio'),
+      },
       { id: 'effort' as const, label: t('usage_stats.request_events_effort') },
       {
         id: 'totalInputTokens' as const,
@@ -1500,6 +1556,19 @@ export function RequestEventsDetailsCard({
 
   const renderedRows = useMemo(() => filteredRows.slice(0, MAX_RENDERED_EVENTS), [filteredRows]);
 
+  const performanceSummary = useMemo(
+    () =>
+      summarizeUsagePerformance(
+        filteredRows.map((row) => ({
+          outputTokens: row.outputTokens,
+          reasoningTokens: row.reasoningTokens,
+          latencyMs: row.latencyMs,
+          ttfbMs: row.ttfbMs,
+        }))
+      ),
+    [filteredRows]
+  );
+
   const hasActiveFilters =
     effectiveModelFilter !== ALL_FILTER ||
     effectiveRequestKeyFilter !== ALL_FILTER ||
@@ -1619,8 +1688,13 @@ export function RequestEventsDetailsCard({
         'result',
         ...(hasLatencyData ? ['latency_ms'] : []),
         ...(hasTTFBData ? ['ttfb_ms'] : []),
+        'timing_version',
+        'ttft_ms',
+        'ttfa_ms',
         ...(hasOutputTpsData ? ['decode_duration_ms', 'output_tps'] : []),
         ...(hasAverageTpsData ? ['average_tps'] : []),
+        'visible_average_tps',
+        'reasoning_ratio',
         'input_tokens',
       'non_cache_read_input_tokens',
       'output_tokens',
@@ -1654,8 +1728,13 @@ export function RequestEventsDetailsCard({
         row.failed ? 'failed' : 'success',
         ...(hasLatencyData ? [row.latencyMs ?? ''] : []),
         ...(hasTTFBData ? [row.ttfbMs ?? ''] : []),
+        row.timingVersion ?? '',
+        row.ttftMs ?? '',
+        row.ttfaMs ?? '',
         ...(hasOutputTpsData ? [row.decodeDurationMs ?? '', row.outputTps ?? ''] : []),
         ...(hasAverageTpsData ? [row.averageTps ?? ''] : []),
+        row.visibleAverageTps ?? '',
+        row.reasoningRatio ?? '',
         row.inputTokens,
         row.nonCacheReadInputTokens,
         row.outputTokens,
@@ -1702,10 +1781,15 @@ export function RequestEventsDetailsCard({
       failed: row.failed,
       ...(hasLatencyData && row.latencyMs !== null ? { latency_ms: row.latencyMs } : {}),
       ...(hasTTFBData && row.ttfbMs !== null ? { ttfb_ms: row.ttfbMs } : {}),
+      timing_version: row.timingVersion,
+      ttft_ms: row.ttftMs,
+      ttfa_ms: row.ttfaMs,
       ...(hasOutputTpsData && row.outputTps !== null
         ? { decode_duration_ms: row.decodeDurationMs, output_tps: row.outputTps }
         : {}),
       ...(hasAverageTpsData && row.averageTps !== null ? { average_tps: row.averageTps } : {}),
+      visible_average_tps: row.visibleAverageTps,
+      reasoning_ratio: row.reasoningRatio,
       tokens: {
         input_tokens: row.inputTokens,
         non_cache_read_input_tokens: row.nonCacheReadInputTokens,
@@ -1828,6 +1912,54 @@ export function RequestEventsDetailsCard({
         </Button>
       </div>
     </>
+  );
+
+  const performanceSummaryCards = [
+    {
+      key: 'output-tps',
+      label: t('usage_stats.request_events_weighted_output_tps'),
+      value: formatPerSecondValue(performanceSummary.outputTps.value),
+      samples: performanceSummary.outputTps.sampleCount,
+    },
+    {
+      key: 'average-tps',
+      label: t('usage_stats.request_events_weighted_average_tps'),
+      value: formatPerSecondValue(performanceSummary.averageTps.value),
+      samples: performanceSummary.averageTps.sampleCount,
+    },
+    {
+      key: 'visible-average-tps',
+      label: t('usage_stats.request_events_visible_average_tps'),
+      value: formatPerSecondValue(performanceSummary.visibleAverageTps.value),
+      samples: performanceSummary.visibleAverageTps.sampleCount,
+    },
+    {
+      key: 'reasoning-ratio',
+      label: t('usage_stats.request_events_reasoning_ratio'),
+      value: formatReasoningRatioValue(performanceSummary.reasoningRatio.value, i18n.language),
+      samples: performanceSummary.reasoningRatio.sampleCount,
+    },
+  ];
+
+  const performanceSummaryGrid = (
+    <div className={styles.requestEventsPerformanceSummary} data-performance-summary>
+      {performanceSummaryCards.map((card) => (
+        <div
+          key={card.key}
+          className={styles.requestEventsPerformanceSummaryCard}
+          data-performance-summary-key={card.key}
+        >
+          <span className={styles.requestEventsPerformanceSummaryLabel}>{card.label}</span>
+          <strong className={styles.requestEventsPerformanceSummaryValue}>{card.value}</strong>
+          <span className={styles.requestEventsPerformanceSummarySamples}>
+            {t('usage_stats.request_events_performance_samples', {
+              valid: card.samples,
+              total: performanceSummary.totalCount,
+            })}
+          </span>
+        </div>
+      ))}
+    </div>
   );
 
   return (
@@ -2167,6 +2299,8 @@ export function RequestEventsDetailsCard({
         </Sheet>
       )}
 
+      {performanceSummaryGrid}
+
       {loading && timeScopedRows.length === 0 ? (
         <div className={styles.hint}>{t('common.loading')}</div>
       ) : timeScopedRows.length === 0 ? (
@@ -2228,11 +2362,27 @@ export function RequestEventsDetailsCard({
                   {columnVisibility.ttfb && hasTTFBData && (
                     <th title={ttfbHint}>{t('usage_stats.request_events_ttfb')}</th>
                   )}
+                  {columnVisibility.ttft && (
+                    <th title={ttftHint}>{t('usage_stats.request_events_ttft')}</th>
+                  )}
+                  {columnVisibility.ttfa && (
+                    <th title={ttfaHint}>{t('usage_stats.request_events_ttfa')}</th>
+                  )}
                   {columnVisibility.outputTps && hasOutputTpsData && (
                     <th title={outputTpsHint}>{t('usage_stats.request_events_output_tps')}</th>
                   )}
                   {columnVisibility.averageTps && hasAverageTpsData && (
                     <th title={averageTpsHint}>{t('usage_stats.request_events_average_tps')}</th>
+                  )}
+                  {columnVisibility.visibleAverageTps && (
+                    <th title={visibleAverageTpsHint}>
+                      {t('usage_stats.request_events_visible_average_tps')}
+                    </th>
+                  )}
+                  {columnVisibility.reasoningRatio && (
+                    <th title={reasoningRatioHint}>
+                      {t('usage_stats.request_events_reasoning_ratio')}
+                    </th>
                   )}
                   {columnVisibility.effort && <th>{t('usage_stats.request_events_effort')}</th>}
                   {columnVisibility.totalInputTokens && (
@@ -2435,6 +2585,26 @@ export function RequestEventsDetailsCard({
                           {formatDurationMs(row.ttfbMs)}
                         </td>
                       )}
+                      {columnVisibility.ttft && (
+                        <td
+                          className={styles.durationCell}
+                          data-request-performance="ttft"
+                          data-ttft-ms={row.ttftMs ?? undefined}
+                          title={ttftHint}
+                        >
+                          {formatDurationMs(row.ttftMs)}
+                        </td>
+                      )}
+                      {columnVisibility.ttfa && (
+                        <td
+                          className={styles.durationCell}
+                          data-request-performance="ttfa"
+                          data-ttfa-ms={row.ttfaMs ?? undefined}
+                          title={ttfaHint}
+                        >
+                          {formatDurationMs(row.ttfaMs)}
+                        </td>
+                      )}
                       {columnVisibility.outputTps && hasOutputTpsData && (
                         <td
                           className={styles.durationCell}
@@ -2457,6 +2627,26 @@ export function RequestEventsDetailsCard({
                           title={averageTpsHint}
                         >
                           {formatPerSecondValue(row.averageTps)}
+                        </td>
+                      )}
+                      {columnVisibility.visibleAverageTps && (
+                        <td
+                          className={styles.durationCell}
+                          data-request-performance="visible-average-tps"
+                          data-visible-average-tps={row.visibleAverageTps ?? undefined}
+                          title={visibleAverageTpsHint}
+                        >
+                          {formatPerSecondValue(row.visibleAverageTps)}
+                        </td>
+                      )}
+                      {columnVisibility.reasoningRatio && (
+                        <td
+                          className={styles.durationCell}
+                          data-request-performance="reasoning-ratio"
+                          data-reasoning-ratio={row.reasoningRatio ?? undefined}
+                          title={reasoningRatioHint}
+                        >
+                          {formatReasoningRatioValue(row.reasoningRatio, i18n.language)}
                         </td>
                       )}
                       {columnVisibility.effort && (

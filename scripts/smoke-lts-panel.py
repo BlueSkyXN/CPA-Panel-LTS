@@ -321,6 +321,9 @@ def build_usage_payload() -> dict[str, Any]:
             "reasoning_effort": " max ",
             "latency_ms": 110,
             "ttfb_ms": 70,
+            "timing_version": 1,
+            "ttft_ms": 80,
+            "ttfa_ms": 95,
             "tokens": {
                 "input_tokens": 12,
                 "output_tokens": 8,
@@ -1090,7 +1093,7 @@ class MockCoreHandler(BaseHTTPRequestHandler):
             "/v0/management/auth-files": build_auth_files_payload(),
             "/v0/management/usage": self.state.usage_payload,
             "/v0/management/usage/export": {
-                "version": 2,
+                "version": 3,
                 "usage": self.state.usage_payload["usage"],
             },
             "/v0/management/api-key-usage": build_api_key_usage_payload(),
@@ -1258,6 +1261,14 @@ class MockCoreHandler(BaseHTTPRequestHandler):
                     {
                         "migrated_from_version": 1,
                         "migration": "v1_uncached_input_tokens_to_v2",
+                    }
+                )
+            elif payload.get("version") == 2:
+                receipt.update(
+                    {
+                        "schema_version": 3,
+                        "migrated_from_version": 2,
+                        "migrations": ["v2_timing_contract_to_v3"],
                     }
                 )
             self._send_json(receipt)
@@ -3607,10 +3618,28 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     card.get_by_role("columnheader", name="Effort", exact=True).wait_for()
     card.get_by_role("columnheader", name="Caller Key", exact=True).wait_for()
     card.get_by_role("columnheader", name="TTFB", exact=True).wait_for()
+    card.get_by_role("columnheader", name="TTFT", exact=True).wait_for()
+    card.get_by_role("columnheader", name="TTFA", exact=True).wait_for()
     card.get_by_role("columnheader", name="Output TPS", exact=True).wait_for()
     card.get_by_role("columnheader", name="Avg TPS", exact=True).wait_for()
     card.locator('td[data-request-performance="ttfb"][data-ttfb-ms="70"]').wait_for()
+    card.locator('td[data-request-performance="ttft"][data-ttft-ms="80"]').wait_for()
+    card.locator('td[data-request-performance="ttfa"][data-ttfa-ms="95"]').wait_for()
     card.locator('td[data-request-performance="output-tps"][data-output-tps="200"]').wait_for()
+    card.locator('[data-performance-summary-key="output-tps"]').wait_for()
+    card.locator('[data-performance-summary-key="reasoning-ratio"]').wait_for()
+    summary_grid = card.locator('[data-performance-summary]')
+    for viewport_width, expected_columns in [(1280, 4), (900, 2), (390, 1)]:
+        page.set_viewport_size({"width": viewport_width, "height": 900})
+        columns = summary_grid.evaluate(
+            "summary => getComputedStyle(summary).gridTemplateColumns.split(' ').length"
+        )
+        if columns != expected_columns:
+            raise AssertionError(
+                f"Request-event summary grid has {columns} columns at {viewport_width}px, "
+                f"want {expected_columns}"
+            )
+    page.set_viewport_size({"width": 1280, "height": 720})
     endpoint_identity_cells = card.locator('td[data-request-identity-type="endpoint"]')
     if endpoint_identity_cells.count() != 8:
         raise AssertionError(
@@ -3695,8 +3724,12 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         "result": True,
         "latency": True,
         "ttfb": True,
+        "ttft": True,
+        "ttfa": True,
         "outputTps": True,
         "averageTps": True,
+        "visibleAverageTps": False,
+        "reasoningRatio": False,
         "effort": True,
         "totalInputTokens": True,
         "nonCacheReadInputTokens": True,
@@ -3963,6 +3996,29 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         csv_rows = list(csv.DictReader(csv_file))
     if any(column.startswith("thinking_") for column in csv_rows[0]):
         raise AssertionError("Request-event CSV must not export legacy thinking fields")
+    required_timing_columns = {
+        "timing_version",
+        "ttft_ms",
+        "ttfa_ms",
+        "visible_average_tps",
+        "reasoning_ratio",
+    }
+    if not required_timing_columns.issubset(csv_rows[0]):
+        raise AssertionError(
+            "Request-event CSV did not export canonical timing/performance columns: "
+            f"{sorted(csv_rows[0])!r}"
+        )
+    if (
+        csv_rows[0].get("timing_version") != "1"
+        or csv_rows[0].get("ttft_ms") != "80"
+        or csv_rows[0].get("ttfa_ms") != "95"
+        or float(csv_rows[0].get("visible_average_tps", "0")) <= 0
+        or float(csv_rows[0].get("reasoning_ratio", "0")) != 0.25
+    ):
+        raise AssertionError(
+            "Request-event CSV lost the canonical timing/performance values: "
+            f"{csv_rows[0]!r}"
+        )
     if any(
         row.get("request_identity_type") != "endpoint"
         or row.get("request_key_hint") != "POST /v1/responses"
@@ -4039,6 +4095,23 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     json_rows = json.loads(Path(json_path).read_text(encoding="utf-8"))
     if any("thinking" in row for row in json_rows):
         raise AssertionError("Request-event JSON must not export legacy thinking data")
+    if not required_timing_columns.issubset(json_rows[0]):
+        raise AssertionError(
+            "Request-event JSON did not export canonical timing/performance columns: "
+            f"{sorted(json_rows[0])!r}"
+        )
+    if (
+        json_rows[0].get("timing_version") != 1
+        or json_rows[0].get("ttft_ms") != 80
+        or json_rows[0].get("ttfa_ms") != 95
+        or not isinstance(json_rows[0].get("visible_average_tps"), (int, float))
+        or not isinstance(json_rows[0].get("reasoning_ratio"), (int, float))
+        or json_rows[0]["reasoning_ratio"] != 0.25
+    ):
+        raise AssertionError(
+            "Request-event JSON lost the canonical timing/performance values: "
+            f"{json_rows[0]!r}"
+        )
     if any(
         row.get("request_identity_type") != "endpoint"
         or row.get("request_key_hint") != "POST /v1/responses"
@@ -4855,7 +4928,9 @@ def run_usage_request_event_column_storage_smoke(context: Any, app_url: str) -> 
                 stored.displayedOutputTokens === true &&
                 stored.reasoningTokens === true && stored.cacheReadTokens === true &&
                 stored.cacheWriteTokens === true && stored.totalTokens === true &&
-                stored.ttfb === true && stored.outputTps === true && stored.averageTps === true &&
+                stored.ttfb === true && stored.ttft === true && stored.ttfa === true &&
+                stored.outputTps === true && stored.averageTps === true &&
+                stored.visibleAverageTps === false && stored.reasoningRatio === false &&
                 stored.cost === true;
             }""",
             arg={"current": storage_key, "legacy": legacy_keys},
@@ -4882,8 +4957,12 @@ def run_usage_request_event_column_storage_smoke(context: Any, app_url: str) -> 
                 result: false,
                 latency: true,
                 ttfb: false,
+                ttft: false,
+                ttfa: false,
                 outputTps: false,
                 averageTps: false,
+                visibleAverageTps: false,
+                reasoningRatio: false,
                 effort: false,
                 totalInputTokens: false,
                 nonCacheReadInputTokens: false,
@@ -5041,7 +5120,14 @@ def run_usage_contract_import_smoke(page: Any, state: MockCoreState) -> None:
     current_detail = state.usage_payload["usage"]["apis"]["POST /v1/responses"]["models"][
         "gpt-5.6-sol"
     ]["details"][-1]
-    ambiguous_detail = json.loads(json.dumps(current_detail))
+
+    def legacy_detail_copy() -> dict[str, Any]:
+        detail = json.loads(json.dumps(current_detail))
+        for key in ("timing_version", "ttft_ms", "ttfa_ms"):
+            detail.pop(key, None)
+        return detail
+
+    ambiguous_detail = legacy_detail_copy()
     ambiguous_payload = {
         "version": 1,
         "usage": {
@@ -5059,7 +5145,7 @@ def run_usage_contract_import_smoke(page: Any, state: MockCoreState) -> None:
     import_route = "POST /v0/management/usage/import"
     before_posts = sum(request == import_route for request in state.requests)
 
-    uncertain_detail = json.loads(json.dumps(current_detail))
+    uncertain_detail = legacy_detail_copy()
     uncertain_detail.pop("timestamp", None)
     uncertain_detail["tokens"] = {
         "input_tokens": 1,
@@ -5153,7 +5239,7 @@ def run_usage_contract_import_smoke(page: Any, state: MockCoreState) -> None:
     if sum(request == import_route for request in state.requests) != posts_after_released_core:
         raise AssertionError("Ambiguous v1 cache semantics must not POST usage imports")
 
-    invalid_v2_detail = json.loads(json.dumps(current_detail))
+    invalid_v2_detail = legacy_detail_copy()
     del invalid_v2_detail["tokens"]["reasoning_tokens"]
     invalid_v2_payload = {
         "version": 2,
@@ -5176,7 +5262,7 @@ def run_usage_contract_import_smoke(page: Any, state: MockCoreState) -> None:
     if sum(request == import_route for request in state.requests) != posts_after_released_core:
         raise AssertionError("Invalid v2 token contracts must not POST usage imports")
 
-    migrated_detail = json.loads(json.dumps(current_detail))
+    migrated_detail = legacy_detail_copy()
     migrated_tokens = migrated_detail["tokens"]
     migrated_tokens["uncached_input_tokens"] = (
         migrated_tokens["input_tokens"]
@@ -5225,7 +5311,7 @@ def run_usage_contract_import_smoke(page: Any, state: MockCoreState) -> None:
 
     page.get_by_text(
         "Import complete: added 0, skipped 2, total 5, failed 1. "
-        "Token contract migrated from schema v1 to v2.",
+        "Schema v1 was migrated to canonical v3.",
         exact=True,
     ).wait_for()
     if sum(request == import_route for request in state.requests) != posts_after_released_core + 1:
@@ -5238,6 +5324,45 @@ def run_usage_contract_import_smoke(page: Any, state: MockCoreState) -> None:
     if posted_details != [migrated_detail]:
         raise AssertionError("Migratable v1 usage import was mutated before POST")
 
+    migrated_v2_payload = {
+        "version": 2,
+        "usage": {
+            "apis": {
+                "POST /v1/responses": {
+                    "models": {
+                        "gpt-5.6-sol": {
+                            "details": [legacy_detail_copy()]
+                        }
+                    }
+                }
+            }
+        },
+    }
+    page.locator('input[type="file"][accept*=".json"]').set_input_files(
+        {
+            "name": "usage-import-v2-migration.json",
+            "mimeType": "application/json",
+            "buffer": json.dumps(migrated_v2_payload).encode("utf-8"),
+        }
+    )
+    v2_dialog = page.get_by_role("dialog", name="Review usage import")
+    v2_dialog.wait_for()
+    v2_dialog.get_by_text("Version 2 · 1 request details", exact=False).wait_for()
+    if sum(request == import_route for request in state.requests) != posts_after_released_core + 1:
+        raise AssertionError("Migratable v2 usage import POST occurred before confirmation")
+    with page.expect_response(
+        lambda response: response.request.method == "POST"
+        and response.url.endswith("/v0/management/usage/import")
+    ):
+        v2_dialog.get_by_role("button", name="Import anyway", exact=True).click()
+    page.get_by_text(
+        "Import complete: added 0, skipped 2, total 5, failed 1. "
+        "Schema v2 was migrated to canonical v3.",
+        exact=True,
+    ).wait_for()
+    if sum(request == import_route for request in state.requests) != posts_after_released_core + 2:
+        raise AssertionError("Migratable v2 usage import must POST exactly once after confirmation")
+
     state.usage_contract_code = "usage_aggregate_overflow"
     try:
         canonical_payload = {
@@ -5245,7 +5370,7 @@ def run_usage_contract_import_smoke(page: Any, state: MockCoreState) -> None:
             "usage": {
                 "apis": {
                     "POST /v1/responses": {
-                        "models": {"gpt-5.6-sol": {"details": [current_detail]}}
+                        "models": {"gpt-5.6-sol": {"details": [legacy_detail_copy()]}}
                     }
                 }
             },

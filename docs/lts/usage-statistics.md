@@ -12,7 +12,7 @@
 - requests/tokens、hour/day trend、RPM/TPM 等完整聚合。
 - API、model、credential/source 维度 breakdown。
 - request events、latency、result、reasoning effort、token breakdown 和逐事件本地费用估算。
-- request events 可显示 Core 提供的 `ttfb_ms`，并在数据完整时派生 `Output TPS` 与 `Avg TPS`。
+- request events 可显示 Core 提供的 `ttfb_ms`、`ttft_ms`、`ttfa_ms`，并派生 `Output TPS`、`Avg TPS`、可见平均 TPS 与 Reasoning 占比。
 - cache read、cache write、non-cache-read input 和 reasoning token 语义。
 - usage export/import、预检查、版本迁移、重复/重叠处理和失败回执。
 - 本地 pricing catalog/profile、来源链接、Fast/Std 和 long-context 策略。
@@ -37,7 +37,7 @@ Core 提供 request-level usage collection 和 Management API；Panel 只读取�
 | Endpoint | Panel 用途 | 关键边界 |
 |---|---|---|
 | `GET /v0/management/usage` | 当前 usage snapshot | 返回 aggregate、API/model tree、details 和 failed requests；具体 shape 以当前 Core 为准 |
-| `GET /v0/management/usage/export` | 导出 canonical usage | 当前 LTS contract 为 version 2；不能因 UI 兼容而伪造缺失语义 |
+| `GET /v0/management/usage/export` | 导出 canonical usage | 当前 LTS contract 为 version 3；不能因 UI 兼容而伪造缺失语义 |
 | `POST /v0/management/usage/import` | 导入 usage | Panel 先执行本地预检查并提交；最终验证、合并和失败语义必须以当前 Core contract/readback 为准，不能仅凭 preflight 宣称已写入或原子合并 |
 | `/v0/management/usage-statistics-enabled` | 查看或修改新 usage 写入开关 | Core compatibility layer 暴露独立读写方法；Panel 当前从整体 config 读取，并以 `PUT` 执行直接 mutation。开关影响新记录；历史 snapshot/export/import 的可读性由 Core 当前契约决定 |
 
@@ -45,17 +45,19 @@ Core 提供 request-level usage collection 和 Management API；Panel 只读取�
 
 ## Usage export/import
 
-### Canonical version 2
+### Canonical version 3
 
-version 2 是当前 Core/Panel 的 canonical export contract。它要求 token category、aggregate、detail 和 schema metadata 具有可验证的一致语义。无效 canonical token、整数溢出或 shape 错误必须在写入前拒绝。
+version 3 是当前 Core/Panel 的 canonical export contract。它要求 token category、aggregate、detail、schema metadata 和 timing contract 具有可验证的一致语义。无效 canonical token、timing 因果关系、整数溢出或 shape 错误必须在写入前拒绝。
+
+每个新 Core detail 使用 `timing_version: 1`。`ttfb_ms` 是首个上游 response byte/payload，`ttft_ms` 是首个非空 reasoning 内容，`ttfa_ms` 是首个非空用户可见 assistant 文本；三个 timing 字段都可以缺失，缺失不得补成零。非流式和未知 format 不伪造 semantic timing。
 
 ### Version 1 migration
 
-version 1 只在语义可证明时迁移到 v2：
+version 1 和 version 2 只在语义可证明时迁移到 v3：
 
 - 允许恢复能够无损解释的旧字段和被省略的 legacy zero。
 - cache category 存在歧义时 fail closed，不把未知 token 强行分类。
-- migration receipt 必须说明来源版本和采用的迁移路径。
+- v1 receipt 的 `migrations` 为 `v1_uncached_input_tokens_to_v2`、`v2_timing_contract_to_v3`；v2 receipt 的 `migrations` 为 `v2_timing_contract_to_v3`。旧 Core 的单数 `migration` 仍由 Panel 兼容读取。
 
 ### Duplicate、overlap 与 uncertain identity
 
@@ -72,7 +74,10 @@ Panel 在浏览器本地按同一条明细派生以下指标：
 
 - `Output TPS` = `output_tokens / ((latency_ms - ttfb_ms) / 1000)`，且包含 provider 报告的 reasoning tokens。
 - `Avg TPS` = `output_tokens / (latency_ms / 1000)`，表示端到端输出速度。
+- `Visible Avg TPS` = `max(output_tokens - reasoning_tokens, 0) / (latency_ms / 1000)`。
+- `Reasoning Ratio` = `reasoning_tokens / output_tokens`。
 - 当时间字段缺失、非正、或 `ttfb_ms >= latency_ms` 时，TPS 显示为 `--`。
+- 筛选汇总使用分子和有效时长分别求和，不使用逐请求 TPS 的简单平均；每项显示自己的有效样本数。
 
 这些是按 Core request detail 边界计算的有效吞吐，不是供应商账单字段，也不保证等同于 CLI stdout 的首事件或模型内部逐 token decode 速度。聚合时应使用 token 总数除以有效时长总和，不能简单平均每条 TPS。
 

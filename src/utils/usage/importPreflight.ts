@@ -4,6 +4,10 @@ export type UsageImportPreflightIssue =
   | 'usage_v1_token_contract_invalid'
   | 'usage_v1_cache_semantics_ambiguous'
   | 'usage_v2_token_contract_invalid'
+  | 'usage_v1_timing_semantics_ambiguous'
+  | 'usage_v2_timing_semantics_ambiguous'
+  | 'usage_v3_token_contract_invalid'
+  | 'usage_v3_timing_contract_invalid'
   | 'usage_aggregate_overflow';
 
 export interface UsageImportPreflightResult {
@@ -88,7 +92,7 @@ const DETAIL_STRING_FIELDS = [
   'failure_reason',
 ] as const;
 
-const DETAIL_INTEGER_FIELDS = ['latency_ms', 'ttfb_ms', 'failure_status'] as const;
+const DETAIL_INTEGER_FIELDS = ['latency_ms', 'failure_status'] as const;
 const DETAIL_BOOLEAN_FIELDS = ['failed', 'generate'] as const;
 
 const RFC3339_PATTERN =
@@ -192,6 +196,63 @@ const validateDetailMetadata = (detail: UnknownRecord): boolean =>
   validateOptionalIntegerFields(detail, DETAIL_INTEGER_FIELDS) &&
   validateOptionalFields(detail, DETAIL_BOOLEAN_FIELDS, (value) => typeof value === 'boolean');
 
+const validateTimingMetadata = (
+  detail: UnknownRecord,
+  version: 1 | 2 | 3
+): UsageImportPreflightIssue | null => {
+  const hasTimingVersion = hasOwn(detail, 'timing_version');
+  const hasTTFB = hasOwn(detail, 'ttfb_ms');
+  const hasTTFT = hasOwn(detail, 'ttft_ms');
+  const hasTTFA = hasOwn(detail, 'ttfa_ms');
+
+  if (hasOwn(detail, 'latency_ms') && !isNonNegativeSafeInteger(detail.latency_ms)) {
+    return version === 3 ? 'usage_v3_timing_contract_invalid' : 'usage_shape_invalid';
+  }
+
+  if (version === 1 || version === 2) {
+    if (hasTimingVersion || hasTTFT || hasTTFA) {
+      return version === 1
+        ? 'usage_v1_timing_semantics_ambiguous'
+        : 'usage_v2_timing_semantics_ambiguous';
+    }
+    if (!hasTTFB) return null;
+    const ttfb = readNonNegativeSafeInteger(detail, 'ttfb_ms');
+    const latency = readNonNegativeSafeInteger(detail, 'latency_ms');
+    return ttfb !== null && latency !== null && ttfb <= latency ? null : 'usage_shape_invalid';
+  }
+
+  if (hasTimingVersion) {
+    const timingVersion = readNonNegativeSafeInteger(detail, 'timing_version');
+    if (timingVersion !== 1) return 'usage_v3_timing_contract_invalid';
+  }
+  if (
+    (hasTTFB && readNonNegativeSafeInteger(detail, 'ttfb_ms') === null) ||
+    (hasTTFT && readNonNegativeSafeInteger(detail, 'ttft_ms') === null) ||
+    (hasTTFA && readNonNegativeSafeInteger(detail, 'ttfa_ms') === null)
+  ) {
+    return 'usage_v3_timing_contract_invalid';
+  }
+  if (!hasTTFB && (hasTTFT || hasTTFA)) return 'usage_v3_timing_contract_invalid';
+
+  if (hasTTFB || hasTTFT || hasTTFA) {
+    const latency = readNonNegativeSafeInteger(detail, 'latency_ms');
+    const ttfb = readNonNegativeSafeInteger(detail, 'ttfb_ms');
+    const ttft = readNonNegativeSafeInteger(detail, 'ttft_ms');
+    const ttfa = readNonNegativeSafeInteger(detail, 'ttfa_ms');
+    if (
+      latency === null ||
+      ttfb === null ||
+      ttfb > latency ||
+      (ttft !== null && (ttft < ttfb || ttft > latency)) ||
+      (ttfa !== null && (ttfa < ttfb || ttfa > latency)) ||
+      ((hasTTFT || hasTTFA) && !hasTimingVersion)
+    ) {
+      return 'usage_v3_timing_contract_invalid';
+    }
+  }
+  return null;
+};
+
 const validLegacyTokenStats = (tokens: CanonicalTokenCounts): boolean => {
   const values = Object.values(tokens);
   if (!values.every(isNonNegativeSafeInteger)) return false;
@@ -214,10 +275,14 @@ const validCanonicalTokenStats = (tokens: CanonicalTokenCounts): boolean => {
 
 const readTokenCounts = (
   value: UnknownRecord,
-  version: 1 | 2
+  version: 1 | 2 | 3
 ): { tokens: CanonicalTokenCounts | null; issue: UsageImportPreflightIssue | null } => {
   const invalidCode: UsageImportPreflightIssue =
-    version === 1 ? 'usage_v1_token_contract_invalid' : 'usage_v2_token_contract_invalid';
+    version === 1
+      ? 'usage_v1_token_contract_invalid'
+      : version === 2
+        ? 'usage_v2_token_contract_invalid'
+        : 'usage_v3_token_contract_invalid';
 
   const requiredFields = version === 1 ? V1_REQUIRED_TOKEN_FIELDS : REQUIRED_TOKEN_FIELDS;
   const optionalFields = version === 1 ? V1_OPTIONAL_TOKEN_FIELDS : OPTIONAL_TOKEN_FIELDS;
@@ -245,7 +310,7 @@ const readTokenCounts = (
 
   if (!validLegacyTokenStats(tokens)) return { tokens: null, issue: invalidCode };
 
-  if (version === 2) {
+  if (version !== 1) {
     if (hasOwn(value, 'uncached_input_tokens') || !validCanonicalTokenStats(tokens)) {
       return { tokens: null, issue: invalidCode };
     }
@@ -302,7 +367,7 @@ const readCurrentTokenCounts = (value: UnknownRecord): CanonicalTokenCounts | nu
   if (canonical) return canonical;
 
   // Keep older partial live snapshots usable for best-effort overlap warnings.
-  // Imported payloads never use this fallback; their v1/v2 contracts stay strict.
+  // Imported payloads never use this fallback; their v1/v2/v3 contracts stay strict.
   for (const key of [...REQUIRED_TOKEN_FIELDS, ...OPTIONAL_TOKEN_FIELDS]) {
     if (hasOwn(value, key) && !isNonNegativeSafeInteger(value[key])) return null;
   }
@@ -319,7 +384,7 @@ const readCurrentTokenCounts = (value: UnknownRecord): CanonicalTokenCounts | nu
 
 const collectUsageDetailEntries = (
   snapshot: UnknownRecord,
-  version: 1 | 2,
+  version: 1 | 2 | 3,
   strictImportedTokens = true
 ): CollectedEntries => {
   if (!validateSnapshotMetadata(snapshot) || !isRecord(snapshot.apis)) {
@@ -358,6 +423,9 @@ const collectUsageDetailEntries = (
           return { entries: [], issue: 'usage_shape_invalid' };
         }
 
+        const timingIssue = validateTimingMetadata(detailValue, version);
+        if (timingIssue) return { entries: [], issue: timingIssue };
+
         let timestampIdentity: string | null = null;
         if (hasOwn(detailValue, 'timestamp') && detailValue.timestamp !== null) {
           const canonicalTimestamp = canonicalizeRFC3339Timestamp(detailValue.timestamp);
@@ -373,7 +441,9 @@ const collectUsageDetailEntries = (
             issue: strictImportedTokens
               ? version === 1
                 ? 'usage_v1_token_contract_invalid'
-                : 'usage_v2_token_contract_invalid'
+                : version === 2
+                  ? 'usage_v2_token_contract_invalid'
+                  : 'usage_v3_token_contract_invalid'
               : 'usage_shape_invalid',
           };
         }
@@ -459,10 +529,10 @@ export function analyzeUsageImport(
       null
     );
   }
-  if (rawVersion !== 1 && rawVersion !== 2) {
+  if (rawVersion !== 1 && rawVersion !== 2 && rawVersion !== 3) {
     return invalidResult('usage_version_unsupported', rawVersion);
   }
-  const version: 1 | 2 = rawVersion;
+  const version: 1 | 2 | 3 = rawVersion;
 
   if (!isRecord(payload.usage)) return invalidResult('usage_shape_invalid', version);
   const imported = collectUsageDetailEntries(payload.usage, version);
@@ -470,7 +540,7 @@ export function analyzeUsageImport(
 
   const currentSnapshot = resolveCurrentSnapshot(currentUsage);
   const current = currentSnapshot
-    ? collectUsageDetailEntries(currentSnapshot, 2, false)
+    ? collectUsageDetailEntries(currentSnapshot, 3, false)
     : { entries: [], issue: 'usage_shape_invalid' as UsageImportPreflightIssue };
   const currentUsageAvailable = Boolean(currentSnapshot && !current.issue);
   const currentEntries = currentUsageAvailable ? current.entries : [];
