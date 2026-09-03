@@ -1,6 +1,7 @@
 export const TTFB_SOURCE_FIELD = 'ttfb_ms';
 export const TTFB_SOURCE_UNIT = 'ms';
 export const TTFT_SOURCE_FIELD = 'ttft_ms';
+export const TTFR_SOURCE_FIELD = 'ttfr_ms';
 export const TTFA_SOURCE_FIELD = 'ttfa_ms';
 export const TIMING_VERSION_SOURCE_FIELD = 'timing_version';
 export const SEMANTIC_TIMING_VERSION = 1;
@@ -40,6 +41,11 @@ const extractSemanticTimingMs = (detail: unknown, field: string): number | null 
 /** 提取首个 reasoning 内容时间；旧 schema 或非法值返回 null。 */
 export function extractTTFTMs(detail: unknown): number | null {
   return extractSemanticTimingMs(detail, TTFT_SOURCE_FIELD);
+}
+
+/** 提取首个 reasoning token 时间（canonical v3 ttfr_ms）；旧 schema 或非法值返回 null。 */
+export function extractTTFRMs(detail: unknown): number | null {
+  return extractSemanticTimingMs(detail, TTFR_SOURCE_FIELD);
 }
 
 /** 提取首个 assistant 文本时间；旧 schema 或非法值返回 null。 */
