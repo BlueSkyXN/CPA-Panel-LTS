@@ -72,7 +72,8 @@
 
 .tabGlyph {
   flex-shrink: 0;
-  color: var(--text-tertiary);
+  display: block;
+  color: color-mix(in srgb, var(--primary-color) 70%, var(--text-primary));
 
   .tabActive & {
     color: var(--text-primary);
@@ -81,25 +82,17 @@
 
 .tabIconWrap {
   flex-shrink: 0;
-  display: flex;
+}
+
+.tabAllIconWrap {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 5px;
-}
-
-.tabIcon {
-  width: 15px;
-  height: 15px;
-  object-fit: contain;
-  display: block;
-}
-
-.tabIconFallback {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--text-secondary);
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-tertiary) 72%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
 }
 
 .tabLabel {
@@ -107,15 +100,20 @@
 }
 
 .tabCount {
-  font-family: $font-mono;
-  font-size: 10.5px;
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.6;
-  color: var(--text-tertiary);
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
   padding: 0 6px;
-  border-radius: $radius-full;
+  border-radius: 6px;
+  font-family: $font-mono;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--text-tertiary);
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  text-align: center;
 
   .tabActive & {
     color: var(--text-primary);

@@ -30,18 +30,16 @@ import {
   MIN_CARD_PAGE_SIZE,
   QUOTA_PROVIDER_TYPES,
   clampCardPageSize,
-  getAuthFileIcon,
-  getThemeSurfaceIconBackground,
   getTypeColor,
   getTypeLabel,
   isProblemAuthFile,
   isRuntimeOnlyAuthFile,
-  isThemeSurfaceIconProvider,
   normalizeProviderKey,
   parsePriorityValue,
   type QuotaProviderType,
 } from '@/features/authFiles/constants';
 import { AuthFileCard } from '@/features/authFiles/components/AuthFileCard';
+import { ProviderIcon } from '@/features/authFiles/components/ProviderIcon';
 import { AuthFileModelsModal } from '@/features/authFiles/components/AuthFileModelsModal';
 import { AuthFilesPrefixProxyEditorModal } from '@/features/authFiles/components/AuthFilesPrefixProxyEditorModal';
 import { OAuthExcludedCard } from '@/features/authFiles/components/OAuthExcludedCard';
@@ -626,7 +624,6 @@ export function AuthFilesPage() {
       <div className={styles.filterTags}>
         {existingTypes.map((type) => {
           const isActive = normalizedFilter === type;
-          const iconSrc = getAuthFileIcon(type);
           const color =
             type === 'all'
               ? { bg: 'var(--bg-tertiary)', text: 'var(--text-primary)' }
@@ -650,25 +647,7 @@ export function AuthFilesPage() {
                     <IconFilterAll className={styles.filterAllIcon} size={16} />
                   </span>
                 ) : (
-                  <span
-                    className={styles.filterTagIconWrap}
-                    style={
-                      isThemeSurfaceIconProvider(type)
-                        ? {
-                            background: getThemeSurfaceIconBackground(),
-                            borderColor: 'transparent',
-                          }
-                        : undefined
-                    }
-                  >
-                    {iconSrc ? (
-                      <img src={iconSrc} alt="" className={styles.filterTagIcon} />
-                    ) : (
-                      <span className={styles.filterTagIconFallback}>
-                        {getTypeLabel(t, type).slice(0, 1).toUpperCase()}
-                      </span>
-                    )}
-                  </span>
+                  <ProviderIcon provider={type} size="nav" className={styles.filterTagIconWrap} />
                 )}
                 <span className={styles.filterTagText}>{getTypeLabel(t, type)}</span>
               </span>
