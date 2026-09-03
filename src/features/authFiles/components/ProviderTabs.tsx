@@ -1,11 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { IconFilterAll } from '@/components/ui/icons';
-import {
-  getAuthFileIcon,
-  getThemeSurfaceIconBackground,
-  getTypeLabel,
-  isThemeSurfaceIconProvider,
-} from '@/features/authFiles/constants';
+import { getTypeLabel } from '@/features/authFiles/constants';
+import { ProviderIcon } from '@/features/authFiles/components/ProviderIcon';
 import styles from './ProviderTabs.module.scss';
 
 export type ProviderTabsProps = {
@@ -24,7 +20,6 @@ export function ProviderTabs({ types, counts, active, onChange }: ProviderTabsPr
       {types.map((type) => {
         const isActive = active === type;
         const label = type === 'all' ? t('auth_files.filter_all') : getTypeLabel(t, type);
-        const iconSrc = type === 'all' ? null : getAuthFileIcon(type);
 
         return (
           <button
@@ -35,24 +30,11 @@ export function ProviderTabs({ types, counts, active, onChange }: ProviderTabsPr
             onClick={() => onChange(type)}
           >
             {type === 'all' ? (
-              <IconFilterAll className={styles.tabGlyph} size={15} />
-            ) : (
-              <span
-                className={styles.tabIconWrap}
-                style={
-                  isThemeSurfaceIconProvider(type)
-                    ? { background: getThemeSurfaceIconBackground() }
-                    : undefined
-                }
-              >
-                {iconSrc ? (
-                  <img src={iconSrc} alt="" className={styles.tabIcon} />
-                ) : (
-                  <span className={styles.tabIconFallback}>
-                    {label.slice(0, 1).toUpperCase()}
-                  </span>
-                )}
+              <span className={`${styles.tabIconWrap} ${styles.tabAllIconWrap}`}>
+                <IconFilterAll className={styles.tabGlyph} size={16} />
               </span>
+            ) : (
+              <ProviderIcon provider={type} size="nav" className={styles.tabIconWrap} />
             )}
             <span className={styles.tabLabel}>{label}</span>
             <span className={styles.tabCount}>{counts[type] ?? 0}</span>

@@ -101,14 +101,14 @@
 }
 
 .filterAllIconWrap {
-  position: relative;
-  border-color: color-mix(in srgb, var(--primary-color) 20%, var(--border-color));
-  background: linear-gradient(
-    145deg,
-    color-mix(in srgb, var(--bg-secondary) 94%, var(--primary-color) 8%),
-    color-mix(in srgb, var(--bg-primary) 92%, var(--primary-color) 5%)
-  );
-  box-shadow: 0 10px 22px -18px color-mix(in srgb, var(--primary-color) 50%, transparent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-tertiary) 72%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
 }
 
 .filterAllIcon {
@@ -162,10 +162,6 @@
   border-color: color-mix(in srgb, var(--filter-color) 50%, var(--border-color));
   background: color-mix(in srgb, var(--filter-surface) 22%, var(--bg-secondary));
   color: var(--text-primary);
-
-  .filterTagIconWrap {
-    border-color: color-mix(in srgb, var(--filter-color) 40%, transparent);
-  }
 }
 
 .filterTagLabel {
@@ -176,29 +172,7 @@
 }
 
 .filterTagIconWrap {
-  width: 24px;
-  height: 24px;
   flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  border: 1px solid color-mix(in srgb, var(--border-color) 50%, transparent);
-  background: color-mix(in srgb, var(--bg-tertiary) 60%, transparent);
-}
-
-.filterTagIcon {
-  width: 16px;
-  height: 16px;
-  flex: 0 0 auto;
-  object-fit: contain;
-}
-
-.filterTagIconFallback {
-  color: var(--filter-color);
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1;
 }
 
 .filterTagText {
@@ -797,7 +771,6 @@
   background-color: color-mix(in srgb, var(--bg-primary) 78%, var(--bg-secondary));
   border-color: color-mix(in srgb, var(--border-color) 62%, transparent);
 
-  .providerAvatar,
   .cardHeaderContent,
   .cardMeta,
   .healthStatusMessage,
@@ -831,21 +804,6 @@
 
   .cardSelection {
     margin-top: 6px;
-  }
-
-  .providerAvatar {
-    width: 34px;
-    height: 34px;
-    border-radius: 8px;
-  }
-
-  .providerAvatarImage {
-    width: 16px;
-    height: 16px;
-  }
-
-  .providerAvatarFallback {
-    font-size: 14px;
   }
 
   .cardHeaderContent {
@@ -942,26 +900,7 @@
 }
 
 .providerAvatar {
-  width: 40px;
-  height: 40px;
   flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
-}
-
-.providerAvatarImage {
-  width: 22px;
-  height: 22px;
-  object-fit: contain;
-}
-
-.providerAvatarFallback {
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 1;
 }
 
 .cardHeaderContent {
@@ -1030,7 +969,7 @@
 
 .fileName {
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--text-primary);
   word-break: break-all;
   line-height: 1.4;

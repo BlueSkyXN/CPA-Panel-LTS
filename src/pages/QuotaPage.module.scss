@@ -295,27 +295,27 @@
 
 // 卡片渐变背景 — 基于 TYPE_COLORS.bg 转 rgba
 .claudeCard {
-  background-image: linear-gradient(180deg, rgba(251, 236, 228, 0.18), rgba(251, 236, 228, 0));
+  background-image: linear-gradient(180deg, rgba(251, 236, 228, 0.08), transparent);
 }
 
 .antigravityCard {
-  background-image: linear-gradient(180deg, rgba(224, 247, 250, 0.12), rgba(224, 247, 250, 0));
+  background-image: linear-gradient(180deg, rgba(224, 247, 250, 0.08), transparent);
 }
 
 .codexCard {
-  background-image: linear-gradient(180deg, rgba(234, 231, 255, 0.18), rgba(234, 231, 255, 0));
+  background-image: linear-gradient(180deg, rgba(234, 231, 255, 0.08), transparent);
 }
 
 .geminiCliCard {
-  background-image: linear-gradient(180deg, rgba(224, 232, 255, 0.2), rgba(224, 232, 255, 0));
+  background-image: linear-gradient(180deg, rgba(224, 232, 255, 0.08), transparent);
 }
 
 .kimiCard {
-  background-image: linear-gradient(180deg, rgba(220, 232, 255, 0.2), rgba(220, 232, 255, 0));
+  background-image: linear-gradient(180deg, rgba(220, 232, 255, 0.08), transparent);
 }
 
 .xaiCard {
-  background-image: linear-gradient(180deg, rgba(243, 244, 246, 0.22), rgba(243, 244, 246, 0));
+  background-image: linear-gradient(180deg, rgba(243, 244, 246, 0.08), transparent);
 }
 
 .quotaSection {
@@ -749,8 +749,8 @@
 
 .fileCard {
   background-color: var(--bg-primary);
-  border: 1px solid color-mix(in srgb, var(--border-color) 92%, transparent);
-  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+  border-radius: 12px;
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -775,34 +775,12 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 34px;
+  min-height: 40px;
   min-width: 0;
 }
 
 .providerIconWrap {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--bg-tertiary) 88%, transparent);
-  border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
   flex-shrink: 0;
-}
-
-.providerIcon {
-  width: 20px;
-  height: 20px;
-  object-fit: contain;
-  display: block;
-}
-
-.providerIconFallback {
-  font-size: 11px;
-  line-height: 1;
-  font-weight: 750;
-  color: var(--text-secondary);
 }
 
 .cardIdentity {
@@ -814,17 +792,18 @@
 
 .fileName {
   font-family: $font-mono;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 650;
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   line-height: 1.35;
+  letter-spacing: -0.01em;
 }
 
 .providerName {
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.25;
   color: var(--text-tertiary);
 }

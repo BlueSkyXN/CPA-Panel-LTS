@@ -29,20 +29,18 @@ import { readCredentialWeight } from '@/utils/credentialWeight';
 import {
   QUOTA_PROVIDER_TYPES,
   formatModified,
-  getAuthFileIcon,
   getAuthFileStatusMessage,
-  getThemeSurfaceIconBackground,
   getTypeColor,
   getTypeLabel,
   hasAuthFileStatusWarning,
   isRuntimeOnlyAuthFile,
-  isThemeSurfaceIconProvider,
   normalizeProviderKey,
   parsePriorityValue,
   type QuotaProviderType,
 } from '@/features/authFiles/constants';
 import type { AuthFileStatusBarData } from '@/features/authFiles/hooks/useAuthFilesStatusBarCache';
 import { AuthFileQuotaSection } from '@/features/authFiles/components/AuthFileQuotaSection';
+import { ProviderIcon } from '@/features/authFiles/components/ProviderIcon';
 import styles from '@/pages/AuthFilesPage.module.scss';
 
 export type AuthFileCardProps = {
@@ -102,8 +100,6 @@ export function AuthFileCard(props: AuthFileCardProps) {
   const showModelsButton = !isRuntimeOnly || isAistudio;
   const typeColor = getTypeColor(providerKey);
   const typeLabel = getTypeLabel(t, providerKey);
-  const providerIcon = getAuthFileIcon(providerKey);
-  const useThemeSurfaceIcon = isThemeSurfaceIconProvider(providerKey);
 
   const quotaType =
     quotaFilterType && resolveQuotaType(file) === quotaFilterType ? quotaFilterType : null;
@@ -171,29 +167,11 @@ export function AuthFileCard(props: AuthFileCardProps) {
                 title={selected ? t('auth_files.batch_deselect') : t('auth_files.batch_select_all')}
               />
             )}
-            <div
+            <ProviderIcon
+              provider={providerKey}
+              size={compact ? 'compact' : 'card'}
               className={styles.providerAvatar}
-              style={
-                useThemeSurfaceIcon
-                  ? {
-                      backgroundColor: getThemeSurfaceIconBackground(),
-                      color: typeColor.text,
-                    }
-                  : {
-                      backgroundColor: typeColor.bg,
-                      color: typeColor.text,
-                      ...(typeColor.border ? { border: typeColor.border } : {}),
-                    }
-              }
-            >
-              {providerIcon ? (
-                <img src={providerIcon} alt="" className={styles.providerAvatarImage} />
-              ) : (
-                <span className={styles.providerAvatarFallback}>
-                  {typeLabel.slice(0, 1).toUpperCase()}
-                </span>
-              )}
-            </div>
+            />
             <div className={styles.cardHeaderContent}>
               <div className={styles.cardBadgeRow}>
                 <span
