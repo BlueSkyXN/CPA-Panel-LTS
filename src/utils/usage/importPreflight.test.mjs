@@ -22,6 +22,7 @@ const {
   getUsageImportErrorCode,
   getUsageImportErrorTranslationKey,
   isMigratedV1UsageImportReceipt,
+  isMigratedV2UsageImportReceipt,
   USAGE_IMPORT_ERROR_CODES,
 } = await importTypeScriptModule(
   new URL('../../services/api/usageImportContract.ts', import.meta.url)
@@ -105,6 +106,11 @@ const v2PayloadForModel = (modelName, ...details) => {
 
 const v2Payload = (...details) => v2PayloadForModel('gpt-5.6-sol', ...details);
 
+const v3Payload = (...details) => ({
+  ...v2PayloadForModel('gpt-5.6-sol', ...details),
+  version: 3,
+});
+
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
 test('accepts canonical v2 and rejects unsupported or malformed envelopes', () => {
@@ -125,7 +131,7 @@ test('accepts canonical v2 and rejects unsupported or malformed envelopes', () =
     [null, 'usage_shape_invalid'],
     [{ usage: { apis: {} } }, 'usage_version_unsupported'],
     [{ version: 0, usage: { apis: {} } }, 'usage_version_unsupported'],
-    [{ version: 3, usage: { apis: {} } }, 'usage_version_unsupported'],
+    [{ version: 4, usage: { apis: {} } }, 'usage_version_unsupported'],
     [{ version: '2', usage: { apis: {} } }, 'usage_shape_invalid'],
     [{ version: 2 }, 'usage_shape_invalid'],
     [{ version: 2, usage: [] }, 'usage_shape_invalid'],
@@ -136,6 +142,42 @@ test('accepts canonical v2 and rejects unsupported or malformed envelopes', () =
     assert.equal(result.valid, false);
     assert.deepEqual(result.issues, [issue]);
   }
+});
+
+test('accepts canonical v3 timing fields and rejects legacy semantic timing', () => {
+  const semanticDetail = detail(v2Tokens(), {
+    latency_ms: 2_000,
+    timing_version: 1,
+    ttfb_ms: 500,
+    ttft_ms: 900,
+    ttfa_ms: 1_500,
+  });
+  assert.equal(analyzeUsageImport(v3Payload(semanticDetail)).valid, true);
+
+  const missingTTFB = clone(v3Payload(semanticDetail));
+  delete missingTTFB.usage.apis['POST /v1/responses'].models['gpt-5.6-sol'].details[0].ttfb_ms;
+  assert.deepEqual(analyzeUsageImport(missingTTFB).issues, ['usage_v3_timing_contract_invalid']);
+
+  const legacyV2Semantic = v2Payload(
+    detail(v2Tokens(), {
+      latency_ms: 2_000,
+      timing_version: 1,
+      ttft_ms: 900,
+    })
+  );
+  assert.deepEqual(analyzeUsageImport(legacyV2Semantic).issues, [
+    'usage_v2_timing_semantics_ambiguous',
+  ]);
+
+  for (const version of [1, 2]) {
+    const legacyNegativeLatency = version === 1 ? v1Payload(detail(v1Tokens())) : v2Payload(detail(v2Tokens()));
+    legacyNegativeLatency.usage.apis['POST /v1/responses'].models['gpt-5.6-sol'].details[0].latency_ms = -1;
+    assert.deepEqual(analyzeUsageImport(legacyNegativeLatency).issues, ['usage_shape_invalid']);
+  }
+  const v3NegativeLatency = v3Payload(detail(v2Tokens(), { latency_ms: -1 }));
+  assert.deepEqual(analyzeUsageImport(v3NegativeLatency).issues, [
+    'usage_v3_timing_contract_invalid',
+  ]);
 });
 
 test('rejects malformed nested containers and known field types', () => {
@@ -655,6 +697,17 @@ test('receipt decoder is strict on known fields and ignores unknown additions', 
   });
   assert.equal(isMigratedV1UsageImportReceipt(decoded), true);
 
+  const migratedV3 = decodeUsageImportReceipt({
+    added: 1,
+    skipped: 0,
+    total_requests: 1,
+    failed_requests: 0,
+    schema_version: 3,
+    migrated_from_version: 2,
+    migrations: ['v2_timing_contract_to_v3'],
+  });
+  assert.equal(isMigratedV2UsageImportReceipt(migratedV3), true);
+
   const releasedCoreReceipt = decodeUsageImportReceipt({
     added: 1,
     skipped: 0,
@@ -704,13 +757,17 @@ test('receipt decoder is strict on known fields and ignores unknown additions', 
   );
 });
 
-test('stable Core error decoder recognizes only the six approved top-level codes', () => {
+test('stable Core error decoder recognizes all approved top-level codes', () => {
   assert.deepEqual(USAGE_IMPORT_ERROR_CODES, [
     'usage_version_unsupported',
     'usage_shape_invalid',
     'usage_v1_token_contract_invalid',
     'usage_v1_cache_semantics_ambiguous',
     'usage_v2_token_contract_invalid',
+    'usage_v1_timing_semantics_ambiguous',
+    'usage_v2_timing_semantics_ambiguous',
+    'usage_v3_token_contract_invalid',
+    'usage_v3_timing_contract_invalid',
     'usage_aggregate_overflow',
   ]);
 

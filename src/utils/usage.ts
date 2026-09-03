@@ -32,7 +32,13 @@ import {
 import { estimateUsageDetailCost, pricedAmountOrZero } from './usage/pricing/usagePricing';
 import { normalizeReasoningEffort } from './usage/reasoningEffort';
 import { normalizeServiceTier } from './usage/serviceTier';
-import { extractTTFBMs } from './usage/performance';
+import {
+  extractTTFBMs,
+  extractTTFTMs,
+  extractTTFAMs,
+  extractTimingVersion,
+  normalizeSemanticTimingMs,
+} from './usage/performance';
 import { maskApiKey } from './format';
 import { parseTimestampMs } from './timestamp';
 
@@ -48,10 +54,21 @@ export {
   calculateAverageTps,
   calculateDecodeDurationMs,
   calculateOutputTps,
+  calculateReasoningRatio,
+  calculateVisibleAverageTps,
   extractTTFBMs,
+  extractTTFTMs,
+  extractTTFAMs,
+  extractTimingVersion,
   formatPerSecondValue,
+  normalizeSemanticTimingMs,
+  summarizeUsagePerformance,
+  SEMANTIC_TIMING_VERSION,
+  TIMING_VERSION_SOURCE_FIELD,
   TTFB_SOURCE_FIELD,
   TTFB_SOURCE_UNIT,
+  TTFA_SOURCE_FIELD,
+  TTFT_SOURCE_FIELD,
 } from './usage/performance';
 
 export interface KeyStatBucket {
@@ -166,6 +183,9 @@ export interface UsageDetail {
   reasoning_effort?: string | null;
   latency_ms?: number;
   ttfb_ms?: number;
+  timing_version?: number;
+  ttft_ms?: number;
+  ttfa_ms?: number;
   tokens: UsageTokenStats;
   failed: boolean;
   /** Parent key from usage.apis; may be a caller key, endpoint, provider, or unknown fallback. */
@@ -836,6 +856,17 @@ export function collectUsageDetails(usageData: unknown): UsageDetail[] {
         const tokensRaw = isRecord(detailRaw.tokens) ? detailRaw.tokens : {};
         const latencyMs = extractLatencyMs(detailRaw);
         const ttfbMs = extractTTFBMs(detailRaw);
+        const timingVersion = extractTimingVersion(detailRaw);
+        const ttftMs = normalizeSemanticTimingMs(
+          extractTTFTMs(detailRaw),
+          latencyMs,
+          ttfbMs
+        );
+        const ttfaMs = normalizeSemanticTimingMs(
+          extractTTFAMs(detailRaw),
+          latencyMs,
+          ttfbMs
+        );
         details.push({
           timestamp,
           source: normalizeSource(detailRaw.source),
@@ -851,6 +882,9 @@ export function collectUsageDetails(usageData: unknown): UsageDetail[] {
           reasoning_effort: extractReasoningEffort(detailRaw),
           latency_ms: latencyMs ?? undefined,
           ttfb_ms: ttfbMs ?? undefined,
+          timing_version: timingVersion ?? undefined,
+          ttft_ms: ttftMs ?? undefined,
+          ttfa_ms: ttfaMs ?? undefined,
           tokens: normalizeUsageDetailTokens(tokensRaw),
           failed: detailRaw.failed === true,
           __apiBucket: apiBucket,
@@ -921,6 +955,9 @@ export function collectUsageDetailsWithEndpoint(usageData: unknown): UsageDetail
         const tokensRaw = isRecord(detailRaw.tokens) ? detailRaw.tokens : {};
         const latencyMs = extractLatencyMs(detailRaw);
         const ttfbMs = extractTTFBMs(detailRaw);
+        const timingVersion = extractTimingVersion(detailRaw);
+        const ttftMs = normalizeSemanticTimingMs(extractTTFTMs(detailRaw), latencyMs, ttfbMs);
+        const ttfaMs = normalizeSemanticTimingMs(extractTTFAMs(detailRaw), latencyMs, ttfbMs);
         details.push({
           timestamp,
           source: normalizeSource(detailRaw.source),
@@ -936,6 +973,9 @@ export function collectUsageDetailsWithEndpoint(usageData: unknown): UsageDetail
           reasoning_effort: extractReasoningEffort(detailRaw),
           latency_ms: latencyMs ?? undefined,
           ttfb_ms: ttfbMs ?? undefined,
+          timing_version: timingVersion ?? undefined,
+          ttft_ms: ttftMs ?? undefined,
+          ttfa_ms: ttfaMs ?? undefined,
           tokens: normalizeUsageDetailTokens(tokensRaw),
           failed: detailRaw.failed === true,
           __apiBucket: endpoint,

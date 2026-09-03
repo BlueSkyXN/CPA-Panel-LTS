@@ -165,6 +165,9 @@ test('renders Core TTFB and derived output throughput metrics', async () => {
                 timestamp: '2026-08-17T00:00:00Z',
                 latency_ms: 2_000,
                 ttfb_ms: 500,
+                timing_version: 1,
+                ttft_ms: 900,
+                ttfa_ms: 1_500,
                 tokens: {
                   input_tokens: 10,
                   output_tokens: 300,
@@ -198,10 +201,14 @@ test('renders Core TTFB and derived output throughput metrics', async () => {
 
   assert.match(markup, /TTFB/);
   assert.match(markup, /data-request-performance="ttfb"[^>]*data-ttfb-ms="500"[^>]*>500ms</);
+  assert.match(markup, /data-request-performance="ttft"[^>]*data-ttft-ms="900"[^>]*>900ms</);
+  assert.match(markup, /data-request-performance="ttfa"[^>]*data-ttfa-ms="1500"[^>]*>1.5s</);
   assert.match(markup, /Output TPS/);
   assert.match(markup, /data-request-performance="output-tps"[^>]*data-output-tps="200"[^>]*>200</);
   assert.match(markup, /Avg TPS/);
   assert.match(markup, /data-request-performance="average-tps"[^>]*data-average-tps="150"[^>]*>150</);
+  assert.match(markup, /data-performance-summary-key="output-tps"/);
+  assert.match(markup, /Weighted Output TPS/);
 });
 
 test('renders a configured caller key without exposing the raw credential', async () => {

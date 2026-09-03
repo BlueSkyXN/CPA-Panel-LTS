@@ -30,7 +30,7 @@
 - 完整 requests/tokens 图表和 hour/day trend。
 - API、model、credential/source 维度 breakdown。
 - request events、latency、reasoning、cache read/write、service-tier evidence 和逐事件本地费用估算。
-- `/usage/export`、`/usage/import` 的 canonical v2 和可证明安全的 v1 migration。
+- `/usage/export`、`/usage/import` 的 canonical v3 和可证明安全的 v1/v2 migration。
 - duplicate/overlap 检查、uncertain identity 披露和 invalid canonical token fail-closed。
 - browser-local pricing profile、preset catalog、Fast/Std、long-context 和逐事件费用估算。
 - aggregate/detail coverage reconciliation；缺失 detail、unmatched 或 unsupported 不得显示为完整覆盖或 `$0`。

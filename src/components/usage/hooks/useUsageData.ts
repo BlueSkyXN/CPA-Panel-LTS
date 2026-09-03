@@ -6,6 +6,7 @@ import {
   getUsageImportErrorCode,
   getUsageImportErrorTranslationKey,
   isMigratedV1UsageImportReceipt,
+  isMigratedV2UsageImportReceipt,
 } from '@/services/api/usageImportContract';
 import { downloadBlob } from '@/utils/download';
 import {
@@ -182,7 +183,9 @@ export function useUsageData(): UseUsageDataReturn {
             t(
               isMigratedV1UsageImportReceipt(result)
                 ? 'usage_stats.import_success_migrated_v1'
-                : 'usage_stats.import_success',
+                : isMigratedV2UsageImportReceipt(result)
+                  ? 'usage_stats.import_success_migrated_v2'
+                  : 'usage_stats.import_success',
               {
                 added: result.added,
                 skipped: result.skipped,

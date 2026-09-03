@@ -449,6 +449,9 @@ def build_service_tier_usage_snapshot() -> dict[str, Any]:
             "effective_service_tier": "standard",
             "latency_ms": 120,
             "ttfb_ms": 40,
+            "timing_version": 1,
+            "ttft_ms": 60,
+            "ttfa_ms": 90,
             "tokens": {
                 "input_tokens": 5,
                 "output_tokens": 7,
@@ -494,7 +497,7 @@ def build_service_tier_usage_snapshot() -> dict[str, Any]:
         },
     ]
     return {
-        "version": 2,
+        "version": 3,
         "exported_at": now.isoformat().replace("+00:00", "Z"),
         "usage": {
             "total_requests": 3,
@@ -1109,7 +1112,9 @@ def run_plugin_config_smoke(api_url: str) -> list[str]:
     return seen
 
 
-def run_usage_v2_import_contract_smoke(api_url: str, seen: list[str]) -> None:
+def run_usage_import_contract_smoke(
+    api_url: str, seen: list[str], core_usage_version: int
+) -> None:
     def export_state(payload: dict[str, Any]) -> dict[str, Any]:
         # exported_at changes on every request; all other envelope and usage
         # fields represent the state that a rejected import must preserve.
@@ -1158,12 +1163,22 @@ def run_usage_v2_import_contract_smoke(api_url: str, seen: list[str]) -> None:
         ),
         "/v0/management/usage/import v1 cache-creation alias fixture",
     )
-    if (
-        legacy_alias_result.get("added") != 1
-        or legacy_alias_result.get("migrated_from_version") != 1
-        or legacy_alias_result.get("schema_version") != 2
-        or legacy_alias_result.get("migration") != "v1_uncached_input_tokens_to_v2"
-    ):
+    if core_usage_version == 3:
+        valid_v1_receipt = (
+            legacy_alias_result.get("added") == 1
+            and legacy_alias_result.get("migrated_from_version") == 1
+            and legacy_alias_result.get("schema_version") == 3
+            and legacy_alias_result.get("migrations")
+            == ["v1_uncached_input_tokens_to_v2", "v2_timing_contract_to_v3"]
+        )
+    else:
+        valid_v1_receipt = (
+            legacy_alias_result.get("added") == 1
+            and legacy_alias_result.get("migrated_from_version") == 1
+            and legacy_alias_result.get("schema_version") == 2
+            and legacy_alias_result.get("migration") == "v1_uncached_input_tokens_to_v2"
+        )
+    if not valid_v1_receipt:
         raise AssertionError(
             f"Core did not report the expected v1 migration receipt: {legacy_alias_result!r}"
         )
@@ -1172,9 +1187,11 @@ def run_usage_v2_import_contract_smoke(api_url: str, seen: list[str]) -> None:
         request_json(api_url, "/v0/management/usage/export"),
         "/v0/management/usage/export after v1 cache-creation migration",
     )
-    if migrated_export.get("version") != 2:
+    expected_export_version = 3 if core_usage_version == 3 else 2
+    if migrated_export.get("version") != expected_export_version:
         raise AssertionError(
-            f"Core v1 migration re-exported schema {migrated_export.get('version')!r}, want 2"
+            f"Core v1 migration re-exported schema {migrated_export.get('version')!r}, "
+            f"want {expected_export_version}"
         )
     migrated_usage = assert_mapping(migrated_export.get("usage"), "migrated usage")
     migrated_api = assert_mapping(
@@ -1237,6 +1254,36 @@ def run_usage_v2_import_contract_smoke(api_url: str, seen: list[str]) -> None:
         raise AssertionError("Duplicate migrated usage mutated the Core export snapshot")
     seen.append("Core migrated the v1 cache-creation alias once and skipped its duplicate")
 
+    if core_usage_version == 3:
+        v2_migration_payload = json.loads(json.dumps(legacy_alias_payload))
+        v2_migration_payload["version"] = 2
+        v2_tokens = v2_migration_payload["usage"]["apis"][
+            "panel-core-v1-migration-smoke"
+        ]["models"]["gpt-5.6-sol"]["details"][0]["tokens"]
+        v2_tokens.pop("uncached_input_tokens", None)
+        v2_tokens["cached_tokens"] = 0
+        v2_tokens["reasoning_tokens"] = 0
+        v2_migration_payload["usage"]["apis"]["panel-core-v2-migration-smoke"] = (
+            v2_migration_payload["usage"]["apis"].pop("panel-core-v1-migration-smoke")
+        )
+        seen.append("POST /v0/management/usage/import v2 migration receipt")
+        v2_result = assert_mapping(
+            request_json(
+                api_url,
+                "/v0/management/usage/import",
+                method="POST",
+                payload=v2_migration_payload,
+            ),
+            "/v0/management/usage/import v2 migration receipt",
+        )
+        if (
+            v2_result.get("migrated_from_version") != 2
+            or v2_result.get("schema_version") != 3
+            or v2_result.get("migrations") != ["v2_timing_contract_to_v3"]
+        ):
+            raise AssertionError(f"Core did not report the expected v2 migration receipt: {v2_result!r}")
+        seen.append("Core usage import returned audited v2-to-v3 migration receipt")
+
     invalid_canonical_tokens = [
         {
             "input_tokens": 10,
@@ -1270,7 +1317,7 @@ def run_usage_v2_import_contract_smoke(api_url: str, seen: list[str]) -> None:
         valid_input_tokens = 20 + index
         fixture_id = index + 1
         invalid_payload = {
-            "version": 2,
+            "version": core_usage_version,
             "usage": {
                 "apis": {
                     f"panel-core-invalid-v2-smoke-{fixture_id}": {
@@ -1320,7 +1367,12 @@ def run_usage_v2_import_contract_smoke(api_url: str, seen: list[str]) -> None:
             ),
             f"invalid canonical usage fixture {fixture_id}",
         )
-        if rejected.get("code") != "usage_v2_token_contract_invalid":
+        expected_token_error = (
+            "usage_v3_token_contract_invalid"
+            if core_usage_version == 3
+            else "usage_v2_token_contract_invalid"
+        )
+        if rejected.get("code") != expected_token_error:
             raise AssertionError(f"Unexpected invalid canonical response: {rejected!r}")
         after_reject = assert_mapping(
             request_json(api_url, "/v0/management/usage/export"),
@@ -1328,7 +1380,9 @@ def run_usage_v2_import_contract_smoke(api_url: str, seen: list[str]) -> None:
         )
         if export_state(after_reject) != export_state(before_reject):
             raise AssertionError("Rejected canonical usage fixture partially mutated Core state")
-    seen.append("Core rejected impossible v2 token fixtures atomically with a stable code")
+    seen.append(
+        f"Core rejected impossible canonical v{core_usage_version} token fixtures atomically with a stable code"
+    )
 
 
 def run_endpoint_smoke(
@@ -1363,7 +1417,7 @@ def run_endpoint_smoke(
         "/v0/management/usage/export",
     )
     core_usage_version = export_payload.get("version")
-    if core_usage_version not in {1, 2} or "usage" not in export_payload:
+    if core_usage_version not in {1, 2, 3} or "usage" not in export_payload:
         raise AssertionError(f"Invalid usage export payload: {export_payload!r}")
 
     seen.append("POST /v0/management/usage/import")
@@ -1375,11 +1429,21 @@ def run_endpoint_smoke(
         raise AssertionError(f"Invalid usage import result: {import_result!r}")
     if core_usage_version == 2 and import_result.get("schema_version") != 2:
         raise AssertionError(f"Canonical Core import omitted schema_version=2: {import_result!r}")
+    if core_usage_version == 3 and (
+        import_result.get("schema_version") != 3
+        or "migrated_from_version" in import_result
+        or "migrations" in import_result
+    ):
+        raise AssertionError(f"Canonical Core import omitted direct schema_version=3 receipt: {import_result!r}")
     if core_usage_version == 1 and "schema_version" in import_result:
         raise AssertionError(f"Released Core unexpectedly returned a schema receipt: {import_result!r}")
 
     tier_snapshot = build_service_tier_usage_snapshot()
     tier_snapshot["version"] = core_usage_version
+    if core_usage_version < 3:
+        for detail in tier_snapshot["usage"]["apis"]["panel-core-tier-smoke"]["models"]["gpt-5.4"]["details"]:
+            for timing_field in ("timing_version", "ttft_ms", "ttfa_ms"):
+                detail.pop(timing_field, None)
     seen.append("POST /v0/management/usage/import service-tier fixture")
     tier_import_result = assert_mapping(
         request_json(
@@ -1465,9 +1529,12 @@ def run_endpoint_smoke(
         "request/response/effective tiers"
     )
 
-    if core_usage_version == 2:
+    if core_usage_version in {2, 3}:
         migrated_v1 = json.loads(json.dumps(tier_snapshot))
         migrated_v1["version"] = 1
+        for detail in migrated_v1["usage"]["apis"]["panel-core-tier-smoke"]["models"]["gpt-5.4"]["details"]:
+            for timing_field in ("timing_version", "ttft_ms", "ttfa_ms"):
+                detail.pop(timing_field, None)
         migrated_tokens = migrated_v1["usage"]["apis"]["panel-core-tier-smoke"]["models"][
             "gpt-5.4"
         ]["details"][0]["tokens"]
@@ -1482,16 +1549,25 @@ def run_endpoint_smoke(
             ),
             "/v0/management/usage/import v1 migration receipt",
         )
-        if (
-            migrated_result.get("schema_version") != 2
-            or migrated_result.get("migrated_from_version") != 1
-            or migrated_result.get("migration") != "v1_uncached_input_tokens_to_v2"
-        ):
+        if core_usage_version == 2:
+            valid_migration_receipt = (
+                migrated_result.get("schema_version") == 2
+                and migrated_result.get("migrated_from_version") == 1
+                and migrated_result.get("migration") == "v1_uncached_input_tokens_to_v2"
+            )
+        else:
+            valid_migration_receipt = (
+                migrated_result.get("schema_version") == 3
+                and migrated_result.get("migrated_from_version") == 1
+                and migrated_result.get("migrations")
+                == ["v1_uncached_input_tokens_to_v2", "v2_timing_contract_to_v3"]
+            )
+        if not valid_migration_receipt:
             raise AssertionError(f"Invalid v1 migration receipt: {migrated_result!r}")
-        seen.append("Core usage import returned audited v1-to-v2 migration receipt")
-        run_usage_v2_import_contract_smoke(api_url, seen)
+        seen.append("Core usage import returned audited v1-to-v3 migration receipt")
+        run_usage_import_contract_smoke(api_url, seen, core_usage_version)
     else:
-        seen.append("Released Core v1 baseline has no v1-to-v2 migration receipt")
+        seen.append("Released Core v1 baseline has no v1-to-v3 migration receipt")
 
     assert_mapping(get("/v0/management/api-key-usage"), "/v0/management/api-key-usage")
     assert_mapping(get("/v0/management/ampcode"), "/v0/management/ampcode")
@@ -2533,7 +2609,9 @@ def run_browser_smoke(
                     )
                     events_card.wait_for()
                     rows = events_card.locator("tbody tr")
-                    expected_usage_rows = 4 if core_usage_version == 2 else 3
+                    expected_usage_rows = 4 if core_usage_version in {2, 3} else 3
+                    if core_usage_version == 3:
+                        expected_usage_rows += 1
                     for _ in range(50):
                         if rows.count() == expected_usage_rows:
                             break
@@ -2544,17 +2622,30 @@ def run_browser_smoke(
                             f"{rows.count()} rows, want {expected_usage_rows}"
                         )
                     events_card.get_by_role("columnheader", name="TTFB", exact=True).wait_for()
+                    events_card.get_by_role("columnheader", name="TTFT", exact=True).wait_for()
+                    events_card.get_by_role("columnheader", name="TTFA", exact=True).wait_for()
                     events_card.get_by_role("columnheader", name="Output TPS", exact=True).wait_for()
                     events_card.locator(
                         'td[data-request-performance="ttfb"][data-ttfb-ms="40"]'
                     ).wait_for()
+                    if core_usage_version == 3:
+                        events_card.locator(
+                            'td[data-request-performance="ttft"][data-ttft-ms="60"]'
+                        ).wait_for()
+                        events_card.locator(
+                            'td[data-request-performance="ttfa"][data-ttfa-ms="90"]'
+                        ).wait_for()
+                        events_card.locator('[data-performance-summary-key="output-tps"]').wait_for()
+                        events_card.locator('[data-performance-summary-key="reasoning-ratio"]').wait_for()
                     resolved_fast_flows = events_card.locator(
                         '[data-service-tier-flow][aria-label*="Resolved: Fast"]'
                     )
                     resolved_fast_flows.first.wait_for()
                     if resolved_fast_flows.count() != 1:
                         raise AssertionError("Real Core effective priority did not render as Fast")
-                    expected_std_rows = 3 if core_usage_version == 2 else 2
+                    expected_std_rows = 3 if core_usage_version in {2, 3} else 2
+                    if core_usage_version == 3:
+                        expected_std_rows += 1
                     resolved_std_flows = events_card.locator(
                         '[data-service-tier-flow][aria-label*="Resolved: Std"]'
                     )
@@ -2566,7 +2657,9 @@ def run_browser_smoke(
                         '[data-service-tier-flow]'
                         '[aria-label*="Resolved: Std (evidence: assumed fallback)"]'
                     )
-                    expected_assumed_std = 2 if core_usage_version == 2 else 1
+                    expected_assumed_std = 2 if core_usage_version in {2, 3} else 1
+                    if core_usage_version == 3:
+                        expected_assumed_std += 1
                     if assumed_std_flows.count() != expected_assumed_std:
                         raise AssertionError(
                             "Real Core migration/tier fixtures exposed "
@@ -2588,7 +2681,9 @@ def run_browser_smoke(
                     page.locator(
                         '[data-testid="pricing-model-row"][data-model="gpt-5.4"]'
                     ).wait_for()
-                    expected_priced_requests = "4 / 4 requests" if core_usage_version == 2 else "3 / 3 requests"
+                    expected_priced_requests = "4 / 4 requests" if core_usage_version in {2, 3} else "3 / 3 requests"
+                    if core_usage_version == 3:
+                        expected_priced_requests = "5 / 5 requests"
                     pricing_summary.get_by_text(expected_priced_requests, exact=True).wait_for()
                     pricing_summary.get_by_text("100.0%", exact=True).first.wait_for()
                     seen.append(
