@@ -51,7 +51,7 @@ Recent upstream intake:
 | Upstream release / commit | Classification | Panel evidence | Decision |
 |---|---|---|---|
 | `v1.18.0` / `4af4cf4` | `reject` | PR #16 records the controlled npm security subset | Reject Bun CI, `bun.lock`, and package-manager migration. |
-| `v1.18.1` / `07562b7` | `adapt-port` | PR #16 / `v1-tls-0.0.8` | Preserve LTS auth/quota/provider boundaries while adapting official xAI API routing. |
+| `v1.18.1` / `07562b7` | `adapt-port` | PR #16 / `v1-lts-0.0.8` | Preserve LTS auth/quota/provider boundaries while adapting official xAI API routing. |
 | `v1.18.2` / `7958915` | `adapt-port` | PR #20 | Add `disable-image-generation: passthrough` through the existing visual-config and browser-smoke architecture; do not copy upstream Bun tests or missing search-index architecture. |
 | `v1.18.3` / `d3df9b0` | `already-equivalent` | `src/lts/codexQuota/` uses `pickCodexClassifiedWindows` | The LTS sidecar already classifies and selects additional quota windows before building display rows; no product-code port is needed. |
 | xAI / `5d24c6f` | `adapt-port` | Panel PR #27 and `test:provider-xai` cover the current Core xAI contract while preserving unknown fields and selecting mutations by `api-key` plus `base-url` | Keep the existing LTS adaptation; do not copy the upstream Bun test or weaken npm/package-lock. |
@@ -420,7 +420,7 @@ Adapt-port candidates:
 - Config schema changes that overlap `usage-statistics-enabled`.
 - Visual config changes around downstream Core LTS surfaces such as `codex.abnormal-reasoning-retry`.
 - Quota page changes that share parsing, account identity, or provider metadata.
-- Release workflow hardening that must retain `management.html`, npm, and `v*-tls-*` semantics.
+- Release workflow hardening that must retain `management.html`, npm, and `v*-lts-*` semantics.
 - Tooling changes that need LTS-specific command, lockfile, CI, or smoke adaptation.
 
 Already-equivalent:
@@ -501,8 +501,8 @@ When releasing:
 2. Run `npm run type-check`.
 3. Run `npm run lint`.
 4. Run `npm run build`.
-5. Create an annotated `v*-tls-*` tag. Its subject is the user-facing summary and its body must contain exactly one `Companion-Core: v*-tls-*` line. Do not use a lightweight tag, a placeholder summary, or release-time proximity as a compatibility signal.
-6. Push only the exact intended tag, for example `v1-tls-0.0.3`.
+5. Create an annotated `v*-lts-*` tag. Its subject is the user-facing summary and its body must contain exactly one `Companion-Core: v*-lts-*` line. Do not use a lightweight tag, a placeholder summary, or release-time proximity as a compatibility signal.
+6. Push only the exact intended tag, for example `v1-lts-0.0.3`.
 7. Confirm `.github/workflows/release.yml` wrote the Release body via `scripts/generate-lts-release-notes.sh` and that the GitHub release contains `management.html`.
 8. Read the published notes and confirm they show the tag summary, explicitly declared companion Core release, and `management.html` asset — not a raw commit dump.
 9. A manual dispatch for an existing Release preserves its title and body by default. Enable `rewrite_release_notes` only when replacing those fields is intentional.

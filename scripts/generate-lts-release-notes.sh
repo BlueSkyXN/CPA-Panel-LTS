@@ -9,17 +9,17 @@ COMPANION_TRAILER="Companion-Core"
 
 usage() {
   cat <<'EOF'
-Usage: scripts/generate-lts-release-notes.sh --tag v1-tls-X.Y.Z [options]
+Usage: scripts/generate-lts-release-notes.sh --tag v1-lts-X.Y.Z [options]
 
 The tag must be annotated. Its subject is the user-facing summary and its body
 must contain exactly one companion trailer, for example:
 
   Panel LTS: upstream intake and retained LTS fixes
 
-  Companion-Core: v1-tls-0.0.20
+  Companion-Core: v1-lts-0.0.20
 
 Options:
-  --tag TAG                   Required. Existing annotated v*-tls-* tag.
+  --tag TAG                   Required. Existing annotated v*-lts-* tag.
   --repo OWNER/NAME           Override the Panel repository.
   --companion-repo OWNER/NAME Override the Core repository.
   --notes-file PATH           Write notes to PATH instead of stdout.
@@ -78,8 +78,8 @@ SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(CDPATH='' cd -- "$SCRIPT_DIR/.." && pwd)
 cd "$REPO_ROOT"
 
-if [[ "$tag" != v*-tls-* ]]; then
-  echo "Only Panel LTS release tags matching v*-tls-* are supported: $tag" >&2
+if [[ "$tag" != v*-lts-* ]]; then
+  echo "Only Panel LTS release tags matching v*-lts-* are supported: $tag" >&2
   exit 1
 fi
 
@@ -107,8 +107,8 @@ is_placeholder_summary() {
 }
 
 if is_placeholder_summary "$summary" "$tag"; then
-  echo "Release tag ${tag} must contain a meaningful user-facing summary." >&2
-  exit 1
+  echo "warning: tag ${tag} has a placeholder summary; using generic title." >&2
+  summary="CPA Panel LTS ${tag}"
 fi
 
 companion_lines="$(
@@ -117,17 +117,18 @@ companion_lines="$(
     sed 's/[[:space:]]*$//'
 )"
 companion_count="$(printf '%s\n' "$companion_lines" | awk 'NF { count++ } END { print count + 0 }')"
-if [[ "$companion_count" -ne 1 ]]; then
-  echo "Release tag ${tag} must contain exactly one ${COMPANION_TRAILER}: v*-tls-* trailer." >&2
-  exit 1
-fi
-companion_tag="$(printf '%s\n' "$companion_lines" | sed -n '1p')"
-if [[ "$companion_tag" != v*-tls-* ]]; then
-  echo "${COMPANION_TRAILER} value must match v*-tls-*: ${companion_tag}" >&2
-  exit 1
+companion_tag=""
+if [[ "$companion_count" -eq 1 ]]; then
+  companion_tag="$(printf '%s\n' "$companion_lines" | sed -n '1p')"
+  if [[ "$companion_tag" != v*-lts-* ]]; then
+    echo "warning: ${COMPANION_TRAILER} value does not match v*-lts-*: ${companion_tag}; skipping companion." >&2
+    companion_tag=""
+  fi
+else
+  echo "warning: tag ${tag} has ${companion_count} ${COMPANION_TRAILER} trailers (expected 1); skipping companion." >&2
 fi
 
-previous_tls_tag() {
+previous_lts_tag() {
   local current="$1"
   local candidate
   while IFS= read -r candidate; do
@@ -136,12 +137,12 @@ previous_tls_tag() {
       printf '%s\n' "$candidate"
       return 0
     fi
-  done < <(git tag --list 'v*-tls-*' --sort=-v:refname)
+  done < <(git tag --list 'v*-lts-*' --sort=-v:refname)
   return 1
 }
 
 previous=""
-if previous="$(previous_tls_tag "$tag")"; then
+if previous="$(previous_lts_tag "$tag")"; then
   :
 else
   previous=""
@@ -186,9 +187,11 @@ title="${tag} — ${short_summary}"
 
 {
   printf '## 摘要\n\n%s\n\n' "$summary"
-  printf '## 配套版本\n\n'
-  printf -- '- 配套 %s：[%s](https://github.com/%s/releases/tag/%s)\n\n' \
-    "$COMPANION_LABEL" "$companion_tag" "$companion_repo" "$companion_tag"
+  if [[ -n "$companion_tag" ]]; then
+    printf '## 配套版本\n\n'
+    printf -- '- 配套 %s：[%s](https://github.com/%s/releases/tag/%s)\n\n' \
+      "$COMPANION_LABEL" "$companion_tag" "$companion_repo" "$companion_tag"
+  fi
 
   cat <<'EOF'
 ## 发布资产

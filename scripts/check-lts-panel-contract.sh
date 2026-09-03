@@ -512,7 +512,7 @@ require_file_contains src/services/api/ampcode.ts "'/ampcode/force-model-mapping
 require_file_contains src/services/api/index.ts "export * from './usage'"
 require_file_contains src/services/api/index.ts "export * from './ampcode'"
 require_file_contains .github/workflows/release.yml "management.html"
-require_file_contains .github/workflows/release.yml "v*-tls-*"
+require_file_contains .github/workflows/release.yml "v*-lts-*"
 require_file_contains docs/lts/panel-protected-deltas.yaml "full-usage-statistics-ui"
 require_file_contains docs/lts/panel-protected-deltas.yaml "cpa-core-lts-management-api-compatibility"
 require_file_contains docs/lts/panel-protected-deltas.yaml "panel-release-contract"

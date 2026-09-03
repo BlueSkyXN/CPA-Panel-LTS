@@ -37,7 +37,7 @@ protected_deltas:
     must_keep:
       - release asset named management.html
       - npm/package-lock based build
-      - v*-tls-* release tag guard
+      - v*-lts-* release tag guard
   - id: local-downstream-customizations
     reason: This repository contains downstream panel work that is not present upstream.
     must_keep:
@@ -87,5 +87,5 @@ sentinel_markers:
     - usage-statistics-enabled
     - CPA-Core-LTS
     - management.html
-    - v*-tls-*
+    - v*-lts-*
     - full-usage-statistics-ui

@@ -175,7 +175,7 @@ Panel 是 browser client，Core 才拥有服务端行为。变更 endpoint、hea
 - Vite build 生成 `dist/index.html`，release workflow 将资产发布为精确名称 `management.html`。
 - Core updater 依赖 `management.html`；改名会破坏集成。
 - 仓库使用 npm 和 `package-lock.json`，不得引入第二套 lockfile。
-- release tag 保持 `v*-tls-*` guard。
+- release tag 保持 `v*-lts-*` guard。
 - build pass 只证明本地构建，不证明 release 已发布、Core 已下载或 live `/management.html` 已更新。
 
 ### Locale 与可访问性

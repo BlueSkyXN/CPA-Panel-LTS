@@ -7,7 +7,7 @@ Key dependencies: `package.json`, `package-lock.json`, `scripts/check-lts-panel-
 ## Why this is high-risk
 
 - Core expects the released asset to be named exactly `management.html`.
-- `release.yml` builds and renames `dist/index.html`, then publishes on `v*-tls-*` tags or explicit dispatch.
+- `release.yml` builds and renames `dist/index.html`, then publishes on `v*-lts-*` tags or explicit dispatch.
 - `lts-panel-contract.yml` is the remote gate for Node tests, contracts, type-check, build, and lint.
 - `contents: write` is only for release creation.
 
@@ -21,7 +21,7 @@ Key dependencies: `package.json`, `package-lock.json`, `scripts/check-lts-panel-
 ## Do not
 
 - Do not rename or omit `management.html`.
-- Do not weaken `v*-tls-*` validation or add broad tag publishing without explicit release scope.
+- Do not weaken `v*-lts-*` validation or add broad tag publishing without explicit release scope.
 - Do not replace `npm ci` with a mode that ignores `package-lock.json`.
 - Do not remove protected tests or `npm run check:lts` merely to make CI green.
 - Do not echo secrets, tokens, GitHub context, or sensitive payloads.

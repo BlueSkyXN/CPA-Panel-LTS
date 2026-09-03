@@ -3,11 +3,11 @@ name: Build and Release
 on:
   push:
     tags:
-      - 'v*-tls-*'
+      - 'v*-lts-*'
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release tag to build and publish, for example v1-tls-0.0.1'
+        description: 'Release tag to build and publish, for example v1-lts-0.0.1'
         required: true
         type: string
       rewrite_release_notes:
@@ -59,8 +59,8 @@ jobs:
       - name: Generate release notes
         run: |
           set -euo pipefail
-          if [[ "${RELEASE_TAG}" != v*-tls-* ]]; then
-            echo "Only panel release tags matching v*-tls-* are supported."
+          if [[ "${RELEASE_TAG}" != v*-lts-* ]]; then
+            echo "Only panel release tags matching v*-lts-* are supported."
             exit 1
           fi
           if ! git rev-parse -q --verify "refs/tags/${RELEASE_TAG}" >/dev/null; then

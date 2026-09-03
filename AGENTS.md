@@ -201,7 +201,7 @@ Contract truth 必须保持一致：
 - 不手改 `dist/` 或 `node_modules/`。
 - 不新增无用户目的或无错误处理的隐藏 browser network call。
 - 不记录 raw management keys、OAuth/access/refresh tokens、JWT、auth JSON 或可能含账户数据的 raw quota/usage payload。
-- 不运行 release publishing、`gh release`、workflow dispatch、push exact tag 或 `git push --tags`，除非用户明确授权；release tag pattern 保持 `v*-tls-*`。
+- 不运行 release publishing、`gh release`、workflow dispatch、push exact tag 或 `git push --tags`，除非用户明确授权；release tag pattern 保持 `v*-lts-*`。
 
 ## Notes for future agents
 
