@@ -107,8 +107,8 @@ is_placeholder_summary() {
 }
 
 if is_placeholder_summary "$summary" "$tag"; then
-  echo "warning: tag ${tag} has a placeholder summary; using generic title." >&2
-  summary="CPA Panel LTS ${tag}"
+  echo "Release tag ${tag} must contain a meaningful user-facing summary." >&2
+  exit 1
 fi
 
 companion_lines="$(
@@ -117,15 +117,14 @@ companion_lines="$(
     sed 's/[[:space:]]*$//'
 )"
 companion_count="$(printf '%s\n' "$companion_lines" | awk 'NF { count++ } END { print count + 0 }')"
-companion_tag=""
-if [[ "$companion_count" -eq 1 ]]; then
-  companion_tag="$(printf '%s\n' "$companion_lines" | sed -n '1p')"
-  if [[ "$companion_tag" != v*-lts-* ]]; then
-    echo "warning: ${COMPANION_TRAILER} value does not match v*-lts-*: ${companion_tag}; skipping companion." >&2
-    companion_tag=""
-  fi
-else
-  echo "warning: tag ${tag} has ${companion_count} ${COMPANION_TRAILER} trailers (expected 1); skipping companion." >&2
+if [[ "$companion_count" -ne 1 ]]; then
+  echo "Release tag ${tag} must contain exactly one ${COMPANION_TRAILER}: v*-lts-* trailer." >&2
+  exit 1
+fi
+companion_tag="$(printf '%s\n' "$companion_lines" | sed -n '1p')"
+if [[ "$companion_tag" != v*-lts-* ]]; then
+  echo "${COMPANION_TRAILER} value must match v*-lts-*: ${companion_tag}" >&2
+  exit 1
 fi
 
 previous_lts_tag() {
@@ -187,11 +186,9 @@ title="${tag} — ${short_summary}"
 
 {
   printf '## 摘要\n\n%s\n\n' "$summary"
-  if [[ -n "$companion_tag" ]]; then
-    printf '## 配套版本\n\n'
-    printf -- '- 配套 %s：[%s](https://github.com/%s/releases/tag/%s)\n\n' \
-      "$COMPANION_LABEL" "$companion_tag" "$companion_repo" "$companion_tag"
-  fi
+  printf '## 配套版本\n\n'
+  printf -- '- 配套 %s：[%s](https://github.com/%s/releases/tag/%s)\n\n' \
+    "$COMPANION_LABEL" "$companion_tag" "$companion_repo" "$companion_tag"
 
   cat <<'EOF'
 ## 发布资产

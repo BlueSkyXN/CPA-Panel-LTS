@@ -121,55 +121,30 @@ git commit -qam lightweight
 git tag v1-lts-0.0.3
 expect_failure 'must be an annotated tag' v1-lts-0.0.3
 
-# --- Lenient fallback tests: script should succeed with degraded output ---
-
-expect_success() {
-  local tag="$1"
-  local out_file="$FIXTURE_DIR/lenient-${tag}.md"
-  local title_out="$FIXTURE_DIR/lenient-${tag}-title.txt"
-  local stderr_file="$FIXTURE_DIR/lenient-${tag}-stderr.txt"
-  if ! PATH="$MOCK_BIN:$PATH" GH_MOCK_LOG="$GH_MOCK_LOG" \
-    bash "$FIXTURE_DIR/repo/scripts/generate-lts-release-notes.sh" \
-      --tag "$tag" \
-      --notes-file "$out_file" \
-      --title-file "$title_out" \
-      >"$stderr_file" 2>&1; then
-    fail "$tag should succeed with lenient fallback"
-  fi
-}
-
 printf 'placeholder\n' >>fixture.txt
 git commit -qam placeholder
 git tag -a v1-lts-0.0.4 \
   -m 'CPA Panel LTS v1-lts-0.0.4' \
   -m 'Companion-Core: v1-lts-0.0.4'
-expect_success v1-lts-0.0.4
-assert_contains "$FIXTURE_DIR/lenient-v1-lts-0.0.4-title.txt" 'v1-lts-0.0.4'
-assert_contains "$FIXTURE_DIR/lenient-v1-lts-0.0.4.md" 'CPA-Core-LTS'
+expect_failure 'meaningful user-facing summary' v1-lts-0.0.4
 
 printf 'missing companion\n' >>fixture.txt
 git commit -qam missing-companion
 git tag -a v1-lts-0.0.5 -m 'Panel LTS: missing companion fixture'
-expect_success v1-lts-0.0.5
-assert_contains "$FIXTURE_DIR/lenient-v1-lts-0.0.5.md" 'Panel LTS: missing companion fixture'
-assert_not_contains "$FIXTURE_DIR/lenient-v1-lts-0.0.5.md" '## 配套版本'
+expect_failure 'exactly one Companion-Core' v1-lts-0.0.5
 
 printf 'invalid companion\n' >>fixture.txt
 git commit -qam invalid-companion
 git tag -a v1-lts-0.0.6 \
   -m 'Panel LTS: invalid companion fixture' \
   -m 'Companion-Core: core-latest'
-expect_success v1-lts-0.0.6
-assert_contains "$FIXTURE_DIR/lenient-v1-lts-0.0.6.md" 'Panel LTS: invalid companion fixture'
-assert_not_contains "$FIXTURE_DIR/lenient-v1-lts-0.0.6.md" '## 配套版本'
+expect_failure 'must match v*-lts-*' v1-lts-0.0.6
 
 printf 'duplicate companion\n' >>fixture.txt
 git commit -qam duplicate-companion
 git tag -a v1-lts-0.0.7 \
   -m 'Panel LTS: duplicate companion fixture' \
   -m $'Companion-Core: v1-lts-0.0.6\nCompanion-Core: v1-lts-0.0.7'
-expect_success v1-lts-0.0.7
-assert_contains "$FIXTURE_DIR/lenient-v1-lts-0.0.7.md" 'Panel LTS: duplicate companion fixture'
-assert_not_contains "$FIXTURE_DIR/lenient-v1-lts-0.0.7.md" '## 配套版本'
+expect_failure 'exactly one Companion-Core' v1-lts-0.0.7
 
 printf 'release notes generator tests passed.\n'
