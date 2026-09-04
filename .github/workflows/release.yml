@@ -80,6 +80,8 @@ jobs:
           ls -lh management.html
 
       - name: Generate release notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           if [[ "${RELEASE_TAG}" != v*-lts-* ]]; then
