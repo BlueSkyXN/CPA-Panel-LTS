@@ -1392,6 +1392,8 @@
     "request_events_output_tps_hint": "Output TPS = Total Output Tokens / (Latency - TTFB). It includes reasoning tokens when the provider reports them; unavailable when timing is incomplete.",
     "request_events_average_tps": "Avg TPS",
     "request_events_average_tps_hint": "Avg TPS = Total Output Tokens / Latency. This is an end-to-end rate, not decode-only throughput.",
+    "request_events_first_content": "First Content",
+    "request_events_first_content_hint": "Earlier observed time of first reasoning content and first user-visible assistant text. Derived locally from canonical Core ttft_ms and ttfa_ms; unavailable when both are missing.",
     "request_events_ttft": "TTFT",
     "request_events_ttft_hint": "Time to first non-empty reasoning content from the upstream stream (ms). Missing for non-streaming or unsupported responses.",
     "request_events_ttfa": "TTFA",

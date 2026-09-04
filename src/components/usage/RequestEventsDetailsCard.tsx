@@ -29,6 +29,7 @@ import {
   calculateAverageTps,
   calculateCostEstimate,
   calculateDecodeDurationMs,
+  calculateFirstContentMs,
   calculateReasoningRatio,
   calculateOutputTps,
   calculateVisibleAverageTps,
@@ -122,6 +123,7 @@ const REQUEST_EVENT_COLUMN_IDS = [
   'result',
   'latency',
   'ttfb',
+  'firstContent',
   'ttft',
   'ttfa',
   'outputTps',
@@ -228,6 +230,7 @@ const DEFAULT_COLUMN_VISIBILITY: RequestEventColumnVisibility = {
   result: true,
   latency: true,
   ttfb: true,
+  firstContent: true,
   ttft: true,
   ttfa: true,
   outputTps: true,
@@ -280,6 +283,7 @@ type RequestEventRow = {
   latencyMs: number | null;
   ttfbMs: number | null;
   timingVersion: number | null;
+  firstContentMs: number | null;
   ttftMs: number | null;
   ttfaMs: number | null;
   decodeDurationMs: number | null;
@@ -585,6 +589,7 @@ export function RequestEventsDetailsCard({
     field: TTFB_SOURCE_FIELD,
     unit: t('usage_stats.duration_unit_ms'),
   });
+  const firstContentHint = t('usage_stats.request_events_first_content_hint');
   const ttftHint = t('usage_stats.request_events_ttft_hint');
   const ttfaHint = t('usage_stats.request_events_ttfa_hint');
   const visibleAverageTpsHint = t('usage_stats.request_events_visible_average_tps_hint');
@@ -1051,6 +1056,7 @@ export function RequestEventsDetailsCard({
       const timingVersion = extractTimingVersion(detail);
       const ttftMs = normalizeSemanticTimingMs(extractTTFTMs(detail), latencyMs, ttfbMs);
       const ttfaMs = normalizeSemanticTimingMs(extractTTFAMs(detail), latencyMs, ttfbMs);
+      const firstContentMs = calculateFirstContentMs(ttftMs, ttfaMs);
       const decodeDurationMs = calculateDecodeDurationMs(latencyMs, ttfbMs);
       const outputTps = calculateOutputTps(outputTokens, latencyMs, ttfbMs);
       const averageTps = calculateAverageTps(outputTokens, latencyMs);
@@ -1094,6 +1100,7 @@ export function RequestEventsDetailsCard({
         latencyMs,
         ttfbMs,
         timingVersion,
+        firstContentMs,
         ttftMs,
         ttfaMs,
         decodeDurationMs,
@@ -1350,6 +1357,10 @@ export function RequestEventsDetailsCard({
       { id: 'result' as const, label: t('usage_stats.request_events_result') },
       { id: 'latency' as const, label: t('usage_stats.time') },
       { id: 'ttfb' as const, label: t('usage_stats.request_events_ttfb') },
+      {
+        id: 'firstContent' as const,
+        label: t('usage_stats.request_events_first_content'),
+      },
       { id: 'ttft' as const, label: t('usage_stats.request_events_ttft') },
       { id: 'ttfa' as const, label: t('usage_stats.request_events_ttfa') },
       { id: 'outputTps' as const, label: t('usage_stats.request_events_output_tps') },
@@ -1688,6 +1699,7 @@ export function RequestEventsDetailsCard({
         'result',
         ...(hasLatencyData ? ['latency_ms'] : []),
         ...(hasTTFBData ? ['ttfb_ms'] : []),
+        'first_content_ms',
         'timing_version',
         'ttft_ms',
         'ttfa_ms',
@@ -1728,6 +1740,7 @@ export function RequestEventsDetailsCard({
         row.failed ? 'failed' : 'success',
         ...(hasLatencyData ? [row.latencyMs ?? ''] : []),
         ...(hasTTFBData ? [row.ttfbMs ?? ''] : []),
+        row.firstContentMs ?? '',
         row.timingVersion ?? '',
         row.ttftMs ?? '',
         row.ttfaMs ?? '',
@@ -1781,6 +1794,7 @@ export function RequestEventsDetailsCard({
       failed: row.failed,
       ...(hasLatencyData && row.latencyMs !== null ? { latency_ms: row.latencyMs } : {}),
       ...(hasTTFBData && row.ttfbMs !== null ? { ttfb_ms: row.ttfbMs } : {}),
+      first_content_ms: row.firstContentMs,
       timing_version: row.timingVersion,
       ttft_ms: row.ttftMs,
       ttfa_ms: row.ttfaMs,
@@ -2362,6 +2376,11 @@ export function RequestEventsDetailsCard({
                   {columnVisibility.ttfb && hasTTFBData && (
                     <th title={ttfbHint}>{t('usage_stats.request_events_ttfb')}</th>
                   )}
+                  {columnVisibility.firstContent && (
+                    <th title={firstContentHint}>
+                      {t('usage_stats.request_events_first_content')}
+                    </th>
+                  )}
                   {columnVisibility.ttft && (
                     <th title={ttftHint}>{t('usage_stats.request_events_ttft')}</th>
                   )}
@@ -2583,6 +2602,16 @@ export function RequestEventsDetailsCard({
                           data-ttfb-ms={row.ttfbMs ?? undefined}
                         >
                           {formatDurationMs(row.ttfbMs)}
+                        </td>
+                      )}
+                      {columnVisibility.firstContent && (
+                        <td
+                          className={styles.durationCell}
+                          data-request-performance="first-content"
+                          data-first-content-ms={row.firstContentMs ?? undefined}
+                          title={firstContentHint}
+                        >
+                          {formatDurationMs(row.firstContentMs)}
                         </td>
                       )}
                       {columnVisibility.ttft && (

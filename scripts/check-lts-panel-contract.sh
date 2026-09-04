@@ -286,6 +286,7 @@ require_file_contains src/utils/usage.ts "ttfa_ms"
 require_file_contains src/utils/usage/performance.ts "extractTTFBMs"
 require_file_contains src/utils/usage/performance.ts "extractTTFTMs"
 require_file_contains src/utils/usage/performance.ts "extractTTFAMs"
+require_file_contains src/utils/usage/performance.ts "calculateFirstContentMs"
 require_file_contains src/utils/usage/performance.ts "calculateOutputTps"
 require_file_contains src/utils/usage/performance.ts "calculateAverageTps"
 require_file_contains src/utils/usage/performance.ts "calculateVisibleAverageTps"
@@ -419,6 +420,10 @@ require_file_contains scripts/smoke-lts-panel-core.py "build_service_tier_usage_
 require_file_contains scripts/smoke-lts-panel-core.py "outbound_service_tier"
 require_file_contains scripts/smoke-lts-panel-core.py "effective_service_tier"
 require_file_contains scripts/smoke-lts-panel-core.py '"/usage/pricing"'
+require_file_contains scripts/smoke-lts-panel.py 'data-request-performance="first-content"'
+require_file_contains scripts/smoke-lts-panel.py '"first_content_ms"'
+require_file_contains scripts/smoke-lts-panel-core.py 'data-request-performance="first-content"'
+require_file_contains scripts/smoke-lts-panel-core.py 'data-first-content-ms="60"'
 require_file_not_contains src/utils/usage/reasoningEffort.ts "GPT56_ULTRA_WIRE_MODELS"
 require_file_not_contains src/utils/usage/reasoningEffort.ts "isGPT56UltraWireModel"
 require_file_not_contains src/utils/usage/reasoningEffort.ts "max-ultra-wire"
@@ -430,6 +435,8 @@ require_file_contains src/components/usage/RequestEventsDetailsCard.tsx "request
 require_file_contains src/components/usage/RequestEventsDetailsCard.tsx "reasoning_effort"
 require_file_contains src/components/usage/RequestEventsDetailsCard.tsx "request_events_filter_effort"
 require_file_contains src/components/usage/RequestEventsDetailsCard.tsx "request_events_ttfb"
+require_file_contains src/components/usage/RequestEventsDetailsCard.tsx "request_events_first_content"
+require_file_contains src/components/usage/RequestEventsDetailsCard.tsx "first_content_ms"
 require_file_contains src/components/usage/RequestEventsDetailsCard.tsx "request_events_ttft"
 require_file_contains src/components/usage/RequestEventsDetailsCard.tsx "request_events_ttfa"
 require_file_contains src/components/usage/RequestEventsDetailsCard.tsx "request_events_output_tps"
@@ -461,6 +468,10 @@ require_file_contains src/i18n/locales/en.json "request_events_ttfb"
 require_file_contains src/i18n/locales/zh-CN.json "request_events_ttfb"
 require_file_contains src/i18n/locales/zh-TW.json "request_events_ttfb"
 require_file_contains src/i18n/locales/ru.json "request_events_ttfb"
+require_file_contains src/i18n/locales/en.json "request_events_first_content"
+require_file_contains src/i18n/locales/zh-CN.json "request_events_first_content"
+require_file_contains src/i18n/locales/zh-TW.json "request_events_first_content"
+require_file_contains src/i18n/locales/ru.json "request_events_first_content"
 require_file_contains src/i18n/locales/en.json "request_events_ttft"
 require_file_contains src/i18n/locales/zh-CN.json "request_events_ttft"
 require_file_contains src/i18n/locales/zh-TW.json "request_events_ttft"

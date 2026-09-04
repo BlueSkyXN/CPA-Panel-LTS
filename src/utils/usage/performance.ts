@@ -1,7 +1,6 @@
 export const TTFB_SOURCE_FIELD = 'ttfb_ms';
 export const TTFB_SOURCE_UNIT = 'ms';
 export const TTFT_SOURCE_FIELD = 'ttft_ms';
-export const TTFR_SOURCE_FIELD = 'ttfr_ms';
 export const TTFA_SOURCE_FIELD = 'ttfa_ms';
 export const TIMING_VERSION_SOURCE_FIELD = 'timing_version';
 export const SEMANTIC_TIMING_VERSION = 1;
@@ -43,14 +42,24 @@ export function extractTTFTMs(detail: unknown): number | null {
   return extractSemanticTimingMs(detail, TTFT_SOURCE_FIELD);
 }
 
-/** 提取首个 reasoning token 时间（canonical v3 ttfr_ms）；旧 schema 或非法值返回 null。 */
-export function extractTTFRMs(detail: unknown): number | null {
-  return extractSemanticTimingMs(detail, TTFR_SOURCE_FIELD);
-}
-
 /** 提取首个 assistant 文本时间；旧 schema 或非法值返回 null。 */
 export function extractTTFAMs(detail: unknown): number | null {
   return extractSemanticTimingMs(detail, TTFA_SOURCE_FIELD);
+}
+
+/**
+ * 首个有效内容时间取首 reasoning 与首 assistant 两个已观测时间中的较早值。
+ * 两者都缺失时返回 null；不会改写 canonical Core 字段的独立语义。
+ */
+export function calculateFirstContentMs(
+  ttftMs: number | null | undefined,
+  ttfaMs: number | null | undefined
+): number | null {
+  const reasoning = readNonNegativeNumber(ttftMs);
+  const assistant = readNonNegativeNumber(ttfaMs);
+  if (reasoning === null) return assistant;
+  if (assistant === null) return reasoning;
+  return Math.min(reasoning, assistant);
 }
 
 /** 校验 semantic timing 与同一 request 的 latency/TTFB 因果关系。 */

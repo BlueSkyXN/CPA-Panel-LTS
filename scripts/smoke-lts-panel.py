@@ -3618,11 +3618,15 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     card.get_by_role("columnheader", name="Effort", exact=True).wait_for()
     card.get_by_role("columnheader", name="Caller Key", exact=True).wait_for()
     card.get_by_role("columnheader", name="TTFB", exact=True).wait_for()
+    card.get_by_role("columnheader", name="First Content", exact=True).wait_for()
     card.get_by_role("columnheader", name="TTFT", exact=True).wait_for()
     card.get_by_role("columnheader", name="TTFA", exact=True).wait_for()
     card.get_by_role("columnheader", name="Output TPS", exact=True).wait_for()
     card.get_by_role("columnheader", name="Avg TPS", exact=True).wait_for()
     card.locator('td[data-request-performance="ttfb"][data-ttfb-ms="70"]').wait_for()
+    card.locator(
+        'td[data-request-performance="first-content"][data-first-content-ms="80"]'
+    ).wait_for()
     card.locator('td[data-request-performance="ttft"][data-ttft-ms="80"]').wait_for()
     card.locator('td[data-request-performance="ttfa"][data-ttfa-ms="95"]').wait_for()
     card.locator('td[data-request-performance="output-tps"][data-output-tps="200"]').wait_for()
@@ -3724,6 +3728,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         "result": True,
         "latency": True,
         "ttfb": True,
+        "firstContent": True,
         "ttft": True,
         "ttfa": True,
         "outputTps": True,
@@ -3998,6 +4003,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         raise AssertionError("Request-event CSV must not export legacy thinking fields")
     required_timing_columns = {
         "timing_version",
+        "first_content_ms",
         "ttft_ms",
         "ttfa_ms",
         "visible_average_tps",
@@ -4010,6 +4016,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         )
     if (
         csv_rows[0].get("timing_version") != "1"
+        or csv_rows[0].get("first_content_ms") != "80"
         or csv_rows[0].get("ttft_ms") != "80"
         or csv_rows[0].get("ttfa_ms") != "95"
         or float(csv_rows[0].get("visible_average_tps", "0")) <= 0
@@ -4102,6 +4109,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         )
     if (
         json_rows[0].get("timing_version") != 1
+        or json_rows[0].get("first_content_ms") != 80
         or json_rows[0].get("ttft_ms") != 80
         or json_rows[0].get("ttfa_ms") != 95
         or not isinstance(json_rows[0].get("visible_average_tps"), (int, float))
@@ -4928,7 +4936,8 @@ def run_usage_request_event_column_storage_smoke(context: Any, app_url: str) -> 
                 stored.displayedOutputTokens === true &&
                 stored.reasoningTokens === true && stored.cacheReadTokens === true &&
                 stored.cacheWriteTokens === true && stored.totalTokens === true &&
-                stored.ttfb === true && stored.ttft === true && stored.ttfa === true &&
+                stored.ttfb === true && stored.firstContent === true &&
+                stored.ttft === true && stored.ttfa === true &&
                 stored.outputTps === true && stored.averageTps === true &&
                 stored.visibleAverageTps === false && stored.reasoningRatio === false &&
                 stored.cost === true;
@@ -4957,6 +4966,7 @@ def run_usage_request_event_column_storage_smoke(context: Any, app_url: str) -> 
                 result: false,
                 latency: true,
                 ttfb: false,
+                firstContent: false,
                 ttft: false,
                 ttfa: false,
                 outputTps: false,

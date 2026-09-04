@@ -1392,6 +1392,8 @@
     "request_events_output_tps_hint": "输出 TPS = 总输出 Token /（延迟 - 首字节时间）。包含 provider 报告的 reasoning Token；时间不完整时显示 --。",
     "request_events_average_tps": "平均 TPS",
     "request_events_average_tps_hint": "平均 TPS = 总输出 Token / 总延迟，是端到端速度，不是纯解码速度。",
+    "request_events_first_content": "首个有效内容",
+    "request_events_first_content_hint": "取首个 reasoning 内容与首个用户可见 assistant 文本中较早的已观测时间。由 Panel 基于 Core canonical 字段 ttft_ms 和 ttfa_ms 本地派生；两者均缺失时显示 --。",
     "request_events_ttft": "首推理内容（TTFT）",
     "request_events_ttft_hint": "从上游流收到首个非空 reasoning 内容的时间（毫秒）。非流式或不支持的响应显示 --。",
     "request_events_ttfa": "首回答内容（TTFA）",

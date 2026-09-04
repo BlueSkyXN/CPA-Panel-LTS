@@ -12,7 +12,7 @@
 - requests/tokens、hour/day trend、RPM/TPM 等完整聚合。
 - API、model、credential/source 维度 breakdown。
 - request events、latency、result、reasoning effort、token breakdown 和逐事件本地费用估算。
-- request events 可显示 Core 提供的 `ttfb_ms`、`ttft_ms`、`ttfa_ms`，并派生 `Output TPS`、`Avg TPS`、可见平均 TPS 与 Reasoning 占比。
+- request events 可显示 Core 提供的 `ttfb_ms`、`ttft_ms`、`ttfa_ms`，并派生首个有效内容、`Output TPS`、`Avg TPS`、可见平均 TPS 与 Reasoning 占比。
 - cache read、cache write、non-cache-read input 和 reasoning token 语义。
 - usage export/import、预检查、版本迁移、重复/重叠处理和失败回执。
 - 本地 pricing catalog/profile、来源链接、Fast/Std 和 long-context 策略。
@@ -72,6 +72,7 @@ Core 的 request detail 使用可选字段 `ttfb_ms` 表示从 Core 发起上游
 
 Panel 在浏览器本地按同一条明细派生以下指标：
 
+- `First Content` = `minPresent(ttft_ms, ttfa_ms)`；只存在其中一个字段时使用该值，两者均缺失时显示 `--`。它不改写 Core canonical timing 字段的独立语义。
 - `Output TPS` = `output_tokens / ((latency_ms - ttfb_ms) / 1000)`，且包含 provider 报告的 reasoning tokens。
 - `Avg TPS` = `output_tokens / (latency_ms / 1000)`，表示端到端输出速度。
 - `Visible Avg TPS` = `max(output_tokens - reasoning_tokens, 0) / (latency_ms / 1000)`。

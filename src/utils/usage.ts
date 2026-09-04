@@ -53,6 +53,7 @@ export {
 export {
   calculateAverageTps,
   calculateDecodeDurationMs,
+  calculateFirstContentMs,
   calculateOutputTps,
   calculateReasoningRatio,
   calculateVisibleAverageTps,
@@ -185,7 +186,6 @@ export interface UsageDetail {
   ttfb_ms?: number;
   timing_version?: number;
   ttft_ms?: number;
-  ttfr_ms?: number;
   ttfa_ms?: number;
   tokens: UsageTokenStats;
   failed: boolean;

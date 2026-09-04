@@ -156,9 +156,11 @@ features:
       - request_key_hint
       - ttfb_ms
       - extractTTFBMs
+      - calculateFirstContentMs
       - calculateOutputTps
       - calculateAverageTps
       - request_events_ttfb
+      - request_events_first_content
       - request_events_ttft
       - request_events_ttfa
       - request_events_output_tps
@@ -169,6 +171,7 @@ features:
       - request_events_weighted_average_tps
       - request_events_performance_samples
       - timing_version
+      - first_content_ms
       - ttft_ms
       - ttfa_ms
       - summarizeUsagePerformance

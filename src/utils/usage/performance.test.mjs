@@ -28,14 +28,16 @@ test('extracts semantic timing only from timing version 1 and enforces causal bo
   assert.equal(performance.extractTTFTMs(detail), 480);
   assert.equal(performance.extractTTFAMs(detail), 920);
   assert.equal(performance.extractTTFTMs({ ttft_ms: 480 }), null);
-  // ttfr_ms: canonical reasoning-only latency
-  const detailWithReasoning = { timing_version: 1, ttfb_ms: 120, ttft_ms: 480, ttfr_ms: 480, ttfa_ms: 920 };
-  assert.equal(performance.extractTTFRMs(detailWithReasoning), 480);
-  assert.equal(performance.extractTTFRMs({ ttfr_ms: 480 }), null); // no timing_version
-  assert.equal(performance.extractTTFRMs({ timing_version: 1 }), null); // no ttfr_ms
   assert.equal(performance.normalizeSemanticTimingMs(480, 2_000, 120), 480);
   assert.equal(performance.normalizeSemanticTimingMs(100, 2_000, 120), null);
   assert.equal(performance.normalizeSemanticTimingMs(2_100, 2_000, 120), null);
+});
+
+test('derives first content without redefining canonical Core timing fields', () => {
+  assert.equal(performance.calculateFirstContentMs(480, 920), 480);
+  assert.equal(performance.calculateFirstContentMs(null, 1_200), 1_200);
+  assert.equal(performance.calculateFirstContentMs(900, 500), 500);
+  assert.equal(performance.calculateFirstContentMs(null, null), null);
 });
 
 test('derives decode and end-to-end TPS from Core latency fields', () => {
