@@ -39,6 +39,7 @@ protected_deltas:
       - release asset named management.html
       - npm/package-lock based build
       - v*-lts-* release tag guard
+      - release source resolves to the exact requested tag commit
   - id: local-downstream-customizations
     reason: This repository contains downstream panel work that is not present upstream.
     must_keep:

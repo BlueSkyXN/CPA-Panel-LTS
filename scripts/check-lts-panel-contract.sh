@@ -524,9 +524,14 @@ require_file_contains src/services/api/index.ts "export * from './usage'"
 require_file_contains src/services/api/index.ts "export * from './ampcode'"
 require_file_contains .github/workflows/release.yml "management.html"
 require_file_contains .github/workflows/release.yml "v*-lts-*"
+require_file_contains .github/workflows/release.yml 'ref: ${{ env.RELEASE_TAG }}'
+require_file_contains .github/workflows/release.yml "Checkout current release tooling"
+require_file_contains .github/workflows/release.yml "Release source mismatch"
+require_file_not_contains .github/workflows/release.yml 'ref: ${{ github.ref }}'
 require_file_contains docs/lts/panel-protected-deltas.yaml "full-usage-statistics-ui"
 require_file_contains docs/lts/panel-protected-deltas.yaml "cpa-core-lts-management-api-compatibility"
 require_file_contains docs/lts/panel-protected-deltas.yaml "panel-release-contract"
+require_file_contains docs/lts/panel-protected-deltas.yaml "release source resolves to the exact requested tag commit"
 require_file_contains docs/lts/sync-runbook.md "protected selective-port"
 require_file_contains docs/lts/panel-feature-contracts.yaml "npm run test:usage-cache"
 
