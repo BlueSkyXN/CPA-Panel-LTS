@@ -29,12 +29,35 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout code
+      - name: Checkout release source
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.ref }}
+          ref: ${{ env.RELEASE_TAG }}
           fetch-depth: 0
           fetch-tags: true
+
+      - name: Checkout current release tooling
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: _release_tools
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Verify release source
+        run: |
+          set -euo pipefail
+          if [[ "${RELEASE_TAG}" != v*-lts-* ]]; then
+            echo "Only Panel LTS release tags matching v*-lts-* are supported." >&2
+            exit 1
+          fi
+          tag_commit="$(git rev-parse "${RELEASE_TAG}^{commit}")"
+          head_commit="$(git rev-parse HEAD)"
+          if [[ "$head_commit" != "$tag_commit" ]]; then
+            echo "Release source mismatch: HEAD=${head_commit}, ${RELEASE_TAG}=${tag_commit}." >&2
+            exit 1
+          fi
+          echo "Verified ${RELEASE_TAG} at ${tag_commit}."
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -48,7 +71,7 @@ jobs:
       - name: Build all-in-one HTML
         run: npm run build
         env:
-          VERSION: ${{ github.event.inputs.release_tag || github.ref_name }}
+          VERSION: ${{ env.RELEASE_TAG }}
 
       - name: Prepare release assets
         run: |
@@ -79,10 +102,10 @@ jobs:
             exit 0
           fi
 
-          bash scripts/generate-lts-release-notes.sh \
+          bash _release_tools/scripts/generate-lts-release-notes.sh \
             --tag "${RELEASE_TAG}" \
-            --notes-file release-notes.md \
-            --title-file release-title.txt
+            --notes-file "$GITHUB_WORKSPACE/release-notes.md" \
+            --title-file "$GITHUB_WORKSPACE/release-title.txt"
           echo "RELEASE_TITLE=$(tr -d '\n' < release-title.txt)" >> "$GITHUB_ENV"
           echo "RELEASE_NOTES_READY=true" >> "$GITHUB_ENV"
 
@@ -104,6 +127,13 @@ jobs:
             gh release create "$RELEASE_TAG" dist/management.html \
               --title "$RELEASE_TITLE" \
               --notes-file release-notes.md
+          fi
+
+          published_assets="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')"
+          if [[ "$published_assets" != "management.html" ]]; then
+            echo "Published release assets must contain only management.html; got:" >&2
+            printf '%s\n' "$published_assets" >&2
+            exit 1
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
