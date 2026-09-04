@@ -21,6 +21,7 @@ protected_deltas:
       - Core-compatible duplicate and overlap identity with uncertain-record disclosure
       - invalid canonical token rejection before upload
       - request events table
+      - derived first-content timing without redefining canonical Core fields
       - model/API/credential breakdowns
       - cached/reasoning token breakdown
       - local model price settings

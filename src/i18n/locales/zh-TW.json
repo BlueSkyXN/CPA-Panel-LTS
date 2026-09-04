@@ -1416,6 +1416,8 @@
     "request_events_ttfb_hint": "首位元組時間取自 Core 欄位 {{field}}，單位為 {{unit}}；目前表示上游第一個 response byte/payload，不保證是第一個有效 Token。",
     "request_events_output_tps": "輸出 TPS",
     "request_events_output_tps_hint": "輸出 TPS = 總輸出 Token /（延遲 - 首位元組時間）。包含 provider 回報的 reasoning Token；時間不完整時顯示 --。",
+    "request_events_first_content": "首個有效內容",
+    "request_events_first_content_hint": "取第一個 reasoning 內容與第一個使用者可見 assistant 文字中較早的已觀測時間。由 Panel 根據 Core canonical 欄位 ttft_ms 和 ttfa_ms 在本機派生；兩者皆缺失時顯示 --。",
     "request_events_ttft": "首推理內容（TTFT）",
     "request_events_ttft_hint": "從上游串流收到第一個非空 reasoning 內容的時間（毫秒）。非串流或不支援的回應顯示 --。",
     "request_events_ttfa": "首回答內容（TTFA）",

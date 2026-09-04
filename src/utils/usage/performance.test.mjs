@@ -33,6 +33,13 @@ test('extracts semantic timing only from timing version 1 and enforces causal bo
   assert.equal(performance.normalizeSemanticTimingMs(2_100, 2_000, 120), null);
 });
 
+test('derives first content without redefining canonical Core timing fields', () => {
+  assert.equal(performance.calculateFirstContentMs(480, 920), 480);
+  assert.equal(performance.calculateFirstContentMs(null, 1_200), 1_200);
+  assert.equal(performance.calculateFirstContentMs(900, 500), 500);
+  assert.equal(performance.calculateFirstContentMs(null, null), null);
+});
+
 test('derives decode and end-to-end TPS from Core latency fields', () => {
   assert.equal(performance.calculateDecodeDurationMs(2_000, 500), 1_500);
   assert.equal(performance.calculateOutputTps(300, 2_000, 500), 200);

@@ -2622,6 +2622,9 @@ def run_browser_smoke(
                             f"{rows.count()} rows, want {expected_usage_rows}"
                         )
                     events_card.get_by_role("columnheader", name="TTFB", exact=True).wait_for()
+                    events_card.get_by_role(
+                        "columnheader", name="First Content", exact=True
+                    ).wait_for()
                     events_card.get_by_role("columnheader", name="TTFT", exact=True).wait_for()
                     events_card.get_by_role("columnheader", name="TTFA", exact=True).wait_for()
                     events_card.get_by_role("columnheader", name="Output TPS", exact=True).wait_for()
@@ -2629,6 +2632,10 @@ def run_browser_smoke(
                         'td[data-request-performance="ttfb"][data-ttfb-ms="40"]'
                     ).wait_for()
                     if core_usage_version == 3:
+                        events_card.locator(
+                            'td[data-request-performance="first-content"]'
+                            '[data-first-content-ms="60"]'
+                        ).wait_for()
                         events_card.locator(
                             'td[data-request-performance="ttft"][data-ttft-ms="60"]'
                         ).wait_for()

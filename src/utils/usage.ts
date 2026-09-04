@@ -53,6 +53,7 @@ export {
 export {
   calculateAverageTps,
   calculateDecodeDurationMs,
+  calculateFirstContentMs,
   calculateOutputTps,
   calculateReasoningRatio,
   calculateVisibleAverageTps,

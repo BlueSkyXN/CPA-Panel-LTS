@@ -211,6 +211,55 @@ test('renders Core TTFB and derived output throughput metrics', async () => {
   assert.match(markup, /Weighted Output TPS/);
 });
 
+test('renders first content from assistant timing when reasoning timing is absent', async () => {
+  await i18n.changeLanguage('en');
+  const usage = {
+    apis: {
+      'POST /v1/responses': {
+        models: {
+          'gpt-5.6-luna': {
+            details: [
+              {
+                timestamp: '2026-08-17T00:00:00Z',
+                latency_ms: 2_000,
+                ttfb_ms: 200,
+                timing_version: 1,
+                ttfa_ms: 1_200,
+                tokens: { input_tokens: 10, output_tokens: 20, total_tokens: 30 },
+                failed: false,
+              },
+            ],
+          },
+        },
+      },
+    },
+  };
+
+  const markup = renderToStaticMarkup(
+    createElement(RequestEventsDetailsCard, {
+      usage,
+      loading: false,
+      pageTimeRange: 'all',
+      referenceNowMs: Date.parse('2026-08-17T00:00:00Z'),
+      priceProfile: pricingModule.createDefaultPriceProfileV3(),
+      requestApiKeys: [],
+      geminiKeys: [],
+      claudeConfigs: [],
+      codexConfigs: [],
+      vertexConfigs: [],
+      openaiProviders: [],
+    })
+  );
+
+  assert.match(markup, /First Content/);
+  assert.match(
+    markup,
+    /data-request-performance="first-content"[^>]*data-first-content-ms="1200"[^>]*>1\.2s</
+  );
+  assert.match(markup, /data-request-performance="ttft"[^>]*>--</);
+  assert.match(markup, /data-request-performance="ttfa"[^>]*data-ttfa-ms="1200"[^>]*>1\.2s</);
+});
+
 test('renders a configured caller key without exposing the raw credential', async () => {
   await i18n.changeLanguage('en');
   const rawRequestKey = 'sk-panel-request-key-1234567890';
