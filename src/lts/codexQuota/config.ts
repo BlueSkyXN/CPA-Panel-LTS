@@ -247,6 +247,15 @@ const buildCodexQuotaWindows = (payload: CodexUsagePayload, t: TFunction): Codex
     codeReviewAllowed
   );
 
+  // Upstream limit_name values are raw identifiers (e.g. "gpt-reserve"); map
+  // known ones to their display label and keep the raw value for window IDs.
+  const formatLimitDisplayName = (rawName: string) => {
+    const knownNames: Record<string, string> = {
+      'gpt-reserve': 'GPT-Reserve'
+    };
+    return knownNames[rawName.trim().toLowerCase()] ?? rawName;
+  };
+
   const normalizeWindowId = (raw: string) =>
     raw
       .trim()
@@ -265,15 +274,16 @@ const buildCodexQuotaWindows = (payload: CodexUsagePayload, t: TFunction): Codex
         `additional-${index + 1}`;
 
       const idPrefix = normalizeWindowId(limitName) || `additional-${index + 1}`;
+      const limitDisplayName = formatLimitDisplayName(limitName);
       const additionalWindows = pickCodexClassifiedWindows(rateInfo);
       const additionalLimitReached = rateInfo.limit_reached ?? rateInfo.limitReached;
       const additionalAllowed = rateInfo.allowed;
 
       addWindow(
         `${idPrefix}-five-hour-${index}`,
-        t('codex_quota.additional_primary_window', { name: limitName }),
+        t('codex_quota.additional_primary_window', { name: limitDisplayName }),
         'codex_quota.additional_primary_window',
-        { name: limitName },
+        { name: limitDisplayName },
         additionalWindows.fiveHourWindow,
         additionalLimitReached,
         additionalAllowed
@@ -285,9 +295,9 @@ const buildCodexQuotaWindows = (payload: CodexUsagePayload, t: TFunction): Codex
       );
       addWindow(
         `${idPrefix}-${additionalSecondaryMeta.id}-${index}`,
-        t(additionalSecondaryMeta.labelKey, { name: limitName }),
+        t(additionalSecondaryMeta.labelKey, { name: limitDisplayName }),
         additionalSecondaryMeta.labelKey,
-        { name: limitName },
+        { name: limitDisplayName },
         additionalWindows.weeklyWindow,
         additionalLimitReached,
         additionalAllowed
