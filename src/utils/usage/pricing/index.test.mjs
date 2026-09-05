@@ -27,7 +27,7 @@ const approx = (actual, expected) =>
 
 test('catalog is versioned, self-describing, exact, and keeps provider rate boundaries explicit', () => {
   const sol = pricing.findCatalogEntry('gpt-5.6-sol');
-  assert.equal(pricing.PRICE_CATALOG_AS_OF, '2026-07-31');
+  assert.equal(pricing.PRICE_CATALOG_AS_OF, '2026-09-05');
   assert.equal(sol.currency, 'USD');
   assert.deepEqual(sol.aliases, ['gpt-5.6']);
   assert.equal(sol.sourceUrl, 'https://developers.openai.com/api/docs/pricing');
@@ -826,4 +826,62 @@ test('Fast policy display distinguishes official and custom multipliers from exp
     pricing.getApiFastPolicyDisplay(pricing.resolvePriceProfile('local', explicitRates)),
     { kind: 'explicit-rates', multiplier: null }
   );
+});
+
+
+test('Astra pricing is exact and does not redate older provider prices', () => {
+  const astra = pricing.findCatalogEntry('gpt-6-astra');
+  assert.equal(astra.asOf, '2026-09-05');
+  assert.deepEqual(astra.standard.short, { input: 10, cachedInput: 1, cacheWrite: 12.5, output: 50 });
+  assert.deepEqual(astra.standard.long.rates, { input: 20, cachedInput: 2, cacheWrite: 25, output: 75 });
+  assert.equal(astra.standard.long.thresholdTokens, 272_001);
+  assert.equal(astra.fast.longSupported, true);
+  assert.equal(pricing.findCatalogEntry('gpt-6-astra-preview'), null);
+  assert.equal(pricing.findCatalogEntry('tenant/gpt-6-astra'), null);
+  assert.equal(pricing.findCatalogEntry('gpt-6–astra'), null);
+  assert.equal(pricing.findCatalogEntry('gpt-5.6-sol').asOf, '2026-07-31');
+});
+
+test('Astra long pricing starts above 272K and uses total input including cache', () => {
+  for (const [input, band, rate] of [
+    [271_999, 'short', 10], [272_000, 'short', 10], [272_001, 'long', 20],
+  ]) {
+    const cost = pricing.estimateUsageCost('gpt-6-astra', {
+      input_tokens: input, cache_read_tokens: 200_000, output_tokens: 100,
+    }, undefined, tier());
+    assert.equal(cost.status, 'priced');
+    assert.equal(cost.contextBand, band);
+    assert.equal(cost.rates.input, rate);
+    approx(cost.amount, ((input - 200_000) * rate + 200_000 * cost.rates.cachedInput + 100 * cost.rates.output) / 1_000_000);
+  }
+});
+
+test('Astra Fast applies to every category in both context bands', () => {
+  for (const input of [200_000, 300_000]) {
+    const tokens = {
+      input_tokens: input, cache_read_tokens: 30_000,
+      cache_creation_tokens: 40_000, output_tokens: 100_000,
+    };
+    const standard = pricing.estimateUsageCost('gpt-6-astra', tokens, undefined, tier());
+    const fast = pricing.estimateUsageCost('gpt-6-astra', tokens, undefined, tier('fast'));
+    assert.equal(fast.status, 'priced');
+    approx(fast.amount, standard.amount * 2);
+    for (const category of ['input', 'cachedInput', 'cacheWrite', 'output']) {
+      assert.equal(fast.rates[category], standard.rates[category] * 2);
+    }
+  }
+});
+
+test('Astra preset never replaces explicit user pricing', () => {
+  const profile = pricing.createDefaultPriceProfileV3();
+  profile.overrides['gpt-6-astra'] = {
+    standard: { short: { input: 0, cachedInput: 0, cacheWrite: 0, output: 0 } },
+  };
+  const before = JSON.stringify(profile);
+  const cost = pricing.estimateUsageCost('gpt-6-astra', {
+    input_tokens: 1_000_000, output_tokens: 100_000,
+  }, profile, tier());
+  assert.equal(cost.modelMatch, 'custom');
+  assert.equal(cost.amount, 0);
+  assert.equal(JSON.stringify(profile), before);
 });
