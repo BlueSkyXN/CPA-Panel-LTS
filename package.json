@@ -28,6 +28,7 @@
     "test:providers": "npm run test:provider-xai && npm run test:provider-integrity && npm run test:provider-recent",
     "test:plugins": "node --test src/features/plugins/pluginResources.test.mjs",
     "test:auth-files": "node --test src/features/authFiles/oauthConfigLoadGuard.test.mjs src/utils/quota/upstreamQuotaPort.test.mjs",
+    "test:codex-remote": "node --test src/lts/codexRemoteCloudConnect/viewModel.test.mjs",
     "test:quota": "node --test src/utils/quota/upstreamQuotaPort.test.mjs",
     "test:api-client": "node --test src/services/api/client.test.mjs",
     "test:logs": "node --test src/utils/logLines.test.mjs",
@@ -35,7 +36,7 @@
     "test:usage": "npm run test:usage-cache && npm run test:usage-prices && npm run test:usage-import && npm run test:usage-effort && npm run test:usage-tier && npm run test:usage-performance && npm run test:usage-pricing-v3 && npm run test:usage-pricing-catalog && npm run test:usage-pricing-storage && npm run test:usage-pricing-integration",
     "check:feature-contract": "node scripts/check-panel-feature-contracts.mjs",
     "check:lts": "scripts/check-lts-panel-contract.sh",
-    "validate:lts": "npm run test:usage && npm run test:dashboard && npm run test:config && npm run test:providers && npm run test:plugins && npm run test:auth-files && npm run test:api-client && npm run test:logs && npm run test:ui && npm run check:lts && npm run type-check && npm run lint && npm run build",
+    "validate:lts": "npm run test:usage && npm run test:dashboard && npm run test:config && npm run test:providers && npm run test:plugins && npm run test:auth-files && npm run test:codex-remote && npm run test:api-client && npm run test:logs && npm run test:ui && npm run check:lts && npm run type-check && npm run lint && npm run build",
     "smoke:lts": "npm run build && python3 scripts/smoke-lts-panel.py",
     "smoke:lts:core": "npm run build && python3 scripts/smoke-lts-panel-core.py"
   },

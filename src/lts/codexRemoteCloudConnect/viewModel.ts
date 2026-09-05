@@ -191,7 +191,11 @@ const createAdvice = (
     return { level: 'keep', reasons };
   }
 
-  if (sameHostOlder && (skeletonRecord || missingLastSeen || isOlderVersion)) {
+  if (
+    environment.online === false &&
+    sameHostOlder &&
+    (skeletonRecord || missingLastSeen || isOlderVersion)
+  ) {
     return { level: 'cleanable', reasons };
   }
 
@@ -275,7 +279,20 @@ export const createCodexRemoteCloudConnectEnvironmentViewModel = (
 
   const sortedEnvironments = groups.flatMap((group) => group.environments);
   const signature = sortedEnvironments
-    .map((item) => `${item.environment.envId}:${item.advice.level}`)
+    // Include normalized record data: heartbeat/version changes can retain the
+    // same advice and counts, but the recheck must still report a changed list.
+    .map((item) =>
+      JSON.stringify([
+        item.environment.envId,
+        Object.keys(item.environment)
+          .sort()
+          .map((key) => [
+            key,
+            item.environment[key as keyof CodexRemoteCloudConnectEnvironment],
+          ]),
+        item.advice.level,
+      ])
+    )
     .sort()
     .join('|');
 
