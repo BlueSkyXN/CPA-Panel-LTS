@@ -18,18 +18,17 @@ test.after(async () => {
 });
 
 test('permanently migrates removed and invalid themes to white', () => {
-  for (const value of ['paper', 'light', 'dark', 'auto', '', 'sepia', null, undefined, 3]) {
+  for (const value of ['paper', 'light', 'dark', 'auto', '', 'sepia', 'mist', null, undefined, 3]) {
     assert.equal(normalizeTheme(value), 'white');
   }
   assert.equal(normalizeTheme('white'), 'white');
-  assert.equal(normalizeTheme('mist'), 'mist');
+  assert.equal(normalizeTheme('aurora-nebula'), 'aurora-nebula');
+  assert.equal(normalizeTheme('aurora-dawn'), 'aurora-dawn');
 });
 
-test('keeps only the three supported workspace layouts', () => {
+test('keeps only the tower workspace layout', () => {
   assert.equal(normalizeWorkspaceLayout('tower'), 'tower');
-  assert.equal(normalizeWorkspaceLayout('studio'), 'studio');
-  assert.equal(normalizeWorkspaceLayout('console'), 'console');
-  for (const value of ['paper', 'classic', '', null, undefined, 3]) {
+  for (const value of ['studio', 'console', 'paper', 'classic', '', null, undefined, 3]) {
     assert.equal(normalizeWorkspaceLayout(value), 'tower');
   }
 });

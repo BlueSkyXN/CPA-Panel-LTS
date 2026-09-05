@@ -10,7 +10,7 @@ interface ThemeState {
 }
 
 export const normalizeTheme = (value: unknown): Theme => {
-  if (value === 'mist') return value;
+  if (value === 'aurora-nebula' || value === 'aurora-dawn') return value;
   return 'white';
 };
 
@@ -39,7 +39,7 @@ export const useThemeStore = create<ThemeState>()(
     }),
     {
       name: STORAGE_KEY_THEME,
-      version: 3,
+      version: 4,
       partialize: (state) => ({ theme: state.theme }),
       migrate: (persistedState) => {
         const state = (persistedState ?? {}) as { theme?: unknown };

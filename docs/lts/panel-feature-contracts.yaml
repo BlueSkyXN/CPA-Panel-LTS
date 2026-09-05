@@ -924,9 +924,9 @@ features:
       - node --check scripts/chatgpt-quota-helper.js
       - node --check scripts/codex-quota-compass.user.js
 
-  - id: light-only-theme-policy
+  - id: theme-policy
     status: lts-maintained
-    reason: CPA-Panel-LTS intentionally ships a light-only appearance policy. Pure White is the neutral default, Soft Mist is the only alternate theme, and removed Paper, Dark, Auto, or invalid persisted values permanently migrate to White.
+    reason: CPA-Panel-LTS ships Pure White as the neutral default plus two Aurora glass themes (aurora-nebula dark, aurora-dawn light). Removed Paper, Dark, Auto, Mist, or invalid persisted values permanently migrate to White.
     panel_files:
       - src/App.tsx
       - src/components/layout/MainLayout.tsx
@@ -939,12 +939,13 @@ features:
       - scripts/smoke-lts-panel.py
     required_markers:
       - normalizeTheme
-      - "version: 3"
+      - "version: 4"
       - removeAttribute('data-theme')
-      - "Theme = 'white' | 'mist'"
-      - "[data-theme='mist']"
+      - "Theme = 'white' | 'aurora-nebula' | 'aurora-dawn'"
+      - "[data-theme='aurora-nebula']"
       - theme.white
-      - theme.mist
+      - theme.aurora_nebula
+      - theme.aurora_dawn
       - permanently migrates removed and invalid themes to white
       - Legacy paper theme did not migrate permanently to white
       - Default theme restored a tinted paper surface
@@ -957,7 +958,7 @@ features:
 
   - id: next-workspace-shell
     status: lts-maintained
-    reason: The downstream Next shell provides Tower, Studio, and Console navigation layouts, a Core-scoped workspace, compact/classic navigation, and a keyboard command palette without replacing protected Usage or stable provider routes.
+    reason: The downstream Next shell provides the Tower navigation layout, a Core-scoped workspace, compact/classic navigation, and a keyboard command palette without replacing protected Usage or stable provider routes.
     routes:
       - /core
       - /core/workspace
@@ -968,7 +969,6 @@ features:
       - src/components/layout/SidebarNavigation.tsx
       - src/components/layout/sidebarNavigationModel.ts
       - src/components/layout/CommandPalette.tsx
-      - src/components/layout/CoreScopeRail.tsx
       - src/pages/CoreWorkspace.tsx
       - src/pages/CoreWorkspace.module.scss
       - src/stores/useWorkspaceStore.ts
@@ -980,20 +980,18 @@ features:
       - src/i18n/locales/
       - scripts/smoke-lts-panel.py
     required_markers:
-      - "WorkspaceLayout = 'tower' | 'studio' | 'console'"
+      - "WorkspaceLayout = 'tower'"
       - normalizeWorkspaceLayout
       - cli-proxy-workspace-layout
       - data-workspace-layout
       - sidebar-mode-compact
       - CommandPalette
-      - CoreScopeRail
       - CoreWorkspace
       - "path: '/core'"
       - "path: '/core/workspace'"
       - core_workspace.summary_aria
       - Command palette allowed Tab focus to escape the modal
-      - Studio workspace did not persist
-      - keeps only the three supported workspace layouts
+      - keeps only the tower workspace layout
     validation:
       - npm run test:ui
       - npm run check:lts

@@ -2257,13 +2257,14 @@
   "theme": {
     "switch": "主题",
     "white": "纯白",
-    "mist": "柔雾灰"
+    "aurora_nebula": "极光·星云",
+    "aurora_dawn": "极光·晨曦"
   },
   "workspace": {
     "appearance": "工作区外观",
     "switch": "工作区布局",
     "layout_heading": "工作区布局",
-    "theme_heading": "浅色主题",
+    "theme_heading": "主题",
     "tower": "控制塔",
     "tower_desc": "高密度实时运维",
     "studio": "工作室",

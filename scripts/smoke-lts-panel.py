@@ -4333,7 +4333,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
             )
 
     try:
-        for theme in ["mist"]:
+        for theme in ["aurora-nebula", "aurora-dawn"]:
             page.evaluate(
                 "theme => document.documentElement.setAttribute('data-theme', theme)",
                 theme,
@@ -5570,7 +5570,7 @@ def run_sidebar_navigation_smoke(page: Any, state: MockCoreState) -> None:
     migrated_theme = page.evaluate(
         "() => JSON.parse(localStorage.getItem('cli-proxy-theme') || 'null')"
     )
-    if migrated_theme != {"state": {"theme": "white"}, "version": 3}:
+    if migrated_theme != {"state": {"theme": "white"}, "version": 4}:
         raise AssertionError(
             f"Legacy paper theme did not migrate permanently to white: {migrated_theme!r}"
         )
@@ -5583,38 +5583,20 @@ def run_sidebar_navigation_smoke(page: Any, state: MockCoreState) -> None:
         "menuitemradio", name="Wool Paper", exact=True
     ).count():
         raise AssertionError("Removed paper theme is still exposed in the appearance menu")
-    appearance_menu.get_by_role("menuitemradio", name=re.compile(r"^Studio\b")).click()
-    page.wait_for_function(
-        "() => document.querySelector('.app-shell')?.getAttribute('data-workspace-layout') === 'studio'"
-    )
-    stored_layout = page.evaluate(
-        "() => JSON.parse(localStorage.getItem('cli-proxy-workspace-layout') || 'null')"
-    )
-    if stored_layout != {"state": {"layout": "studio"}, "version": 1}:
-        raise AssertionError(f"Studio workspace did not persist: {stored_layout!r}")
-
-    theme_button.click()
-    page.get_by_role("menu", name="Workspace appearance").get_by_role(
-        "menuitemradio", name=re.compile(r"^Console\b")
-    ).click()
-    page.wait_for_function(
-        "() => document.querySelector('.app-shell')?.getAttribute('data-workspace-layout') === 'console'"
-    )
-    theme_button.click()
-    page.get_by_role("menu", name="Workspace appearance").get_by_role(
-        "menuitemradio", name=re.compile(r"^Tower\b")
-    ).click()
-    page.wait_for_function(
-        "() => document.querySelector('.app-shell')?.getAttribute('data-workspace-layout') === 'tower'"
-    )
-
     theme_button.click()
     appearance_menu = page.get_by_role("menu", name="Workspace appearance")
     appearance_menu.get_by_role(
-        "menuitemradio", name="Soft Mist", exact=True
+        "menuitemradio", name="Aurora Dawn", exact=True
     ).click()
     page.wait_for_function(
-        "() => document.documentElement.getAttribute('data-theme') === 'mist'"
+        "() => document.documentElement.getAttribute('data-theme') === 'aurora-dawn'"
+    )
+    theme_button.click()
+    page.get_by_role("menu", name="Workspace appearance").get_by_role(
+        "menuitemradio", name="Aurora Nebula", exact=True
+    ).click()
+    page.wait_for_function(
+        "() => document.documentElement.getAttribute('data-theme') === 'aurora-nebula'"
     )
     theme_button.click()
     page.get_by_role("menu", name="Workspace appearance").get_by_role(
