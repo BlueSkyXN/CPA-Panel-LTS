@@ -1,12 +1,13 @@
 /** Official provider catalog data is kept separate from the pricing engine and UI. */
 export const PRICE_CURRENCY = 'USD' as const;
 export const OPENAI_CATALOG_AS_OF = '2026-07-31';
+export const GPT6_ASTRA_CATALOG_AS_OF = '2026-09-05';
 export const ZAI_CATALOG_AS_OF = '2026-07-22';
 export const KIMI_CATALOG_AS_OF = '2026-07-28';
 export const XAI_CATALOG_AS_OF = '2026-07-23';
 export const CODEX_SPARK_CATALOG_AS_OF = '2026-07-25';
 export const ANTHROPIC_CATALOG_AS_OF = '2026-07-26';
-export const PRICE_CATALOG_AS_OF = OPENAI_CATALOG_AS_OF;
+export const PRICE_CATALOG_AS_OF = GPT6_ASTRA_CATALOG_AS_OF;
 export const PRICE_CATALOG_VERSION = `api-${PRICE_CATALOG_AS_OF}`;
 export const OPENAI_PRICING_SOURCE_URL = 'https://developers.openai.com/api/docs/pricing';
 export const ZAI_PRICING_SOURCE_URL = 'https://docs.z.ai/guides/overview/pricing';
@@ -93,6 +94,21 @@ const kimiModelNotesUrl = (model: 'k3' | 'k2-7-code'): string =>
  * OpenAI model notes define the 272K long-context uplift when their aggregate table omits it.
  */
 export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
+  {
+    canonicalModel: 'gpt-6-astra',
+    aliases: [],
+    currency: 'USD',
+    standard: {
+      short: rateCard(10, 1, 12.5, 50),
+      // The engine's threshold is inclusive; the official uplift is strictly
+      // above 272K input tokens, so 272001 is the first long-context request.
+      long: longCard(rateCard(20, 2, 25, 75), LONG_CONTEXT_INPUT_TOKEN_THRESHOLD + 1),
+    },
+    fast: { multiplier: 2, longSupported: true },
+    sourceUrl: OPENAI_PRICING_SOURCE_URL,
+    pricingNotesUrl: modelPricingNotesUrl('gpt-6-astra'),
+    asOf: GPT6_ASTRA_CATALOG_AS_OF,
+  },
   {
     canonicalModel: 'gpt-5.6-sol',
     aliases: ['gpt-5.6'],

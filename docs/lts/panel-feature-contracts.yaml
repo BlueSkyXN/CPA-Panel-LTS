@@ -1000,3 +1000,20 @@ features:
       - npm run type-check
       - npm run build
       - npm run smoke:lts
+
+  - id: codex-remote-environment-advice
+    status: lts-maintained
+    reason: Unknown online status is not proof that an environment can be cleaned up; delayed rechecks must detect normalized heartbeat, version and identity changes as well as count changes.
+    panel_files:
+      - src/lts/codexRemoteCloudConnect/viewModel.ts
+      - src/lts/codexRemoteCloudConnect/viewModel.test.mjs
+      - package.json
+    required_markers:
+      - createCodexRemoteCloudConnectEnvironmentViewModel
+      - areCodexRemoteCloudConnectEnvironmentSummariesEqual
+      - test:codex-remote
+    validation:
+      - npm run test:codex-remote
+      - npm run check:lts
+      - npm run type-check
+      - npm run smoke:lts
