@@ -1,3 +1,5 @@
+import { FLOW_DEFAULT_VALUES, type FlowControlValues } from '@/lts/flowControl/model';
+
 export type PayloadParamValueType = 'string' | 'number' | 'boolean' | 'json';
 export type DisableImageGenerationMode = 'false' | 'true' | 'chat' | 'passthrough';
 export type RoutingStrategy = 'round-robin' | 'weighted-round-robin' | 'fill-first';
@@ -25,6 +27,7 @@ export type PayloadParamValidationErrorCode =
   | 'payload_invalid_json';
 
 export type VisualConfigFieldPath =
+  | 'flowControlRulesText'
   | 'port'
   | 'errorLogsMaxFiles'
   | 'logsMaxTotalSizeMb'
@@ -43,6 +46,7 @@ export type VisualConfigFieldPath =
   | 'streaming.nonstreamKeepaliveInterval';
 
 export type VisualConfigValidationErrorCode =
+  | 'flow_control_config'
   | 'port_range'
   | 'non_negative_integer'
   | 'integer'
@@ -109,7 +113,7 @@ export type PluginStoreAuthRule = {
   allowInsecure: boolean;
 };
 
-export type VisualConfigValues = {
+export type VisualConfigValues = FlowControlValues & {
   host: string;
   port: string;
   tlsEnable: boolean;
@@ -195,6 +199,7 @@ export const makeClientId = () => {
 };
 
 export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
+  ...FLOW_DEFAULT_VALUES,
   host: '',
   port: '',
   tlsEnable: false,

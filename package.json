@@ -21,7 +21,7 @@
     "test:usage-pricing-storage": "node --test src/utils/usage/pricing/storage.test.mjs",
     "test:usage-pricing-integration": "node --test src/utils/usage/pricing/usagePricing.test.mjs src/utils/usage/pricing/usageAggregation.test.mjs src/components/usage/RequestEventsDetailsCard.test.mjs",
     "test:dashboard": "node --test src/features/dashboard/dashboardMetrics.test.mjs",
-    "test:config": "node --test src/components/config/apiKeySecurity.test.mjs",
+    "test:config": "node --test src/components/config/apiKeySecurity.test.mjs && npm run test:flow-control",
     "test:provider-xai": "node --test src/features/providers/xaiApiKeyProvider.test.mjs",
     "test:provider-integrity": "node --test src/features/providers/providerIntegrity.test.mjs",
     "test:provider-recent": "node --test src/components/providers/hooks/providerRecentRequests.test.mjs",
@@ -38,7 +38,8 @@
     "check:lts": "scripts/check-lts-panel-contract.sh",
     "validate:lts": "npm run test:usage && npm run test:dashboard && npm run test:config && npm run test:providers && npm run test:plugins && npm run test:auth-files && npm run test:codex-remote && npm run test:api-client && npm run test:logs && npm run test:ui && npm run check:lts && npm run type-check && npm run lint && npm run build",
     "smoke:lts": "npm run build && python3 scripts/smoke-lts-panel.py",
-    "smoke:lts:core": "npm run build && python3 scripts/smoke-lts-panel-core.py"
+    "smoke:lts:core": "npm run build && python3 scripts/smoke-lts-panel-core.py",
+    "test:flow-control": "node --test src/lts/flowControl/*.test.mjs"
   },
   "dependencies": {
     "@codemirror/lang-yaml": "^6.1.2",

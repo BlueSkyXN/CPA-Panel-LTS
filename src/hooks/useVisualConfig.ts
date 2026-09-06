@@ -1,3 +1,5 @@
+import { FLOW_FIELDS, flowControlValidation, readFlowControlValues } from '@/lts/flowControl/model';
+import { writeFlowControlValues } from '@/lts/flowControl/yaml';
 import { useCallback, useMemo, useReducer } from 'react';
 import { isMap, parse as parseYaml, parseDocument } from 'yaml';
 import type {
@@ -312,9 +314,11 @@ function getRedisRetentionError(value: string): 'integer_range_1_3600' | undefin
 }
 
 export function getVisualConfigValidationErrors(
-  values: VisualConfigValues
+  values: VisualConfigValues,
+  dirtyFields: ReadonlySet<string> = new Set()
 ): VisualConfigValidationErrors {
   return {
+    ...flowControlValidation(values, dirtyFields),
     port: getPortError(values.port),
     errorLogsMaxFiles: getNonNegativeIntegerError(values.errorLogsMaxFiles),
     logsMaxTotalSizeMb: getNonNegativeIntegerError(values.logsMaxTotalSizeMb),
@@ -1060,6 +1064,7 @@ function getNextDirtyFields(
       'claudeHeaderArch',
       'claudeHeaderTimeout',
       'claudeHeaderStabilizeDeviceProfile',
+      ...FLOW_FIELDS,
       'codexHeaderUserAgent',
       'codexHeaderBetaFeatures',
       'codexIdentityConfuse',
@@ -1271,8 +1276,8 @@ export function useVisualConfig() {
   const { visualValues, visualParseError, dirtyFields } = state;
   const visualDirty = dirtyFields.size > 0;
   const visualValidationErrors = useMemo(
-    () => getVisualConfigValidationErrors(visualValues),
-    [visualValues]
+    () => getVisualConfigValidationErrors(visualValues, dirtyFields),
+    [visualValues, dirtyFields]
   );
   const visualHasPayloadValidationErrors = useMemo(
     () =>
@@ -1395,6 +1400,7 @@ export function useVisualConfig() {
         claudeHeaderStabilizeDeviceProfile: Boolean(
           claudeHeaderDefaults?.['stabilize-device-profile']
         ),
+        ...readFlowControlValues(parsed),
         codexHeaderUserAgent:
           typeof codexHeaderDefaults?.['user-agent'] === 'string'
             ? codexHeaderDefaults['user-agent']
@@ -1743,6 +1749,8 @@ export function useVisualConfig() {
           }
           deleteIfMapEmpty(doc, ['claude-header-defaults']);
         }
+
+        writeFlowControlValues(doc, values, dirtyFields);
 
         const codexHeadersDirty =
           dirtyFields.has('codexHeaderUserAgent') || dirtyFields.has('codexHeaderBetaFeatures');

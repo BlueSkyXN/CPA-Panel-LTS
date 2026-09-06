@@ -1393,6 +1393,13 @@ for lockfile in bun.lock yarn.lock pnpm-lock.yaml; do
   fi
 done
 
+# Keep this optional Core-owned settings surface and its status reader together.
+require_path src/lts/flowControl
+require_file_contains src/components/config/VisualConfigEditor.tsx "FlowControlFields"
+require_file_contains src/lts/flowControl/useStatus.ts "'/flow-control'"
+require_file_contains src/lts/flowControl/model.ts "key-model"
+require_file_contains src/lts/flowControl/model.ts "account-model"
+
 if [ "$failures" -ne 0 ]; then
   printf 'LTS panel contract check failed with %s violation(s).\n' "$failures" >&2
   exit 1
