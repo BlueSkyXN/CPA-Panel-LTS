@@ -6,8 +6,14 @@ export function writeFlowControlValues(doc: Document, values: FlowControlValues,
     if (!FLOW_FIELDS.some((name) => dirty.has(name)))
         return;
     const root = ['flow-control'];
+    const before = doc.getIn(root, true);
+    const priorRules = isMap(before) ? before.get('rules', true) : undefined;
+    const newPolicy = !isMap(before) || (!before.has('version') && before.get('enabled') !== true && (priorRules === undefined || (isSeq(priorRules) && priorRules.items.length === 0)));
     if (!isMap(doc.getIn(root, true)))
         doc.setIn(root, doc.createNode({}));
+    // First use is a disabled v3 draft, not a migration from an empty policy.
+    // Opening the editor alone still writes nothing; this runs only on an edit.
+    if (newPolicy && values.flowControlVersion === '3') doc.setIn([...root, 'version'], 3);
     if (dirty.has('flowControlEnabled'))
         doc.setIn([...root, 'enabled'], values.flowControlEnabled);
     for (const [field, key] of [['flowControlRealtime', 'realtime'], ['flowControlResources', 'resources']] as const) {

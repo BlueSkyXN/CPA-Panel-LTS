@@ -192,7 +192,7 @@
     "unsupported": "目前 Core 尚不支援本地流量控制；已有設定保留，不會自動改寫。",
     "error": "讀取狀態失敗，請檢查連線後重試。",
     "home_unsupported": "目前執行方式無法編輯本地流量控制。Home 繼續使用自己的帳號並行控制。",
-    "runtime_error": "執行設定未能套用；Core 暫停新的受控請求。請檢查規則和容量設定後儲存。",
+    "runtime_error": "最近一次 Flow 設定未套用。繼續使用上一次成功套用的策略；不會僅因設定更新失敗而拒絕正常請求。",
     "max_waiting": "最大等待請求數（0 表示不排隊）",
     "max_waiting_key": "每個 Key 最大等待數",
     "same_as_queue": "留空使用總等待上限",
@@ -424,7 +424,18 @@
     "queued_bytes": "等候本文登記量",
     "phase_waiting": "等候中",
     "phase_running": "執行中",
-    "phase_draining": "已取消，等待產生端結束"
+    "phase_draining": "已取消，等待產生端結束",
+    "admission_switch_hint": "只控制新模型請求是否受限制。關閉後，已有工作繼續計數至結束；不會取消串流或刪除規則。",
+    "save_apply_hint": "這裡是設定草稿。儲存設定並重新整理後，確認實際生效值。新設定遭拒時，繼續執行上一次成功套用的限制。",
+    "resource_switch_hint": "允許按需取樣資源指標，不儲存監控歷史。關閉即停止取樣，不改變限流及進行中的串流。",
+    "switch_status": "草稿開關與實際開關",
+    "switch_on": "開啟",
+    "switch_off": "關閉",
+    "resolved_model_hint": "執行層使用解析後的上游目標，不是對外別名。箭頭後顯示該目標對應的公開別名。模型池共享限額需選擇全部目標；外掛後續改寫的目標需另行確認。",
+    "unresolved_catalog": "目前 Core 未提供解析後的目標目錄，不會自動以公開別名替代。請手動填寫明確的上游目標，或更新 Core。",
+    "catalog_truncated": "目標目錄已截斷。已儲存的選項繼續保留；請另行確認未顯示的目標。",
+    "stage_capacity": "本階段餘量",
+    "empty_active_policy": "啟用但沒有規則時，只記錄已接入的呼叫，不限制並發或頻率。請新增規則後再確認實際生效結果。"
   },
   "config_management": {
     "visual": {

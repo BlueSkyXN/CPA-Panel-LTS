@@ -39,3 +39,13 @@ test('resource metrics are labeled process-wide and unavailable space remains un
  const resource={'sampled-at':'fixture','heap-object-bytes':2000,'go-managed-bytes':8000,goroutines:2,'filesystem-free-bytes':null,'filesystem-sampled-at':'fixture'};
  const html=renderToStaticMarkup(createElement(LiveMonitor,{data:{...data,state:{...state,resources:resource}},live:false,setLive(){},liveState:'off',history:[],onRefresh(){}}));assert(html.includes('进程级'));assert(html.includes('不是 RSS'));assert(html.includes('?'));
 });
+
+test('fresh disabled configuration exposes normal editor without migration',()=>{
+ const html=renderToStaticMarkup(createElement(View,{values:models.readFlowControlValues({}),support:{state:'ready',data},onChange(){},onRefresh(){}}));
+ assert(html.includes('草稿开关与实际开关'));assert(!html.includes('读取迁移建议'));
+});
+
+test('last-good failure is shown without disabling a supported editor',()=>{
+ const html=render({state:'ready',data:{...data,'configuration-error':true,'configuration-failure':{code:'flow_control_rate_domain_change',message:'Retained history example',rule:'shared-a'}}});
+ assert(html.includes('Retained history example'));assert(html.includes('上一次成功'));
+});

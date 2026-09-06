@@ -192,7 +192,7 @@
     "unsupported": "当前 Core 尚不支持本地流控；已有配置保留，不会自动改写。",
     "error": "读取状态失败，请检查连接后重试。",
     "home_unsupported": "当前运行方式不可编辑本地流控。Home 继续使用自己的账号并发控制。",
-    "runtime_error": "运行配置未能应用；Core 暂停新的受控请求。检查规则和容量设置后保存。",
+    "runtime_error": "最近一次 Flow 配置未应用。继续使用上一次成功应用的策略；不会仅因配置更新失败而拒绝正常请求。",
     "max_waiting": "最大等待请求数（0 表示不排队）",
     "max_waiting_key": "每个 Key 最大等待数",
     "same_as_queue": "留空使用总等待上限",
@@ -424,7 +424,18 @@
     "queued_bytes": "等待正文登记量",
     "phase_waiting": "等待中",
     "phase_running": "执行中",
-    "phase_draining": "已取消，等待生产端结束"
+    "phase_draining": "已取消，等待生产端结束",
+    "admission_switch_hint": "只控制新模型请求是否受限制。关闭后，已有工作继续计数至结束；不会取消流或删除规则。",
+    "save_apply_hint": "这里是配置草稿。保存配置并刷新后，确认实际生效值。新配置被拒绝时，继续执行上一次成功应用的限制。",
+    "resource_switch_hint": "允许按需采样资源指标，不保存监控历史。关闭即停止采样，不改变限流和进行中的流。",
+    "switch_status": "草稿开关与实际开关",
+    "switch_on": "开启",
+    "switch_off": "关闭",
+    "resolved_model_hint": "执行层使用解析后的上游目标，不是对外别名。箭头后显示该目标对应的公开别名。模型池共享限额需选择全部目标；插件后续改写的目标需单独确认。",
+    "unresolved_catalog": "当前 Core 未提供解析后的目标目录，不会自动用公开别名替代。请手工填写明确的上游目标，或更新 Core。",
+    "catalog_truncated": "目标目录已截断。已保存的选项继续保留；请单独确认未展示的目标。",
+    "stage_capacity": "本阶段余量",
+    "empty_active_policy": "启用但没有规则时，只记录已接入的调用，不限制并发或频率。请添加规则后再确认实际生效结果。"
   },
   "config_management": {
     "visual": {

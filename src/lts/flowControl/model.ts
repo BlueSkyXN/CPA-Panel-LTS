@@ -24,7 +24,7 @@ export interface FlowRule extends Record<string, unknown> {
 }
 export const FLOW_DEFAULT_VALUES = {
     flowControlEnabled: false,
-    flowControlVersion: '',
+    flowControlVersion: '3',
     flowControlRealtime: false,
     flowControlResources: false,
     flowControlIntervalMs: '',
@@ -50,7 +50,7 @@ export function readFlowControlValues(parsed: Record<string, unknown>): FlowCont
     const observation = asRecord(flow?.observation);
     return {
         flowControlEnabled: flow?.enabled === true,
-        flowControlVersion: text(flow?.version),
+        flowControlVersion: text(flow?.version) || (!flow || (!flow.enabled && (flow.rules === undefined || (Array.isArray(flow.rules) && flow.rules.length === 0))) ? '3' : ''),
         flowControlRealtime: observation?.realtime === true,
         flowControlResources: observation?.resources === true,
         flowControlIntervalMs: text(observation?.['interval-ms']),
@@ -251,6 +251,10 @@ export interface FlowCapabilities {
     supported: boolean;
     'configured-enabled': boolean;
     'configuration-error': boolean;
+    'configuration-failure'?: {code: string; message: string; rule?: string; 'rejected-at'?: string};
+    'configured-policy'?: FlowPolicy;
+    features?: string[];
+    'model-options-truncated'?: boolean;
     keys: FlowReference[];
     accounts: FlowReference[];
     credentials: FlowReference[];
@@ -290,7 +294,12 @@ export function parseFlowCapabilities(raw: unknown): FlowCapabilities | null {
     }))
         return null;
     return { supported: data.supported === true, 'configured-enabled': data['configured-enabled'] === true,
-        'configuration-error': data['configuration-error'] === true, keys: refs(data.keys), accounts: refs(data.accounts), credentials: refs(data.credentials),
+        'configuration-error': data['configuration-error'] === true,
+        'configuration-failure': readConfigurationFailure(data['configuration-failure']),
+        'configured-policy': asRecord(data['configured-policy']) as FlowPolicy | undefined,
+        features: Array.isArray(data.features) ? data.features.filter((v): v is string => typeof v === 'string') : [],
+        'model-options-truncated': data['model-options-truncated'] === true,
+        keys: refs(data.keys), accounts: refs(data.accounts), credentials: refs(data.credentials),
         models: Array.isArray(data.models) ? data.models.filter((m): m is string => typeof m === 'string') : [],
         'schema-version': Number(data['schema-version']), 'events-supported': data['events-supported'] === true,
         'events-enabled': Number(data['schema-version']) >= 3 ? data['events-enabled'] === true : data['events-supported'] === true,
@@ -368,7 +377,30 @@ export interface FlowModelOption {
     ref: string;
     model: string;
     provider: string;
+    aliases?: string[];
+    accounts?: string[];
 }
+
+function readConfigurationFailure(value: unknown): FlowCapabilities['configuration-failure'] {
+    const row = asRecord(value);
+    if (!row || typeof row.code !== 'string' || typeof row.message !== 'string') return undefined;
+    return {code: row.code, message: row.message,
+        ...(typeof row.rule === 'string' ? {rule: row.rule} : {}),
+        ...(typeof row['rejected-at'] === 'string' ? {'rejected-at': row['rejected-at']} : {})};
+}
+
+// Never substitute a public alias directory for actual Executor targets.
+// Older schema-3 servers can still be used with explicit, operator-supplied
+// target names, but their model-options are not advertised as resolved targets.
+export function modelOptionsForStage(data: FlowCapabilities | null, stage: string): Array<{value: string; label: string}> {
+    if (stage !== 'attempt') return (data?.models ?? []).map(value => ({value, label: value}));
+    if (!data?.features?.includes('resolved-model-options')) return [];
+    return data['model-options'].map(row => {
+        const aliases = (Array.isArray(row.aliases) ? row.aliases : []).filter(value => typeof value === 'string' && value !== row.model);
+        return {value: row.ref, label: `${row.provider} · ${row.model}${aliases.length ? ` ← ${aliases.slice(0, 4).join(', ')}` : ''}`};
+    });
+}
+
 export function policyFromValues(v: FlowControlValues): FlowPolicy {
     const queue: Record<string, number> = {};
     for (const [field, key] of [['flowControlMaxWaiting', 'max-waiting'], ['flowControlMaxWaitingPerKey', 'max-waiting-per-key'], ['flowControlMaxBytes', 'max-bytes'], ['flowControlMaxWaitMs', 'max-wait-ms']] as const) {
@@ -398,7 +430,7 @@ export function setSelection(rule: FlowRule, field: 'models' | 'keys' | 'account
 }
 export function mergeSummary(previous: FlowStatus, next: FlowStatus): FlowStatus {
     // SSE carries no catalogs/policy/detail arrays; those remain manual reads.
-    return { ...previous, ...next, policy: previous.policy, buckets: previous.buckets, activity: undefined };
+    return { ...previous, ...next, policy: previous.policy, buckets: previous.buckets, activity: undefined, resources: next.resources };
 }
 export function mergeMigration(original: FlowRule[], converted: FlowRule[]): FlowRule[] {
     return converted.map(r => {

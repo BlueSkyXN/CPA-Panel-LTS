@@ -80,3 +80,21 @@ test('observation edits preserve legacy rule syntax and client metadata settings
  const doc=parseDocument(raw);const v=m.readFlowControlValues(doc.toJSON());writeFlowControlValues(doc,{...v,flowControlRealtime:true,flowControlResources:false,flowControlIntervalMs:'5000'},new Set(['flowControlRealtime','flowControlResources','flowControlIntervalMs']));
  const flow=doc.toJSON()['flow-control'];assert.equal(flow.observation.realtime,true);assert.equal(flow.observation.resources,false);assert.equal(flow.observation['interval-ms'],5000);assert.equal(flow.rules[0].scope,'key-model');assert.equal(doc.toJSON().codex['client-metadata'].mode,'repair');assert.equal(doc.toJSON().codex['client-metadata']['workspace-policy'],'passthrough');
 });
+
+test('first Flow edit stamps V3 only when the existing policy is empty', () => {
+ const doc=parseDocument('port: 8317 # keep\n'); const v=m.readFlowControlValues(doc.toJSON());
+ writeFlowControlValues(doc,{...v,flowControlResources:true},new Set(['port']));
+ assert.equal(doc.toJSON()['flow-control'],undefined);
+ writeFlowControlValues(doc,{...v,flowControlResources:true},new Set(['flowControlResources']));
+ assert.equal(doc.toJSON()['flow-control'].version,3);
+ assert.equal(doc.toJSON()['flow-control'].enabled,undefined);
+ assert.equal(doc.toJSON()['flow-control'].observation.resources,true);
+ assert(String(doc).includes('# keep'));
+});
+
+test('editing observation never silently upgrades a populated legacy policy', () => {
+ const doc=parseDocument(raw);const v=m.readFlowControlValues(doc.toJSON());
+ writeFlowControlValues(doc,{...v,flowControlRealtime:true},new Set(['flowControlRealtime']));
+ assert.equal(doc.toJSON()['flow-control'].version,undefined);
+ assert.equal(doc.toJSON()['flow-control'].rules[0].id,'r1');
+});

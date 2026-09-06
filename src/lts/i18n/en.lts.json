@@ -192,7 +192,7 @@
     "unsupported": "This Core does not support local flow control. Existing settings are preserved.",
     "error": "Unable to read status. Check the connection and retry.",
     "home_unsupported": "Local flow control cannot be edited in this runtime. Home retains its own credential concurrency control.",
-    "runtime_error": "The requested configuration could not be applied. New controlled calls are stopped until the rules or state limits are corrected.",
+    "runtime_error": "The latest Flow update was not applied. The last successfully applied policy remains active; normal requests are not rejected just because the configuration update failed.",
     "max_waiting": "Maximum waiting requests (0 disables queue)",
     "max_waiting_key": "Maximum waiting per key",
     "same_as_queue": "Empty uses total queue limit",
@@ -424,7 +424,18 @@
     "queued_bytes": "Registered waiting payload",
     "phase_waiting": "Waiting",
     "phase_running": "Running",
-    "phase_draining": "Canceled; waiting for producer to end"
+    "phase_draining": "Canceled; waiting for producer to end",
+    "admission_switch_hint": "Only controls new model admissions. Turning it off keeps current work counted until it ends; it does not cancel streams or delete rules.",
+    "save_apply_hint": "These are unsaved settings. Save the configuration and refresh to confirm the effective policy. A rejected update leaves the last applied limits running.",
+    "resource_switch_hint": "Allows resource samples on demand; no monitoring history is written to disk. Disable to stop sampling, without changing admission or streams.",
+    "switch_status": "Draft and effective switches",
+    "switch_on": "On",
+    "switch_off": "Off",
+    "resolved_model_hint": "Execution rules use resolved upstream targets, not public aliases. The arrow shows public aliases for each known target. Choose all pool targets for a shared limit; later plugin rewrites may require manual targets.",
+    "unresolved_catalog": "This Core does not advertise resolved targets. Public aliases will not be substituted. Enter an exact upstream target manually or update Core.",
+    "catalog_truncated": "The target directory is truncated. Saved selections are retained; verify targets not listed here.",
+    "stage_capacity": "Capacity in this stage",
+    "empty_active_policy": "Enabled with no rules records supported calls but imposes no concurrency or frequency limit. Add rules to apply limits."
   },
   "config_management": {
     "visual": {

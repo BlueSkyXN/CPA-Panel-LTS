@@ -3,7 +3,7 @@ import test from 'node:test';
 import fs from 'node:fs';
 import { loadTypeScript } from './testLoader.mjs';
 const m=loadTypeScript('model.ts');
-const values=(rules,extra={})=>({...m.FLOW_DEFAULT_VALUES,flowControlEnabled:true,flowControlRulesText:JSON.stringify(rules),...extra});
+const values=(rules,extra={})=>({...m.FLOW_DEFAULT_VALUES,flowControlEnabled:true,flowControlVersion:'2',flowControlRulesText:JSON.stringify(rules),...extra});
 const rule=(extra={})=>({id:'r1',stage:'request',scope:'key-model','max-concurrent':2,...extra});
 test('missing config remains disabled without new queue defaults',()=>{
  assert.deepEqual(m.readFlowControlValues({}),m.FLOW_DEFAULT_VALUES);
