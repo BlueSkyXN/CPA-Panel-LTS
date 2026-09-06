@@ -485,6 +485,18 @@ export function UsagePricingPage() {
     });
   };
 
+  const gptLongContextShortOnly = priceProfile.assumptions.gptLongContext === 'shortOnly';
+
+  const setGptLongContextShortOnly = (shortOnly: boolean) => {
+    setPriceProfile({
+      ...priceProfile,
+      assumptions: {
+        ...priceProfile.assumptions,
+        gptLongContext: shortOnly ? 'shortOnly' : 'auto',
+      },
+    });
+  };
+
   const renderEditor = () => {
     if (!selectedSummary || !draft) return null;
     const modelIsCanonicalPreset =
@@ -816,6 +828,23 @@ export function UsagePricingPage() {
           </Button>
         </div>
       )}
+
+      <section
+        className={styles.assumptionsBar}
+        aria-label={t('usage_stats.pricing_gpt_long_context_title')}
+        data-testid="pricing-gpt-long-context-toggle"
+      >
+        <div className={styles.assumptionsCopy}>
+          <strong>{t('usage_stats.pricing_gpt_long_context_title')}</strong>
+          <span>{t('usage_stats.pricing_gpt_long_context_description')}</span>
+        </div>
+        <ToggleSwitch
+          checked={!gptLongContextShortOnly}
+          onChange={(enabled) => setGptLongContextShortOnly(!enabled)}
+          label={t('usage_stats.pricing_gpt_long_context_auto')}
+          ariaLabel={t('usage_stats.pricing_gpt_long_context_title')}
+        />
+      </section>
 
       <PresetPricingCatalog />
 

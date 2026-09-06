@@ -172,6 +172,36 @@
   line-height: 1.4;
 }
 
+.assumptionsBar {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-primary) 88%, transparent);
+}
+
+.assumptionsCopy {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 320px;
+  gap: 2px;
+
+  strong {
+    font-size: 12px;
+  }
+
+  span {
+    color: var(--text-tertiary);
+    font-size: 11px;
+    line-height: 1.4;
+  }
+}
+
 .presetRecoveryNotice {
   flex-wrap: wrap;
   align-items: center;

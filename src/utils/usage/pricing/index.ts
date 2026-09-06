@@ -53,9 +53,17 @@ export interface PriceOverride {
   fast?: FastOverride;
 }
 
+export type GptLongContextAssumption = 'auto' | 'shortOnly';
+
 export interface PriceProfileAssumptions {
   historicalPricing: 'current';
   unknownServiceTier: 'standard';
+  /**
+   * 'auto' keeps the threshold-driven long/short band switch for GPT-series
+   * models; 'shortOnly' prices every GPT request against the standard short
+   * rates. Provider-branded long bands (for example grok) are never affected.
+   */
+  gptLongContext: GptLongContextAssumption;
 }
 
 /** A profile holds only user intent; immutable preset catalog cards stay external. */
@@ -293,7 +301,7 @@ export function createDefaultPriceProfileV3(): PriceProfileV3 {
   return {
     schemaVersion: PRICE_PROFILE_SCHEMA_VERSION,
     currency: PRICE_CURRENCY,
-    assumptions: { historicalPricing: 'current', unknownServiceTier: 'standard' },
+    assumptions: { historicalPricing: 'current', unknownServiceTier: 'standard', gptLongContext: 'auto' },
     aliases: {},
     overrides: {},
   };
@@ -354,6 +362,7 @@ export function normalizePriceProfileV3(value: unknown): PriceProfileNormalizati
   const warnings: string[] = [];
   const aliases: Record<string, string> = {};
   const overrides: Record<string, PriceOverride> = {};
+  let gptLongContext: GptLongContextAssumption = 'auto';
 
   if (isRecord(value.overrides)) {
     Object.entries(value.overrides).forEach(([modelName, raw]) => {
@@ -385,13 +394,17 @@ export function normalizePriceProfileV3(value: unknown): PriceProfileNormalizati
     if (value.assumptions.historicalPricing !== 'current')
       warnings.push('historical-pricing-invalid');
     if (value.assumptions.unknownServiceTier !== 'standard') warnings.push('unknown-tier-invalid');
+    const rawGptLongContext = value.assumptions.gptLongContext;
+    if (rawGptLongContext === 'shortOnly') gptLongContext = 'shortOnly';
+    else if (rawGptLongContext !== undefined && rawGptLongContext !== 'auto')
+      warnings.push('gpt-long-context-invalid');
   }
 
   return {
     profile: {
       schemaVersion: PRICE_PROFILE_SCHEMA_VERSION,
       currency: PRICE_CURRENCY,
-      assumptions: { historicalPricing: 'current', unknownServiceTier: 'standard' },
+      assumptions: { historicalPricing: 'current', unknownServiceTier: 'standard', gptLongContext },
       aliases,
       overrides,
     },
@@ -564,6 +577,14 @@ const ASSUMED_STANDARD_TIER: ResolvedServiceTier = {
   rawEffective: null,
 };
 
+/**
+ * GPT-series names share the OpenAI 272K long-context uplift. The name-based
+ * check intentionally covers aliases and custom keys that embed "gpt" so the
+ * short-only assumption also reaches overridden GPT models.
+ */
+export const isGptSeriesModelName = (modelName: string): boolean =>
+  normalizeModelKey(modelName).includes('gpt');
+
 const resolveContextBand = (standard: StandardPricing, inputTokens: number): ContextBand =>
   standard.long !== undefined && inputTokens >= standard.long.thresholdTokens ? 'long' : 'short';
 
@@ -609,8 +630,18 @@ export function estimateUsageCost(
     };
   }
 
-  const contextBand = resolveContextBand(resolved.standard, split.inputTokens);
-  const standardRates = standardRatesForBand(resolved.standard, contextBand);
+  // The short-only assumption strips the long-context band from GPT-series
+  // cards so every GPT request prices against the standard short rates.
+  const suppressGptLongBand =
+    profile.assumptions.gptLongContext === 'shortOnly' &&
+    isGptSeriesModelName(resolved.resolvedModel ?? modelName);
+  const effectiveStandard =
+    suppressGptLongBand && resolved.standard.long !== undefined
+      ? { short: resolved.standard.short }
+      : resolved.standard;
+
+  const contextBand = resolveContextBand(effectiveStandard, split.inputTokens);
+  const standardRates = standardRatesForBand(effectiveStandard, contextBand);
   let rates = standardRates;
   if (tier.tier === 'fast') {
     if (resolved.fast === null && !resolved.usesCustomOverride) {

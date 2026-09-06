@@ -463,6 +463,82 @@ test('the full input_tokens count switches GPT-5.5 at 271999, 272000, and 272001
   assert.equal(gpt56.rates.input, 4);
 });
 
+test('the GPT short-only assumption suppresses the long band without touching other providers', () => {
+  const shortOnly = pricing.createDefaultPriceProfileV3();
+  shortOnly.assumptions.gptLongContext = 'shortOnly';
+
+  const gpt = pricing.estimateUsageCost(
+    'gpt-5.5',
+    { input_tokens: 272_000, output_tokens: 1 },
+    shortOnly,
+    tier()
+  );
+  assert.equal(gpt.contextBand, 'short');
+  assert.equal(gpt.rates.input, 5);
+
+  const customGpt = pricing.createDefaultPriceProfileV3();
+  customGpt.assumptions.gptLongContext = 'shortOnly';
+  customGpt.overrides['tenant/gpt-5.5'] = {
+    standard: {
+      short: { input: 5, cachedInput: 0.5, output: 30 },
+      long: { thresholdTokens: 272_000, basis: 'inputTokens', appliesTo: 'entireRequest', rates: { input: 10, cachedInput: 1, output: 45 } },
+    },
+  };
+  const customEstimate = pricing.estimateUsageCost(
+    'tenant/gpt-5.5',
+    { input_tokens: 272_000, output_tokens: 1 },
+    customGpt,
+    tier()
+  );
+  assert.equal(customEstimate.status, 'priced');
+  assert.equal(customEstimate.contextBand, 'short');
+  assert.equal(customEstimate.rates.input, 5);
+
+  const grok = pricing.estimateUsageCost(
+    'grok-4.5',
+    { input_tokens: 200_000, output_tokens: 1 },
+    shortOnly,
+    tier()
+  );
+  assert.equal(grok.contextBand, 'long');
+  assert.equal(grok.rates.input, 4);
+
+  const auto = pricing.estimateUsageCost(
+    'gpt-5.5',
+    { input_tokens: 272_000, output_tokens: 1 },
+    undefined,
+    tier()
+  );
+  assert.equal(auto.contextBand, 'long');
+  assert.equal(auto.rates.input, 10);
+});
+
+test('normalization keeps the GPT long-context assumption backward compatible', () => {
+  const legacy = pricing.normalizePriceProfileV3({
+    schemaVersion: 3,
+    currency: 'USD',
+    assumptions: { historicalPricing: 'current', unknownServiceTier: 'standard' },
+    aliases: {},
+    overrides: {},
+  });
+  assert.equal(legacy.profile.assumptions.gptLongContext, 'auto');
+  assert.deepEqual(legacy.warnings, []);
+
+  const invalid = pricing.normalizePriceProfileV3({
+    schemaVersion: 3,
+    currency: 'USD',
+    assumptions: {
+      historicalPricing: 'current',
+      unknownServiceTier: 'standard',
+      gptLongContext: 'bogus',
+    },
+    aliases: {},
+    overrides: {},
+  });
+  assert.equal(invalid.profile.assumptions.gptLongContext, 'auto');
+  assert.deepEqual(invalid.warnings, ['gpt-long-context-invalid']);
+});
+
 test('GLM-5.2 keeps official Standard rates and explicit free cache write', () => {
   const estimate = pricing.estimateUsageCost(
     'glm-5.2',
