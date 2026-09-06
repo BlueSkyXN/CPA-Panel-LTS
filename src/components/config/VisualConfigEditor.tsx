@@ -1,3 +1,4 @@
+import { FlowControlFields } from '@/lts/flowControl/FlowControlFields';
 import {
   useCallback,
   useId,
@@ -1635,6 +1636,7 @@ export function VisualConfigEditor({
                         />
                       </SectionGrid>
                       <Divider />
+                      <FlowControlFields values={values} disabled={disabled} onChange={onChange} />
                       <div className={styles.subsectionHeader}>
                         <h3 className={styles.subsectionTitle}>
                           {t('config_management.visual.sections.headers.codex_title')}

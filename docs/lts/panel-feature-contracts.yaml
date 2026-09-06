@@ -1015,3 +1015,32 @@ features:
       - npm run check:lts
       - npm run type-check
       - npm run smoke:lts
+
+  - id: local-flow-control-config
+    status: lts-maintained
+    reason: Opt-in multi-dimensional local admission settings must preserve old YAML and be editable only with a Core that provides the read-only capability/status API.
+    panel_files:
+      - src/lts/flowControl/
+      - src/types/visualConfig.ts
+      - src/hooks/useVisualConfig.ts
+      - src/components/config/VisualConfigEditor.tsx
+      - src/lts/i18n/
+    core_endpoints:
+      - /v0/management/flow-control
+      - /v0/management/flow-control/events
+      - /v0/management/flow-control/explain
+      - /v0/management/flow-control/summary
+      - /v0/management/flow-control/details
+      - /v0/management/flow-control/preview
+      - /v0/management/flow-control/migration-preview
+    required_markers:
+      - FlowControlFields
+      - flow-control-settings
+      - key-model
+      - account-model
+      - flowControlEnabled
+    validation:
+      - npm run test:flow-control
+      - npm run check:lts
+      - npm run type-check
+      - npm run build
