@@ -9,8 +9,7 @@ interface WorkspaceState {
   initializeLayout: () => () => void;
 }
 
-export const normalizeWorkspaceLayout = (value: unknown): WorkspaceLayout => {
-  if (value === 'studio' || value === 'console') return value;
+export const normalizeWorkspaceLayout = (_value: unknown): WorkspaceLayout => {
   return 'tower';
 };
 
@@ -34,7 +33,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     }),
     {
       name: STORAGE_KEY_WORKSPACE_LAYOUT,
-      version: 1,
+      version: 2,
       migrate: (persistedState) => {
         const state = (persistedState ?? {}) as Partial<WorkspaceState> & { layout?: unknown };
         return { ...state, layout: normalizeWorkspaceLayout(state.layout) };

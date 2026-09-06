@@ -2260,13 +2260,14 @@
   "theme": {
     "switch": "Theme",
     "white": "Pure White",
-    "mist": "Soft Mist"
+    "aurora_nebula": "Aurora Nebula",
+    "aurora_dawn": "Aurora Dawn"
   },
   "workspace": {
     "appearance": "Workspace appearance",
     "switch": "Workspace layout",
     "layout_heading": "Workspace layout",
-    "theme_heading": "Light theme",
+    "theme_heading": "Theme",
     "tower": "Tower",
     "tower_desc": "Dense live operations",
     "studio": "Studio",

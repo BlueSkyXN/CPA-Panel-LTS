@@ -13,7 +13,6 @@ import { Button } from '@/components/ui/Button';
 import { PageTransition } from '@/components/common/PageTransition';
 import { SidebarNavigation } from '@/components/layout/SidebarNavigation';
 import { CommandPalette } from '@/components/layout/CommandPalette';
-import { CoreScopeRail } from '@/components/layout/CoreScopeRail';
 import {
   flattenSidebarNavPaths,
   type SidebarNavGroup,
@@ -165,9 +164,14 @@ const THEME_CARDS: Array<{
     colors: { bg: '#ffffff', card: '#ffffff', border: '#e5e7eb', textMuted: '#9ca3af' },
   },
   {
-    key: 'mist',
-    labelKey: 'theme.mist',
-    colors: { bg: '#f3f5f7', card: '#fbfcfd', border: '#dce1e7', textMuted: '#87909c' },
+    key: 'aurora-nebula',
+    labelKey: 'theme.aurora_nebula',
+    colors: { bg: '#140b2e', card: '#2a1152', border: '#8b5cf6', textMuted: '#c9b8f0' },
+  },
+  {
+    key: 'aurora-dawn',
+    labelKey: 'theme.aurora_dawn',
+    colors: { bg: '#fbfaff', card: '#ffffff', border: '#7c6cf0', textMuted: '#8f8aab' },
   },
 ];
 
@@ -177,8 +181,6 @@ const LAYOUT_CARDS: Array<{
   descriptionKey: string;
 }> = [
   { key: 'tower', labelKey: 'workspace.tower', descriptionKey: 'workspace.tower_desc' },
-  { key: 'studio', labelKey: 'workspace.studio', descriptionKey: 'workspace.studio_desc' },
-  { key: 'console', labelKey: 'workspace.console', descriptionKey: 'workspace.console_desc' },
 ];
 
 export function MainLayout() {
@@ -624,35 +626,6 @@ export function MainLayout() {
         label: t('workspace.group_runtime'),
         items: [...pluginItems, systemItem],
       },
-    ],
-    studio: [
-      {
-        id: 'studio',
-        label: t('workspace.group_workspace'),
-        items: [dashboardItem, coreItem, providersItem],
-      },
-      {
-        id: 'accounts',
-        label: t('workspace.group_accounts'),
-        items: [oauthItem, authFilesItem, quotaItem],
-      },
-      { id: 'insights', label: t('workspace.group_insights'), items: [usageItem, logsItem] },
-      {
-        id: 'settings',
-        label: t('workspace.group_settings'),
-        items: [configItem, ...pluginItems, systemItem],
-      },
-    ],
-    console: [
-      { id: 'access', label: t('workspace.scope_access'), items: [dashboardItem, configItem] },
-      {
-        id: 'credentials',
-        label: t('workspace.scope_credentials'),
-        items: [oauthItem, authFilesItem, providersItem],
-      },
-      { id: 'policy', label: t('workspace.scope_policy'), items: [coreItem, quotaItem] },
-      { id: 'observe', label: t('workspace.scope_observe'), items: [usageItem, logsItem] },
-      { id: 'extend', label: t('workspace.scope_extend'), items: [...pluginItems, systemItem] },
     ],
   };
 
@@ -1118,41 +1091,7 @@ export function MainLayout() {
             onRequestExpand={() => setSidebarCollapsed(false)}
           />
 
-          {layout === 'studio' && showSidebarLabels && (
-            <div className="studio-provider-dock">
-              <span className="studio-provider-dock-label">{t('workspace.provider_dock')}</span>
-              <div className="studio-provider-dock-grid">
-                <Link
-                  to="/oauth?provider=anthropic"
-                  title="Claude Code OAuth"
-                  data-provider="claude"
-                >
-                  CC
-                </Link>
-                <Link to="/oauth?provider=codex" title="Codex OAuth" data-provider="codex">
-                  CX
-                </Link>
-                <Link
-                  to="/oauth?provider=gemini-cli"
-                  title="Gemini CLI OAuth"
-                  data-provider="gemini"
-                >
-                  GM
-                </Link>
-                <Link
-                  to="/ai-providers?provider=claudeApi"
-                  title={t('nav.ai_providers')}
-                  data-provider="api"
-                >
-                  API
-                </Link>
-              </div>
-              <small>{t('workspace.provider_dock_hint')}</small>
-            </div>
-          )}
         </aside>
-
-        {layout === 'console' && <CoreScopeRail supportsPlugin={supportsPlugin} />}
 
         <div className={`content${isLogsPage ? ' content-logs' : ''}`} ref={contentRef}>
           <main className={`main-content${isLogsPage ? ' main-content-logs' : ''}`}>

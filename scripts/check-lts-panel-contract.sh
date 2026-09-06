@@ -81,7 +81,6 @@ for path in \
   src/components/providers/ProviderStatusBar.tsx \
   src/components/providers/hooks/useProviderRecentRequests.ts \
   src/components/layout/CommandPalette.tsx \
-  src/components/layout/CoreScopeRail.tsx \
   src/components/layout/MainLayout.tsx \
   src/components/layout/SidebarNavigation.tsx \
   src/components/layout/sidebarNavigationModel.ts \
@@ -246,21 +245,19 @@ require_file_contains src/components/layout/MainLayout.tsx "nav.provider_legacy"
 require_file_contains src/components/layout/MainLayout.tsx "data-workspace-layout"
 require_file_contains src/components/layout/MainLayout.tsx 'sidebar-mode-${effectiveSidebarMode}'
 require_file_contains src/components/layout/MainLayout.tsx "CommandPalette"
-require_file_contains src/components/layout/MainLayout.tsx "CoreScopeRail"
 require_file_contains src/stores/useThemeStore.ts "normalizeTheme"
-require_file_contains src/stores/useThemeStore.ts "version: 3"
+require_file_contains src/stores/useThemeStore.ts "version: 4"
 require_file_contains src/stores/useThemeStore.ts "removeAttribute('data-theme')"
 require_file_contains src/stores/useWorkspaceStore.ts "normalizeWorkspaceLayout"
-require_file_contains src/stores/useWorkspaceStore.ts "version: 1"
-require_file_contains src/types/common.ts "Theme = 'white' | 'mist'"
-require_file_contains src/types/common.ts "WorkspaceLayout = 'tower' | 'studio' | 'console'"
-require_file_contains src/styles/themes.scss "[data-theme='mist']"
+require_file_contains src/stores/useWorkspaceStore.ts "version: 2"
+require_file_contains src/types/common.ts "Theme = 'white' | 'aurora-nebula' | 'aurora-dawn'"
+require_file_contains src/types/common.ts "WorkspaceLayout = 'tower'"
+require_file_contains src/styles/themes.scss "[data-theme='aurora-nebula']"
 require_file_contains src/components/layout/CommandPalette.tsx "FOCUSABLE_SELECTOR"
 require_file_contains src/components/layout/CommandPalette.tsx "event.key === 'Tab'"
 require_file_contains src/stores/themeWorkspace.test.mjs "permanently migrates removed and invalid themes to white"
-require_file_contains src/stores/themeWorkspace.test.mjs "keeps only the three supported workspace layouts"
+require_file_contains src/stores/themeWorkspace.test.mjs "keeps only the tower workspace layout"
 require_file_contains scripts/smoke-lts-panel.py "Legacy paper theme did not migrate permanently to white"
-require_file_contains scripts/smoke-lts-panel.py "Studio workspace did not persist"
 require_file_contains scripts/smoke-lts-panel.py "Command palette allowed Tab focus to escape the modal"
 require_file_not_contains src/styles/themes.scss "[data-theme='dark']"
 require_file_not_contains src/components/layout/MainLayout.tsx "theme.paper"
