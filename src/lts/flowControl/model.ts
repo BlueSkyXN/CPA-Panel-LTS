@@ -1,3 +1,7 @@
+// Control characters are rejected in identifiers and free-text labels to keep
+// them out of YAML output and logs. The NUL byte is intentional here.
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\r\n\x00]/;
 export const FLOW_STAGES = ['request', 'attempt'] as const;
 export const FLOW_SCOPES = ['global', 'key', 'model', 'key-model', 'provider', 'account', 'account-model', 'credential', 'credential-model', 'key-account', 'key-account-model', 'key-credential', 'key-credential-model', 'custom'] as const;
 export interface FlowWindow extends Record<string, unknown> {
@@ -130,14 +134,14 @@ export function flowIssues(values: FlowControlValues): FlowIssue[] {
             bad('invalid_scope');
         if (r.scope !== 'custom' && (r['group-by']?.length ?? 0) > 0)
             bad('invalid_scope');
-        if (r.label !== undefined && (typeof r.label !== 'string' || new TextEncoder().encode(r.label).length > 256 || /[\r\n\x00]/.test(r.label)))
+        if (r.label !== undefined && (typeof r.label !== 'string' || new TextEncoder().encode(r.label).length > 256 || CONTROL_CHARS.test(r.label)))
             bad('invalid_id');
         if (r['auth-kind'] && !['*', 'oauth', 'apikey'].includes(r['auth-kind']))
             bad('invalid_scope');
         for (const ref of [r.key, r.account, r.credential])
             if (ref !== undefined && ref !== '' && (typeof ref !== 'string' || !opaque.test(ref)))
                 bad('invalid_reference');
-        if (r.model !== undefined && (typeof r.model !== 'string' || r.model.length > 256 || /[\r\n\x00]/.test(r.model) || r.model.replace(/\*$/, '').includes('*')))
+        if (r.model !== undefined && (typeof r.model !== 'string' || r.model.length > 256 || CONTROL_CHARS.test(r.model) || r.model.replace(/\*$/, '').includes('*')))
             bad('invalid_model');
         for (const [old, selected, model] of [[r.model, r.models, true], [r.key, r.keys, false], [r.account, r.accounts, false]] as const) {
             if (selected === undefined)
@@ -151,7 +155,7 @@ export function flowIssues(values: FlowControlValues): FlowIssue[] {
             if (old && (selected.length !== 1 || old.trim().toLowerCase() !== selected[0]?.trim().toLowerCase()))
                 bad('selection_conflict');
             for (const item of selected) {
-                if (typeof item !== 'string' || !item.trim() || item === '*' || (model ? item.length > 512 || /[\r\n\x00]/.test(item) || item.replace(/\*$/, '').includes('*') || item.endsWith('::') || item.startsWith('::') || item.split('::').length > 2 : !opaque.test(item)))
+                if (typeof item !== 'string' || !item.trim() || item === '*' || (model ? item.length > 512 || CONTROL_CHARS.test(item) || item.replace(/\*$/, '').includes('*') || item.endsWith('::') || item.startsWith('::') || item.split('::').length > 2 : !opaque.test(item)))
                     bad('invalid_selection');
             }
         }
@@ -159,7 +163,7 @@ export function flowIssues(values: FlowControlValues): FlowIssue[] {
             bad('migrate_required');
         if (r.stage === 'request' && [r.model, ...(r.models ?? [])].some(v => typeof v === 'string' && v.includes('::')))
             bad('invalid_model');
-        if (r.provider !== undefined && (typeof r.provider !== 'string' || r.provider.length > 64 || /[\r\n\x00]/.test(r.provider)))
+        if (r.provider !== undefined && (typeof r.provider !== 'string' || r.provider.length > 64 || CONTROL_CHARS.test(r.provider)))
             bad('invalid_scope');
         const concurrent = r['max-concurrent'] ?? 0;
         if (!integer(concurrent, 0, 100000))

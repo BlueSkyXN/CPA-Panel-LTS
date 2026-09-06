@@ -2,6 +2,7 @@ import { useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
+import { FLOW_CONTROL_ENDPOINTS } from '@/services/api/flowControl';
 import { apiClient } from '@/services/api/client';
 import {
   asRecord, flowIssues, mergeMigration, nextRule, parseRules, policyFromValues,
@@ -83,7 +84,7 @@ export function FlowControlFieldsView({
     setMigrationError(false);
     setAck(false);
     try {
-      const raw = asRecord(await apiClient.post<unknown>('/flow-control/migration-preview', policyFromValues(values)));
+      const raw = asRecord(await apiClient.post<unknown>(FLOW_CONTROL_ENDPOINTS.migrationPreview, policyFromValues(values)));
       if (!raw || !asRecord(raw.config) || !Array.isArray(raw.issues)) throw new Error('Invalid migration');
       setMigration({
         config: raw.config as Record<string, unknown>,

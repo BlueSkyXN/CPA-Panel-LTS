@@ -55,7 +55,7 @@ export function writeFlowControlValues(doc: Document, values: FlowControlValues,
     if (!rules)
         return; // Keep unknown future draft; the validator blocks enabled invalid edits.
     const old = doc.getIn([...root, 'rules'], true);
-    const next = doc.createNode([]);
+    const next = doc.createNode<unknown[]>([]);
     if (!isSeq(next))
         return;
     if (isSeq(old)) {
@@ -81,7 +81,7 @@ export function writeFlowControlValues(doc: Document, values: FlowControlValues,
                 continue;
             if (field === 'windows' && Array.isArray(value)) {
                 const before = node.get('windows', true);
-                const windows = doc.createNode([]);
+                const windows = doc.createNode<unknown[]>([]);
                 if (!isSeq(windows))
                     continue;
                 if (isSeq(before)) {

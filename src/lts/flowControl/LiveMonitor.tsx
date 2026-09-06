@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
+import { FLOW_CONTROL_ENDPOINTS } from '@/services/api/flowControl';
 import { apiClient } from '@/services/api/client';
 import { asRecord, canObserveLive, type FlowActivity, type FlowCapabilities } from './model';
 import { referenceLabel } from './insights';
@@ -67,7 +68,7 @@ export function LiveMonitor({ data, live, setLive, liveState, history, onRefresh
     setError(false);
     try {
       const query = new URLSearchParams({ ...filters, offset: String(offset), limit: String(DETAILS_PAGE_SIZE) });
-      const raw = asRecord(await apiClient.get<unknown>(`/flow-control/details?${query}`));
+      const raw = asRecord(await apiClient.get<unknown>(`${FLOW_CONTROL_ENDPOINTS.details}?${query}`));
       if (!raw || !Array.isArray(raw.activity) || typeof raw['matching-total'] !== 'number') {
         throw new Error('Invalid flow-control details');
       }

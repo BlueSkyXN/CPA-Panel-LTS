@@ -1393,7 +1393,7 @@ done
 # Keep this optional Core-owned settings surface and its status reader together.
 require_path src/lts/flowControl
 require_file_contains src/components/config/VisualConfigEditor.tsx "FlowControlFields"
-require_file_contains src/lts/flowControl/useStatus.ts "'/flow-control'"
+require_file_contains src/lts/flowControl/useStatus.ts "FLOW_CONTROL_ENDPOINTS.status"
 require_file_contains src/lts/flowControl/model.ts "key-model"
 require_file_contains src/lts/flowControl/model.ts "account-model"
 

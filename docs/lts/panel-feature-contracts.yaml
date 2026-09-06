@@ -1021,6 +1021,7 @@ features:
     reason: Opt-in multi-dimensional local admission settings must preserve old YAML and be editable only with a Core that provides the read-only capability/status API.
     panel_files:
       - src/lts/flowControl/
+      - src/services/api/flowControl.ts
       - src/types/visualConfig.ts
       - src/hooks/useVisualConfig.ts
       - src/components/config/VisualConfigEditor.tsx

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiClient } from '@/services/api/client';
 import { useAuthStore } from '@/stores';
+import { FLOW_CONTROL_ENDPOINTS } from '@/services/api/flowControl';
 import { computeApiUrl } from '@/utils/connection';
 import {
   asRecord, canObserveLive, mergeSummary, parseFlowCapabilities, parseFlowEvent,
@@ -33,7 +34,7 @@ export function useFlowControlStatus() {
     setSupport({ state: 'loading' });
     setHistory([]);
     if (connectionStatus === 'connected') {
-      void apiClient.get<unknown>('/flow-control').then((raw) => {
+      void apiClient.get<unknown>(FLOW_CONTROL_ENDPOINTS.status).then((raw) => {
         if (stopped) return;
         const data = parseFlowCapabilities(raw);
         setSupport(data ? { state: 'ready', data } : { state: 'unsupported' });
@@ -93,7 +94,7 @@ export function useFlowControlStatus() {
       // Refresh the rule/alias directory only after a policy or process change,
       // not on every summary. A late response must not replace a newer summary.
       if ((lastRevision !== undefined && state['policy-revision'] !== lastRevision) || restarted) {
-        void apiClient.get<unknown>('/flow-control').then((raw) => {
+        void apiClient.get<unknown>(FLOW_CONTROL_ENDPOINTS.status).then((raw) => {
           if (stopped) return;
           const data = parseFlowCapabilities(raw);
           if (!data) return;
@@ -118,7 +119,7 @@ export function useFlowControlStatus() {
       };
       resetWatchdog();
       try {
-        const response = await fetch(`${computeApiUrl(apiBase)}/flow-control/events`, {
+        const response = await fetch(`${computeApiUrl(apiBase)}${FLOW_CONTROL_ENDPOINTS.events}`, {
           headers: { Authorization: `Bearer ${managementKey}`, Accept: 'text/event-stream' },
           signal: controller.signal, cache: 'no-store', redirect: 'error',
         });
