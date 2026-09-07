@@ -2106,6 +2106,8 @@ def assert_config_yaml_roundtrip(state: MockCoreState) -> None:
 
     source_payload = state.config_yaml_puts[0]
     visual_payload = state.config_yaml_puts[-1]
+    if 'word-obfuscation-smoke' not in visual_payload or 'sensitive-words:' not in visual_payload:
+        raise AssertionError('Visual save did not persist Antigravity sensitive words')
     for marker in [
         "source-smoke-marker: saved",
         "unmanaged-lts-smoke: keep-me",
@@ -5871,6 +5873,12 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
                 raise AssertionError("Remember password checkbox did not become checked")
             page.get_by_role("button", name=re.compile("Login|Connect", re.I)).click()
             page.wait_for_url(re.compile(r".*/#/$"), timeout=20_000)
+            for shortcut in ('Control+b', 'Meta+b'):
+                before = page.locator('.app-shell').evaluate("node => node.classList.contains('sidebar-is-collapsed')")
+                page.keyboard.press(shortcut)
+                page.wait_for_function("before => document.querySelector('.app-shell').classList.contains('sidebar-is-collapsed') !== before", arg=before)
+                page.keyboard.press(shortcut)
+                page.wait_for_function("before => document.querySelector('.app-shell').classList.contains('sidebar-is-collapsed') === before", arg=before)
             run_sidebar_navigation_smoke(page, state)
 
             route_checks = [
@@ -5970,6 +5978,14 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             page.get_by_role("button", name=re.compile(r"^New$", re.I)).first.click()
             sheet = page.get_by_role("dialog").last
             sheet.get_by_role("textbox", name="API key").fill("codex-smoke-new")
+            animation = sheet.evaluate("node => getComputedStyle(node).animationName")
+            if 'sheet-slide-in' not in animation:
+                raise AssertionError(f'Sheet entrance animation is missing: {animation}')
+            page.emulate_media(reduced_motion='reduce')
+            reduced = sheet.evaluate("node => ({animation: getComputedStyle(node).animationName, transform: getComputedStyle(node).transform})")
+            if reduced != {'animation': 'none', 'transform': 'none'}:
+                raise AssertionError(f'Sheet ignored reduced motion: {reduced}')
+            page.emulate_media(reduced_motion='no-preference')
             sheet.get_by_label("Base URL").fill("https://codex.new.example/v1")
             sheet.get_by_label("Enable WebSockets").check()
             sheet.get_by_text("Custom models", exact=True).click()
@@ -6281,6 +6297,13 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             page.get_by_label("Log to File").evaluate(
                 "(element) => { if (element.checked) element.click(); }"
             )
+            words = page.locator('[data-testid="antigravity-sensitive-words"]')
+            words.get_by_role('button', name='Add', exact=True).click()
+            words.get_by_role('textbox').first.fill('word-obfuscation-smoke')
+            before = page.locator('.app-shell').evaluate("node => node.classList.contains('sidebar-is-collapsed')")
+            words.get_by_role('textbox').first.press('Control+b')
+            if page.locator('.app-shell').evaluate("node => node.classList.contains('sidebar-is-collapsed')") != before:
+                raise AssertionError('Sidebar shortcut intercepted the config editor')
             redis_retention = page.get_by_label("Redis Usage Queue Retention (seconds)")
             redis_retention.fill("0")
             page.get_by_text("Enter a whole number between 1 and 3600", exact=True).wait_for()

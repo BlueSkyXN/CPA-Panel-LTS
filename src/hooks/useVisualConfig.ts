@@ -1125,6 +1125,13 @@ function getNextDirtyFields(
     );
   }
 
+  if (Object.prototype.hasOwnProperty.call(patch, 'antigravitySensitiveWords')) {
+    updateDirty(
+      'antigravitySensitiveWords',
+      areStringArraysEqual(nextValues.antigravitySensitiveWords, baselineValues.antigravitySensitiveWords)
+    );
+  }
+
   if (Object.prototype.hasOwnProperty.call(patch, 'codexAbnormalReasoningRetryModelContains')) {
     updateDirty(
       'codexAbnormalReasoningRetryModelContains',
@@ -1309,6 +1316,7 @@ export function useVisualConfig() {
       const payload = asRecord(parsed.payload);
       const streaming = asRecord(parsed.streaming);
       const plugins = asRecord(parsed.plugins);
+      const antigravity = asRecord(parsed.antigravity);
       const codex = asRecord(parsed.codex);
       const codexAbnormalReasoningRetry = asRecord(codex?.['abnormal-reasoning-retry']);
       const codexAbnormalReasoningHedgedRetry = asRecord(
@@ -1379,6 +1387,7 @@ export function useVisualConfig() {
           parsed['antigravity-signature-cache-enabled'] ?? true
         ),
         antigravitySignatureBypassStrict: Boolean(parsed['antigravity-signature-bypass-strict']),
+        antigravitySensitiveWords: parseStringList(antigravity?.['sensitive-words']),
 
         claudeHeaderUserAgent:
           typeof claudeHeaderDefaults?.['user-agent'] === 'string'
@@ -1698,6 +1707,11 @@ export function useVisualConfig() {
             ['antigravity-signature-bypass-strict'],
             values.antigravitySignatureBypassStrict
           );
+        }
+        if (dirtyFields.has('antigravitySensitiveWords')) {
+          ensureMapInDoc(doc, ['antigravity']);
+          setStringListInDoc(doc, ['antigravity', 'sensitive-words'], values.antigravitySensitiveWords);
+          deleteIfMapEmpty(doc, ['antigravity']);
         }
 
         const claudeHeadersDirty =

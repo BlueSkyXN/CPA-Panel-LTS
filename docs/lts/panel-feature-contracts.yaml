@@ -602,6 +602,9 @@ features:
       - payloadRuleRawParamRow
       - payloadJsonInput
       - pluginStoreSources
+      - antigravitySensitiveWords
+      - antigravity-sensitive-words
+      - sensitive-words
       - parsePluginStoreSources
       - dirtyFields.has('pluginStoreSources')
       - transientErrorCooldownSeconds

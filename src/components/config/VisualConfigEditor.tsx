@@ -1480,6 +1480,21 @@ export function VisualConfigEditor({
                             }
                           />
                         </SectionGrid>
+                        <div className={styles.fieldShell} data-testid="antigravity-sensitive-words">
+                          <label className={styles.fieldLabel}>
+                            {t('config_management.visual.sections.system.antigravity_sensitive_words')}
+                          </label>
+                          <StringListEditor
+                            value={values.antigravitySensitiveWords}
+                            disabled={disabled}
+                            inputAriaLabel={t('config_management.visual.sections.system.antigravity_sensitive_words_label')}
+                            placeholder={t('config_management.visual.sections.system.antigravity_sensitive_words_placeholder')}
+                            onChange={(antigravitySensitiveWords) => onChange({ antigravitySensitiveWords })}
+                          />
+                          <div className={styles.fieldHint}>
+                            {t('config_management.visual.sections.system.antigravity_sensitive_words_desc')}
+                          </div>
+                        </div>
                       </SectionStack>
                     </SectionSubsection>
                   </SectionStack>

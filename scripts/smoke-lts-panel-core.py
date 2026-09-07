@@ -1661,6 +1661,9 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
     logging_was_checked = logging_toggle.is_checked()
     logging_toggle.evaluate("(element) => element.click()")
     expected_logging = not logging_was_checked
+    words = page.locator('[data-testid="antigravity-sensitive-words"]')
+    words.get_by_role('button', name='Add', exact=True).click()
+    words.get_by_role('textbox').last.fill('word-obfuscation-smoke')
     page.get_by_role("tab", name="Network & Routing", exact=True).click()
     transient_cooldown_input = page.get_by_label("Transient Error Cooldown (seconds)")
     transient_cooldown_input.scroll_into_view_if_needed()
@@ -1732,6 +1735,8 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
     seen.append("BROWSER visual save PUT /v0/management/config.yaml")
 
     visual_saved_yaml = request_text(api_url, "/v0/management/config.yaml")
+    if 'word-obfuscation-smoke' not in visual_saved_yaml or 'sensitive-words:' not in visual_saved_yaml:
+        raise AssertionError('Real Core did not persist Antigravity sensitive words')
     expected_logging_text = f"logging-to-file: {str(expected_logging).lower()}"
     if expected_logging_text not in visual_saved_yaml:
         raise AssertionError("Browser visual save did not persist logging-to-file toggle")

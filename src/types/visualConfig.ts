@@ -156,6 +156,7 @@ export type VisualConfigValues = FlowControlValues & {
   wsAuth: boolean;
   enableGeminiCliEndpoint: boolean;
   antigravitySignatureCacheEnabled: boolean;
+  antigravitySensitiveWords: string[];
   antigravitySignatureBypassStrict: boolean;
   claudeHeaderUserAgent: string;
   claudeHeaderPackageVersion: string;
@@ -242,6 +243,7 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   wsAuth: false,
   enableGeminiCliEndpoint: false,
   antigravitySignatureCacheEnabled: true,
+  antigravitySensitiveWords: [],
   antigravitySignatureBypassStrict: false,
   claudeHeaderUserAgent: '',
   claudeHeaderPackageVersion: '',
