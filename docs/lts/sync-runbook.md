@@ -10,6 +10,8 @@
 
 ## Summary
 
+最新分支收尾和逐提交决策见 [2026-09-07 intake](upstream-intake-20260907.md)：审计至上游 `v1.22.14`，按 LTS 架构适配快捷键、Sheet、俄语和 Antigravity 配置；推广、不同 UI 架构及未确认合同不混入主线。
+
 `CPA-Panel-LTS` should not use the same full-sync strategy as `CPA-Core-LTS`.
 
 Core can use protected full-sync because its protected usage delta is small and can be replayed at a few integration points. Panel is different: the upstream management UI moved away from complete usage statistics and directly deleted the LTS-protected usage page, store, API client, and utilities. A blind merge would remove the main reason this repository exists.
