@@ -16,6 +16,7 @@ import mimetypes
 import os
 import re
 import socket
+import subprocess
 import sys
 import threading
 from datetime import datetime, timedelta, timezone
@@ -27,6 +28,9 @@ from urllib.parse import parse_qs, unquote, urlparse
 ROOT = Path(__file__).resolve().parents[1]
 DIST = ROOT / "dist"
 INDEX_HTML = DIST / "index.html"
+PRICING_FIXTURES = json.loads(
+    (ROOT / "scripts/fixtures/usage-pricing-smoke.json").read_text(encoding="utf-8")
+)
 
 
 def find_free_port() -> int:
@@ -3091,6 +3095,20 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
         ):
             raise AssertionError("Grok 4.6 Official source does not point to xAI model pricing")
 
+        sol_model = catalog.locator('[data-testid="preset-pricing-model"][data-model="gpt-5.6-sol"]')
+        for band, expected_rates in [
+            ("short", {"Input": "$4", "Cached input": "$0.4", "Cache write": "$5", "Output": "$20"}),
+            ("long", {"Input": "$8", "Cached input": "$0.8", "Cache write": "$10", "Output": "$30"}),
+        ]:
+            sol_row = sol_model.locator(f'tr[data-context-band="{band}"]')
+            for label, expected_rate in expected_rates.items():
+                actual = sol_row.locator(f'td[data-label="{label}"] strong').first.inner_text()
+                if actual != expected_rate:
+                    raise AssertionError(f"Sol {band} {label}: {actual!r}, expected {expected_rate!r}")
+            fast_text = sol_row.locator('td[data-label="Fast policies"]').inner_text()
+            if "Official API ×2.00" not in fast_text or "unsupported" in fast_text.lower():
+                raise AssertionError(f"Sol {band} lost its supported Fast pricing: {fast_text!r}")
+
         long_context_cell_text = (
             catalog.locator(
                 '[data-testid="preset-pricing-model"][data-model="gpt-5.6-sol"] '
@@ -3424,33 +3442,27 @@ def run_usage_pricing_smoke(page: Any) -> None:
     if storage_after_reset["v3"]["overrides"] or storage_after_reset["v3"]["aliases"]:
         raise AssertionError("Resetting pricing did not clear v3 overrides and aliases")
 
+    # A historical Sol override is a real custom price, not an obsolete duplicate.
+    # It must survive reloads without offering automatic preset-equivalent recovery.
     page.evaluate(
-        """() => localStorage.setItem(
-          'cli-proxy-model-prices-v3',
-          JSON.stringify({
-            schemaVersion: 3,
-            currency: 'USD',
-            assumptions: { historicalPricing: 'current', unknownServiceTier: 'standard' },
-            aliases: {},
-            overrides: {
-              'gpt-5.6-sol': {
-                standard: {
-                  short: {
-                    input: 5,
-                    cachedInput: 0.5,
-                    cacheWrite: 6.25,
-                    output: 30
-                  }
-                }
-              },
-              'grok-4.5': {
-                standard: {
-                  short: { input: 2, cachedInput: 0, output: 6 }
-                }
-              }
-            }
-          })
-        )"""
+        "profile => localStorage.setItem('cli-proxy-model-prices-v3', JSON.stringify(profile))",
+        PRICING_FIXTURES["savedOldSol"]["profile"],
+    )
+    page.reload(wait_until="domcontentloaded")
+    page.get_by_role("heading", name="Pricing workspace", exact=True).wait_for()
+    gpt56_row.get_by_text("Custom", exact=True).wait_for()
+    if page.locator('[data-testid="pricing-preset-recovery"]').count() != 0:
+        raise AssertionError("Saved old Sol rates were incorrectly offered as preset-equivalent")
+    historical_profile = page.evaluate(
+        "() => JSON.parse(localStorage.getItem('cli-proxy-model-prices-v3'))"
+    )
+    if historical_profile.get("overrides") != PRICING_FIXTURES["savedOldSol"]["profile"]["overrides"]:
+        raise AssertionError("Reloading the pricing workspace changed saved old Sol rates")
+
+    # Share the exact positive recovery fixture with the fast pre-browser tests.
+    page.evaluate(
+        "profile => localStorage.setItem('cli-proxy-model-prices-v3', JSON.stringify(profile))",
+        PRICING_FIXTURES["v3"]["profile"],
     )
     page.reload(wait_until="domcontentloaded")
     page.get_by_role("heading", name="Pricing workspace", exact=True).wait_for()
@@ -3599,7 +3611,72 @@ def run_usage_pricing_smoke(page: Any) -> None:
     page.locator('[data-testid="pricing-editor"]').wait_for()
 
 
+def assert_request_events_sticky_header(page: Any, region: Any) -> None:
+    original_height = region.evaluate("node => node.style.maxHeight")
+    try:
+        region.evaluate("node => { node.style.maxHeight = '160px'; node.scrollTop = 100; }")
+        page.evaluate("() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
+        metrics = region.evaluate("""node => ({
+          scrollTop: node.scrollTop,
+          regionTop: node.getBoundingClientRect().top,
+          headerTop: node.querySelector('thead th').getBoundingClientRect().top,
+          position: getComputedStyle(node.querySelector('thead th')).position,
+        })""")
+        if metrics["scrollTop"] <= 0 or metrics["position"] != "sticky" or abs(metrics["headerTop"] - metrics["regionTop"]) > 3:
+            raise AssertionError(f"Request-event header did not remain fixed during vertical scroll: {metrics!r}")
+    finally:
+        region.evaluate("(node, height) => { node.style.maxHeight = height; node.scrollTop = 0; }", original_height)
+
+
+def run_usage_events_workspace_smoke(context: Any, app_url: str) -> None:
+    workspace = context.new_page()
+    workspace.set_default_timeout(15_000)
+    now = datetime.now(timezone.utc)
+    details = [
+        {
+            "timestamp": (now - timedelta(seconds=index)).isoformat(),
+            "tokens": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+            "failed": False,
+        }
+        for index in range(625)
+    ]
+    payload = {"usage": {"apis": {"POST /v1/responses": {"models": {"gpt-5.6-sol": {"details": details}}}}}}
+    try:
+        workspace.route("**/v0/management/usage", lambda route: route.fulfill(
+            status=200, content_type="application/json", body=json.dumps(payload)
+        ))
+        workspace.goto(f"{app_url}?route=events-workspace#/usage/events?range=all", wait_until="domcontentloaded")
+        workspace.get_by_role("heading", name="Request details", exact=True).wait_for()
+        region = workspace.get_by_role("region", name="Request events table", exact=True)
+        region.wait_for()
+        region.locator("tbody tr").nth(99).wait_for()
+        if region.locator("tbody tr").count() != 100:
+            raise AssertionError("The request workspace must render only the first 100 rows")
+        assert_request_events_sticky_header(workspace, region)
+        for _ in range(6):
+            workspace.get_by_role("button", name="Next page", exact=True).click()
+        workspace.get_by_text("601–625 of 625 requests. Export includes all filtered requests.", exact=True).wait_for()
+        if region.locator("tbody tr").count() != 25:
+            raise AssertionError("Rows beyond the former 500-row cap were not reachable")
+        if not workspace.get_by_role("button", name="Next page", exact=True).is_disabled():
+            raise AssertionError("The last request page must disable Next page")
+        with workspace.expect_download() as pending:
+            workspace.get_by_role("button", name="Export JSON", exact=True).click()
+        exported = json.loads(Path(pending.value.path()).read_text(encoding="utf-8"))
+        if len(exported) != 625:
+            raise AssertionError("Request export was incorrectly limited to the current page")
+        workspace.set_viewport_size({"width": 390, "height": 844})
+        metrics = workspace.evaluate("() => ({width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth})")
+        if metrics["scroll"] > metrics["width"] + 1:
+            raise AssertionError(f"Request workspace leaked horizontal scroll to the page: {metrics!r}")
+    finally:
+        workspace.close()
+
+
 def run_usage_service_tier_smoke(page: Any) -> None:
+    if page.get_by_role("region", name="Request events table", exact=True).count() != 0:
+        raise AssertionError("The overview mounted the request table before it was requested")
+    page.get_by_role("button", name="Show details here", exact=True).click()
     card = page.get_by_text("Request Events", exact=True).locator("xpath=../..")
     card.wait_for()
     table_region = card.get_by_role("region", name="Request events table", exact=True)
@@ -3617,11 +3694,11 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     card.get_by_role("columnheader", name="Tier", exact=True).wait_for()
     card.get_by_role("columnheader", name="Effort", exact=True).wait_for()
     card.get_by_role("columnheader", name="Caller Key", exact=True).wait_for()
-    card.get_by_role("columnheader", name="TTFB", exact=True).wait_for()
-    card.get_by_role("columnheader", name="First Content", exact=True).wait_for()
-    card.get_by_role("columnheader", name="TTFT", exact=True).wait_for()
-    card.get_by_role("columnheader", name="TTFA", exact=True).wait_for()
-    card.get_by_role("columnheader", name="Output TPS", exact=True).wait_for()
+    card.get_by_role("columnheader", name="Upstream TTFB", exact=True).wait_for()
+    card.get_by_role("columnheader", name="First Text", exact=True).wait_for()
+    card.get_by_role("columnheader", name="First Reasoning", exact=True).wait_for()
+    card.get_by_role("columnheader", name="First Answer", exact=True).wait_for()
+    card.get_by_role("columnheader", name="Output TPS (estimate)", exact=True).wait_for()
     card.get_by_role("columnheader", name="Avg TPS", exact=True).wait_for()
     card.locator('td[data-request-performance="ttfb"][data-ttfb-ms="70"]').wait_for()
     card.locator(
@@ -4828,10 +4905,10 @@ def run_usage_request_event_clock_smoke(context: Any, app_url: str) -> None:
             ),
         )
         clock_page.goto(
-            f"{app_url}?route=request-events-clock#/usage",
+            f"{app_url}?route=request-events-clock#/usage/events",
             wait_until="domcontentloaded",
         )
-        clock_page.wait_for_function("() => window.location.hash.endsWith('/usage')")
+        clock_page.wait_for_function("() => window.location.hash.endsWith('/usage/events')")
         card = clock_page.get_by_text("Request Events", exact=True).locator("xpath=../..")
         card.wait_for()
         rows = card.locator("tbody tr")
@@ -4899,7 +4976,7 @@ def run_usage_request_event_column_storage_smoke(context: Any, app_url: str) -> 
     ]
     try:
         storage_page.goto(
-            f"{app_url}?route=request-events-columns#/usage",
+            f"{app_url}?route=request-events-columns#/usage/events",
             wait_until="domcontentloaded",
         )
         storage_page.evaluate(
@@ -5761,19 +5838,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             ) {
               localStorage.setItem(
                 'cli-proxy-model-prices-v2',
-                JSON.stringify({
-                  'gpt-5.6-sol': {
-                    prompt: 4,
-                    completion: 20,
-                    cache: 0.4
-                  },
-                  'gpt-5.4': {
-                    prompt: 2.5,
-                    completion: 15,
-                    cache: 0.25,
-                    cacheWrite: 2.5
-                  }
-                })
+                JSON.stringify(__LTS_SMOKE_V2_PROFILE__)
               );
             }
             window.__ltsSmokeClipboard = [];
@@ -5785,7 +5850,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
                 },
               },
             });
-            """
+            """.replace("__LTS_SMOKE_V2_PROFILE__", json.dumps(PRICING_FIXTURES["v2"]["profile"]))
         )
         page = context.new_page()
         page.set_default_timeout(15_000)
@@ -5867,6 +5932,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
                     if not native_clock_preserved:
                         raise AssertionError("Request-event clock smoke polluted the main page clock")
                     run_usage_request_event_column_storage_smoke(context, app_url)
+                    run_usage_events_workspace_smoke(context, app_url)
                     run_usage_contract_import_smoke(page, state)
                 elif route == "/usage/pricing":
                     run_usage_pricing_smoke(page)
@@ -6556,6 +6622,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run LTS Panel browser smoke against a mock Core API.")
     parser.add_argument("--headed", action="store_true", help="Run Chromium headed for debugging.")
     args = parser.parse_args()
+
+    # Fail with the mismatched fixture/model before opening a browser, rather
+    # than timing out while waiting for a notice the actual pricing engine omits.
+    subprocess.run(
+        ["node", "--test", "scripts/usage-pricing-smoke-fixtures.test.mjs"],
+        cwd=ROOT,
+        check=True,
+    )
 
     if not INDEX_HTML.exists():
         print("dist/index.html is missing. Run `npm run build` first.", file=sys.stderr)

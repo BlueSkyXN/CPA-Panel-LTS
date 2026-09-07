@@ -1,18 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import * as esbuild from 'esbuild';
+import { fileURLToPath } from 'node:url';
+import { loadTypeScript } from '../../../../scripts/testTypeScript.mjs';
 
-const bundle = await esbuild.build({
-  entryPoints: [new URL('./index.ts', import.meta.url).pathname],
-  bundle: true,
-  format: 'esm',
-  platform: 'node',
-  write: false,
-  target: 'es2020',
-});
-const pricing = await import(
-  `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`
-);
+const pricing = loadTypeScript(fileURLToPath(new URL('./index.ts', import.meta.url)));
 
 const tier = (tierName = 'std', evidence = 'effective') => ({
   tier: tierName,
@@ -27,7 +18,7 @@ const approx = (actual, expected) =>
 
 test('catalog is versioned, self-describing, exact, and keeps provider rate boundaries explicit', () => {
   const sol = pricing.findCatalogEntry('gpt-5.6-sol');
-  assert.equal(pricing.PRICE_CATALOG_AS_OF, '2026-09-05');
+  assert.equal(pricing.PRICE_CATALOG_AS_OF, '2026-09-07');
   assert.equal(sol.currency, 'USD');
   assert.deepEqual(sol.aliases, ['gpt-5.6']);
   assert.equal(sol.sourceUrl, 'https://developers.openai.com/api/docs/pricing');
@@ -35,7 +26,7 @@ test('catalog is versioned, self-describing, exact, and keeps provider rate boun
   assert.equal(sol.standard.long.basis, 'inputTokens');
   assert.equal(sol.standard.long.appliesTo, 'entireRequest');
   assert.equal(sol.fast.multiplier, 2);
-  assert.equal(sol.fast.longSupported, false);
+  assert.equal(sol.fast.longSupported, true);
   const terra = pricing.findCatalogEntry('gpt-5.6-terra');
   assert.deepEqual(terra.standard.short, {
     input: 2,
@@ -49,7 +40,7 @@ test('catalog is versioned, self-describing, exact, and keeps provider rate boun
     cacheWrite: 5,
     output: 18,
   });
-  assert.equal(terra.asOf, '2026-07-31');
+  assert.equal(terra.asOf, '2026-09-07');
   const luna = pricing.findCatalogEntry('gpt-5.6-luna');
   assert.deepEqual(luna.standard.short, {
     input: 0.2,
@@ -63,7 +54,7 @@ test('catalog is versioned, self-describing, exact, and keeps provider rate boun
     cacheWrite: 0.5,
     output: 1.8,
   });
-  assert.equal(luna.asOf, '2026-07-31');
+  assert.equal(luna.asOf, '2026-09-07');
   const gpt55 = pricing.findCatalogEntry('gpt-5.5');
   assert.equal(gpt55.standard.long.basis, 'inputTokens');
   assert.equal(gpt55.standard.long.appliesTo, 'entireRequest');
@@ -157,6 +148,55 @@ test('catalog is versioned, self-describing, exact, and keeps provider rate boun
   assert.equal(grok46.sourceUrl, 'https://docs.x.ai/developers/models/grok-4.6');
   assert.equal(grok46.pricingNotesUrl, undefined);
   assert.equal(grok46.asOf, '2026-08-18');
+});
+
+test('September GPT-5.6 rates price Standard and Fast in both context bands', () => {
+  for (const [model, short, long] of [
+    ['gpt-5.6-sol', [4, 0.4, 5, 20], [8, 0.8, 10, 30]],
+    ['gpt-5.6-terra', [2, 0.2, 2.5, 12], [4, 0.4, 5, 18]],
+    ['gpt-5.6-luna', [0.2, 0.02, 0.25, 1.2], [0.4, 0.04, 0.5, 1.8]],
+  ]) {
+    for (const [input, band, rates] of [
+      [200_000, 'short', short],
+      [300_000, 'long', long],
+    ]) {
+      for (const [serviceTier, multiplier] of [['std', 1], ['fast', 2]]) {
+        const estimate = pricing.estimateUsageCost(model, {
+          input_tokens: input,
+          cache_read_tokens: 30_000,
+          cache_creation_tokens: 40_000,
+          output_tokens: 100_000,
+        }, undefined, tier(serviceTier));
+        assert.equal(estimate.status, 'priced');
+        assert.equal(estimate.contextBand, band);
+        assert.deepEqual(estimate.rates, {
+          input: rates[0] * multiplier,
+          cachedInput: rates[1] * multiplier,
+          cacheWrite: rates[2] * multiplier,
+          output: rates[3] * multiplier,
+        });
+        approx(estimate.amount, (
+          (input - 70_000) * rates[0] + 30_000 * rates[1] +
+          40_000 * rates[2] + 100_000 * rates[3]
+        ) * multiplier / 1_000_000);
+      }
+    }
+  }
+});
+
+test('Sol pricing update preserves saved old rates instead of treating them as current presets', () => {
+  const { profile } = pricing.migrateModelPricesV2ToV3({
+    'gpt-5.6-sol': { prompt: 5, cache: 0.5, cacheWrite: 6.25, completion: 30 },
+  });
+  const before = JSON.stringify(profile);
+  const estimate = pricing.estimateUsageCost('gpt-5.6-sol', {
+    input_tokens: 200_000, output_tokens: 100_000,
+    cache_read_tokens: 30_000, cache_creation_tokens: 40_000,
+  }, profile, tier());
+  assert.equal(estimate.modelMatch, 'custom');
+  approx(estimate.amount, 3.915);
+  assert.deepEqual(pricing.restorePresetEquivalentOverrides(profile).restoredModels, []);
+  assert.equal(JSON.stringify(profile), before);
 });
 
 test('GPT-5.3 Codex Spark is a free preset across every billable token category', () => {
@@ -313,10 +353,10 @@ test('v2 migration preserves Auto cache-write, explicit zero, and old string val
 test('v2 migration preserves matching rates until the user explicitly restores complete presets', () => {
   const { profile } = pricing.migrateModelPricesV2ToV3({
     'gpt-5.6-sol': {
-      prompt: 5,
-      completion: 30,
-      cache: 0.5,
-      cacheWrite: 6.25,
+      prompt: 4,
+      completion: 20,
+      cache: 0.4,
+      cacheWrite: 5,
     },
     'gpt-5.4': {
       prompt: 2.5,
@@ -343,7 +383,7 @@ test('v2 migration preserves matching rates until the user explicitly restores c
   assert.equal(pricing.resolvePriceProfile('gpt-5.6-sol', recovery.profile).fast.multiplier, 2);
   assert.equal(
     pricing.resolvePriceProfile('gpt-5.6-sol', recovery.profile).standard.long.rates.output,
-    45
+    30
   );
 });
 
@@ -354,7 +394,7 @@ test('preset-equivalent v3 recovery is opt-in and preserves real custom override
     overrides: {
       'gpt-5.6-sol': {
         standard: {
-          short: { input: 5, cachedInput: 0.5, cacheWrite: 6.25, output: 30 },
+          short: { input: 4, cachedInput: 0.4, cacheWrite: 5, output: 20 },
         },
       },
       'gpt-5.6-terra': {
@@ -724,7 +764,7 @@ test('cost uses the normalized cache split and honors Auto versus explicit free 
     cacheWriteTokens: 40_000,
     promptTokens: 130_000,
   });
-  approx(preset.amount, 3.915);
+  approx(preset.amount, 2.732);
 
   const auto = pricing.migrateModelPricesV2ToV3({
     local: { prompt: 10, completion: 20, cache: 1 },
@@ -915,7 +955,7 @@ test('Astra pricing is exact and does not redate older provider prices', () => {
   assert.equal(pricing.findCatalogEntry('gpt-6-astra-preview'), null);
   assert.equal(pricing.findCatalogEntry('tenant/gpt-6-astra'), null);
   assert.equal(pricing.findCatalogEntry('gpt-6–astra'), null);
-  assert.equal(pricing.findCatalogEntry('gpt-5.6-sol').asOf, '2026-07-31');
+  assert.equal(pricing.findCatalogEntry('gpt-5.6-sol').asOf, '2026-09-07');
 });
 
 test('Astra long pricing starts above 272K and uses total input including cache', () => {

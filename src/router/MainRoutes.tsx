@@ -1,3 +1,4 @@
+import { UsageEventsPage } from '@/pages/UsageEventsPage';
 import type { ReactNode } from 'react';
 import { Navigate, useLocation, useRoutes, type Location } from 'react-router-dom';
 import { DashboardPage } from '@/features/dashboard/DashboardPage';
@@ -140,6 +141,7 @@ const mainRoutes = [
   { path: '/auth-files/oauth-model-alias', element: <AuthFilesOAuthModelAliasEditPage /> },
   { path: '/oauth', element: <OAuthPage /> },
   { path: '/quota', element: <QuotaPage /> },
+  { path: '/usage/events', element: <UsageEventsPage /> },
   { path: '/usage/pricing', element: <UsagePricingPage /> },
   { path: '/usage', element: <UsagePage /> },
   {

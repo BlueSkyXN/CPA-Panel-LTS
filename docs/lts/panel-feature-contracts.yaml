@@ -16,10 +16,15 @@ features:
     routes:
       - /usage
       - /usage/pricing
+      - /usage/events
       - /lts/usage
     panel_files:
       - src/router/MainRoutes.tsx
       - src/pages/UsagePage.tsx
+      - src/pages/UsageEventsPage.tsx
+      - src/utils/usage/eventWorkspace.ts
+      - src/utils/usage/timeRange.ts
+      - src/utils/usage/timeRangeFilter.test.mjs
       - src/pages/UsagePage.module.scss
       - src/pages/UsagePricingPage.tsx
       - src/pages/UsagePricingPage.module.scss

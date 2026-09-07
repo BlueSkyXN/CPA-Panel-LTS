@@ -549,6 +549,13 @@ export function MainLayout() {
     children: [
       {
         kind: 'link',
+        path: '/usage/events',
+        label: t('usage_stats.request_events_workspace_title'),
+        icon: <span className="nav-sub-dot" aria-hidden="true" />,
+        end: true,
+      },
+      {
+        kind: 'link',
         path: '/usage/pricing',
         label: t('usage_stats.pricing_title'),
         icon: <span className="nav-sub-dot" aria-hidden="true" />,

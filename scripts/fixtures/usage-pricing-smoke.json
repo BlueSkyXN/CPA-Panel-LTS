@@ -1,0 +1,88 @@
+{
+  "v2": {
+    "profile": {
+      "gpt-5.6-sol": {
+        "prompt": 4,
+        "completion": 20,
+        "cache": 0.4
+      },
+      "gpt-5.4": {
+        "prompt": 2.5,
+        "completion": 15,
+        "cache": 0.25,
+        "cacheWrite": 2.5
+      }
+    },
+    "matchingModels": [
+      "gpt-5.4"
+    ],
+    "preservedModels": [
+      "gpt-5.6-sol"
+    ]
+  },
+  "v3": {
+    "profile": {
+      "schemaVersion": 3,
+      "currency": "USD",
+      "assumptions": {
+        "historicalPricing": "current",
+        "unknownServiceTier": "standard"
+      },
+      "aliases": {},
+      "overrides": {
+        "gpt-5.6-sol": {
+          "standard": {
+            "short": {
+              "input": 4,
+              "cachedInput": 0.4,
+              "cacheWrite": 5,
+              "output": 20
+            }
+          }
+        },
+        "grok-4.5": {
+          "standard": {
+            "short": {
+              "input": 2,
+              "cachedInput": 0,
+              "output": 6
+            }
+          }
+        }
+      }
+    },
+    "matchingModels": [
+      "gpt-5.6-sol"
+    ],
+    "preservedModels": [
+      "grok-4.5"
+    ]
+  },
+  "savedOldSol": {
+    "profile": {
+      "schemaVersion": 3,
+      "currency": "USD",
+      "assumptions": {
+        "historicalPricing": "current",
+        "unknownServiceTier": "standard"
+      },
+      "aliases": {},
+      "overrides": {
+        "gpt-5.6-sol": {
+          "standard": {
+            "short": {
+              "input": 5,
+              "cachedInput": 0.5,
+              "cacheWrite": 6.25,
+              "output": 30
+            }
+          }
+        }
+      }
+    },
+    "matchingModels": [],
+    "preservedModels": [
+      "gpt-5.6-sol"
+    ]
+  }
+}

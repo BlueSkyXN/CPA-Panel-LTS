@@ -2693,6 +2693,7 @@ def run_browser_smoke(
                     )
                 page.get_by_text(expected_text, exact=False).first.wait_for()
                 if route == "/usage":
+                    page.get_by_role("button", name="Show details here", exact=True).click()
                     events_card = page.get_by_text("Request Events", exact=True).locator(
                         "xpath=../.."
                     )
@@ -2710,13 +2711,13 @@ def run_browser_smoke(
                             "Real Core migration/tier fixtures rendered "
                             f"{rows.count()} rows, want {expected_usage_rows}"
                         )
-                    events_card.get_by_role("columnheader", name="TTFB", exact=True).wait_for()
+                    events_card.get_by_role("columnheader", name="Upstream TTFB", exact=True).wait_for()
                     events_card.get_by_role(
-                        "columnheader", name="First Content", exact=True
+                        "columnheader", name="First Text", exact=True
                     ).wait_for()
-                    events_card.get_by_role("columnheader", name="TTFT", exact=True).wait_for()
-                    events_card.get_by_role("columnheader", name="TTFA", exact=True).wait_for()
-                    events_card.get_by_role("columnheader", name="Output TPS", exact=True).wait_for()
+                    events_card.get_by_role("columnheader", name="First Reasoning", exact=True).wait_for()
+                    events_card.get_by_role("columnheader", name="First Answer", exact=True).wait_for()
+                    events_card.get_by_role("columnheader", name="Output TPS (estimate)", exact=True).wait_for()
                     events_card.locator(
                         'td[data-request-performance="ttfb"][data-ttfb-ms="40"]'
                     ).wait_for()

@@ -251,7 +251,7 @@ test('renders first content from assistant timing when reasoning timing is absen
     })
   );
 
-  assert.match(markup, /First Content/);
+  assert.match(markup, /First Text/);
   assert.match(
     markup,
     /data-request-performance="first-content"[^>]*data-first-content-ms="1200"[^>]*>1\.2s</

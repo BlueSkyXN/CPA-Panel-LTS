@@ -1,13 +1,13 @@
 /** Official provider catalog data is kept separate from the pricing engine and UI. */
 export const PRICE_CURRENCY = 'USD' as const;
-export const OPENAI_CATALOG_AS_OF = '2026-07-31';
+export const OPENAI_CATALOG_AS_OF = '2026-09-07';
 export const GPT6_ASTRA_CATALOG_AS_OF = '2026-09-05';
 export const ZAI_CATALOG_AS_OF = '2026-07-22';
 export const KIMI_CATALOG_AS_OF = '2026-07-28';
 export const XAI_CATALOG_AS_OF = '2026-07-23';
 export const CODEX_SPARK_CATALOG_AS_OF = '2026-07-25';
 export const ANTHROPIC_CATALOG_AS_OF = '2026-07-26';
-export const PRICE_CATALOG_AS_OF = GPT6_ASTRA_CATALOG_AS_OF;
+export const PRICE_CATALOG_AS_OF = OPENAI_CATALOG_AS_OF;
 export const PRICE_CATALOG_VERSION = `api-${PRICE_CATALOG_AS_OF}`;
 export const OPENAI_PRICING_SOURCE_URL = 'https://developers.openai.com/api/docs/pricing';
 export const ZAI_PRICING_SOURCE_URL = 'https://docs.z.ai/guides/overview/pricing';
@@ -113,8 +113,9 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
     canonicalModel: 'gpt-5.6-sol',
     aliases: ['gpt-5.6'],
     currency: 'USD',
-    standard: { short: rateCard(5, 0.5, 6.25, 30), long: longCard(rateCard(10, 1, 12.5, 45)) },
-    fast: { multiplier: 2, longSupported: false },
+    // 用户提供的价格表：促销价至少持续至 2026-11-21，不推测到期后的价格。
+    standard: { short: rateCard(4, 0.4, 5, 20), long: longCard(rateCard(8, 0.8, 10, 30)) },
+    fast: { multiplier: 2, longSupported: true },
     sourceUrl: OPENAI_PRICING_SOURCE_URL,
     pricingNotesUrl: modelPricingNotesUrl('gpt-5.6-sol'),
     asOf: OPENAI_CATALOG_AS_OF,
@@ -127,7 +128,7 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
       short: rateCard(2, 0.2, 2.5, 12),
       long: longCard(rateCard(4, 0.4, 5, 18)),
     },
-    fast: { multiplier: 2, longSupported: false },
+    fast: { multiplier: 2, longSupported: true },
     sourceUrl: OPENAI_PRICING_SOURCE_URL,
     pricingNotesUrl: modelPricingNotesUrl('gpt-5.6-terra'),
     asOf: OPENAI_CATALOG_AS_OF,
@@ -140,7 +141,7 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
       short: rateCard(0.2, 0.02, 0.25, 1.2),
       long: longCard(rateCard(0.4, 0.04, 0.5, 1.8)),
     },
-    fast: { multiplier: 2, longSupported: false },
+    fast: { multiplier: 2, longSupported: true },
     sourceUrl: OPENAI_PRICING_SOURCE_URL,
     pricingNotesUrl: modelPricingNotesUrl('gpt-5.6-luna'),
     asOf: OPENAI_CATALOG_AS_OF,
