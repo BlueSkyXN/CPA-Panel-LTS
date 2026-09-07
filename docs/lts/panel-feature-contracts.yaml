@@ -1026,6 +1026,7 @@ features:
       - src/hooks/useVisualConfig.ts
       - src/components/config/VisualConfigEditor.tsx
       - src/lts/i18n/
+      - docs/lts/flow-control.md
     core_endpoints:
       - /v0/management/flow-control
       - /v0/management/flow-control/events
@@ -1040,6 +1041,8 @@ features:
       - key-model
       - account-model
       - flowControlEnabled
+      - resolved-model-options
+      - configuration-failure
     validation:
       - npm run test:flow-control
       - npm run check:lts

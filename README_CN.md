@@ -51,6 +51,12 @@ CPA Panel LTS 是 `CPA-Core-LTS` 的长期维护版 Web 管理面板。
 
 ## 快速开始
 
+### 新增本地流控与外观
+
+Flow V3 可视化配置支持调用方/模型/账号复选、共享或独立计数、策略预览、按需详情和可停止的实时观察。三个服务端开关默认关闭，配置草稿与实际策略分开显示；旧配置显式迁移，不改写未知 YAML。兼容性、配套版本及回退步骤见 [流控指南](docs/lts/flow-control.md)。
+
+当前工作区统一为 Tower；主题为默认 Pure White、Aurora Nebula（深色）和 Aurora Dawn（浅色）。旧布局迁移为 Tower，旧 Paper/Dark/Auto/Mist 主题迁移为 White，不影响连接、配置和 usage 数据。
+
 ### 方式 A：使用 CLI Proxy API 自带的 Web UI（推荐）
 
 1. 启动 CLI Proxy API 服务。

@@ -1,6 +1,6 @@
 # Flow Control Panel：当前入口
 
-配套 Core 产品指南：`docs/lts/flow-control.md`。本目录实现通用规则编辑与只读运行解释，不再维护一套不同的后端调度说明。
+配套 [Core 产品指南](https://github.com/BlueSkyXN/CPA-Core-LTS/blob/main/docs/lts/flow-control.md) 与 [Panel 使用及发布指南](../../../docs/lts/flow-control.md)。本目录实现通用规则编辑与只读运行解释，不再维护一套不同的后端调度说明。
 
 ## 开关与草稿
 

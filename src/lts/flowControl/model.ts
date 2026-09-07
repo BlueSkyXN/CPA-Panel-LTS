@@ -72,7 +72,25 @@ export function readFlowControlValues(parsed: Record<string, unknown>): FlowCont
 export function parseRules(raw: string): FlowRule[] | null {
     try {
         const value: unknown = JSON.parse(raw);
-        return Array.isArray(value) && value.every((rule) => !!asRecord(rule)) ? value as FlowRule[] : null;
+        return Array.isArray(value) && value.every((rule) => {
+            const row = asRecord(rule);
+            if (!row) return false;
+            // Disabled YAML may contain malformed drafts. Keep the source intact,
+            // but do not pass unsafe known-field shapes to validators or React.
+            for (const field of ['id', 'stage', 'scope', 'label', 'key', 'model', 'account', 'credential', 'provider', 'auth-kind']) {
+                if (row[field] !== undefined && typeof row[field] !== 'string') return false;
+            }
+            for (const field of ['models', 'keys', 'accounts', 'group-by']) {
+                const items = row[field];
+                if (items !== undefined && (!Array.isArray(items) || !items.every(item => typeof item === 'string'))) return false;
+            }
+            if (row['max-concurrent'] !== undefined && typeof row['max-concurrent'] !== 'number') return false;
+            if (row.windows !== undefined && (!Array.isArray(row.windows) || !row.windows.every(item => {
+                const window = asRecord(item);
+                return window && typeof window.requests === 'number' && typeof window['period-ms'] === 'number';
+            }))) return false;
+            return true;
+        }) ? value as FlowRule[] : null;
     }
     catch {
         return null;

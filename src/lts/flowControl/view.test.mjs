@@ -49,3 +49,9 @@ test('last-good failure is shown without disabling a supported editor',()=>{
  const html=render({state:'ready',data:{...data,'configuration-error':true,'configuration-failure':{code:'flow_control_rate_domain_change',message:'Retained history example',rule:'shared-a'}}});
  assert(html.includes('Retained history example'));assert(html.includes('上一次成功'));
 });
+test('malformed disabled draft renders without crashing the configuration page',()=>{
+ const values={...models.FLOW_DEFAULT_VALUES,flowControlRulesText:JSON.stringify([{id:'bad',stage:'request',scope:'global',models:42,'max-concurrent':1}])};
+ const html=renderToStaticMarkup(createElement(View,{values,support:{state:'ready',data},onChange(){},onRefresh(){}}));
+ assert(html.includes('flow-control-settings'));
+ assert(html.includes('规则格式无法编辑'));
+});

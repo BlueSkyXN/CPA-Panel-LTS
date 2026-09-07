@@ -1396,6 +1396,10 @@ require_file_contains src/components/config/VisualConfigEditor.tsx "FlowControlF
 require_file_contains src/lts/flowControl/useStatus.ts "FLOW_CONTROL_ENDPOINTS.status"
 require_file_contains src/lts/flowControl/model.ts "key-model"
 require_file_contains src/lts/flowControl/model.ts "account-model"
+require_path docs/lts/flow-control.md
+require_file_contains docs/lts/panel-protected-deltas.yaml "local-flow-control-config"
+require_file_contains src/lts/flowControl/model.ts "resolved-model-options"
+require_file_contains src/lts/flowControl/model.ts "configuration-failure"
 
 if [ "$failures" -ne 0 ]; then
   printf 'LTS panel contract check failed with %s violation(s).\n' "$failures" >&2

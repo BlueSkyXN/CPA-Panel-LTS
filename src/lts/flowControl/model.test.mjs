@@ -44,6 +44,15 @@ test('rule ids and windows validated without changing saved values',()=>{
 test('new rule receives unused stable id',()=>{
  assert.equal(m.nextRule([rule({id:'rule-1'}),rule({id:'rule-3'})]).id,'rule-2');
 });
+test('malformed known rule fields fail validation without throwing or losing source',()=>{
+ for(const patch of [{models:42},{models:[null]},{model:42},{keys:{}},{'group-by':'key'},{windows:[null]},{windows:{}},{label:{text:'bad'}}]){
+  const v=values([rule(patch)],{flowControlVersion:'3'});
+  assert.equal(m.parseRules(v.flowControlRulesText),null);
+  assert(m.flowIssues(v).some(issue=>issue.code==='invalid_rules'));
+  assert.deepEqual(m.flowIssues({...v,flowControlEnabled:false}),[]);
+  assert.deepEqual(JSON.parse(v.flowControlRulesText),[rule(patch)]);
+ }
+});
 test('capability parser rejects old/unrelated Core response and filters raw refs',()=>{
  assert.equal(m.parseFlowCapabilities({modes:['legacy']}),null);
  const raw={'schema-version':1,supported:true,state:{'active-requests':0,'active-attempts':1,waiting:2,'queued-bytes':100,buckets:[]},keys:[{ref:'secret',label:'bad'},{ref:'a'.repeat(64),label:'Key 1'}]};

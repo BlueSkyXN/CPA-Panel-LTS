@@ -44,6 +44,9 @@ jobs:
       - name: Test logs incremental merge semantics
         run: npm run test:logs
 
+      - name: Test remote environment and appearance contracts
+        run: npm run test:codex-remote && npm run test:ui
+
       - name: Check LTS panel contract
         run: npm run check:lts
 

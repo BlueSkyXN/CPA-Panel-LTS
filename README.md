@@ -51,6 +51,12 @@ Since version 6.0.19, the Web UI ships with the main program; access it via `/ma
 
 ## Quick start
 
+### Local flow control and appearance
+
+The Flow V3 visual editor provides caller/model/account selections, shared or independent limits, policy previews, on-demand details and stoppable live observation. All three server switches default to off; drafts and applied policies remain distinct. Legacy policies require explicit migration and unknown YAML is preserved. See the [Flow guide](docs/lts/flow-control.md) for paired versions and rollback.
+
+The workspace is Tower-only, with Pure White as the default theme plus Aurora Nebula (dark) and Aurora Dawn (light). Removed layouts migrate to Tower; old Paper/Dark/Auto/Mist themes migrate to White without changing connections, configuration or usage data.
+
 ### Option A: Use the Web UI bundled in CLI Proxy API (recommended)
 
 1. Start your CLI Proxy API service.

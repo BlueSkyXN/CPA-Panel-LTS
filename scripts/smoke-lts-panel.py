@@ -5583,8 +5583,6 @@ def run_sidebar_navigation_smoke(page: Any, state: MockCoreState) -> None:
         "menuitemradio", name="Wool Paper", exact=True
     ).count():
         raise AssertionError("Removed paper theme is still exposed in the appearance menu")
-    theme_button.click()
-    appearance_menu = page.get_by_role("menu", name="Workspace appearance")
     appearance_menu.get_by_role(
         "menuitemradio", name="Aurora Dawn", exact=True
     ).click()

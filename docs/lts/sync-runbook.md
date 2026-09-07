@@ -1,5 +1,13 @@
 # CPA-Panel-LTS upstream handling runbook
 
+## Flow V3 与外观维护补充
+
+同步 config、API client、locale、layout 时必须保留 `local-flow-control-config`：schema3 能力门禁、三个默认关闭开关、草稿/实际策略分离、最后有效策略提示、显式迁移、未知 YAML 与注释保留、只读预览及有界观察。浏览器不实现第二套放行算法，不以 Flow 摘要替代完整 usage。指南见 [flow-control.md](flow-control.md)。
+
+当前外观基线为 Tower-only 和 White/Aurora Nebula/Aurora Dawn，不恢复已移除布局或 Mist。旧持久值的迁移必须保持，不修改用户的连接或统计数据。
+
+发布前运行 `npm run validate:lts`、mock smoke 和临时真实 Core smoke。Core 配套 tag 与 Panel annotated tag 的 `Companion-Core` 一致；tag 注释必须包含有意义的变更摘要。仅 tag 存在不证明 Release 成功，必须回读精确 SHA 的 CI、Release 和 `management.html` 资产。
+
 ## Summary
 
 `CPA-Panel-LTS` should not use the same full-sync strategy as `CPA-Core-LTS`.

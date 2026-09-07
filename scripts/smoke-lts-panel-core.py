@@ -1826,6 +1826,74 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
     return seen
 
 
+def run_browser_flow_control_smoke(page: Any, app_url: str, api_url: str) -> list[str]:
+    endpoint = "/v0/management/flow-control"
+    before = request_json(api_url, endpoint)
+    if before.get("schema-version") != 3 or not before.get("supported"):
+        raise AssertionError("Local Core must expose supported Flow schema 3")
+    if before["state"]["enabled"] or before["events-enabled"]:
+        raise AssertionError("Fresh Flow must default to disabled admission and observation")
+    original_yaml = request_text(api_url, "/v0/management/config.yaml")
+    if "flow-control:" in original_yaml:
+        raise AssertionError("Unrelated visual edits unexpectedly created Flow configuration")
+
+    page.goto(f"{app_url}/#/config", wait_until="domcontentloaded")
+    page.get_by_role("button", name="Visual Editor").click()
+    page.get_by_role("tab", name="Headers & Codex Strategy", exact=True).click()
+    flow = page.get_by_test_id("flow-control-settings")
+    flow.get_by_role("button", name="Add rule", exact=True).click()
+    flow.get_by_label("Maximum in flight (0 = unlimited concurrency)", exact=True).fill("2")
+    flow.get_by_label("Enable local flow control", exact=True).evaluate("element => element.click()")
+    flow.get_by_text("Observation settings", exact=True).click()
+    flow.get_by_label("Allow live updates", exact=True).evaluate("element => element.click()")
+
+    def save() -> None:
+        page.locator('button[aria-label="Save"]').click()
+        page.get_by_text("Review Changes", exact=False).first.wait_for()
+        with page.expect_response(lambda response: response.request.method == "PUT"
+                                  and response.url.endswith("/v0/management/config.yaml")) as saved:
+            page.get_by_role("button", name="Confirm Save").click()
+        if saved.value.status != 200:
+            raise AssertionError("Flow visual config save was rejected")
+        page.get_by_text("Configuration saved successfully", exact=False).first.wait_for()
+
+    save()
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        applied = request_json(api_url, endpoint)
+        if applied["state"]["enabled"] and applied["events-enabled"]:
+            break
+        time.sleep(0.1)
+    else:
+        raise AssertionError("Flow watcher did not apply the saved policy")
+    rule = applied["policy"]["rules"][0]
+    if applied["policy"]["version"] != 3 or rule["max-concurrent"] != 2:
+        raise AssertionError("Flow visual rule did not round-trip into Core policy")
+    preview = request_json(api_url, endpoint + "/preview", "POST", {
+        "targets": [{"stage": "attempt", "provider": "codex", "model": "gpt-5"}]
+    })
+    if preview["results"][0]["complete"]:
+        raise AssertionError("Missing account must not appear as a complete account-limit preview")
+    details = request_json(api_url, endpoint + "/details?offset=0&limit=100")
+    if details["matching-total"] != 0:
+        raise AssertionError("Management previews must not create model activity")
+
+    flow.get_by_role("button", name="Refresh status and references", exact=True).click()
+    flow.get_by_role("button", name="Observe live", exact=True).click()
+    flow.locator('[data-state="live"]').wait_for()
+    flow.get_by_role("button", name="Stop live updates", exact=True).click()
+    for width in (1440, 390):
+        page.set_viewport_size({"width": width, "height": 1000})
+        flow.scroll_into_view_if_needed()
+        if page.evaluate("document.documentElement.scrollWidth > window.innerWidth + 1"):
+            raise AssertionError(f"Flow configuration overflows the page at {width}px")
+    page.set_viewport_size({"width": 1440, "height": 1000})
+    flow.get_by_label("Enable local flow control", exact=True).evaluate("element => element.click()")
+    flow.get_by_label("Allow live updates", exact=True).evaluate("element => element.click()")
+    save()
+    return ["BROWSER Flow V3 defaults, visual save/readback, incomplete preview, paged details, authenticated SSE and responsive widths"]
+
+
 def wait_for_no_dialog(page: Any) -> None:
     page.wait_for_function("() => document.querySelectorAll('[role=\"dialog\"]').length === 0")
 
@@ -2587,6 +2655,7 @@ def run_browser_smoke(
             page.get_by_role("button", name=re.compile("Login|Connect", re.I)).click()
             page.wait_for_url(re.compile(r".*/#/$"), timeout=30_000)
             seen.extend(run_browser_config_save_smoke(page, api_url))
+            seen.extend(run_browser_flow_control_smoke(page, app_url, api_url))
             seen.extend(run_browser_provider_workbench_smoke(page, app_url, api_url))
             seen.extend(run_browser_real_core_logs_smoke(page, app_url, api_url, logs_dir))
 

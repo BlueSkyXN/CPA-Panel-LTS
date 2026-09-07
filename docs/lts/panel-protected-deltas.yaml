@@ -49,8 +49,19 @@ protected_deltas:
       - visual config support for codex.abnormal-reasoning-retry unless intentionally replaced
       - commercial-neutral documentation and runtime UI with no referral incentives, paid placement, or empty-state provider recommendations
       - local i18n and panel compatibility fixes
-      - light-only theme policy with Pure White as the default, Soft Mist as the only alternate, and removed Paper/Dark/Auto values migrated to White
-      - Next workspace shell with Tower/Studio/Console layouts, /core, Command Palette, and compact/classic navigation
+      - Pure White default plus Aurora Nebula and Aurora Dawn themes; removed Paper/Dark/Auto/Mist values migrate to White
+      - Tower-only workspace shell, /core, Command Palette, and compact/classic navigation; removed layouts migrate to Tower
+  - id: local-flow-control-config
+    reason: The optional Core-owned Flow V3 surface must survive selective ports without replacing usage statistics or implementing a second admission algorithm in the browser.
+    must_keep:
+      - schema-version 3 capability gate and resolved-model-options feature gate
+      - disabled defaults for execution, realtime observation and resource sampling
+      - separate draft, configured policy and last successfully applied policy
+      - opaque caller and Auth references, explicit legacy migration, and unknown YAML/comment preservation
+      - /v0/management/flow-control read-only status, preview, migration-preview and paged details
+      - authenticated SSE with no management key in URLs and no automatic polling fallback
+      - actual producer lifetime owned by Core, not page visibility or observation switches
+      - src/lts/flowControl/ sidecar and four matching locale overlays
 
 upstream_boundaries:
   baseline_tag: v1.8.4
