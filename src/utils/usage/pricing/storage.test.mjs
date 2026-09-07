@@ -1,18 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import * as esbuild from 'esbuild';
+import { fileURLToPath } from 'node:url';
+import { loadTypeScript } from '../../../../scripts/testTypeScript.mjs';
 
-const bundle = await esbuild.build({
-  entryPoints: [new URL('./storage.ts', import.meta.url).pathname],
-  bundle: true,
-  format: 'esm',
-  platform: 'node',
-  write: false,
-  target: 'es2020',
-});
-const pricingStorage = await import(
-  `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`
-);
+const pricingStorage = loadTypeScript(fileURLToPath(new URL('./storage.ts', import.meta.url)));
 
 const createStorage = (initial = {}) => {
   const values = new Map(Object.entries(initial));

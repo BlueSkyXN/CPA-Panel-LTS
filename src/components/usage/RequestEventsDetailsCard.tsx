@@ -52,6 +52,8 @@ import {
   type DisplayServiceTier,
   type PriceProfileV3,
   type ResolvedServiceTier,
+  type UsageCustomTimeRange,
+  type UsagePresetTimeRange,
   type UsageTimeRange,
 } from '@/utils/usage';
 import {
@@ -71,7 +73,7 @@ const RESULT_SUCCESS_FILTER = '__result_success__';
 const RESULT_FAILED_FILTER = '__result_failed__';
 const CACHE_PRESENT_FILTER = '__cache_present__';
 const CACHE_ABSENT_FILTER = '__cache_absent__';
-const MAX_RENDERED_EVENTS = 500;
+const REQUEST_EVENTS_PAGE_SIZE = 100;
 const REQUEST_IDENTITY_ENDPOINT_REGEX = /^(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\s+\/\S*/i;
 const maskRequestKey = (value: string): string => {
   if (value.length <= 4) return '**';
@@ -84,29 +86,48 @@ const LEGACY_COLUMN_VISIBILITY_STORAGE_KEYS = [
 ] as const;
 const COLUMN_VISIBILITY_STORAGE_KEY = 'cli-proxy-usage-request-event-columns-v3';
 
-const REQUEST_EVENT_TIME_RANGES = ['page', 'all', '1h', '24h', '7d', '30d'] as const;
+const REQUEST_EVENT_PRESET_TIME_RANGES = ['1h', '3h', '6h', '12h', '24h', '48h', '7d', '14d', '30d', '90d'] as const;
+const REQUEST_EVENT_TIME_RANGES = ['page', 'all', ...REQUEST_EVENT_PRESET_TIME_RANGES] as const;
 type RequestEventTimeRange = (typeof REQUEST_EVENT_TIME_RANGES)[number];
 
 const REQUEST_EVENT_TIME_RANGE_MS: Record<
   Exclude<RequestEventTimeRange, 'page' | 'all'>,
   number
 > = {
-  '1h': 60 * 60 * 1000,
+  '1h': 1 * 60 * 60 * 1000,
+  '3h': 3 * 60 * 60 * 1000,
+  '6h': 6 * 60 * 60 * 1000,
+  '12h': 12 * 60 * 60 * 1000,
   '24h': 24 * 60 * 60 * 1000,
+  '48h': 48 * 60 * 60 * 1000,
   '7d': 7 * 24 * 60 * 60 * 1000,
+  '14d': 14 * 24 * 60 * 60 * 1000,
   '30d': 30 * 24 * 60 * 60 * 1000,
+  '90d': 90 * 24 * 60 * 60 * 1000,
 };
 
-const PAGE_TIME_RANGE_MS: Record<Exclude<UsageTimeRange, 'all'>, number> = {
-  '7h': 7 * 60 * 60 * 1000,
+const PAGE_TIME_RANGE_MS: Record<UsagePresetTimeRange, number> = {
+  '1h': 1 * 60 * 60 * 1000,
+  '3h': 3 * 60 * 60 * 1000,
+  '6h': 6 * 60 * 60 * 1000,
+  '12h': 12 * 60 * 60 * 1000,
   '24h': 24 * 60 * 60 * 1000,
+  '48h': 48 * 60 * 60 * 1000,
   '7d': 7 * 24 * 60 * 60 * 1000,
+  '14d': 14 * 24 * 60 * 60 * 1000,
+  '30d': 30 * 24 * 60 * 60 * 1000,
+  '90d': 90 * 24 * 60 * 60 * 1000,
 };
 
 const PAGE_TIME_RANGE_LABEL_KEYS: Record<UsageTimeRange, string> = {
-  '7h': 'usage_stats.range_7h',
-  '24h': 'usage_stats.range_24h',
-  '7d': 'usage_stats.range_7d',
+  ...REQUEST_EVENT_PRESET_TIME_RANGES.reduce(
+    (labels, preset) => {
+      labels[preset] = `usage_stats.range_${preset}`;
+      return labels;
+    },
+    {} as Record<UsagePresetTimeRange, string>
+  ),
+  custom: 'usage_stats.range_custom',
   all: 'usage_stats.range_all',
 };
 
@@ -381,6 +402,8 @@ export interface RequestEventsDetailsCardProps {
   usage: unknown;
   loading: boolean;
   pageTimeRange: UsageTimeRange;
+  /** pageTimeRange 为 'custom' 时的自定义起止窗口（毫秒）；无效或缺失时退化为不过滤 */
+  pageTimeRangeCustom?: UsageCustomTimeRange | null;
   referenceNowMs: number;
   priceProfile: PriceProfileV3;
   requestApiKeys: string[];
@@ -570,6 +593,7 @@ export function RequestEventsDetailsCard({
   usage,
   loading,
   pageTimeRange,
+  pageTimeRangeCustom = null,
   referenceNowMs,
   priceProfile,
   requestApiKeys,
@@ -1168,25 +1192,40 @@ export function RequestEventsDetailsCard({
   const effectiveNowMs = shouldTrackTime
     ? Math.max(referenceNowMs, timeRangeClockMs)
     : referenceNowMs;
-  const pageTimeRangeDurationMs =
-    pageTimeRange === 'all' ? null : PAGE_TIME_RANGE_MS[pageTimeRange];
+
+  // 页面时间范围对应的绝对窗口；null 表示不过滤
+  const pageTimeRangeWindow = useMemo(() => {
+    if (pageTimeRange === 'all') return null;
+    if (pageTimeRange === 'custom') {
+      if (!pageTimeRangeCustom || pageTimeRangeCustom.endMs <= pageTimeRangeCustom.startMs) {
+        return null;
+      }
+      return pageTimeRangeCustom;
+    }
+    if (effectiveNowMs <= 0) return null;
+    return { startMs: effectiveNowMs - PAGE_TIME_RANGE_MS[pageTimeRange], endMs: effectiveNowMs };
+  }, [effectiveNowMs, pageTimeRange, pageTimeRangeCustom]);
 
   const timeScopedRows = useMemo(() => {
     if (effectiveTimeRangeFilter === 'all') return rows;
     if (effectiveNowMs <= 0) return rows;
 
-    const durationMs =
+    const windowMs =
       effectiveTimeRangeFilter === 'page'
-        ? pageTimeRangeDurationMs
-        : REQUEST_EVENT_TIME_RANGE_MS[effectiveTimeRangeFilter];
-    if (durationMs === null) return rows;
+        ? pageTimeRangeWindow
+        : (() => {
+            const durationMs = REQUEST_EVENT_TIME_RANGE_MS[effectiveTimeRangeFilter];
+            return { startMs: effectiveNowMs - durationMs, endMs: effectiveNowMs };
+          })();
+    if (!windowMs) return rows;
 
-    const cutoffMs = effectiveNowMs - durationMs;
     return rows.filter(
       (row) =>
-        row.timestampMs > 0 && row.timestampMs >= cutoffMs && row.timestampMs <= effectiveNowMs
+        row.timestampMs > 0 &&
+        row.timestampMs >= windowMs.startMs &&
+        row.timestampMs <= windowMs.endMs
     );
-  }, [effectiveNowMs, effectiveTimeRangeFilter, pageTimeRangeDurationMs, rows]);
+  }, [effectiveNowMs, effectiveTimeRangeFilter, pageTimeRangeWindow, rows]);
 
   const hasLatencyData = useMemo(
     () => timeScopedRows.some((row) => row.latencyMs !== null),
@@ -1301,7 +1340,7 @@ export function RequestEventsDetailsCard({
         label: t('usage_stats.request_events_range_page', { range: pageRangeLabel }),
       },
       { value: 'all', label: t('usage_stats.range_all') },
-      ...(['1h', '24h', '7d', '30d'] as const).map((range) => ({
+      ...REQUEST_EVENT_PRESET_TIME_RANGES.map((range) => ({
         value: range,
         label: t(`usage_stats.range_${range}`),
       })),
@@ -1565,7 +1604,19 @@ export function RequestEventsDetailsCard({
     ]
   );
 
-  const renderedRows = useMemo(() => filteredRows.slice(0, MAX_RENDERED_EVENTS), [filteredRows]);
+  // Reset to the first page on a new filter/snapshot without an effect-driven rerender.
+  const [pagination, setPagination] = useState<{ rows: RequestEventRow[]; page: number } | null>(null);
+  const pageCount = Math.max(1, Math.ceil(filteredRows.length / REQUEST_EVENTS_PAGE_SIZE));
+  const currentPage = pagination && pagination.rows === filteredRows ? Math.min(pagination.page, pageCount - 1) : 0;
+  const renderedRows = useMemo(
+    () => filteredRows.slice(currentPage * REQUEST_EVENTS_PAGE_SIZE, (currentPage + 1) * REQUEST_EVENTS_PAGE_SIZE),
+    [currentPage, filteredRows]
+  );
+  const tableScrollRef = useRef<HTMLDivElement | null>(null);
+  const changePage = (page: number) => {
+    setPagination({ rows: filteredRows, page });
+    tableScrollRef.current?.scrollTo({ top: 0 });
+  };
 
   const performanceSummary = useMemo(
     () =>
@@ -2336,17 +2387,11 @@ export function RequestEventsDetailsCard({
             {hasOutputTpsData && (
               <span className={styles.requestEventsLimitHint}>{outputTpsHint}</span>
             )}
-            {filteredRows.length > MAX_RENDERED_EVENTS && (
-              <span className={styles.requestEventsLimitHint}>
-                {t('usage_stats.request_events_limit_hint', {
-                  shown: MAX_RENDERED_EVENTS,
-                  total: filteredRows.length,
-                })}
-              </span>
-            )}
+
           </div>
 
           <div
+            ref={tableScrollRef}
             className={styles.requestEventsTableWrapper}
             role="region"
             tabIndex={0}
@@ -2793,6 +2838,21 @@ export function RequestEventsDetailsCard({
               </tbody>
             </table>
           </div>
+          {pageCount > 1 && (
+            <nav className={styles.requestEventsPagination} aria-label={t('usage_stats.request_events_pagination')}>
+              <span>{t('usage_stats.request_events_page_status', {
+                start: currentPage * REQUEST_EVENTS_PAGE_SIZE + 1,
+                end: Math.min((currentPage + 1) * REQUEST_EVENTS_PAGE_SIZE, filteredRows.length),
+                total: filteredRows.length,
+              })}</span>
+              <Button variant="secondary" size="sm" disabled={currentPage === 0} onClick={() => changePage(currentPage - 1)}>
+                {t('usage_stats.request_events_previous_page')}
+              </Button>
+              <Button variant="secondary" size="sm" disabled={currentPage + 1 >= pageCount} onClick={() => changePage(currentPage + 1)}>
+                {t('usage_stats.request_events_next_page')}
+              </Button>
+            </nav>
+          )}
         </>
       )}
       {activeHeaderTooltip &&

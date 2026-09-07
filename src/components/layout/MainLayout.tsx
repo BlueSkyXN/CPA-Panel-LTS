@@ -53,6 +53,7 @@ import {
 } from '@/features/plugins/pluginResources';
 import { LANGUAGE_LABEL_KEYS, LANGUAGE_ORDER } from '@/utils/constants';
 import { isSupportedLanguage } from '@/utils/language';
+import { isSidebarToggleShortcut } from '@/utils/sidebarShortcut';
 import type { Theme, WorkspaceLayout } from '@/types';
 
 type SidebarMode = 'classic' | 'compact';
@@ -250,6 +251,11 @@ export function MainLayout() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (isSidebarToggleShortcut(event) && !document.querySelector('[role="dialog"]')) {
+        event.preventDefault();
+        setSidebarCollapsed((prev) => !prev);
+        return;
+      }
       if (event.repeat || event.defaultPrevented || event.isComposing) return;
       if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
       if (event.key.toLowerCase() !== 'k') return;
@@ -549,6 +555,13 @@ export function MainLayout() {
     children: [
       {
         kind: 'link',
+        path: '/usage/events',
+        label: t('usage_stats.request_events_workspace_title'),
+        icon: <span className="nav-sub-dot" aria-hidden="true" />,
+        end: true,
+      },
+      {
+        kind: 'link',
         path: '/usage/pricing',
         label: t('usage_stats.pricing_title'),
         icon: <span className="nav-sub-dot" aria-hidden="true" />,
@@ -826,11 +839,12 @@ export function MainLayout() {
           type="button"
           className="sidebar-toggle-floating"
           onClick={() => setSidebarCollapsed((prev) => !prev)}
-          title={
+          aria-keyshortcuts="Control+b Meta+b"
+          title={`${
             sidebarCollapsed
               ? t('sidebar.expand', { defaultValue: '展开' })
               : t('sidebar.collapse', { defaultValue: '收起' })
-          }
+          } (Ctrl+B / ⌘B)`}
           aria-label={
             sidebarCollapsed
               ? t('sidebar.expand', { defaultValue: '展开' })

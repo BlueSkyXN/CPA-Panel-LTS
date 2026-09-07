@@ -248,14 +248,23 @@ export interface UsagePricingAnalysis {
   modelSummaries: PricingModelSummary[];
 }
 
-export type UsageTimeRange = '7h' | '24h' | '7d' | 'all';
+export {
+  filterUsageByTimeRange,
+  isUsageCustomTimeRange,
+  isUsageTimeRange,
+  resolveUsageTimeRangeWindow,
+  usageTimeRangeWindowHours,
+  USAGE_PRESET_TIME_RANGES,
+} from './usage/timeRange';
+export type {
+  UsageTimeRange,
+  UsagePresetTimeRange,
+  UsageCustomTimeRange,
+  UsageTimeRangeSelection,
+  UsageTimeWindow,
+} from './usage/timeRange';
 
 const USAGE_ENDPOINT_METHOD_REGEX = /^(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\s+(\S+)/i;
-const USAGE_TIME_RANGE_MS: Record<Exclude<UsageTimeRange, 'all'>, number> = {
-  '7h': 7 * 60 * 60 * 1000,
-  '24h': 24 * 60 * 60 * 1000,
-  '7d': 7 * 24 * 60 * 60 * 1000,
-};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -379,134 +388,6 @@ const normalizeUsageDetailTokens = (tokensRaw: Record<string, unknown>): UsageTo
     cache_creation_tokens: cacheWriteTokens,
   } as UsageTokenStats;
 };
-
-interface UsageSummary {
-  totalRequests: number;
-  successCount: number;
-  failureCount: number;
-  totalTokens: number;
-}
-
-const createUsageSummary = (): UsageSummary => ({
-  totalRequests: 0,
-  successCount: 0,
-  failureCount: 0,
-  totalTokens: 0,
-});
-
-const toUsageSummaryFields = (summary: UsageSummary) => ({
-  total_requests: summary.totalRequests,
-  success_count: summary.successCount,
-  failure_count: summary.failureCount,
-  total_tokens: summary.totalTokens,
-});
-
-export function filterUsageByTimeRange<T>(
-  usageData: T,
-  range: UsageTimeRange,
-  nowMs: number = Date.now()
-): T {
-  if (range === 'all') {
-    return usageData;
-  }
-
-  const usageRecord = isRecord(usageData) ? usageData : null;
-  const apis = getApisRecord(usageData);
-  if (!usageRecord || !apis) {
-    return usageData;
-  }
-
-  const rangeMs = USAGE_TIME_RANGE_MS[range];
-  if (!Number.isFinite(rangeMs) || rangeMs <= 0) {
-    return usageData;
-  }
-
-  const windowStart = nowMs - rangeMs;
-  const filteredApis: Record<string, unknown> = {};
-  const totalSummary = createUsageSummary();
-
-  Object.entries(apis).forEach(([apiName, apiEntry]) => {
-    if (!isRecord(apiEntry)) {
-      return;
-    }
-
-    const models = isRecord(apiEntry.models) ? apiEntry.models : null;
-    if (!models) {
-      return;
-    }
-
-    const filteredModels: Record<string, unknown> = {};
-    const apiSummary = createUsageSummary();
-    let hasModelData = false;
-
-    Object.entries(models).forEach(([modelName, modelEntry]) => {
-      if (!isRecord(modelEntry)) {
-        return;
-      }
-
-      const detailsRaw = Array.isArray(modelEntry.details) ? modelEntry.details : [];
-      const modelSummary = createUsageSummary();
-      const filteredDetails: unknown[] = [];
-
-      detailsRaw.forEach((detail) => {
-        const detailRecord = isRecord(detail) ? detail : null;
-        if (!detailRecord || typeof detailRecord.timestamp !== 'string') {
-          return;
-        }
-        const timestamp = parseTimestampMs(detailRecord.timestamp);
-        if (Number.isNaN(timestamp) || timestamp < windowStart || timestamp > nowMs) {
-          return;
-        }
-
-        filteredDetails.push(detail);
-        modelSummary.totalRequests += 1;
-        if (detailRecord.failed === true) {
-          modelSummary.failureCount += 1;
-        } else {
-          modelSummary.successCount += 1;
-        }
-        modelSummary.totalTokens += extractTotalTokens(detailRecord, modelName);
-      });
-
-      if (!filteredDetails.length) {
-        return;
-      }
-
-      filteredModels[modelName] = {
-        ...modelEntry,
-        ...toUsageSummaryFields(modelSummary),
-        details: filteredDetails,
-      };
-      hasModelData = true;
-
-      apiSummary.totalRequests += modelSummary.totalRequests;
-      apiSummary.successCount += modelSummary.successCount;
-      apiSummary.failureCount += modelSummary.failureCount;
-      apiSummary.totalTokens += modelSummary.totalTokens;
-    });
-
-    if (!hasModelData) {
-      return;
-    }
-
-    filteredApis[apiName] = {
-      ...apiEntry,
-      ...toUsageSummaryFields(apiSummary),
-      models: filteredModels,
-    };
-
-    totalSummary.totalRequests += apiSummary.totalRequests;
-    totalSummary.successCount += apiSummary.successCount;
-    totalSummary.failureCount += apiSummary.failureCount;
-    totalSummary.totalTokens += apiSummary.totalTokens;
-  });
-
-  return {
-    ...usageRecord,
-    ...toUsageSummaryFields(totalSummary),
-    apis: filteredApis,
-  } as T;
-}
 
 export const normalizeAuthIndex = (value: unknown) => {
   if (typeof value === 'number' && Number.isFinite(value)) {

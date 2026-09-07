@@ -14,6 +14,8 @@ import {
   Filler,
 } from 'chart.js';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { buildUsageEventsSearch } from '@/utils/usage/eventWorkspace';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { Select } from '@/components/ui/Select';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
@@ -43,6 +45,10 @@ import {
   getModelStats,
   calculatePricingCoverage,
   filterUsageByTimeRange,
+  isUsageTimeRange,
+  resolveUsageTimeRangeWindow,
+  USAGE_PRESET_TIME_RANGES,
+  usageTimeRangeWindowHours,
   type UsageTimeRange,
 } from '@/utils/usage';
 import styles from './UsagePage.module.scss';
@@ -62,23 +68,74 @@ ChartJS.register(
 
 const CHART_LINES_STORAGE_KEY = 'cli-proxy-usage-chart-lines-v1';
 const TIME_RANGE_STORAGE_KEY = 'cli-proxy-usage-time-range-v1';
+const CUSTOM_RANGE_STORAGE_KEY = 'cli-proxy-usage-custom-time-range-v1';
 const DEFAULT_CHART_LINES = ['all'];
 const DEFAULT_TIME_RANGE: UsageTimeRange = '24h';
 const MAX_CHART_LINES = 9;
 const TIME_RANGE_OPTIONS: ReadonlyArray<{ value: UsageTimeRange; labelKey: string }> = [
   { value: 'all', labelKey: 'usage_stats.range_all' },
-  { value: '7h', labelKey: 'usage_stats.range_7h' },
-  { value: '24h', labelKey: 'usage_stats.range_24h' },
-  { value: '7d', labelKey: 'usage_stats.range_7d' },
+  ...USAGE_PRESET_TIME_RANGES.map((preset) => ({
+    value: preset as UsageTimeRange,
+    labelKey: `usage_stats.range_${preset}`,
+  })),
+  { value: 'custom', labelKey: 'usage_stats.range_custom' },
 ];
-const HOUR_WINDOW_BY_TIME_RANGE: Record<Exclude<UsageTimeRange, 'all'>, number> = {
-  '7h': 7,
-  '24h': 24,
-  '7d': 7 * 24,
+
+// 自定义时间范围的表单草稿（datetime-local 字符串）
+interface CustomRangeDraft {
+  start: string;
+  end: string;
+}
+
+const CUSTOM_RANGE_INPUT_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+
+const formatDateTimeLocal = (ms: number): string => {
+  const date = new Date(ms);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours()
+  )}:${pad(date.getMinutes())}`;
 };
 
-const isUsageTimeRange = (value: unknown): value is UsageTimeRange =>
-  value === '7h' || value === '24h' || value === '7d' || value === 'all';
+const parseDateTimeLocal = (value: string): number | null => {
+  if (!CUSTOM_RANGE_INPUT_PATTERN.test(value)) {
+    return null;
+  }
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : null;
+};
+
+const createDefaultCustomRange = (): CustomRangeDraft => {
+  const now = Date.now();
+  return {
+    start: formatDateTimeLocal(now - 24 * 60 * 60 * 1000),
+    end: formatDateTimeLocal(now),
+  };
+};
+
+const isCustomRangeDraft = (value: unknown): value is CustomRangeDraft =>
+  typeof value === 'object' &&
+  value !== null &&
+  typeof (value as CustomRangeDraft).start === 'string' &&
+  typeof (value as CustomRangeDraft).end === 'string' &&
+  CUSTOM_RANGE_INPUT_PATTERN.test((value as CustomRangeDraft).start) &&
+  CUSTOM_RANGE_INPUT_PATTERN.test((value as CustomRangeDraft).end);
+
+const loadCustomRange = (): CustomRangeDraft => {
+  try {
+    if (typeof localStorage === 'undefined') {
+      return createDefaultCustomRange();
+    }
+    const raw = localStorage.getItem(CUSTOM_RANGE_STORAGE_KEY);
+    if (!raw) {
+      return createDefaultCustomRange();
+    }
+    const parsed = JSON.parse(raw);
+    return isCustomRangeDraft(parsed) ? parsed : createDefaultCustomRange();
+  } catch {
+    return createDefaultCustomRange();
+  }
+};
 
 const normalizeChartLines = (value: unknown, maxLines = MAX_CHART_LINES): string[] => {
   if (!Array.isArray(value)) {
@@ -151,8 +208,10 @@ export function UsagePage() {
   useHeaderRefresh(loadUsage);
 
   // Chart lines state
+  const [showRequestEvents, setShowRequestEvents] = useState(false);
   const [chartLines, setChartLines] = useState<string[]>(loadChartLines);
   const [timeRange, setTimeRange] = useState<UsageTimeRange>(loadTimeRange);
+  const [customRange, setCustomRange] = useState<CustomRangeDraft>(loadCustomRange);
 
   useEffect(() => {
     let cancelled = false;
@@ -191,11 +250,28 @@ export function UsagePage() {
 
   const nowMs = lastRefreshedAt?.getTime() ?? 0;
 
+  const customWindow = useMemo(() => {
+    const startMs = parseDateTimeLocal(customRange.start);
+    const endMs = parseDateTimeLocal(customRange.end);
+    return startMs !== null && endMs !== null && endMs > startMs
+      ? { startMs, endMs }
+      : null;
+  }, [customRange]);
+
+  const effectiveWindow = useMemo(() => {
+    if (timeRange === 'all') return null;
+    if (timeRange === 'custom') return customWindow;
+    return nowMs > 0 ? resolveUsageTimeRangeWindow(timeRange, nowMs) : null;
+  }, [customWindow, nowMs, timeRange]);
+
   const filteredUsage = useMemo(
-    () => (usage && nowMs > 0 ? filterUsageByTimeRange(usage, timeRange, nowMs) : (usage ?? null)),
-    [nowMs, timeRange, usage]
+    () =>
+      usage && effectiveWindow && nowMs > 0
+        ? filterUsageByTimeRange(usage, effectiveWindow, nowMs)
+        : (usage ?? null),
+    [effectiveWindow, nowMs, usage]
   );
-  const hourWindowHours = timeRange === 'all' ? undefined : HOUR_WINDOW_BY_TIME_RANGE[timeRange];
+  const hourWindowHours = usageTimeRangeWindowHours(effectiveWindow);
 
   const handleChartLinesChange = useCallback((lines: string[]) => {
     setChartLines(normalizeChartLines(lines));
@@ -222,6 +298,21 @@ export function UsagePage() {
       // Ignore storage errors.
     }
   }, [timeRange]);
+
+  useEffect(() => {
+    try {
+      if (typeof localStorage === 'undefined') {
+        return;
+      }
+      localStorage.setItem(CUSTOM_RANGE_STORAGE_KEY, JSON.stringify(customRange));
+    } catch {
+      // Ignore storage errors.
+    }
+  }, [customRange]);
+
+  const handleCustomRangeChange = useCallback((field: 'start' | 'end', value: string) => {
+    setCustomRange((prev) => ({ ...prev, [field]: value }));
+  }, []);
 
   // Sparklines hook
   const { requestsSparkline, tokensSparkline, rpmSparkline, tpmSparkline, costSparkline } =
@@ -280,6 +371,27 @@ export function UsagePage() {
               ariaLabel={t('usage_stats.range_filter')}
               fullWidth={false}
             />
+            {timeRange === 'custom' && (
+              <div className={styles.customRangeInputs}>
+                <input
+                  type="datetime-local"
+                  className={styles.customRangeInput}
+                  value={customRange.start}
+                  onChange={(event) => handleCustomRangeChange('start', event.target.value)}
+                  aria-label={t('usage_stats.range_custom_start')}
+                />
+                <span className={styles.customRangeSeparator} aria-hidden="true">
+                  –
+                </span>
+                <input
+                  type="datetime-local"
+                  className={styles.customRangeInput}
+                  value={customRange.end}
+                  onChange={(event) => handleCustomRangeChange('end', event.target.value)}
+                  aria-label={t('usage_stats.range_custom_end')}
+                />
+              </div>
+            )}
           </div>
           <Button
             variant="secondary"
@@ -399,19 +511,37 @@ export function UsagePage() {
         <ModelStatsCard modelStats={modelStats} loading={loading} showPricing={showPricing} />
       </div>
 
-      <RequestEventsDetailsCard
-        usage={usage}
-        loading={loading}
-        pageTimeRange={timeRange}
-        referenceNowMs={nowMs}
-        priceProfile={priceProfile}
-        requestApiKeys={config?.apiKeys || []}
-        geminiKeys={config?.geminiApiKeys || []}
-        claudeConfigs={config?.claudeApiKeys || []}
-        codexConfigs={config?.codexApiKeys || []}
-        vertexConfigs={config?.vertexApiKeys || []}
-        openaiProviders={openaiProvidersForUsage}
-      />
+      <Card title={t('usage_stats.request_events_workspace_title')}>
+        <p className={styles.hint}>{t('usage_stats.request_events_entry_hint')}</p>
+        <div className={styles.requestEventsActions}>
+          <Button
+            variant="secondary"
+            onClick={() => navigate(`/usage/events${buildUsageEventsSearch(timeRange, customWindow)}`)}
+          >
+            {t('usage_stats.request_events_open_workspace')}
+          </Button>
+          <Button variant="ghost" onClick={() => setShowRequestEvents((value) => !value)}>
+            {t(showRequestEvents ? 'usage_stats.request_events_hide_inline' : 'usage_stats.request_events_show_inline')}
+          </Button>
+        </div>
+      </Card>
+
+      {showRequestEvents && (
+        <RequestEventsDetailsCard
+          usage={usage}
+          loading={loading}
+          pageTimeRange={timeRange}
+          pageTimeRangeCustom={timeRange === 'custom' ? customWindow : null}
+          referenceNowMs={nowMs}
+          priceProfile={priceProfile}
+          requestApiKeys={config?.apiKeys || []}
+          geminiKeys={config?.geminiApiKeys || []}
+          claudeConfigs={config?.claudeApiKeys || []}
+          codexConfigs={config?.codexApiKeys || []}
+          vertexConfigs={config?.vertexApiKeys || []}
+          openaiProviders={openaiProvidersForUsage}
+        />
+      )}
 
       {/* Credential Stats */}
       <CredentialStatsCard

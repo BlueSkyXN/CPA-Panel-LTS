@@ -48,6 +48,38 @@
   min-width: 164px;
 }
 
+.customRangeInputs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.customRangeInput {
+  height: 32px;
+  padding: 0 8px;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: $radius-sm;
+
+  &:focus {
+    outline: none;
+    border-color: var(--primary-color);
+  }
+
+  &::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    filter: invert(var(--icon-invert, 0));
+  }
+}
+
+.customRangeSeparator {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
 .pageTitle {
   font-size: 28px;
   font-weight: 700;
@@ -1162,6 +1194,18 @@
 }
 
 .requestEventsTable {
+  // Separate borders keep the sticky header's lower edge visible while scrolling.
+  border-collapse: separate;
+  border-spacing: 0;
+
+  thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--bg-primary);
+    box-shadow: 0 1px 0 var(--border-color);
+  }
+
   width: max-content;
   min-width: 100%;
 
@@ -2077,4 +2121,21 @@
     grid-column: 1 / -1;
     width: 100%;
   }
+}
+
+
+.requestEventsWorkspace .requestEventsTableWrapper {
+  min-width: 0;
+  max-width: 100%;
+  max-height: max(360px, calc(100dvh - 300px));
+}
+
+.requestEventsPagination {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: $spacing-sm;
+  margin-top: $spacing-sm;
+  font-variant-numeric: tabular-nums;
 }
