@@ -1882,6 +1882,26 @@ def run_browser_flow_control_smoke(page: Any, app_url: str, api_url: str) -> lis
     flow.get_by_role("button", name="Observe live", exact=True).click()
     flow.locator('[data-state="live"]').wait_for()
     flow.get_by_role("button", name="Stop live updates", exact=True).click()
+    # Change the actual policy while observation is stopped. Its first resumed
+    # summary must refresh the full policy, not only its counters/revision.
+    current_yaml = request_text(api_url, "/v0/management/config.yaml")
+    changed_yaml = replace_one(current_yaml, r"max-concurrent: 2", "max-concurrent: 3", "Flow limit")
+    put_text(api_url, "/v0/management/config.yaml", changed_yaml)
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        changed = request_json(api_url, endpoint)
+        if changed["policy"]["rules"][0]["max-concurrent"] == 3:
+            break
+        time.sleep(0.1)
+    else:
+        raise AssertionError("Paused Flow policy update was not applied")
+    with page.expect_response(lambda response: response.request.method == "GET"
+                              and response.url.endswith(endpoint)) as refreshed:
+        flow.get_by_role("button", name="Observe live", exact=True).click()
+    if refreshed.value.json()["policy"]["rules"][0]["max-concurrent"] != 3:
+        raise AssertionError("Resumed Flow observation did not reload the latest policy")
+    flow.locator('[data-state="live"]').wait_for()
+    flow.get_by_role("button", name="Stop live updates", exact=True).click()
     for width in (1440, 390):
         page.set_viewport_size({"width": width, "height": 1000})
         flow.scroll_into_view_if_needed()
@@ -1891,7 +1911,7 @@ def run_browser_flow_control_smoke(page: Any, app_url: str, api_url: str) -> lis
     flow.get_by_label("Enable local flow control", exact=True).evaluate("element => element.click()")
     flow.get_by_label("Allow live updates", exact=True).evaluate("element => element.click()")
     save()
-    return ["BROWSER Flow V3 defaults, visual save/readback, incomplete preview, paged details, authenticated SSE and responsive widths"]
+    return ["BROWSER Flow V3 defaults, visual save/readback, incomplete preview, paged details, authenticated SSE, paused-policy refresh and responsive widths"]
 
 
 def wait_for_no_dialog(page: Any) -> None:

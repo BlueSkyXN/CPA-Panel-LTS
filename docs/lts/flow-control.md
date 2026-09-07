@@ -4,7 +4,7 @@ Flow V3 是 Core 的可选单进程流控，Panel 只负责编辑与观察，不
 
 ## 配套版本与范围
 
-- 首个包含本次 Flow V3 的配套版本目标：Core `v1-lts-0.0.24`、Panel `v1-lts-0.0.16`。旧 Core `v1-lts-0.0.23`、Panel `v1-lts-0.0.15` tag 不包含该功能，且这两个旧 tag 的 Release 任务未成功。
+- 首个包含本次 Flow V3 的配套版本目标：Core `v1-lts-0.0.25`、Panel `v1-lts-0.0.17`，包含恢复实时观察时重新加载最新策略的修复。旧 Core `v1-lts-0.0.23`、Panel `v1-lts-0.0.15` tag 不包含该功能，且这两个旧 tag 的 Release 任务未成功。
 - 运行时以 `GET /v0/management/flow-control` 的 `schema-version: 3` 和 `supported` 为准，不以版本字符串猜能力。缺失接口、旧 schema、Home 模式不得误显示为可编辑。
 - attempt 模型选择还要求 `resolved-model-options` 特性，不能把公开别名当成上游实际模型。旧 Core 仍可使用其他管理功能。
 - 不改变 Codex UA、client metadata、usage v3、provider 协议或定价统计；流控摘要不是完整 usage 的替代品。

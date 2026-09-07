@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { apiClient } from '@/services/api/client';
 import { useAuthStore } from '@/stores';
 import { FLOW_CONTROL_ENDPOINTS } from '@/services/api/flowControl';
@@ -18,6 +18,7 @@ export function useFlowControlStatus() {
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
   const [revision, setRevision] = useState(0);
   const [support, setSupport] = useState<FlowSupport>({ state: 'loading' });
+  const loadedPolicyState = useRef<FlowStatus | null>(null);
   const [live, setLive] = useState(false);
   const [liveState, setLiveState] = useState<FlowLiveState>('off');
   const [visible, setVisible] = useState(() => typeof document === 'undefined' || !document.hidden);
@@ -31,12 +32,14 @@ export function useFlowControlStatus() {
 
   useEffect(() => {
     let stopped = false;
+    loadedPolicyState.current = null;
     setSupport({ state: 'loading' });
     setHistory([]);
     if (connectionStatus === 'connected') {
       void apiClient.get<unknown>(FLOW_CONTROL_ENDPOINTS.status).then((raw) => {
         if (stopped) return;
         const data = parseFlowCapabilities(raw);
+        loadedPolicyState.current = data?.state ?? null;
         setSupport(data ? { state: 'ready', data } : { state: 'unsupported' });
       }).catch((error: unknown) => {
         if (stopped) return;
@@ -63,8 +66,10 @@ export function useFlowControlStatus() {
     let controller: AbortController | undefined;
     let watchdog: ReturnType<typeof setTimeout> | undefined;
     let retry: ReturnType<typeof setTimeout> | undefined;
-    let lastRevision: number | undefined;
-    let lastProcess = '';
+    // Compare the first frame with the last full policy read, not an earlier
+    // summary: observation may have stopped while the policy/process changed.
+    let lastRevision = loadedPolicyState.current?.['policy-revision'];
+    let lastProcess = loadedPolicyState.current?.['process-id'] ?? '';
     const clearWatchdog = () => { if (watchdog) clearTimeout(watchdog); };
     const serverDisabled = () => {
       permanent = true;
@@ -102,6 +107,7 @@ export function useFlowControlStatus() {
             const current = old.state === 'ready' ? old.data.state : undefined;
             if (current && current['process-id'] === data.state['process-id']
               && (current['policy-revision'] ?? 0) > (data.state['policy-revision'] ?? 0)) return old;
+            loadedPolicyState.current = data.state;
             return { state: 'ready', data };
           });
         }).catch(() => {});
