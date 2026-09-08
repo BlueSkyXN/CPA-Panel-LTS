@@ -294,6 +294,24 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
     pricingNotesUrl: 'https://docs.z.ai/guides/llm/glm-5.2',
     asOf: ZAI_CATALOG_AS_OF,
   },
+  {
+    canonicalModel: 'glm-5.3',
+    aliases: ['glm-5.3-1m'],
+    currency: 'USD',
+    // 用户确认的原价；未提供缓存写入单价，保持 Auto 继承输入价。
+    standard: { short: rateCard(1.4, 0.26, undefined, 4.4) },
+    sourceUrl: ZAI_PRICING_SOURCE_URL,
+    asOf: '2026-09-03',
+  },
+  {
+    canonicalModel: 'glm-5.3-flash',
+    aliases: ['ox-alpha', 'glm-5.3-flash-1m'],
+    currency: 'USD',
+    // 用户确认采用五折促销前的原价；ox-alpha 为同价别名。
+    standard: { short: rateCard(0.15, 0.03, undefined, 0.5) },
+    sourceUrl: ZAI_PRICING_SOURCE_URL,
+    asOf: '2026-09-03',
+  },
   // Kimi keeps one flat rate per model id. Do not add long-context bands for the
   // same Kimi model; reduced-context SKUs such as kimi-k3-256k are separate models.
   {

@@ -603,6 +603,51 @@ test('GLM-5.2 keeps official Standard rates and explicit free cache write', () =
   approx(estimate.amount, 5.152);
 });
 
+test('GLM-5.3 models use list prices, exact aliases and inherited cache-write rates', () => {
+  for (const [model, input, cachedInput, output, amount] of [
+    ['glm-5.3', 1.4, 0.26, 4.4, 5.572],
+    ['glm-5.3-1m', 1.4, 0.26, 4.4, 5.572],
+    ['glm-5.3-flash', 0.15, 0.03, 0.5, 0.626],
+    ['glm-5.3-flash-1m', 0.15, 0.03, 0.5, 0.626],
+    ['ox-alpha', 0.15, 0.03, 0.5, 0.626],
+  ]) {
+    const entry = pricing.findCatalogEntry(model);
+    assert.deepEqual(entry.standard.short, { input, cachedInput, output });
+    assert.equal(entry.asOf, '2026-09-03');
+    assert.equal(entry.sourceUrl, 'https://docs.z.ai/guides/overview/pricing');
+    assert.equal(entry.standard.long, undefined);
+    assert.equal(entry.fast, undefined);
+    const estimate = pricing.estimateUsageCost(model, {
+      input_tokens: 1_000_000,
+      output_tokens: 1_000_000,
+      cache_read_tokens: 200_000,
+      cache_creation_tokens: 300_000,
+    }, undefined, tier());
+    assert.equal(estimate.status, 'priced');
+    assert.equal(estimate.rates.cacheWrite, undefined);
+    assert.equal(estimate.modelMatch, model === entry.canonicalModel ? 'preset' : 'alias');
+    assert.equal(estimate.resolvedModel, input === 1.4 ? 'glm-5.3' : 'glm-5.3-flash');
+    approx(estimate.amount, amount);
+    const fast = pricing.estimateUsageCost(model, { input_tokens: 1_000 }, undefined, tier('fast'));
+    assert.equal(fast.status, 'unsupported');
+    assert.equal(fast.amount, null);
+  }
+  assert.equal(pricing.findCatalogEntry('ox-alpha').canonicalModel, 'glm-5.3-flash');
+  for (const model of ['glm-5.3-preview', 'tenant/glm-5.3', 'glm-5.3-2m', 'glm-5.3-flash-1m-preview']) {
+    assert.equal(pricing.findCatalogEntry(model), null);
+  }
+});
+
+test('GLM presets preserve explicit user prices for canonical models and aliases', () => {
+  const profile = pricing.createDefaultPriceProfileV3();
+  for (const model of ['glm-5.3', 'glm-5.3-1m', 'glm-5.3-flash', 'glm-5.3-flash-1m', 'ox-alpha']) {
+    profile.overrides[model] = { standard: { short: { input: 2, cachedInput: 0.1, output: 3 } } };
+    const estimate = pricing.estimateUsageCost(model, { input_tokens: 1_000_000 }, profile, tier());
+    assert.equal(estimate.modelMatch, 'custom');
+    approx(estimate.amount, 2);
+  }
+});
+
 test('GLM-5.2 Fast is unsupported and excluded from priced coverage', () => {
   const estimate = pricing.estimateUsageCost(
     'glm-5.2',
