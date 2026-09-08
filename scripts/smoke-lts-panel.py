@@ -3187,6 +3187,7 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
                 )
 
         assert_mobile_catalog_layout("English")
+        expand_header_toolbar(page)
         language_button = page.locator(".language-menu > button")
         for menu_name, catalog_title, locale_name in [
             ("Русский", "Таблица предустановленных цен", "Russian"),
@@ -3505,6 +3506,7 @@ def run_usage_pricing_smoke(page: Any) -> None:
             )
 
     assert_recovery_notice_layout("English")
+    expand_header_toolbar(page)
     language_button = page.locator(".language-menu > button")
     language_button.click()
     page.get_by_role("menuitemradio", name="Русский", exact=True).click()
@@ -3548,6 +3550,7 @@ def run_usage_pricing_smoke(page: Any) -> None:
         arg=gpt54_row.element_handle(),
     )
 
+    expand_header_toolbar(page)
     language_button = page.locator(".language-menu > button")
     language_button.click()
     page.get_by_role("menuitemradio", name="Русский", exact=True).click()
@@ -5492,6 +5495,7 @@ def run_plugin_runtime_mismatch_smoke(
     state: MockCoreState,
 ) -> None:
     def logout() -> None:
+        expand_header_toolbar(page)
         page.get_by_title("Logout").click()
         page.wait_for_function("() => window.location.hash.endsWith('/login')")
 
@@ -5544,6 +5548,7 @@ def run_plugin_runtime_mismatch_smoke(
             )
         page.set_viewport_size({"width": 1280, "height": 720})
 
+        expand_header_toolbar(page)
         page.get_by_title("Refresh All").click()
         page.wait_for_function("() => window.location.hash.endsWith('/plugins')")
         page.get_by_text("Plugin runtime unavailable", exact=True).first.wait_for()
@@ -5585,6 +5590,7 @@ def run_plugin_runtime_mismatch_smoke(
 
         state.supports_plugin = False
         state.arm_delayed_config_response()
+        expand_header_toolbar(page)
         page.get_by_title("Refresh All").click()
         if not state.delayed_config_started.wait(timeout=5):
             raise AssertionError("Delayed stale config request did not start")
@@ -5601,6 +5607,7 @@ def run_plugin_runtime_mismatch_smoke(
             raise AssertionError("A stale capability response polluted the active connection")
 
         state.arm_delayed_config_response(status=401)
+        expand_header_toolbar(page)
         page.get_by_title("Refresh All").click()
         if not state.delayed_config_started.wait(timeout=5):
             raise AssertionError("Delayed stale unauthorized request did not start")
@@ -5622,7 +5629,55 @@ def run_plugin_runtime_mismatch_smoke(
         state.plugins_config_enabled = True
 
 
+def expand_header_toolbar(page: Any) -> None:
+    toggle = page.locator('.toolbar-toggle')
+    if toggle.get_attribute('aria-expanded') != 'true':
+        toggle.click()
+
+
+def run_toolbar_and_usage_range_smoke(page: Any) -> None:
+    toggle = page.locator('.toolbar-toggle')
+    controls = page.locator('#header-action-controls')
+    if toggle.get_attribute('aria-expanded') != 'false' or controls.is_visible():
+        raise AssertionError('Header toolbar must default to collapsed')
+    original_viewport = page.viewport_size
+    for width in [1440, 390]:
+        page.set_viewport_size({'width': width, 'height': 900})
+        if page.locator('.header-actions').bounding_box()['width'] > 64:
+            raise AssertionError('Collapsed toolbar still occupies too much space')
+        expand_header_toolbar(page)
+        controls.wait_for(state='visible')
+        bounds = page.locator('.header-actions').bounding_box()
+        if bounds['x'] < 0 or bounds['x'] + bounds['width'] > width:
+            raise AssertionError('Expanded toolbar overflows viewport')
+        page.locator('.palette-trigger').focus()
+        page.keyboard.press('Escape')
+        controls.wait_for(state='hidden')
+        if not toggle.evaluate('node => node === document.activeElement'):
+            raise AssertionError('Collapsing toolbar did not restore keyboard focus')
+        expand_header_toolbar(page)
+        toggle.click()
+        controls.wait_for(state='hidden')
+    page.set_viewport_size(original_viewport)
+    page.evaluate("window.location.hash = '/usage'")
+    page.get_by_role('button', name='Time Range', exact=True).click()
+    page.get_by_role('option', name='Custom Range', exact=True).click()
+    page.get_by_label('Custom start time', exact=True).fill('2026-09-07T12:00')
+    page.get_by_label('Custom end time', exact=True).fill('2026-09-06T12:00')
+    page.get_by_role('alert').filter(has_text='Enter both start and end times').wait_for()
+    if page.locator('[class*="statValue"]').count():
+        raise AssertionError('Invalid custom range exposed full-history statistics')
+    page.get_by_label('Custom end time', exact=True).fill('2026-09-08T12:00')
+    page.locator('[class*="statValue"]').first.wait_for()
+    if page.get_by_role('alert').filter(has_text='Enter both start and end times').count():
+        raise AssertionError('Valid custom range did not recover')
+    page.get_by_role('button', name='Time Range', exact=True).click()
+    page.get_by_role('option', name='All Time', exact=True).click()
+    page.evaluate("window.location.hash = '/'")
+
+
 def run_sidebar_navigation_smoke(page: Any, state: MockCoreState) -> None:
+    expand_header_toolbar(page)
     navigation = page.get_by_role("navigation", name="Primary navigation")
     navigation.wait_for()
 
@@ -5879,6 +5934,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
                 page.wait_for_function("before => document.querySelector('.app-shell').classList.contains('sidebar-is-collapsed') !== before", arg=before)
                 page.keyboard.press(shortcut)
                 page.wait_for_function("before => document.querySelector('.app-shell').classList.contains('sidebar-is-collapsed') === before", arg=before)
+            run_toolbar_and_usage_range_smoke(page)
             run_sidebar_navigation_smoke(page, state)
 
             route_checks = [

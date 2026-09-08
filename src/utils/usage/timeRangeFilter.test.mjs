@@ -198,3 +198,29 @@ test('missing, blocked or malformed storage still allows a default workspace vis
     assert.deepEqual(workspace.resolveUsageEventsScope(new URLSearchParams(), storage), { range: '24h', customRange: null, valid: true });
   }
 });
+
+for (const [name, window, timestamps] of [
+  ['historical custom day', { startMs: now - 8 * 24 * hour, endMs: now - 7 * 24 * hour }, [now - 8 * 24 * hour, now - 7 * 24 * hour]],
+  ['90 days', { startMs: now - 90 * 24 * hour, endMs: now }, [now - 45 * 24 * hour]],
+  ['partial hours', { startMs: now - 40 * 60_000, endMs: now + 20 * 60_000 }, [now - 35 * 60_000, now + 15 * 60_000]],
+  ['long custom range', { startMs: now - 1000 * 24 * hour, endMs: now }, [now - 500 * 24 * hour]],
+]) {
+  test(`all hourly charts retain the same requests and tokens for ${name}`, () => {
+    const snapshot = { apis: { test: { models: { 'gpt-5.6-sol': { details: timestamps.map((ms) => ({
+      timestamp: new Date(ms).toISOString(), tokens: { input_tokens: 100, output_tokens: 20, total_tokens: 120 }, failed: false,
+    })) } } } } };
+    const sum = (values) => values.reduce((total, value) => total + value, 0);
+    const requests = usage.buildHourlySeriesByModel(snapshot, 'requests', window);
+    assert.equal(sum([...requests.dataByModel.values()].flat()), timestamps.length);
+    const chart = usage.buildChartData(snapshot, 'hour', 'tokens', ['all'], { timeWindow: window });
+    assert.equal(sum(chart.datasets[0].data), timestamps.length * 120);
+    const tokens = usage.buildHourlyTokenBreakdown(snapshot, window);
+    assert.equal(sum(tokens.dataByCategory.input), timestamps.length * 100);
+    assert.deepEqual(tokens.labels, requests.labels);
+    const cost = usage.buildHourlyCostSeries(snapshot, undefined, window);
+    assert.equal(cost.pricingCoverage.totalRequests, timestamps.length);
+    assert.equal(sum(cost.data), sum(usage.buildDailyCostSeries(snapshot).data));
+    assert.deepEqual(cost.labels, requests.labels);
+    assert.ok(requests.labels.length <= 24 * 90 + 1, 'large custom ranges must not allocate unbounded empty buckets');
+  });
+}

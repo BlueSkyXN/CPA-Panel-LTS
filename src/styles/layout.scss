@@ -167,6 +167,20 @@
 
   .header-actions {
     right: var(--shell-gutter);
+    align-items: flex-start;
+  }
+
+  .header-action-controls {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: inherit;
+    min-width: 0;
+  }
+
+  .header-action-controls[hidden] {
+    display: none;
   }
 
   .mobile-sidebar-actions .btn,

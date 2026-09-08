@@ -66,7 +66,6 @@
 
 | 对象 / 精确 head | 分类 | Diff 判断与重新评估条件 |
 |---|---|---|
-| `dev` / `5b4d52b38929454491674e130d7368c908353e65` | `defer` | OAuth provider card、alias row、共享 shell 和两套页面 SCSS 重构（14 文件），不更改当前认证协议。等待 main 接纳后，连同 LTS load/dirty/force mapping/排除规则验证整体评估。 |
 | PR #416 / `dd909847d4189c63d3b7c2ffa1ecd7442c449834` | `defer` | 新增 `spend_control.individual_limit` 月度 credit budget，区别于滚动窗口、reset credit、USD 余额。没有本轮真实账户 payload 验证，且目标是上游 quota timeline；不得套用 USD 或重置窗口语义。 |
 | PR #413 / `2aab1612fe8f1e010abd5298f0b68a628ea972e2` | `defer` | iframe postMessage → 带管理权限的 scoped API bridge，允许 POST/PUT/PATCH/DELETE。属于新增信任/权限边界，需 plugin scope、连接切换和请求竞态的独立审查，不因是官方 PR 就先放行。 |
 | PR #376 / `51526bf268c0ed2126d484396c9758a3ea9902c9` | `already-equivalent` | 上游批量 Codex 串行化；LTS `codexQuota/config.ts` 已设置 `CODEX_BATCH_CONCURRENCY = 1`，`useQuotaLoader` 使用有界 worker；不复制新 quota hook 或夹带 AGENTS 改动。 |
@@ -80,3 +79,16 @@
 - 真实 Core 使用临时配置、临时凭据和独立端口；`--no-write-smoke` 跳过额外 API 写测试，但保留浏览器在临时配置上的保存/回读，不连接生产实例。
 - 浏览器执行结果与 GitHub 精确 head CI 以本轮 PR 的最终验证记录为准；本文件不将测试程序存在等同于已通过。
 - 未创建 Release、未推送 tag、未部署。完整 usage 下载仍是 Core 全量快照，前端分页不冒充服务端分页。
+
+## Post-intake v1.22.15 readback (2026-09-08)
+
+本次按当前时间重新 fetch `origin` 与 `upstream`（未使用 `--prune`），并以 `upstream/main = ed5f1c48e11ba7335f1e8f676f228c280196af85`（tag `v1.22.15`）为新的上游边界。`upstream/dev` 与 `upstream/main` 同 head；Panel `origin/main` 仍为 `c78c4132590474a0c0327197b16e334ffc0bfefd`，本地 main 另有未推送的 GLM pricing 提交。复核窗口取 `2026-09-01T12:00:00+08:00` 至本次 fetch，窗口内 16 个非 merge 提交的既有决策仍以本文件上一节为准；merge 只有已记录提交的承载作用，没有独立冲突 hunk。
+
+本次边界相对上一节新增两个实际进入 upstream/main 的提交，按完整 patch 重新分类：
+
+| Upstream SHA | 分类 | Diff 与 LTS 决策 |
+|---|---|---|
+| `5b4d52b38929454491674e130d7368c908353e65` | `defer` | OAuth editor provider card 将两个 LTS OAuth 编辑页改成新的共享卡片、映射行、页面样式和 locale/test 组合，并删除现有页面 SCSS。它已经从 `upstream/dev` 进入 `upstream/main`，但仍属于依赖新 AuthFiles/Vault 视觉架构的跨页重构；当前 LTS 的 load failure、dirty/force-mapping、excluded-model、缓存失效和完整 usage 兼容边界不能由这组 UI 替换隐含满足。等待独立的 LTS 适配与浏览器验收，不 cherry-pick 或文件级覆盖。 |
+| `ed5f1c48e11ba7335f1e8f676f228c280196af85` (`v1.22.15`) | `reject` | Infistar follow-up 将其从 quick-fill 顺序移除，并加入 `TEMPORARILY_HIDDEN_SPONSOR_BRANDS`，使已配置 Infistar 资源不再进入 provider groups。LTS 的 Infistar 适配要求商业中立、配置检测可见、保留 `sourceIndex`/未知字段；临时 sponsor roster 变化不是管理功能正确性理由，不能隐藏用户已配置凭据。因此不移植该提交；现有 `CONFIG_DETECTED_BRANDS`/provider integrity 约束保持。 |
+
+这次 readback 不改变 protected `/usage`、Core Management API、四套 locale、plugin gate、LTS sidecars、npm/package-lock 或 `management.html` release contract，也不创建 Release、tag、部署或 live UAT 结论。`5b4d52b` 的上游实现和 `ed5f1c48` 的 sponsor hiding 均不进入 Panel LTS main；需要吸收的 Panel 本地 usage/layout 工作另按当前工作树 diff 与实际验证记录。

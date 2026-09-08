@@ -27,6 +27,7 @@ import {
   IconSidebarLogs,
   IconMaximize2,
   IconMinimize2,
+  IconSlidersHorizontal,
   IconSidebarOauth,
   IconSidebarPlugins,
   IconSidebarProviders,
@@ -205,6 +206,8 @@ export function MainLayout() {
   const setLanguage = useLanguageStore((state) => state.setLanguage);
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [toolbarExpanded, setToolbarExpanded] = useState(false);
+  const toolbarToggleRef = useRef<HTMLButtonElement | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarMode, setSidebarMode] = useLocalStorage<SidebarMode>(
     SIDEBAR_MODE_STORAGE_KEY,
@@ -814,8 +817,8 @@ export function MainLayout() {
   const requestRetryText = String(config?.requestRetry ?? 0);
   const quotaFallbackEnabled = Boolean(
     config?.quotaExceeded?.switchProject ||
-      config?.quotaExceeded?.switchPreviewModel ||
-      config?.quotaExceeded?.antigravityCredits
+    config?.quotaExceeded?.switchPreviewModel ||
+    config?.quotaExceeded?.antigravityCredits
   );
   const toggleSidebarMode = () => {
     setSidebarMode((current) => (current === 'compact' ? 'classic' : 'compact'));
@@ -867,207 +870,247 @@ export function MainLayout() {
           </Button>
         </div>
 
-        <div className="header-actions floating-actions">
-          <button
-            type="button"
-            className="palette-trigger"
-            onClick={() => setPaletteOpen(true)}
-            aria-label={t('command_palette.open')}
-            title={t('command_palette.open')}
+        <div
+          className="header-actions floating-actions"
+          onKeyDown={(event) => {
+            if (
+              event.key === 'Escape' &&
+              toolbarExpanded &&
+              !languageMenuOpen &&
+              !themeMenuOpen &&
+              !paletteOpen
+            ) {
+              event.stopPropagation();
+              setToolbarExpanded(false);
+              toolbarToggleRef.current?.focus();
+            }
+          }}
+        >
+          <div
+            id="header-action-controls"
+            className="header-action-controls"
+            hidden={!toolbarExpanded}
           >
-            <span className="palette-trigger-icon">
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-                focusable="false"
-              >
-                <circle cx="11" cy="11" r="8" />
-                <path d="m21 21-4.3-4.3" />
-              </svg>
+            <button
+              type="button"
+              className="palette-trigger"
+              onClick={() => setPaletteOpen(true)}
+              aria-label={t('command_palette.open')}
+              title={t('command_palette.open')}
+            >
+              <span className="palette-trigger-icon">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <circle cx="11" cy="11" r="8" />
+                  <path d="m21 21-4.3-4.3" />
+                </svg>
+              </span>
+              <span className="palette-trigger-label">{t('command_palette.open')}</span>
+              <kbd className="palette-trigger-kbd">{paletteShortcutLabel}</kbd>
+            </button>
+            <span
+              className="connection-pill"
+              data-status={connectionStatus}
+              title={t('header.connection_status')}
+            >
+              <span className="connection-pill-dot" aria-hidden="true" />
+              <span className="connection-pill-label">
+                {connectionStatus === 'connected'
+                  ? t('common.connected')
+                  : connectionStatus === 'connecting'
+                    ? t('common.connecting')
+                    : t('common.disconnected')}
+              </span>
             </span>
-            <span className="palette-trigger-label">{t('command_palette.open')}</span>
-            <kbd className="palette-trigger-kbd">{paletteShortcutLabel}</kbd>
-          </button>
-          <span
-            className="connection-pill"
-            data-status={connectionStatus}
-            title={t('header.connection_status')}
-          >
-            <span className="connection-pill-dot" aria-hidden="true" />
-            <span className="connection-pill-label">
-              {connectionStatus === 'connected'
-                ? t('common.connected')
-                : connectionStatus === 'connecting'
-                  ? t('common.connecting')
-                  : t('common.disconnected')}
-            </span>
-          </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleRefreshAll}
-            title={t('header.refresh_all')}
-          >
-            {headerIcons.refresh}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="sidebar-mode-toggle"
-            onClick={toggleSidebarMode}
-            title={sidebarModeToggleLabel}
-            aria-label={sidebarModeToggleLabel}
-            aria-pressed={isCompactSidebar}
-          >
-            {isCompactSidebar ? <IconMaximize2 size={16} /> : <IconMinimize2 size={16} />}
-          </Button>
-          <div className={`language-menu ${languageMenuOpen ? 'open' : ''}`} ref={languageMenuRef}>
             <Button
               variant="ghost"
               size="sm"
-              onClick={toggleLanguageMenu}
-              title={t('language.switch')}
-              aria-label={t('language.switch')}
-              aria-haspopup="menu"
-              aria-expanded={languageMenuOpen}
+              onClick={handleRefreshAll}
+              title={t('header.refresh_all')}
             >
-              {headerIcons.language}
+              {headerIcons.refresh}
             </Button>
-            {languageMenuOpen && (
-              <div
-                className="notification entering language-menu-popover"
-                role="menu"
+            <Button
+              variant="ghost"
+              size="sm"
+              className="sidebar-mode-toggle"
+              onClick={toggleSidebarMode}
+              title={sidebarModeToggleLabel}
+              aria-label={sidebarModeToggleLabel}
+              aria-pressed={isCompactSidebar}
+            >
+              {isCompactSidebar ? <IconMaximize2 size={16} /> : <IconMinimize2 size={16} />}
+            </Button>
+            <div
+              className={`language-menu ${languageMenuOpen ? 'open' : ''}`}
+              ref={languageMenuRef}
+            >
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={toggleLanguageMenu}
+                title={t('language.switch')}
                 aria-label={t('language.switch')}
+                aria-haspopup="menu"
+                aria-expanded={languageMenuOpen}
               >
-                {LANGUAGE_ORDER.map((lang) => (
-                  <button
-                    key={lang}
-                    type="button"
-                    className={`language-menu-option ${language === lang ? 'active' : ''}`}
-                    onClick={() => handleLanguageSelect(lang)}
-                    role="menuitemradio"
-                    aria-checked={language === lang}
-                  >
-                    <span>{t(LANGUAGE_LABEL_KEYS[lang])}</span>
-                    {language === lang ? <span className="language-menu-check">✓</span> : null}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className={`theme-menu ${themeMenuOpen ? 'open' : ''}`} ref={themeMenuRef}>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={toggleThemeMenu}
-              title={t('theme.switch')}
-              aria-label={t('theme.switch')}
-              aria-haspopup="menu"
-              aria-expanded={themeMenuOpen}
-            >
-              {headerIcons.layout}
-            </Button>
-            {themeMenuOpen && (
-              <div
-                className="notification entering theme-menu-popover appearance-menu-popover"
-                role="menu"
-                aria-label={t('workspace.appearance')}
+                {headerIcons.language}
+              </Button>
+              {languageMenuOpen && (
+                <div
+                  className="notification entering language-menu-popover"
+                  role="menu"
+                  aria-label={t('language.switch')}
+                >
+                  {LANGUAGE_ORDER.map((lang) => (
+                    <button
+                      key={lang}
+                      type="button"
+                      className={`language-menu-option ${language === lang ? 'active' : ''}`}
+                      onClick={() => handleLanguageSelect(lang)}
+                      role="menuitemradio"
+                      aria-checked={language === lang}
+                    >
+                      <span>{t(LANGUAGE_LABEL_KEYS[lang])}</span>
+                      {language === lang ? <span className="language-menu-check">✓</span> : null}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className={`theme-menu ${themeMenuOpen ? 'open' : ''}`} ref={themeMenuRef}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={toggleThemeMenu}
+                title={t('theme.switch')}
+                aria-label={t('theme.switch')}
+                aria-haspopup="menu"
+                aria-expanded={themeMenuOpen}
               >
-                <section className="appearance-menu-section">
-                  <div className="appearance-menu-heading">{t('workspace.layout_heading')}</div>
-                  <div className="layout-card-grid">
-                    {LAYOUT_CARDS.map((item) => (
-                      <button
-                        key={item.key}
-                        type="button"
-                        className={`layout-card ${layout === item.key ? 'active' : ''}`}
-                        onClick={() => handleLayoutSelect(item.key)}
-                        role="menuitemradio"
-                        aria-checked={layout === item.key}
-                      >
-                        <span
-                          className={`layout-card-preview preview-${item.key}`}
-                          aria-hidden="true"
+                {headerIcons.layout}
+              </Button>
+              {themeMenuOpen && (
+                <div
+                  className="notification entering theme-menu-popover appearance-menu-popover"
+                  role="menu"
+                  aria-label={t('workspace.appearance')}
+                >
+                  <section className="appearance-menu-section">
+                    <div className="appearance-menu-heading">{t('workspace.layout_heading')}</div>
+                    <div className="layout-card-grid">
+                      {LAYOUT_CARDS.map((item) => (
+                        <button
+                          key={item.key}
+                          type="button"
+                          className={`layout-card ${layout === item.key ? 'active' : ''}`}
+                          onClick={() => handleLayoutSelect(item.key)}
+                          role="menuitemradio"
+                          aria-checked={layout === item.key}
                         >
-                          <i />
-                          <i />
-                          <i />
-                        </span>
-                        <span className="layout-card-copy">
-                          <strong>{t(item.labelKey)}</strong>
-                          <small>{t(item.descriptionKey)}</small>
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </section>
-                <section className="appearance-menu-section">
-                  <div className="appearance-menu-heading">{t('workspace.theme_heading')}</div>
-                  <div className="theme-card-grid">
-                    {THEME_CARDS.map((tc) => (
-                      <button
-                        key={tc.key}
-                        type="button"
-                        className={`theme-card ${theme === tc.key ? 'active' : ''}`}
-                        onClick={() => handleThemeSelect(tc.key)}
-                        role="menuitemradio"
-                        aria-checked={theme === tc.key}
-                      >
-                        <div
-                          className="theme-card-preview"
-                          style={{
-                            background: tc.colors.bg,
-                            border: `1px solid ${tc.colors.border}`,
-                          }}
+                          <span
+                            className={`layout-card-preview preview-${item.key}`}
+                            aria-hidden="true"
+                          >
+                            <i />
+                            <i />
+                            <i />
+                          </span>
+                          <span className="layout-card-copy">
+                            <strong>{t(item.labelKey)}</strong>
+                            <small>{t(item.descriptionKey)}</small>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                  <section className="appearance-menu-section">
+                    <div className="appearance-menu-heading">{t('workspace.theme_heading')}</div>
+                    <div className="theme-card-grid">
+                      {THEME_CARDS.map((tc) => (
+                        <button
+                          key={tc.key}
+                          type="button"
+                          className={`theme-card ${theme === tc.key ? 'active' : ''}`}
+                          onClick={() => handleThemeSelect(tc.key)}
+                          role="menuitemradio"
+                          aria-checked={theme === tc.key}
                         >
                           <div
-                            className="theme-card-header"
+                            className="theme-card-preview"
                             style={{
-                              background: tc.colors.card,
-                              borderBottom: `1px solid ${tc.colors.border}`,
+                              background: tc.colors.bg,
+                              border: `1px solid ${tc.colors.border}`,
                             }}
-                          />
-                          <div className="theme-card-body">
+                          >
                             <div
-                              className="theme-card-sidebar"
+                              className="theme-card-header"
                               style={{
                                 background: tc.colors.card,
-                                borderRight: `1px solid ${tc.colors.border}`,
+                                borderBottom: `1px solid ${tc.colors.border}`,
                               }}
                             />
-                            <div
-                              className="theme-card-content"
-                              style={{ background: tc.colors.bg }}
-                            >
+                            <div className="theme-card-body">
                               <div
-                                className="theme-card-line"
-                                style={{ background: tc.colors.textMuted }}
+                                className="theme-card-sidebar"
+                                style={{
+                                  background: tc.colors.card,
+                                  borderRight: `1px solid ${tc.colors.border}`,
+                                }}
                               />
                               <div
-                                className="theme-card-line short"
-                                style={{ background: tc.colors.textMuted }}
-                              />
+                                className="theme-card-content"
+                                style={{ background: tc.colors.bg }}
+                              >
+                                <div
+                                  className="theme-card-line"
+                                  style={{ background: tc.colors.textMuted }}
+                                />
+                                <div
+                                  className="theme-card-line short"
+                                  style={{ background: tc.colors.textMuted }}
+                                />
+                              </div>
                             </div>
                           </div>
-                        </div>
-                        <span className="theme-card-label">{t(tc.labelKey)}</span>
-                      </button>
-                    ))}
-                  </div>
-                </section>
-              </div>
-            )}
+                          <span className="theme-card-label">{t(tc.labelKey)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                </div>
+              )}
+            </div>
+            <Button variant="ghost" size="sm" onClick={logout} title={t('header.logout')}>
+              {headerIcons.logout}
+            </Button>
           </div>
-          <Button variant="ghost" size="sm" onClick={logout} title={t('header.logout')}>
-            {headerIcons.logout}
-          </Button>
+          <button
+            ref={toolbarToggleRef}
+            type="button"
+            className="btn toolbar-toggle"
+            aria-controls="header-action-controls"
+            aria-expanded={toolbarExpanded}
+            aria-label={t(toolbarExpanded ? 'header.collapse_toolbar' : 'header.expand_toolbar')}
+            title={t(toolbarExpanded ? 'header.collapse_toolbar' : 'header.expand_toolbar')}
+            onClick={() => {
+              setToolbarExpanded((expanded) => !expanded);
+              setLanguageMenuOpen(false);
+              setThemeMenuOpen(false);
+            }}
+          >
+            {toolbarExpanded ? headerIcons.chevronRight : <IconSlidersHorizontal size={18} />}
+          </button>
         </div>
       </header>
 

@@ -256,6 +256,7 @@ export {
   usageTimeRangeWindowHours,
   USAGE_PRESET_TIME_RANGES,
 } from './usage/timeRange';
+import type { UsageTimeWindow } from './usage/timeRange';
 export type {
   UsageTimeRange,
   UsagePresetTimeRange,
@@ -1349,35 +1350,64 @@ export function formatDayLabel(date: Date): string {
 /**
  * 构建小时级别的数据序列
  */
+function buildHourlyBuckets(details: UsageDetail[], selection: number | UsageTimeWindow) {
+  const hourMs = 60 * 60 * 1000;
+  const floorHour = (timestamp: number) => {
+    const date = new Date(timestamp);
+    date.setMinutes(0, 0, 0);
+    return date.getTime();
+  };
+  const absoluteWindow = typeof selection === 'object' ? selection : null;
+  const legacyHours =
+    typeof selection === 'number' && Number.isFinite(selection) && selection > 0
+      ? Math.min(Math.max(Math.floor(selection), 1), 24 * 31)
+      : 24;
+  const end = floorHour(absoluteWindow?.endMs ?? Date.now());
+  const start = absoluteWindow
+    ? floorHour(absoluteWindow.startMs)
+    : end - (legacyHours - 1) * hourMs;
+  const count = Math.floor((end - start) / hourMs) + 1;
+  const inWindow = (timestamp: number) =>
+    Number.isFinite(timestamp) &&
+    timestamp > 0 &&
+    (!absoluteWindow || (timestamp >= absoluteWindow.startMs && timestamp <= absoluteWindow.endMs));
+
+  // 常用窗口补齐空小时；超长自定义范围仅省略空桶，不截断实际数据。
+  const bucketTimes =
+    !Number.isFinite(count) || count <= 0
+      ? []
+      : count <= 24 * 90 + 1
+        ? Array.from({ length: count }, (_, index) => start + index * hourMs)
+        : Array.from(
+            new Set([
+              start,
+              end,
+              ...details
+                .map((detail) => detail.__timestampMs ?? parseTimestampMs(detail.timestamp))
+                .filter(inWindow)
+                .map(floorHour),
+            ])
+          ).sort((a, b) => a - b);
+  const indexes = new Map(bucketTimes.map((timestamp, index) => [timestamp, index]));
+  return {
+    labels: bucketTimes.map((timestamp) => formatHourLabel(new Date(timestamp))),
+    getIndex: (timestamp: number) =>
+      inWindow(timestamp) ? (indexes.get(floorHour(timestamp)) ?? -1) : -1,
+  };
+}
+
 export function buildHourlySeriesByModel(
   usageData: unknown,
   metric: 'requests' | 'tokens' = 'requests',
-  hourWindow: number = 24
+  hourWindow: number | UsageTimeWindow = 24
 ): {
   labels: string[];
   dataByModel: Map<string, number[]>;
   hasData: boolean;
 } {
-  const hourMs = 60 * 60 * 1000;
-  const resolvedHourWindow =
-    Number.isFinite(hourWindow) && hourWindow > 0
-      ? Math.min(Math.max(Math.floor(hourWindow), 1), 24 * 31)
-      : 24;
-  const now = new Date();
-  const currentHour = new Date(now);
-  currentHour.setMinutes(0, 0, 0);
-
-  const earliestBucket = new Date(currentHour);
-  earliestBucket.setHours(earliestBucket.getHours() - (resolvedHourWindow - 1));
-  const earliestTime = earliestBucket.getTime();
-
-  const labels: string[] = [];
-  for (let i = 0; i < resolvedHourWindow; i++) {
-    const bucketStart = earliestTime + i * hourMs;
-    labels.push(formatHourLabel(new Date(bucketStart)));
-  }
-
   const details = collectUsageDetails(usageData);
+  const { labels, getIndex } = buildHourlyBuckets(details, hourWindow);
+
   const dataByModel = new Map<string, number[]>();
   let hasData = false;
 
@@ -1394,18 +1424,8 @@ export function buildHourlySeriesByModel(
       return;
     }
 
-    const normalized = new Date(timestamp);
-    normalized.setMinutes(0, 0, 0);
-    const bucketStart = normalized.getTime();
-    const lastBucketTime = earliestTime + (labels.length - 1) * hourMs;
-    if (bucketStart < earliestTime || bucketStart > lastBucketTime) {
-      return;
-    }
-
-    const bucketIndex = Math.floor((bucketStart - earliestTime) / hourMs);
-    if (bucketIndex < 0 || bucketIndex >= labels.length) {
-      return;
-    }
+    const bucketIndex = getIndex(timestamp);
+    if (bucketIndex < 0) return;
 
     const modelName = detail.__modelName || 'Unknown';
     if (!dataByModel.has(modelName)) {
@@ -1562,11 +1582,11 @@ export function buildChartData(
   period: 'hour' | 'day' = 'day',
   metric: 'requests' | 'tokens' = 'requests',
   selectedModels: string[] = [],
-  options: { hourWindowHours?: number } = {}
+  options: { hourWindowHours?: number; timeWindow?: UsageTimeWindow | null } = {}
 ): ChartData {
   const baseSeries =
     period === 'hour'
-      ? buildHourlySeriesByModel(usageData, metric, options.hourWindowHours)
+      ? buildHourlySeriesByModel(usageData, metric, options.timeWindow ?? options.hourWindowHours)
       : buildDailySeriesByModel(usageData, metric);
 
   const { labels, dataByModel } = baseSeries;
@@ -1958,25 +1978,10 @@ export interface TokenBreakdownSeries {
  */
 export function buildHourlyTokenBreakdown(
   usageData: unknown,
-  hourWindow: number = 24
+  hourWindow: number | UsageTimeWindow = 24
 ): TokenBreakdownSeries {
-  const hourMs = 60 * 60 * 1000;
-  const resolvedHourWindow =
-    Number.isFinite(hourWindow) && hourWindow > 0
-      ? Math.min(Math.max(Math.floor(hourWindow), 1), 24 * 31)
-      : 24;
-  const now = new Date();
-  const currentHour = new Date(now);
-  currentHour.setMinutes(0, 0, 0);
-
-  const earliestBucket = new Date(currentHour);
-  earliestBucket.setHours(earliestBucket.getHours() - (resolvedHourWindow - 1));
-  const earliestTime = earliestBucket.getTime();
-
-  const labels: string[] = [];
-  for (let i = 0; i < resolvedHourWindow; i++) {
-    labels.push(formatHourLabel(new Date(earliestTime + i * hourMs)));
-  }
+  const details = collectUsageDetails(usageData);
+  const { labels, getIndex } = buildHourlyBuckets(details, hourWindow);
 
   const dataByCategory: Record<TokenCategory, number[]> = {
     input: new Array(labels.length).fill(0),
@@ -1986,7 +1991,6 @@ export function buildHourlyTokenBreakdown(
     reasoning: new Array(labels.length).fill(0),
   };
 
-  const details = collectUsageDetails(usageData);
   let hasData = false;
 
   details.forEach((detail) => {
@@ -1995,13 +1999,8 @@ export function buildHourlyTokenBreakdown(
         ? detail.__timestampMs
         : parseTimestampMs(detail.timestamp);
     if (!Number.isFinite(timestamp) || timestamp <= 0) return;
-    const normalized = new Date(timestamp);
-    normalized.setMinutes(0, 0, 0);
-    const bucketStart = normalized.getTime();
-    const lastBucketTime = earliestTime + (labels.length - 1) * hourMs;
-    if (bucketStart < earliestTime || bucketStart > lastBucketTime) return;
-    const bucketIndex = Math.floor((bucketStart - earliestTime) / hourMs);
-    if (bucketIndex < 0 || bucketIndex >= labels.length) return;
+    const bucketIndex = getIndex(timestamp);
+    if (bucketIndex < 0) return;
 
     const tokens = detail.tokens;
     const input = typeof tokens.input_tokens === 'number' ? Math.max(tokens.input_tokens, 0) : 0;
@@ -2082,28 +2081,12 @@ export interface CostSeries {
 export function buildHourlyCostSeries(
   usageData: unknown,
   priceProfile: PriceProfileV3 = createDefaultPriceProfileV3(),
-  hourWindow: number = 24
+  hourWindow: number | UsageTimeWindow = 24
 ): CostSeries {
-  const hourMs = 60 * 60 * 1000;
-  const resolvedHourWindow =
-    Number.isFinite(hourWindow) && hourWindow > 0
-      ? Math.min(Math.max(Math.floor(hourWindow), 1), 24 * 31)
-      : 24;
-  const now = new Date();
-  const currentHour = new Date(now);
-  currentHour.setMinutes(0, 0, 0);
-
-  const earliestBucket = new Date(currentHour);
-  earliestBucket.setHours(earliestBucket.getHours() - (resolvedHourWindow - 1));
-  const earliestTime = earliestBucket.getTime();
-
-  const labels: string[] = [];
-  for (let i = 0; i < resolvedHourWindow; i++) {
-    labels.push(formatHourLabel(new Date(earliestTime + i * hourMs)));
-  }
+  const details = collectUsageDetails(usageData);
+  const { labels, getIndex } = buildHourlyBuckets(details, hourWindow);
 
   const data = new Array(labels.length).fill(0);
-  const details = collectUsageDetails(usageData);
   const pricingInputs: PricingCoverageInput[] = [];
 
   details.forEach((detail) => {
@@ -2112,13 +2095,8 @@ export function buildHourlyCostSeries(
         ? detail.__timestampMs
         : parseTimestampMs(detail.timestamp);
     if (!Number.isFinite(timestamp) || timestamp <= 0) return;
-    const normalized = new Date(timestamp);
-    normalized.setMinutes(0, 0, 0);
-    const bucketStart = normalized.getTime();
-    const lastBucketTime = earliestTime + (labels.length - 1) * hourMs;
-    if (bucketStart < earliestTime || bucketStart > lastBucketTime) return;
-    const bucketIndex = Math.floor((bucketStart - earliestTime) / hourMs);
-    if (bucketIndex < 0 || bucketIndex >= labels.length) return;
+    const bucketIndex = getIndex(timestamp);
+    if (bucketIndex < 0) return;
 
     const pricingInput = estimateUsageDetailCost(detail, priceProfile);
     pricingInputs.push(pricingInput);

@@ -101,7 +101,9 @@
     "check_connection": "檢查連線",
     "refresh_all": "全部重新整理",
     "logout": "登出",
-    "connection_status": "連線狀態"
+    "connection_status": "連線狀態",
+    "expand_toolbar": "展開工具列",
+    "collapse_toolbar": "收合工具列"
   },
   "connection": {
     "title": "連線資訊",
@@ -1152,6 +1154,7 @@
     "range_custom": "自訂時間範圍",
     "range_custom_start": "自訂開始時間",
     "range_custom_end": "自訂結束時間",
+    "range_custom_invalid": "請填寫開始與結束時間，且結束時間必須晚於開始時間。",
     "filter_all": "全部",
     "clear_filters": "清空篩選",
     "refresh": "重新整理",

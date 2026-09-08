@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import type { ChartOptions } from 'chart.js';
-import { buildChartData, type ChartData } from '@/utils/usage';
+import { buildChartData, type ChartData, type UsageTimeWindow } from '@/utils/usage';
 import { buildChartOptions } from '@/utils/usage/chartConfig';
 import type { UsagePayload } from './useUsageData';
 
@@ -8,7 +8,7 @@ export interface UseChartDataOptions {
   usage: UsagePayload | null;
   chartLines: string[];
   isMobile: boolean;
-  hourWindowHours?: number;
+  timeWindow?: UsageTimeWindow | null;
 }
 
 export interface UseChartDataReturn {
@@ -26,27 +26,27 @@ export function useChartData({
   usage,
   chartLines,
   isMobile,
-  hourWindowHours
+  timeWindow,
 }: UseChartDataOptions): UseChartDataReturn {
   const [requestsPeriod, setRequestsPeriod] = useState<'hour' | 'day'>('day');
   const [tokensPeriod, setTokensPeriod] = useState<'hour' | 'day'>('day');
 
   const requestsChartData = useMemo(() => {
     if (!usage) return { labels: [], datasets: [] };
-    return buildChartData(usage, requestsPeriod, 'requests', chartLines, { hourWindowHours });
-  }, [usage, requestsPeriod, chartLines, hourWindowHours]);
+    return buildChartData(usage, requestsPeriod, 'requests', chartLines, { timeWindow });
+  }, [usage, requestsPeriod, chartLines, timeWindow]);
 
   const tokensChartData = useMemo(() => {
     if (!usage) return { labels: [], datasets: [] };
-    return buildChartData(usage, tokensPeriod, 'tokens', chartLines, { hourWindowHours });
-  }, [usage, tokensPeriod, chartLines, hourWindowHours]);
+    return buildChartData(usage, tokensPeriod, 'tokens', chartLines, { timeWindow });
+  }, [usage, tokensPeriod, chartLines, timeWindow]);
 
   const requestsChartOptions = useMemo(
     () =>
       buildChartOptions({
         period: requestsPeriod,
         labels: requestsChartData.labels,
-        isMobile
+        isMobile,
       }),
     [requestsPeriod, requestsChartData.labels, isMobile]
   );
@@ -56,7 +56,7 @@ export function useChartData({
       buildChartOptions({
         period: tokensPeriod,
         labels: tokensChartData.labels,
-        isMobile
+        isMobile,
       }),
     [tokensPeriod, tokensChartData.labels, isMobile]
   );
@@ -69,6 +69,6 @@ export function useChartData({
     requestsChartData,
     tokensChartData,
     requestsChartOptions,
-    tokensChartOptions
+    tokensChartOptions,
   };
 }

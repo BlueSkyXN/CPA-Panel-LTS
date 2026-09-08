@@ -8,6 +8,7 @@ import {
   buildHourlyTokenBreakdown,
   buildDailyTokenBreakdown,
   type TokenCategory,
+  type UsageTimeWindow,
 } from '@/utils/usage';
 import { buildChartOptions, getHourChartMinWidth } from '@/utils/usage/chartConfig';
 import type { UsagePayload } from './hooks/useUsageData';
@@ -33,14 +34,14 @@ export interface TokenBreakdownChartProps {
   usage: UsagePayload | null;
   loading: boolean;
   isMobile: boolean;
-  hourWindowHours?: number;
+  timeWindow?: UsageTimeWindow | null;
 }
 
 export function TokenBreakdownChart({
   usage,
   loading,
   isMobile,
-  hourWindowHours,
+  timeWindow,
 }: TokenBreakdownChartProps) {
   const { t } = useTranslation();
   const [period, setPeriod] = useState<'hour' | 'day'>('hour');
@@ -48,7 +49,7 @@ export function TokenBreakdownChart({
   const { chartData, chartOptions } = useMemo(() => {
     const series =
       period === 'hour'
-        ? buildHourlyTokenBreakdown(usage, hourWindowHours)
+        ? buildHourlyTokenBreakdown(usage, timeWindow ?? undefined)
         : buildDailyTokenBreakdown(usage);
     const categoryLabels: Record<TokenCategory, string> = {
       input: t('usage_stats.input_tokens'),
@@ -118,7 +119,7 @@ export function TokenBreakdownChart({
     };
 
     return { chartData: data, chartOptions: options };
-  }, [usage, period, isMobile, hourWindowHours, t]);
+  }, [usage, period, isMobile, timeWindow, t]);
   const labels = chartData.labels ?? [];
 
   return (

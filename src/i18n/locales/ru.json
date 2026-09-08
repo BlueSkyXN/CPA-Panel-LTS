@@ -101,7 +101,9 @@
     "check_connection": "Проверить подключение",
     "refresh_all": "Обновить всё",
     "logout": "Выйти",
-    "connection_status": "Состояние соединения"
+    "connection_status": "Состояние соединения",
+    "expand_toolbar": "Развернуть панель инструментов",
+    "collapse_toolbar": "Свернуть панель инструментов"
   },
   "connection": {
     "title": "Информация о подключении",
@@ -1127,6 +1129,7 @@
     "range_custom": "Настраиваемый диапазон",
     "range_custom_start": "Начало диапазона",
     "range_custom_end": "Конец диапазона",
+    "range_custom_invalid": "Укажите начало и конец диапазона; конец должен быть позже начала.",
     "filter_all": "Все",
     "clear_filters": "Сбросить фильтры",
     "refresh": "Обновить",

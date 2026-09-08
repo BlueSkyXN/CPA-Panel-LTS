@@ -101,7 +101,9 @@
     "check_connection": "Check Connection",
     "refresh_all": "Refresh All",
     "logout": "Logout",
-    "connection_status": "Connection status"
+    "connection_status": "Connection status",
+    "expand_toolbar": "Expand toolbar",
+    "collapse_toolbar": "Collapse toolbar"
   },
   "connection": {
     "title": "Connection Information",
@@ -1126,6 +1128,7 @@
     "range_custom": "Custom Range",
     "range_custom_start": "Custom start time",
     "range_custom_end": "Custom end time",
+    "range_custom_invalid": "Enter both start and end times; the end must be later than the start.",
     "filter_all": "All",
     "clear_filters": "Clear Filters",
     "refresh": "Refresh",

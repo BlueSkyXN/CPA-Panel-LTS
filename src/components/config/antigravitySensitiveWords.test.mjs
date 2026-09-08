@@ -63,3 +63,24 @@ test('equal lists stay clean and unrelated changes preserve unmanaged words', ()
   assert.equal(apply(source, { antigravitySensitiveWords: ['word-a'] }).dirty, false);
   assert.deepEqual(parse(apply(source, { debug: true }).yaml).antigravity, { 'sensitive-words': ['word-a'] });
 });
+
+test('visual edits preserve unknown nested Core config under the same parent', () => {
+  const source = [
+    'antigravity:',
+    '  connection-pool:',
+    '    enabled: true',
+    '    idle-conn-timeout: 30s',
+    '    max-idle-conns-per-host: 2',
+    '  sensitive-words: [word-a]',
+    '',
+  ].join('\n');
+  const result = apply(source, { antigravitySensitiveWords: ['word-b'] });
+  assert.deepEqual(parse(result.yaml).antigravity, {
+    'connection-pool': {
+      enabled: true,
+      'idle-conn-timeout': '30s',
+      'max-idle-conns-per-host': 2,
+    },
+    'sensitive-words': ['word-b'],
+  });
+});

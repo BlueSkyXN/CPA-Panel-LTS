@@ -48,7 +48,6 @@ import {
   isUsageTimeRange,
   resolveUsageTimeRangeWindow,
   USAGE_PRESET_TIME_RANGES,
-  usageTimeRangeWindowHours,
   type UsageTimeRange,
 } from '@/utils/usage';
 import styles from './UsagePage.module.scss';
@@ -253,9 +252,7 @@ export function UsagePage() {
   const customWindow = useMemo(() => {
     const startMs = parseDateTimeLocal(customRange.start);
     const endMs = parseDateTimeLocal(customRange.end);
-    return startMs !== null && endMs !== null && endMs > startMs
-      ? { startMs, endMs }
-      : null;
+    return startMs !== null && endMs !== null && endMs > startMs ? { startMs, endMs } : null;
   }, [customRange]);
 
   const effectiveWindow = useMemo(() => {
@@ -264,14 +261,16 @@ export function UsagePage() {
     return nowMs > 0 ? resolveUsageTimeRangeWindow(timeRange, nowMs) : null;
   }, [customWindow, nowMs, timeRange]);
 
+  const invalidCustomRange = timeRange === 'custom' && customWindow === null;
   const filteredUsage = useMemo(
     () =>
-      usage && effectiveWindow && nowMs > 0
-        ? filterUsageByTimeRange(usage, effectiveWindow, nowMs)
-        : (usage ?? null),
-    [effectiveWindow, nowMs, usage]
+      invalidCustomRange
+        ? null
+        : usage && effectiveWindow && nowMs > 0
+          ? filterUsageByTimeRange(usage, effectiveWindow, nowMs)
+          : (usage ?? null),
+    [effectiveWindow, nowMs, usage, invalidCustomRange]
   );
-  const hourWindowHours = usageTimeRangeWindowHours(effectiveWindow);
 
   const handleChartLinesChange = useCallback((lines: string[]) => {
     setChartLines(normalizeChartLines(lines));
@@ -328,7 +327,7 @@ export function UsagePage() {
     tokensChartData,
     requestsChartOptions,
     tokensChartOptions,
-  } = useChartData({ usage: filteredUsage, chartLines, isMobile, hourWindowHours });
+  } = useChartData({ usage: filteredUsage, chartLines, isMobile, timeWindow: effectiveWindow });
 
   // Derived data
   const modelNames = useMemo(() => getModelNamesFromUsage(usage), [usage]);
@@ -436,125 +435,139 @@ export function UsagePage() {
 
       {error && <div className={styles.errorBox}>{error}</div>}
 
-      {/* Stats Overview Cards */}
-      <StatCards
-        usage={filteredUsage}
-        loading={loading}
-        pricingCoverage={pricingCoverage}
-        onOpenPricing={openPricing}
-        nowMs={nowMs}
-        sparklines={{
-          requests: requestsSparkline,
-          tokens: tokensSparkline,
-          rpm: rpmSparkline,
-          tpm: tpmSparkline,
-          cost: costSparkline,
-        }}
-      />
-
-      {/* Chart Line Selection */}
-      <ChartLineSelector
-        chartLines={chartLines}
-        modelNames={modelNames}
-        maxLines={MAX_CHART_LINES}
-        onChange={handleChartLinesChange}
-      />
-
-      {/* Service Health */}
-      <ServiceHealthCard usage={usage} loading={loading} />
-
-      {/* Charts Grid */}
-      <div className={styles.chartsGrid}>
-        <UsageChart
-          title={t('usage_stats.requests_trend')}
-          period={requestsPeriod}
-          onPeriodChange={setRequestsPeriod}
-          chartData={requestsChartData}
-          chartOptions={requestsChartOptions}
-          loading={loading}
-          isMobile={isMobile}
-          emptyText={t('usage_stats.no_data')}
-        />
-        <UsageChart
-          title={t('usage_stats.tokens_trend')}
-          period={tokensPeriod}
-          onPeriodChange={setTokensPeriod}
-          chartData={tokensChartData}
-          chartOptions={tokensChartOptions}
-          loading={loading}
-          isMobile={isMobile}
-          emptyText={t('usage_stats.no_data')}
-        />
-      </div>
-
-      {/* Token Breakdown Chart */}
-      <TokenBreakdownChart
-        usage={filteredUsage}
-        loading={loading}
-        isMobile={isMobile}
-        hourWindowHours={hourWindowHours}
-      />
-
-      {/* Cost Trend Chart */}
-      <CostTrendChart
-        usage={filteredUsage}
-        loading={loading}
-        isMobile={isMobile}
-        priceProfile={priceProfile}
-        onOpenPricing={openPricing}
-        hourWindowHours={hourWindowHours}
-      />
-
-      {/* Details Grid */}
-      <div className={styles.detailsGrid}>
-        <ApiDetailsCard apiStats={apiStats} loading={loading} showPricing={showPricing} />
-        <ModelStatsCard modelStats={modelStats} loading={loading} showPricing={showPricing} />
-      </div>
-
-      <Card title={t('usage_stats.request_events_workspace_title')}>
-        <p className={styles.hint}>{t('usage_stats.request_events_entry_hint')}</p>
-        <div className={styles.requestEventsActions}>
-          <Button
-            variant="secondary"
-            onClick={() => navigate(`/usage/events${buildUsageEventsSearch(timeRange, customWindow)}`)}
-          >
-            {t('usage_stats.request_events_open_workspace')}
-          </Button>
-          <Button variant="ghost" onClick={() => setShowRequestEvents((value) => !value)}>
-            {t(showRequestEvents ? 'usage_stats.request_events_hide_inline' : 'usage_stats.request_events_show_inline')}
-          </Button>
+      {invalidCustomRange ? (
+        <div className={styles.errorBox} role="alert">
+          {t('usage_stats.range_custom_invalid')}
         </div>
-      </Card>
+      ) : (
+        <>
+          {/* Stats Overview Cards */}
+          <StatCards
+            usage={filteredUsage}
+            loading={loading}
+            pricingCoverage={pricingCoverage}
+            onOpenPricing={openPricing}
+            nowMs={nowMs}
+            sparklines={{
+              requests: requestsSparkline,
+              tokens: tokensSparkline,
+              rpm: rpmSparkline,
+              tpm: tpmSparkline,
+              cost: costSparkline,
+            }}
+          />
 
-      {showRequestEvents && (
-        <RequestEventsDetailsCard
-          usage={usage}
-          loading={loading}
-          pageTimeRange={timeRange}
-          pageTimeRangeCustom={timeRange === 'custom' ? customWindow : null}
-          referenceNowMs={nowMs}
-          priceProfile={priceProfile}
-          requestApiKeys={config?.apiKeys || []}
-          geminiKeys={config?.geminiApiKeys || []}
-          claudeConfigs={config?.claudeApiKeys || []}
-          codexConfigs={config?.codexApiKeys || []}
-          vertexConfigs={config?.vertexApiKeys || []}
-          openaiProviders={openaiProvidersForUsage}
-        />
+          {/* Chart Line Selection */}
+          <ChartLineSelector
+            chartLines={chartLines}
+            modelNames={modelNames}
+            maxLines={MAX_CHART_LINES}
+            onChange={handleChartLinesChange}
+          />
+
+          {/* Service Health */}
+          <ServiceHealthCard usage={usage} loading={loading} />
+
+          {/* Charts Grid */}
+          <div className={styles.chartsGrid}>
+            <UsageChart
+              title={t('usage_stats.requests_trend')}
+              period={requestsPeriod}
+              onPeriodChange={setRequestsPeriod}
+              chartData={requestsChartData}
+              chartOptions={requestsChartOptions}
+              loading={loading}
+              isMobile={isMobile}
+              emptyText={t('usage_stats.no_data')}
+            />
+            <UsageChart
+              title={t('usage_stats.tokens_trend')}
+              period={tokensPeriod}
+              onPeriodChange={setTokensPeriod}
+              chartData={tokensChartData}
+              chartOptions={tokensChartOptions}
+              loading={loading}
+              isMobile={isMobile}
+              emptyText={t('usage_stats.no_data')}
+            />
+          </div>
+
+          {/* Token Breakdown Chart */}
+          <TokenBreakdownChart
+            usage={filteredUsage}
+            loading={loading}
+            isMobile={isMobile}
+            timeWindow={effectiveWindow}
+          />
+
+          {/* Cost Trend Chart */}
+          <CostTrendChart
+            usage={filteredUsage}
+            loading={loading}
+            isMobile={isMobile}
+            priceProfile={priceProfile}
+            onOpenPricing={openPricing}
+            timeWindow={effectiveWindow}
+          />
+
+          {/* Details Grid */}
+          <div className={styles.detailsGrid}>
+            <ApiDetailsCard apiStats={apiStats} loading={loading} showPricing={showPricing} />
+            <ModelStatsCard modelStats={modelStats} loading={loading} showPricing={showPricing} />
+          </div>
+
+          <Card title={t('usage_stats.request_events_workspace_title')}>
+            <p className={styles.hint}>{t('usage_stats.request_events_entry_hint')}</p>
+            <div className={styles.requestEventsActions}>
+              <Button
+                variant="secondary"
+                onClick={() =>
+                  navigate(`/usage/events${buildUsageEventsSearch(timeRange, customWindow)}`)
+                }
+              >
+                {t('usage_stats.request_events_open_workspace')}
+              </Button>
+              <Button variant="ghost" onClick={() => setShowRequestEvents((value) => !value)}>
+                {t(
+                  showRequestEvents
+                    ? 'usage_stats.request_events_hide_inline'
+                    : 'usage_stats.request_events_show_inline'
+                )}
+              </Button>
+            </div>
+          </Card>
+
+          {showRequestEvents && (
+            <RequestEventsDetailsCard
+              usage={usage}
+              loading={loading}
+              pageTimeRange={timeRange}
+              pageTimeRangeCustom={timeRange === 'custom' ? customWindow : null}
+              referenceNowMs={nowMs}
+              priceProfile={priceProfile}
+              requestApiKeys={config?.apiKeys || []}
+              geminiKeys={config?.geminiApiKeys || []}
+              claudeConfigs={config?.claudeApiKeys || []}
+              codexConfigs={config?.codexApiKeys || []}
+              vertexConfigs={config?.vertexApiKeys || []}
+              openaiProviders={openaiProvidersForUsage}
+            />
+          )}
+
+          {/* Credential Stats */}
+          <CredentialStatsCard
+            usage={filteredUsage}
+            loading={loading}
+            geminiKeys={config?.geminiApiKeys || []}
+            claudeConfigs={config?.claudeApiKeys || []}
+            codexConfigs={config?.codexApiKeys || []}
+            vertexConfigs={config?.vertexApiKeys || []}
+            openaiProviders={openaiProvidersForUsage}
+          />
+
+          <PricingEntryCard coverage={pricingCoverage} onOpen={openPricing} />
+        </>
       )}
-
-      {/* Credential Stats */}
-      <CredentialStatsCard
-        usage={filteredUsage}
-        loading={loading}
-        geminiKeys={config?.geminiApiKeys || []}
-        claudeConfigs={config?.claudeApiKeys || []}
-        codexConfigs={config?.codexApiKeys || []}
-        vertexConfigs={config?.vertexApiKeys || []}
-        openaiProviders={openaiProvidersForUsage}
-      />
-
-      <PricingEntryCard coverage={pricingCoverage} onOpen={openPricing} />
     </div>
   );
 }

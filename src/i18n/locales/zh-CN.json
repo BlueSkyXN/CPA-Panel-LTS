@@ -101,7 +101,9 @@
     "check_connection": "检查连接",
     "refresh_all": "刷新全部",
     "logout": "登出",
-    "connection_status": "连接状态"
+    "connection_status": "连接状态",
+    "expand_toolbar": "展开工具栏",
+    "collapse_toolbar": "收起工具栏"
   },
   "connection": {
     "title": "连接信息",
@@ -1126,6 +1128,7 @@
     "range_custom": "自定义时间范围",
     "range_custom_start": "自定义开始时间",
     "range_custom_end": "自定义结束时间",
+    "range_custom_invalid": "请填写开始和结束时间，且结束时间必须晚于开始时间。",
     "filter_all": "全部",
     "clear_filters": "清空筛选",
     "refresh": "刷新",

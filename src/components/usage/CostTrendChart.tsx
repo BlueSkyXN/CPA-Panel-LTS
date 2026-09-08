@@ -11,6 +11,7 @@ import {
   isLocalEstimateComplete,
   type PriceProfileV3,
   type PricingCoverage,
+  type UsageTimeWindow,
 } from '@/utils/usage';
 import { buildChartOptions, getHourChartMinWidth } from '@/utils/usage/chartConfig';
 import type { UsagePayload } from './hooks/useUsageData';
@@ -22,7 +23,7 @@ export interface CostTrendChartProps {
   isMobile: boolean;
   priceProfile: PriceProfileV3;
   onOpenPricing: () => void;
-  hourWindowHours?: number;
+  timeWindow?: UsageTimeWindow | null;
 }
 
 const COST_COLOR = '#f59e0b';
@@ -45,7 +46,7 @@ export function CostTrendChart({
   isMobile,
   priceProfile,
   onOpenPricing,
-  hourWindowHours,
+  timeWindow,
 }: CostTrendChartProps) {
   const { t } = useTranslation();
   const [period, setPeriod] = useState<'hour' | 'day'>('hour');
@@ -61,7 +62,7 @@ export function CostTrendChart({
 
     const series =
       period === 'hour'
-        ? buildHourlyCostSeries(usage, priceProfile, hourWindowHours)
+        ? buildHourlyCostSeries(usage, priceProfile, timeWindow ?? undefined)
         : buildDailyCostSeries(usage, priceProfile);
 
     const data = {
@@ -103,7 +104,7 @@ export function CostTrendChart({
       hasData: series.hasData,
       pricingCoverage: series.pricingCoverage,
     };
-  }, [usage, period, isMobile, priceProfile, hourWindowHours, t]);
+  }, [usage, period, isMobile, priceProfile, timeWindow, t]);
 
   const pricingComplete = pricingCoverage !== null && isLocalEstimateComplete(pricingCoverage);
   const hasUnpricedUsage =
@@ -142,11 +143,7 @@ export function CostTrendChart({
         <div className={styles.hint}>{t('common.loading')}</div>
       ) : !hasData ? (
         <div className={styles.hint}>
-          {t(
-            hasUnpricedUsage
-              ? 'usage_stats.pricing_cost_incomplete'
-              : 'usage_stats.cost_no_data'
-          )}
+          {t(hasUnpricedUsage ? 'usage_stats.pricing_cost_incomplete' : 'usage_stats.cost_no_data')}
         </div>
       ) : (
         <>
