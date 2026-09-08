@@ -490,11 +490,6 @@
   min-width: 0;
 }
 
-:root:has(.layout-tower) {
-  --tower-runtime-height: 48px;
-  --shell-bottom-inset: var(--tower-runtime-height);
-}
-
 .layout-tower {
   background:
     linear-gradient(color-mix(in srgb, var(--border-color) 20%, transparent) 1px, transparent 1px),
@@ -541,10 +536,6 @@
     }
   }
 
-  .main-content {
-    padding-bottom: calc(var(--tower-runtime-height) + 34px);
-  }
-
   .card {
     border-radius: 10px;
     box-shadow: 0 8px 24px color-mix(in srgb, var(--text-primary) 5%, transparent);
@@ -552,27 +543,21 @@
 }
 
 .tower-runtime-bar {
-  position: fixed;
-  right: 0;
-  bottom: 0;
-  left: var(--sidebar-active-width);
-  z-index: $z-dropdown;
-  min-height: var(--tower-runtime-height, 48px);
-  padding: 7px 18px;
+  margin-top: auto;
+  padding-top: 10px;
   display: flex;
-  align-items: center;
-  gap: 0;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
   border-top: 1px solid var(--border-color);
-  background: color-mix(in srgb, var(--bg-primary) 92%, transparent);
-  box-shadow: 0 -10px 28px color-mix(in srgb, var(--text-primary) 7%, transparent);
-  --glass-blur: 14px;
-  backdrop-filter: var(--glass-backdrop-filter);
-  -webkit-backdrop-filter: var(--glass-backdrop-filter);
-  transition: left $transition-normal;
+}
+
+.sidebar.collapsed .tower-runtime-bar {
+  display: none;
 }
 
 .tower-runtime-label {
-  padding-right: 18px;
+  padding: 0 10px 6px;
   font-family: $font-mono;
   font-size: 10px;
   font-weight: 800;
@@ -582,11 +567,12 @@
 
 .tower-runtime-item {
   min-width: 0;
-  padding: 0 18px;
-  display: inline-flex;
+  padding: 6px 10px;
+  display: flex;
   align-items: baseline;
-  gap: 8px;
-  border-left: 1px solid var(--border-color);
+  justify-content: space-between;
+  gap: 12px;
+  border-radius: 8px;
   color: inherit;
   text-decoration: none;
   white-space: nowrap;
@@ -622,6 +608,10 @@
 
   &[data-status='connecting'] i {
     background: var(--amber-color);
+  }
+
+  &:hover {
+    background: color-mix(in srgb, var(--border-color) 26%, transparent);
   }
 
   &:hover strong {
@@ -665,33 +655,8 @@
     height: 44px;
   }
 
-  .layout-tower .main-content {
-    padding-bottom: calc(var(--tower-runtime-height) + 24px);
-  }
-
-  .tower-runtime-bar {
-    left: 0;
-    z-index: $z-dropdown - 2;
-    padding: 7px 10px;
-    overflow-x: auto;
-    scrollbar-width: none;
-
-    &::-webkit-scrollbar {
-      display: none;
-    }
-  }
-
-  .tower-runtime-label {
-    display: none;
-  }
-
-  .tower-runtime-item {
-    min-width: max-content;
-    padding: 0 12px;
-
-    &:first-of-type {
-      border-left: 0;
-    }
+  .sidebar.collapsed .tower-runtime-bar {
+    display: flex;
   }
 }
 
