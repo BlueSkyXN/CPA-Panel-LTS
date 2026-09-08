@@ -16,13 +16,13 @@
   color: var(--text-primary);
 
   &.btn-primary {
-    background-color: var(--primary-color);
+    background-color: var(--primary-button-bg);
     color: var(--primary-contrast, #fff);
-    border-color: var(--primary-color);
+    border-color: var(--primary-button-bg);
 
     &:hover {
-      background-color: var(--primary-hover);
-      border-color: var(--primary-hover);
+      background-color: var(--primary-button-bg-hover);
+      border-color: var(--primary-button-bg-hover);
     }
   }
 

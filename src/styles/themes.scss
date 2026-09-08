@@ -31,6 +31,9 @@
   --primary-hover: #5f5f5f;
   --primary-active: #4d4d4d;
   --primary-contrast: #ffffff;
+  // 实底主操作(按钮):允许比强调色深一档以满足文字对比度
+  --primary-button-bg: var(--primary-color);
+  --primary-button-bg-hover: var(--primary-hover);
 
   --success-color: #10b981;
   --quota-medium-color: #e0aa14;
@@ -121,6 +124,8 @@
   --primary-hover: #9333ea;
   --primary-active: #7e22ce;
   --primary-contrast: #fff5fb;
+  --primary-button-bg: #9333ea;
+  --primary-button-bg-hover: #7e22ce;
 
   --success-color: #4ade80;
   --quota-medium-color: #fbbf24;
@@ -184,6 +189,8 @@
   --primary-hover: #6355e6;
   --primary-active: #5243d6;
   --primary-contrast: #ffffff;
+  --primary-button-bg: #6355e6;
+  --primary-button-bg-hover: #5243d6;
 
   --success-color: #10b981;
   --quota-medium-color: #d97706;
