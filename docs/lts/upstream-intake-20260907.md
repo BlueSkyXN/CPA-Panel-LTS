@@ -82,7 +82,7 @@
 
 ## Post-intake v1.22.15 readback (2026-09-08)
 
-本次按当前时间重新 fetch `origin` 与 `upstream`（未使用 `--prune`），并以 `upstream/main = ed5f1c48e11ba7335f1e8f676f228c280196af85`（tag `v1.22.15`）为新的上游边界。`upstream/dev` 与 `upstream/main` 同 head；Panel `origin/main` 仍为 `c78c4132590474a0c0327197b16e334ffc0bfefd`，本地 main 另有未推送的 GLM pricing 提交。复核窗口取 `2026-09-01T12:00:00+08:00` 至本次 fetch，窗口内 16 个非 merge 提交的既有决策仍以本文件上一节为准；merge 只有已记录提交的承载作用，没有独立冲突 hunk。
+本次按当前时间重新 fetch `origin` 与 `upstream`（未使用 `--prune`），并以 `upstream/main = ed5f1c48e11ba7335f1e8f676f228c280196af85`（tag `v1.22.15`）为新的上游边界。`upstream/dev` 与 `upstream/main` 同 head；Panel `origin/main` 仍为 `c78c4132590474a0c0327197b16e334ffc0bfefd`，本地 main 另有未推送的 GLM pricing 提交。复核窗口取 `2026-09-01T00:00:00+08:00` 至本次 fetch，窗口内共 15 个非 merge 提交；其中前一节已记录 13 个，本节补充新增 2 个，merge 只有已记录提交的承载作用，没有独立冲突 hunk。
 
 本次边界相对上一节新增两个实际进入 upstream/main 的提交，按完整 patch 重新分类：
 
