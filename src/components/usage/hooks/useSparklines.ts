@@ -6,6 +6,7 @@ import {
   type PriceProfileV3,
 } from '@/utils/usage';
 import type { UsagePayload } from './useUsageData';
+import { isUsageQueryView, queryCoverage } from '@/utils/usage/queryView';
 
 export interface SparklineData {
   labels: string[];
@@ -51,6 +52,12 @@ export function useSparklines({
     if (!usage) return { labels: [], requests: [], tokens: [], costs: [] };
     if (!Number.isFinite(nowMs) || nowMs <= 0) {
       return { labels: [], requests: [], tokens: [], costs: [] };
+    }
+    if (isUsageQueryView(usage)) {
+      const groups = new Map((usage.summary.groups.minutes ?? []).map((g) => [g.start_ms, g.metrics]));
+      const priced = new Map((usage.pricing?.groups.minutes ?? []).map((g) => [g.start_ms, g.metrics]));
+      const times = Array.from({ length: 60 }, (_, i) => nowMs - 3600000 + i * 60000);
+      return { labels: times.map((ms) => { const date = new Date(ms + 60000); return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`; }), requests: times.map((ms) => groups.get(ms)?.requests ?? 0), tokens: times.map((ms) => groups.get(ms)?.tokens ?? 0), costs: times.map((ms) => queryCoverage(priced.get(ms), priceProfile).estimatedAmount) };
     }
     const details = collectUsageDetails(usage);
     if (!details.length) return { labels: [], requests: [], tokens: [], costs: [] };

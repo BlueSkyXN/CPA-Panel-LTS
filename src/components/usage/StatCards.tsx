@@ -25,6 +25,7 @@ import { sparklineOptions } from '@/utils/usage/chartConfig';
 import type { UsagePayload } from './hooks/useUsageData';
 import type { SparklineBundle } from './hooks/useSparklines';
 import { getUsageCacheTokenCounts } from '@/utils/usage/cacheTokens';
+import { isUsageQueryView } from '@/utils/usage/queryView';
 import styles from '@/pages/UsagePage.module.scss';
 
 interface StatCardData {
@@ -42,6 +43,7 @@ interface StatCardData {
 export interface StatCardsProps {
   usage: UsagePayload | null;
   loading: boolean;
+  pricingLoading?: boolean;
   pricingCoverage: PricingCoverage;
   onOpenPricing: () => void;
   nowMs: number;
@@ -57,6 +59,7 @@ export interface StatCardsProps {
 export function StatCards({
   usage,
   loading,
+  pricingLoading = false,
   pricingCoverage,
   onOpenPricing,
   nowMs,
@@ -84,6 +87,11 @@ export function StatCards({
     };
 
     if (!usage) return empty;
+    if (isUsageQueryView(usage)) {
+      const m = usage.summary.totals;
+      const rates = usage.summary.groups.rates?.[0]?.metrics;
+      return { tokenBreakdown: { cacheReadTokens: m.cache_read, cacheWriteTokens: m.cache_write, reasoningTokens: m.reasoning }, latencyStats: { averageMs: m.latency_samples ? m.latency_ms / m.latency_samples : null, totalMs: m.latency_samples ? m.latency_ms : null, sampleCount: m.latency_samples }, rateStats: { rpm: (rates?.requests ?? 0) / 30, tpm: (rates?.tokens ?? 0) / 30, windowMinutes: 30, requestCount: rates?.requests ?? 0, tokenCount: rates?.tokens ?? 0 } };
+    }
     const details = collectUsageDetails(usage);
     if (!details.length) return empty;
 
@@ -229,12 +237,12 @@ export function StatCards({
       accent: '#f59e0b',
       accentSoft: 'rgba(245, 158, 11, 0.18)',
       accentBorder: 'rgba(245, 158, 11, 0.32)',
-      value: loading ? '-' : hasPricedRequests ? formatUsd(pricingCoverage.estimatedAmount) : '--',
+      value: loading || pricingLoading ? '-' : hasPricedRequests ? formatUsd(pricingCoverage.estimatedAmount) : '--',
       meta: (
         <>
           <span className={styles.statMetaItem}>
             {t('usage_stats.pricing_api_request_coverage')}:{' '}
-            {loading
+            {loading || pricingLoading
               ? '-'
               : localCoverageDisplay.requestPercent === null
                 ? t('usage_stats.pricing_no_usage_requests')

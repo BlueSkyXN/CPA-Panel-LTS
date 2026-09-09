@@ -43,6 +43,8 @@ import {
 } from '@/utils/usage';
 import { parseNonNegativePrice } from '@/utils/usage/modelPrices';
 import styles from './UsagePricingPage.module.scss';
+import { useUsageQuerySummary } from '@/components/usage/hooks/useUsageQuery';
+import { buildQueryPriceRules, makeUsageQueryView } from '@/utils/usage/queryView';
 
 type PricingFilter = 'all' | 'preset' | 'custom' | 'unmatched' | 'anomaly';
 type FastEditorMode = 'none' | 'rates' | 'multiplier';
@@ -255,13 +257,20 @@ export function UsagePricingPage() {
   const isEditorModal = useMediaQuery('(max-width: 1279px)');
   const { showNotification, showConfirmation } = useNotificationStore();
   const {
-    usage,
-    loading,
+    usage: legacyUsage,
+    loading: baseLoading,
+    error: baseError,
+    querySession,
     priceProfile,
     priceProfileSource,
     priceProfileWarnings,
     setPriceProfile,
   } = useUsageData();
+  const summaryQuery = useUsageQuerySummary(querySession, { modules: ['models'] });
+  const pricingQuery = useUsageQuerySummary(querySession, { modules: ['models'], rules: buildQueryPriceRules(querySession?.models ?? [], priceProfile) }, true);
+  const queryView = useMemo(() => makeUsageQueryView(summaryQuery.data, pricingQuery.data), [summaryQuery.data, pricingQuery.data]);
+  const usage = querySession ? queryView : legacyUsage;
+  const loading = baseLoading || summaryQuery.loading || pricingQuery.loading;
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<PricingFilter>('all');
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
@@ -848,7 +857,10 @@ export function UsagePricingPage() {
 
       <PresetPricingCatalog />
 
-      <section className={styles.summaryGrid} aria-label={t('usage_stats.pricing_summary')}>
+      {baseError && <div className={styles.notice} role="alert">{baseError}</div>}
+      {summaryQuery.error && <div className={styles.notice} role="alert">{summaryQuery.error}</div>}
+      {pricingQuery.error && <div className={styles.notice} role="alert">{pricingQuery.error}</div>}
+      {loading ? <div role="status">{t('common.loading')}</div> : <section className={styles.summaryGrid} aria-label={t('usage_stats.pricing_summary')}>
         <div className={styles.summaryCard}>
           <span>{t('usage_stats.pricing_api_usd_estimate')}</span>
           <strong>
@@ -880,6 +892,7 @@ export function UsagePricingPage() {
         </div>
       </section>
 
+      }
       <section className={styles.toolbar}>
         <div className={styles.searchWrap}>
           <IconSearch size={16} aria-hidden="true" />

@@ -1,4 +1,8 @@
-import { createElement, useEffect, useState, useCallback, useRef } from 'react';
+import { createElement, useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { useUsageQuerySession } from './useUsageQuery';
+import { useUsageQueryStore, usageConnectionScope } from '@/stores/useUsageQueryStore';
+import { preparePriceProfile } from '@/utils/usage/pricing';
+import type { UsageQuerySession } from '@/types/usageQuery';
 import { useTranslation } from 'react-i18next';
 import { USAGE_STATS_STALE_TIME_MS, useNotificationStore, useUsageStatsStore } from '@/stores';
 import { usageApi } from '@/services/api/usage';
@@ -29,6 +33,7 @@ export interface UsagePayload {
 }
 
 export interface UseUsageDataReturn {
+  querySession: UsageQuerySession | null;
   usage: UsagePayload | null;
   loading: boolean;
   error: string;
@@ -50,10 +55,12 @@ export function useUsageData(): UseUsageDataReturn {
   const { t } = useTranslation();
   const { showNotification, showConfirmation } = useNotificationStore();
   const usageSnapshot = useUsageStatsStore((state) => state.usage);
-  const loading = useUsageStatsStore((state) => state.loading);
+  const legacyLoading = useUsageStatsStore((state) => state.loading);
   const storeError = useUsageStatsStore((state) => state.error);
   const lastRefreshedAtTs = useUsageStatsStore((state) => state.lastRefreshedAt);
   const loadUsageStats = useUsageStatsStore((state) => state.loadUsageStats);
+  const queryState = useUsageQuerySession();
+  const loadQuerySession = queryState.load;
 
   const [priceProfile, setPriceProfileState] = useState<PriceProfileV3>(
     createDefaultPriceProfileV3
@@ -65,16 +72,20 @@ export function useUsageData(): UseUsageDataReturn {
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
   const loadUsage = useCallback(async () => {
-    await loadUsageStats({ force: true, staleTimeMs: USAGE_STATS_STALE_TIME_MS });
-  }, [loadUsageStats]);
+    await loadQuerySession(true);
+    if (useUsageQueryStore.getState().mode === 'legacy') await loadUsageStats({ force: true, staleTimeMs: USAGE_STATS_STALE_TIME_MS });
+  }, [loadUsageStats, loadQuerySession]);
 
   useEffect(() => {
-    void loadUsageStats({ staleTimeMs: USAGE_STATS_STALE_TIME_MS }).catch(() => {});
+    if (queryState.mode === 'legacy') void loadUsageStats({ staleTimeMs: USAGE_STATS_STALE_TIME_MS }).catch(() => {});
+  }, [loadUsageStats, queryState.mode]);
+
+  useEffect(() => {
     const loaded = loadPriceProfileV3();
     setPriceProfileState(loaded.profile);
     setPriceProfileSource(loaded.source);
     setPriceProfileWarnings(loaded.warnings);
-  }, [loadUsageStats]);
+  }, []);
 
   const handleExport = async () => {
     setExporting(true);
@@ -110,6 +121,7 @@ export function useUsageData(): UseUsageDataReturn {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
+    const importScope = usageConnectionScope();
 
     setImporting(true);
     let payload: unknown = null;
@@ -132,7 +144,17 @@ export function useUsageData(): UseUsageDataReturn {
       setImporting(false);
     }
 
-    const preflight = analyzeUsageImport(payload, usageSnapshot);
+    if (importScope !== usageConnectionScope()) return;
+    // 显式导入操作才读取完整备份，保留与现存记录的重叠检查；日常查询不走此路径。
+    let currentUsage = queryState.mode === 'legacy' ? usageSnapshot : null;
+    if (queryState.mode === 'query') {
+      setImporting(true);
+      try { currentUsage = (await usageApi.exportUsage()).usage ?? null; }
+      catch { currentUsage = null; }
+      finally { setImporting(false); }
+    }
+    if (importScope !== usageConnectionScope()) return;
+    const preflight = analyzeUsageImport(payload, currentUsage);
     if (!preflight.valid) {
       const issue = preflight.issues[0];
       showNotification(
@@ -176,6 +198,7 @@ export function useUsageData(): UseUsageDataReturn {
       confirmText: t('usage_stats.import_review_confirm'),
       variant: 'primary',
       onConfirm: async () => {
+        if (importScope !== usageConnectionScope()) return;
         setImporting(true);
         try {
           const result = await usageApi.importUsage(payload);
@@ -197,7 +220,7 @@ export function useUsageData(): UseUsageDataReturn {
             'success'
           );
           try {
-            await loadUsageStats({ force: true, staleTimeMs: USAGE_STATS_STALE_TIME_MS });
+            await loadUsage();
           } catch (err: unknown) {
             const message = err instanceof Error ? err.message : '';
             showNotification(
@@ -238,16 +261,20 @@ export function useUsageData(): UseUsageDataReturn {
     [showNotification, t]
   );
 
-  const usage = usageSnapshot as UsagePayload | null;
-  const error = storeError || '';
-  const lastRefreshedAt = lastRefreshedAtTs ? new Date(lastRefreshedAtTs) : null;
+  const usage = queryState.mode === 'legacy' ? usageSnapshot as UsagePayload | null : null;
+  const loading = queryState.loading || queryState.mode === 'unknown' || queryState.mode === 'legacy' && legacyLoading;
+  const error = queryState.error || (queryState.mode === 'legacy' ? storeError : '') || '';
+  const refreshedAt = queryState.mode === 'legacy' ? lastRefreshedAtTs : queryState.session?.now_ms;
+  const lastRefreshedAt = refreshedAt ? new Date(refreshedAt) : null;
+  const preparedProfile = useMemo(() => preparePriceProfile(priceProfile), [priceProfile]);
 
   return {
+    querySession: queryState.mode === 'query' ? queryState.session : null,
     usage,
     loading,
     error,
     lastRefreshedAt,
-    priceProfile,
+    priceProfile: preparedProfile,
     priceProfileSource,
     priceProfileWarnings,
     setPriceProfile: handleSetPriceProfile,

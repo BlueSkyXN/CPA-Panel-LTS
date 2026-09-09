@@ -116,6 +116,8 @@ export interface PricingCoverageInput {
   modelName: string;
   tokenCount: number;
   estimate: CostEstimate;
+  /** 查询分类已累计的请求数；未提供时仍表示单条记录。 */
+  requestCount?: number;
 }
 
 export interface PricingCoverage {
@@ -518,7 +520,35 @@ const resolveAliasTarget = (
 
 /** Direct custom -> catalog canonical -> explicit user/catalog alias -> no fuzzy fallback. */
 export function resolvePriceProfile(modelName: string, profile: PriceProfileV3): ResolvedPrice {
+  const prepared = preparedProfiles.get(profile);
+  if (prepared) {
+    const cached = prepared.get(modelName);
+    if (cached) return cached;
+    const result = resolveNormalizedPriceProfile(modelName, profile);
+    prepared.set(modelName, result);
+    return result;
+  }
   const normalized = normalizePriceProfileV3(profile).profile;
+  return resolveNormalizedPriceProfile(modelName, normalized);
+}
+
+const preparedProfiles = new WeakMap<PriceProfileV3, Map<string, ResolvedPrice>>();
+
+/** 返回独立、不可变的查询配置；配置变更产生新对象，不复用旧解析结果。 */
+export function preparePriceProfile(profile: PriceProfileV3): PriceProfileV3 {
+  if (preparedProfiles.has(profile)) return profile;
+  const normalized = normalizePriceProfileV3(profile).profile;
+  const freeze = (value: unknown): void => {
+    if (!value || typeof value !== 'object' || Object.isFrozen(value)) return;
+    Object.values(value).forEach(freeze);
+    Object.freeze(value);
+  };
+  freeze(normalized);
+  preparedProfiles.set(normalized, new Map());
+  return normalized;
+}
+
+function resolveNormalizedPriceProfile(modelName: string, normalized: PriceProfileV3): ResolvedPrice {
   const key = normalizeModelKey(modelName);
   if (!key) return unmatchedPrice(modelName);
 
@@ -734,8 +764,8 @@ export function aggregateCostEstimateCoverage(
     estimatedAmount: 0,
     assumedTierRequests: 0,
   };
-  for (const { modelName, tokenCount, estimate } of inputs) {
-    result.totalRequests += 1;
+  for (const { modelName, tokenCount, estimate, requestCount = 1 } of inputs) {
+    result.totalRequests += requestCount;
     const modelKey = normalizeModelKey(modelName);
     let currentModel:
       | {
@@ -748,7 +778,7 @@ export function aggregateCostEstimateCoverage(
         total: 0,
         priced: 0,
       };
-      currentModel.total += 1;
+      currentModel.total += requestCount;
       modelCoverage.set(modelKey, currentModel);
     }
     const tokens = toTokenCount(tokenCount);
@@ -758,18 +788,18 @@ export function aggregateCostEstimateCoverage(
     const isLocallyPriced = localAmount !== null;
 
     if (estimate.tier.evidence === 'assumed' && isLocallyPriced) {
-      result.assumedTierRequests += 1;
+      result.assumedTierRequests += requestCount;
     }
     if (isLocallyPriced) {
-      result.pricedRequests += 1;
+      result.pricedRequests += requestCount;
       result.pricedTokens += tokens;
       result.estimatedAmount += localAmount;
       if (currentModel) {
-        currentModel.priced += 1;
+        currentModel.priced += requestCount;
       }
     }
-    if (estimate.status === 'unsupported') result.unsupportedRequests += 1;
-    else if (estimate.status === 'unmatched') result.unmatchedRequests += 1;
+    if (estimate.status === 'unsupported') result.unsupportedRequests += requestCount;
+    else if (estimate.status === 'unmatched') result.unmatchedRequests += requestCount;
   }
   const totalModels = modelCoverage.size;
   const modelStates = Array.from(modelCoverage.values());

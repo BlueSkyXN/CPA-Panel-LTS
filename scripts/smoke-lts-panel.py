@@ -1096,6 +1096,7 @@ class MockCoreHandler(BaseHTTPRequestHandler):
             "/v0/management/config": config_payload,
             "/v0/management/auth-files": build_auth_files_payload(),
             "/v0/management/usage": self.state.usage_payload,
+            "/v0/management/usage-statistics-enabled": {"usage-statistics-enabled": True},
             "/v0/management/usage/export": {
                 "version": 3,
                 "usage": self.state.usage_payload["usage"],

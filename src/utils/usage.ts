@@ -77,6 +77,8 @@ export interface KeyStatBucket {
   failure: number;
 }
 
+import { isUsageQueryView, queryApiStats, queryModelStats, queryPricingModels, queryCoverage, querySeriesByModel, queryTokenSeries, queryCostSeries } from './usage/queryView';
+
 export interface KeyStats {
   bySource: Record<string, KeyStatBucket>;
   byAuthIndex: Record<string, KeyStatBucket>;
@@ -173,6 +175,7 @@ export interface UsageTokenStats extends UsageTokenFields {
 }
 
 export interface UsageDetail {
+  __queryId?: string;
   timestamp: string;
   source: string;
   auth_index: string | number | null;
@@ -894,6 +897,7 @@ export function extractTotalTokens(detail: unknown, modelNameOverride?: string):
  * 计算耗时统计
  */
 export function calculateLatencyStats(usageData: unknown): LatencyStats {
+  if (isUsageQueryView(usageData)) { const m = usageData.summary.totals; return { averageMs: m.latency_samples ? m.latency_ms / m.latency_samples : null, totalMs: m.latency_samples ? m.latency_ms : null, sampleCount: m.latency_samples }; }
   return calculateLatencyStatsFromDetails(collectUsageDetails(usageData));
 }
 
@@ -901,6 +905,7 @@ export function calculateLatencyStats(usageData: unknown): LatencyStats {
  * 计算 token 分类统计
  */
 export function calculateTokenBreakdown(usageData: unknown): TokenBreakdown {
+  if (isUsageQueryView(usageData)) { const m = usageData.summary.totals; return { cacheReadTokens: m.cache_read, cacheWriteTokens: m.cache_write, reasoningTokens: m.reasoning }; }
   const details = collectUsageDetails(usageData);
   if (!details.length) {
     return { cacheReadTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0 };
@@ -968,6 +973,7 @@ export function calculateRecentPerMinuteRates(
  * 从使用数据获取模型名称列表
  */
 export function getModelNamesFromUsage(usageData: unknown): string[] {
+  if (isUsageQueryView(usageData)) return (usageData.summary.groups.models ?? []).map((g) => g.model ?? '').sort((a, b) => a.localeCompare(b));
   const apis = getApisRecord(usageData);
   if (!apis) return [];
   const names = new Set<string>();
@@ -1012,6 +1018,7 @@ export function analyzeUsagePricing(
   usageData: unknown,
   priceProfile: PriceProfileV3 = createDefaultPriceProfileV3()
 ): UsagePricingAnalysis {
+  if (isUsageQueryView(usageData)) return { coverage: queryCoverage(usageData.pricing?.totals, priceProfile), modelSummaries: queryPricingModels(usageData, priceProfile) };
   const modelSummaries = getPricingModelSummaries(usageData, priceProfile);
   const modelCoverage = combinePricingCoverages(
     modelSummaries.map((summary) => summary.pricingCoverage)
@@ -1041,6 +1048,7 @@ export function getApiStats(
   usageData: unknown,
   priceProfile: PriceProfileV3 = createDefaultPriceProfileV3()
 ): ApiStats[] {
+  if (isUsageQueryView(usageData)) return queryApiStats(usageData, priceProfile);
   const apis = getApisRecord(usageData);
   if (!apis) return [];
   const result: ApiStats[] = [];
@@ -1140,6 +1148,7 @@ export function getModelStats(
   usageData: unknown,
   priceProfile: PriceProfileV3 = createDefaultPriceProfileV3()
 ): ModelStatsSummary[] {
+  if (isUsageQueryView(usageData)) return queryModelStats(usageData, priceProfile);
   const apis = getApisRecord(usageData);
   if (!apis) return [];
   const detailsByEndpointAndModel = new Map<string, UsageDetailWithEndpoint[]>();
@@ -1252,6 +1261,7 @@ export function getPricingModelSummaries(
   usageData: unknown,
   priceProfile: PriceProfileV3 = createDefaultPriceProfileV3()
 ): PricingModelSummary[] {
+  if (isUsageQueryView(usageData)) return queryPricingModels(usageData, priceProfile);
   const groups = new Map<
     string,
     {
@@ -1405,6 +1415,7 @@ export function buildHourlySeriesByModel(
   dataByModel: Map<string, number[]>;
   hasData: boolean;
 } {
+  if (isUsageQueryView(usageData)) return querySeriesByModel(usageData, 'hour', metric, hourWindow);
   const details = collectUsageDetails(usageData);
   const { labels, getIndex } = buildHourlyBuckets(details, hourWindow);
 
@@ -1455,6 +1466,7 @@ export function buildDailySeriesByModel(
   dataByModel: Map<string, number[]>;
   hasData: boolean;
 } {
+  if (isUsageQueryView(usageData)) return querySeriesByModel(usageData, 'day', metric);
   const details = collectUsageDetails(usageData);
   const valuesByModel = new Map<string, Map<string, number>>();
   const labelsSet = new Set<string>();
@@ -1980,6 +1992,7 @@ export function buildHourlyTokenBreakdown(
   usageData: unknown,
   hourWindow: number | UsageTimeWindow = 24
 ): TokenBreakdownSeries {
+  if (isUsageQueryView(usageData)) return queryTokenSeries(usageData, 'hour', hourWindow);
   const details = collectUsageDetails(usageData);
   const { labels, getIndex } = buildHourlyBuckets(details, hourWindow);
 
@@ -2024,6 +2037,7 @@ export function buildHourlyTokenBreakdown(
  * 按 token 类别构建日级别的堆叠序列
  */
 export function buildDailyTokenBreakdown(usageData: unknown): TokenBreakdownSeries {
+  if (isUsageQueryView(usageData)) return queryTokenSeries(usageData, 'day');
   const details = collectUsageDetails(usageData);
   const dayMap: Record<string, Record<TokenCategory, number>> = {};
   let hasData = false;
@@ -2083,6 +2097,7 @@ export function buildHourlyCostSeries(
   priceProfile: PriceProfileV3 = createDefaultPriceProfileV3(),
   hourWindow: number | UsageTimeWindow = 24
 ): CostSeries {
+  if (isUsageQueryView(usageData)) return queryCostSeries(usageData, 'hour', priceProfile, hourWindow);
   const details = collectUsageDetails(usageData);
   const { labels, getIndex } = buildHourlyBuckets(details, hourWindow);
 
@@ -2114,6 +2129,7 @@ export function buildDailyCostSeries(
   usageData: unknown,
   priceProfile: PriceProfileV3 = createDefaultPriceProfileV3()
 ): CostSeries {
+  if (isUsageQueryView(usageData)) return queryCostSeries(usageData, 'day', priceProfile);
   const details = collectUsageDetails(usageData);
   const dayMap: Record<string, number> = {};
   const pricingInputs: PricingCoverageInput[] = [];

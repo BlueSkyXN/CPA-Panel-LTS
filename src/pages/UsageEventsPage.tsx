@@ -29,7 +29,7 @@ export function UsageEventsPage() {
     providers: OpenAIProviderConfig[];
   } | null>(null);
   const {
-    usage, loading, error, lastRefreshedAt, priceProfile, loadUsage,
+    usage, loading, error, lastRefreshedAt, priceProfile, loadUsage, querySession,
     handleExport, handleImport, handleImportChange, importInputRef, exporting, importing,
   } = useUsageData();
   useHeaderRefresh(loadUsage);
@@ -80,6 +80,7 @@ export function UsageEventsPage() {
       {error && <div className={styles.errorBox}>{error}</div>}
       {!scope.valid && <div className={styles.errorBox}>{t('usage_stats.request_events_invalid_scope')}</div>}
       <RequestEventsDetailsCard
+        querySession={scope.valid ? querySession : null}
         usage={scope.valid ? usage : null}
         loading={loading}
         pageTimeRange={scope.range}

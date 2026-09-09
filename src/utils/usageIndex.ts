@@ -1,12 +1,16 @@
 import type { UsageDetail } from '@/utils/usage';
 import { normalizeAuthIndex } from '@/utils/usage';
+import type { UsageQuerySummary } from '@/types/usageQuery';
 
-export type UsageDetailsBySource = Map<string, UsageDetail[]>;
-export type UsageDetailsByAuthIndex = Map<string, UsageDetail[]>;
+export interface UsageQueryStatusIndex { kind: 'usage-query-status'; summary: UsageQuerySummary }
+export type UsageDetailsBySource = Map<string, UsageDetail[]> | UsageQueryStatusIndex;
+export type UsageDetailsByAuthIndex = Map<string, UsageDetail[]> | UsageQueryStatusIndex;
+export const isUsageQueryStatusIndex = (index: UsageDetailsBySource): index is UsageQueryStatusIndex => !(index instanceof Map);
 
 const EMPTY_USAGE_DETAILS: UsageDetail[] = [];
 
-export function indexUsageDetailsBySource(usageDetails: UsageDetail[]): UsageDetailsBySource {
+export function indexUsageDetailsBySource(usageDetails: UsageDetail[], summary?: UsageQuerySummary | null): UsageDetailsBySource {
+  if (summary) return { kind: 'usage-query-status', summary };
   const map: UsageDetailsBySource = new Map();
 
   usageDetails.forEach((detail) => {
@@ -24,7 +28,8 @@ export function indexUsageDetailsBySource(usageDetails: UsageDetail[]): UsageDet
   return map;
 }
 
-export function indexUsageDetailsByAuthIndex(usageDetails: UsageDetail[]): UsageDetailsByAuthIndex {
+export function indexUsageDetailsByAuthIndex(usageDetails: UsageDetail[], summary?: UsageQuerySummary | null): UsageDetailsByAuthIndex {
+  if (summary) return { kind: 'usage-query-status', summary };
   const map: UsageDetailsByAuthIndex = new Map();
 
   usageDetails.forEach((detail) => {
@@ -46,6 +51,7 @@ export function collectUsageDetailsForCandidates(
   usageDetailsBySource: UsageDetailsBySource,
   candidates: Iterable<string>
 ): UsageDetail[] {
+  if (isUsageQueryStatusIndex(usageDetailsBySource)) throw new Error('A status summary is not a detail index');
   return collectUsageDetailsForKeys(usageDetailsBySource, candidates);
 }
 
@@ -53,6 +59,7 @@ export function collectUsageDetailsForAuthIndices(
   usageDetailsByAuthIndex: UsageDetailsByAuthIndex,
   authIndices: Iterable<string>
 ): UsageDetail[] {
+  if (isUsageQueryStatusIndex(usageDetailsByAuthIndex)) throw new Error('A status summary is not a detail index');
   return collectUsageDetailsForKeys(usageDetailsByAuthIndex, authIndices);
 }
 

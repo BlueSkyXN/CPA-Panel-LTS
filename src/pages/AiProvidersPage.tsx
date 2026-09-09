@@ -63,16 +63,16 @@ export function AiProvidersPage() {
   const pageTransitionLayer = usePageTransitionLayer();
   const isCurrentLayer = pageTransitionLayer ? pageTransitionLayer.status === 'current' : true;
 
-  const { keyStats, usageDetails, loadKeyStats, refreshKeyStats } = useProviderStats({
+  const { keyStats, usageDetails, querySummary, loadKeyStats, refreshKeyStats, error: usageError } = useProviderStats({
     enabled: isCurrentLayer,
   });
   const usageDetailsBySource = useMemo(
-    () => indexUsageDetailsBySource(usageDetails),
-    [usageDetails]
+    () => indexUsageDetailsBySource(usageDetails, querySummary),
+    [usageDetails, querySummary]
   );
   const usageDetailsByAuthIndex = useMemo(
-    () => indexUsageDetailsByAuthIndex(usageDetails),
-    [usageDetails]
+    () => indexUsageDetailsByAuthIndex(usageDetails, querySummary),
+    [usageDetails, querySummary]
   );
 
   const getErrorMessage = (err: unknown) => {
@@ -413,6 +413,7 @@ export function AiProvidersPage() {
 
   return (
     <div className={styles.container}>
+      {usageError && <div role="alert">{t('usage_stats.loading_error')}: {usageError}</div>}
       <h1 className={styles.pageTitle}>{t('ai_providers.title')}</h1>
       <div className={styles.content}>
         {error && <div className="error-box">{error}</div>}
