@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import argparse
 import io
 import json
 import re
@@ -105,12 +106,12 @@ def browser_check(api, app_url, count):
             browser.close()
 
 
-def legacy_panel_check(api, directory):
-    """构建本仓修改前的 HEAD，仅使用已有依赖；不检出或覆盖当前工作区。"""
+def legacy_panel_check(api, directory, ref):
+    """构建明确指定的旧版本，仅使用已有依赖；不检出或覆盖当前工作区。"""
     from playwright.sync_api import sync_playwright
     source = directory / "legacy-panel"
     source.mkdir()
-    archive = subprocess.run(["git", "archive", "HEAD"], cwd=ROOT, check=True, capture_output=True).stdout
+    archive = subprocess.run(["git", "archive", ref], cwd=ROOT, check=True, capture_output=True).stdout
     with tarfile.open(fileobj=io.BytesIO(archive)) as files:
         files.extractall(source, filter="data")
     (source / "node_modules").symlink_to(ROOT / "node_modules", target_is_directory=True)
@@ -142,7 +143,7 @@ def legacy_panel_check(api, directory):
                 assert page.locator('[data-testid="usage-events-workspace"] tbody tr').count() == 100
                 assert any(url.endswith("/v0/management/usage") for url in reads)
                 assert not errors, errors
-                return {"baseline": subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, text=True).strip(), "old_panel_new_core": "passed"}
+                return {"baseline": subprocess.check_output(["git", "rev-parse", "--short", ref], cwd=ROOT, text=True).strip(), "old_panel_new_core": "passed"}
             finally:
                 browser.close()
     finally:
@@ -150,6 +151,10 @@ def legacy_panel_check(api, directory):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--legacy-panel", action="store_true", help="同时构建旧 Panel，验证旧 Panel + 新 Core")
+    parser.add_argument("--legacy-panel-ref", default="7d00037", help="本地可解析的旧 Panel Git ref，默认固定在按量查询迁移前")
+    args = parser.parse_args()
     now = int(time.time() * 1000)
     with tempfile.TemporaryDirectory(prefix="cpa-usage-query-") as directory:
         with core.run_core(ROOT.parent / "CPA-Core-LTS", Path(directory)) as runtime:
@@ -176,8 +181,8 @@ def main():
                 port = core.find_free_port()
                 with core.run_static_server(port):
                     output["browser"] = browser_check(api, f"http://127.0.0.1:{port}", count)
-                if count == 10000 and "--legacy-panel" in sys.argv:
-                    output["legacy_panel"] = legacy_panel_check(api, Path(directory))
+                if count == 10000 and args.legacy_panel:
+                    output["legacy_panel"] = legacy_panel_check(api, Path(directory), args.legacy_panel_ref)
                 print(json.dumps(output), flush=True)
 
 
