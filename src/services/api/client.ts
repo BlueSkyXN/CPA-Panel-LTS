@@ -18,9 +18,11 @@ import {
 import { computeApiUrl } from '@/utils/connection';
 import type { ServerRuntimeKind } from '@/types';
 import { parseApiErrorResponse } from './apiError';
+import { beginSessionWrite, isSessionFrozen } from '@/services/connectionSession';
 
 type ConnectionScopedRequestConfig = AxiosRequestConfig & {
   __cpaConnectionGeneration?: number;
+  __finishSessionWrite?: () => void;
 };
 
 class ApiClient {
@@ -132,8 +134,10 @@ class ApiClient {
     // 请求拦截器
     this.instance.interceptors.request.use(
       (config) => {
+        if (isSessionFrozen() && !['get', 'head', 'options'].includes(config.method || 'get')) throw new Error('Connection switch in progress');
         const scopedConfig = config as typeof config & ConnectionScopedRequestConfig;
         scopedConfig.__cpaConnectionGeneration = this.connectionGeneration;
+        if (!['get', 'head', 'options'].includes(config.method || 'get')) scopedConfig.__finishSessionWrite = beginSessionWrite();
 
         // 设置 baseURL
         config.baseURL = this.apiBase;
@@ -158,6 +162,7 @@ class ApiClient {
     // 响应拦截器
     this.instance.interceptors.response.use(
       (response) => {
+        (response.config as ConnectionScopedRequestConfig).__finishSessionWrite?.();
         if (!this.isCurrentRequest(response.config)) {
           return response;
         }
@@ -192,7 +197,10 @@ class ApiClient {
 
         return response;
       },
-      (error) => Promise.reject(this.handleError(error))
+      (error) => {
+        if (axios.isAxiosError(error)) (error.config as ConnectionScopedRequestConfig | undefined)?.__finishSessionWrite?.();
+        return Promise.reject(this.handleError(error));
+      }
     );
   }
 

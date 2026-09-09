@@ -6,6 +6,14 @@ maintenance_model:
   release_asset: management.html
 
 protected_deltas:
+  - id: multi-instance-connections
+    reason: Instance selection remains available without an authenticated business workspace.
+    must_keep:
+      - shared connection profiles with per-profile credential opt-in
+      - independent tab-local active sessions and bounded one-shot credential handoff
+      - isolated target probe; failed target preserves the current instance and drafts
+      - full document reconstruction on successful switch; no hot global client replacement
+      - full usage and global pricing semantics unchanged
   - id: full-usage-statistics-ui
     reason: CPA-Panel-LTS exists to preserve the full usage statistics UI after upstream moved toward recent requests and API-key summaries.
     must_keep:

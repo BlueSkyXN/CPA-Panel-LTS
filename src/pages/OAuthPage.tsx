@@ -10,6 +10,7 @@ import { vertexApi, type VertexImportResponse } from '@/services/api/vertex';
 import { copyToClipboard } from '@/utils/clipboard';
 import { getErrorMessage, isRecord } from '@/utils/helpers';
 import styles from './OAuthPage.module.scss';
+import { registerSessionBusyCheck, registerSessionLeaveCheck } from '@/services/connectionSession';
 import iconCodex from '@/assets/icons/codex.svg';
 import iconClaude from '@/assets/icons/claude.svg';
 import iconAntigravity from '@/assets/icons/antigravity.svg';
@@ -152,12 +153,14 @@ export function OAuthPage() {
   const [searchParams] = useSearchParams();
   const { showNotification } = useNotificationStore();
   const [states, setStates] = useState<Record<OAuthProvider, ProviderState>>({} as Record<OAuthProvider, ProviderState>);
+  useEffect(() => registerSessionLeaveCheck(() => Object.values(states).some((state) => state.polling || state.callbackSubmitting)), [states]);
   const [vertexState, setVertexState] = useState<VertexImportState>({
     fileName: '',
     location: '',
     loading: false
   });
   const pollingTimers = useRef<Partial<Record<OAuthProvider, number>>>({});
+  useEffect(() => registerSessionBusyCheck(() => vertexState.loading || Object.values(states).some((state) => state.callbackSubmitting)), [states, vertexState.loading]);
   const successResetTimers = useRef<Partial<Record<OAuthProvider, number>>>({});
   const vertexFileInputRef = useRef<HTMLInputElement | null>(null);
   const providerCardRefs = useRef<Partial<Record<OAuthProvider, HTMLDivElement | null>>>({});

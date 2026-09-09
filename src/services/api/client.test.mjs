@@ -26,6 +26,25 @@ const unauthorizedError = (config, data) =>
     config,
   });
 
+test('switch preparation blocks new writes and tracks in-flight mutations until completion', async () => {
+  const lifecycle = await vite.ssrLoadModule('/src/services/connectionSession.ts');
+  apiClient.setConfig({ apiBase: 'https://test.example.test', managementKey: 'synthetic' });
+  let finish;
+  const pending = apiClient.put('/config', {}, { adapter: (config) => new Promise((resolve) => {
+    finish = () => resolve({ data: {}, status: 200, statusText: 'OK', headers: {}, config });
+  }) });
+  assert.equal(lifecycle.hasActiveWrites(), true);
+  lifecycle.setSessionFrozen(true);
+  try {
+    await assert.rejects(apiClient.post('/config', {}, { adapter: () => { throw new Error('must not reach network'); } }), /Connection switch/);
+    finish();
+    await pending;
+    assert.equal(lifecycle.hasActiveWrites(), false);
+  } finally {
+    lifecycle.setSessionFrozen(false);
+  }
+});
+
 test.after(async () => {
   apiClient.clearConfig();
   await vite.close();

@@ -1,0 +1,137 @@
+.shell {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+.bar {
+  flex: 0 0 48px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border-color);
+  z-index: 1100;
+  min-width: 0;
+}
+.selector {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  max-width: min(640px, 75%);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font: inherit;
+  strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  &:hover {
+    background: var(--bg-secondary);
+  }
+}
+.tag {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.status {
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  &[data-status='connected'] {
+    color: var(--success-color, #168357);
+  }
+}
+.host {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  transform: translateZ(0);
+  :global(.app-shell),
+  :global(.main-body),
+  :global(.sidebar),
+  :global(.content) {
+    height: calc(100dvh - 48px);
+    min-height: 0;
+  }
+}
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.error {
+  padding: 12px;
+  border: 1px solid var(--error-color, #c65746);
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 8px;
+}
+.target {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 6px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  overflow-wrap: anywhere;
+  span,
+  small {
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+  &:disabled {
+    cursor: default;
+  }
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+@media (max-width: 768px) {
+  .bar {
+    padding: 0 8px;
+    gap: 4px;
+  }
+  .tag {
+    display: none;
+  }
+  .row {
+    flex-wrap: wrap;
+  }
+  .target {
+    flex-basis: 100%;
+  }
+}

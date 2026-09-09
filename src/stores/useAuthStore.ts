@@ -7,7 +7,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { AuthState, LoginCredentials, ConnectionStatus, ServerRuntimeKind } from '@/types';
 import { STORAGE_KEY_AUTH } from '@/utils/constants';
-import { obfuscatedStorage } from '@/services/storage/secureStorage';
+import { readProfiles, saveProfile, tabAuthStorage } from '@/services/storage/connectionProfiles';
 import { apiClient } from '@/services/api/client';
 import { versionApi } from '@/services/api/version';
 import { pluginsApi } from '@/services/api/plugins';
@@ -16,6 +16,7 @@ import { useUsageStatsStore } from './useUsageStatsStore';
 import { useModelsStore } from './useModelsStore';
 import { useQuotaStore } from './useQuotaStore';
 import { detectApiBaseFromLocation, normalizeApiBase } from '@/utils/connection';
+import { generateId } from '@/utils/helpers';
 
 type PluginSupportState = Pick<
   AuthState,
@@ -23,6 +24,7 @@ type PluginSupportState = Pick<
 >;
 
 interface AuthStoreState extends AuthState {
+  profileId: string;
   connectionStatus: ConnectionStatus;
   connectionError: string | null;
 
@@ -97,6 +99,7 @@ export const useAuthStore = create<AuthStoreState>()(
     (set, get) => ({
       // 初始状态
       isAuthenticated: false,
+      profileId: '',
       apiBase: '',
       managementKey: '',
       rememberPassword: false,
@@ -114,18 +117,11 @@ export const useAuthStore = create<AuthStoreState>()(
         if (restoreSessionPromise) return restoreSessionPromise;
 
         restoreSessionPromise = (async () => {
-          obfuscatedStorage.migratePlaintextKeys(['apiBase', 'apiUrl', 'managementKey']);
-
-          const wasLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
-          const legacyBase =
-            obfuscatedStorage.getItem<string>('apiBase') ||
-            obfuscatedStorage.getItem<string>('apiUrl', { encrypt: true });
-          const legacyKey = obfuscatedStorage.getItem<string>('managementKey');
-
+          const wasLoggedIn = sessionStorage.getItem('isLoggedIn') === 'true';
           const { apiBase, managementKey, rememberPassword } = get();
-          const resolvedBase = normalizeApiBase(apiBase || legacyBase || detectApiBaseFromLocation());
-          const resolvedKey = managementKey || legacyKey || '';
-          const resolvedRememberPassword = rememberPassword || Boolean(managementKey) || Boolean(legacyKey);
+          const resolvedBase = normalizeApiBase(apiBase || detectApiBaseFromLocation());
+          const resolvedKey = managementKey || '';
+          const resolvedRememberPassword = rememberPassword;
 
           set({
             apiBase: resolvedBase,
@@ -195,7 +191,15 @@ export const useAuthStore = create<AuthStoreState>()(
           }
 
           // 登录成功
+          const existing = readProfiles().find((profile) => profile.id === get().profileId && profile.apiBase === apiBase);
+          const profileId = existing?.id || generateId();
+          saveProfile({
+            id: profileId, name: existing?.name || apiBase, apiBase,
+            environment: existing?.environment || '', rememberPassword,
+            ...(rememberPassword ? { managementKey } : {}), lastUsedAt: Date.now(),
+          });
           set({
+            profileId,
             isAuthenticated: true,
             apiBase,
             managementKey,
@@ -206,9 +210,9 @@ export const useAuthStore = create<AuthStoreState>()(
             ...(runtimeKind !== 'unknown' ? { serverRuntimeKind: runtimeKind } : {})
           });
           if (rememberPassword) {
-            localStorage.setItem('isLoggedIn', 'true');
+            sessionStorage.setItem('isLoggedIn', 'true');
           } else {
-            localStorage.removeItem('isLoggedIn');
+            sessionStorage.removeItem('isLoggedIn');
           }
           return true;
         } catch (error: unknown) {
@@ -231,6 +235,7 @@ export const useAuthStore = create<AuthStoreState>()(
 
       // 登出
       logout: () => {
+        const wasAuthenticated = get().isAuthenticated;
         restoreSessionPromise = null;
         apiClient.clearConfig();
         useConfigStore.getState().clearCache();
@@ -250,7 +255,8 @@ export const useAuthStore = create<AuthStoreState>()(
           connectionStatus: 'disconnected',
           connectionError: null
         });
-        localStorage.removeItem('isLoggedIn');
+        sessionStorage.removeItem('isLoggedIn');
+        if (wasAuthenticated) window.location.reload();
       },
 
       // 检查认证状态
@@ -336,21 +342,10 @@ export const useAuthStore = create<AuthStoreState>()(
     }),
     {
       name: STORAGE_KEY_AUTH,
-      storage: createJSONStorage(() => ({
-        getItem: (name) => {
-          const data = obfuscatedStorage.getItem<AuthStoreState>(name);
-          return data ? JSON.stringify(data) : null;
-        },
-        setItem: (name, value) => {
-          obfuscatedStorage.setItem(name, JSON.parse(value));
-        },
-        removeItem: (name) => {
-          obfuscatedStorage.removeItem(name);
-        }
-      })),
+      storage: createJSONStorage(() => tabAuthStorage),
       partialize: (state) => ({
+        profileId: state.profileId,
         apiBase: state.apiBase,
-        ...(state.rememberPassword ? { managementKey: state.managementKey } : {}),
         rememberPassword: state.rememberPassword,
         serverVersion: state.serverVersion,
         serverBuildDate: state.serverBuildDate,
