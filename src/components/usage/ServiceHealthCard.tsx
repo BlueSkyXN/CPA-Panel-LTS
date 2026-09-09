@@ -59,12 +59,15 @@ export interface ServiceHealthCardProps {
   loading: boolean;
 }
 
+import { isUsageQueryView, queryStatusBar } from '@/utils/usage/queryView';
+
 export function ServiceHealthCard({ usage, loading }: ServiceHealthCardProps) {
   const { t } = useTranslation();
   const [activeTooltip, setActiveTooltip] = useState<ActiveTooltipState | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
 
   const healthData: ServiceHealthData = useMemo(() => {
+    if (isUsageQueryView(usage)) return { ...queryStatusBar(usage.summary.groups.health ?? [], usage.summary.now_ms, 672, 900000), rows: 7, cols: 96 };
     const details = usage ? collectUsageDetails(usage) : [];
     return calculateServiceHealthData(details);
   }, [usage]);

@@ -6,7 +6,8 @@ import type { GeminiKeyConfig, OpenAIProviderConfig, ProviderKeyConfig } from '@
 import type { AuthFileItem } from '@/types/authFile';
 import type { CredentialInfo } from '@/types/sourceInfo';
 import { buildSourceInfoMap, resolveSourceDisplay } from '@/utils/sourceResolver';
-import { collectUsageDetails, formatCompactNumber, normalizeAuthIndex } from '@/utils/usage';
+import { collectUsageDetails, formatCompactNumber, normalizeAuthIndex, normalizeUsageSourceId } from '@/utils/usage';
+import { isUsageQueryView } from '@/utils/usage/queryView';
 import type { UsagePayload } from './hooks/useUsageData';
 import styles from '@/pages/UsagePage.module.scss';
 
@@ -89,7 +90,10 @@ export function CredentialStatsCard({
 
     const rowMap = new Map<string, CredentialRow>();
 
-    collectUsageDetails(usage).forEach((detail) => {
+    const entries = isUsageQueryView(usage)
+      ? (usage.summary.groups.credentials ?? []).map((g) => ({ source: normalizeUsageSourceId(g.source ?? ''), auth_index: g.auth_index ?? '', success: g.metrics.success, failure: g.metrics.failure }))
+      : collectUsageDetails(usage).map((d) => ({ source: d.source, auth_index: d.auth_index, success: d.failed ? 0 : 1, failure: d.failed ? 1 : 0 }));
+    entries.forEach((detail) => {
       const sourceInfo = resolveSourceDisplay(
         detail.source ?? '',
         detail.auth_index,
@@ -109,11 +113,8 @@ export function CredentialStatsCard({
           successRate: 100,
         } satisfies CredentialRow);
 
-      if (detail.failed === true) {
-        row.failure += 1;
-      } else {
-        row.success += 1;
-      }
+      row.failure += detail.failure;
+      row.success += detail.success;
 
       row.total = row.success + row.failure;
       row.successRate = row.total > 0 ? (row.success / row.total) * 100 : 100;

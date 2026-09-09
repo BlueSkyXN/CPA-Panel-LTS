@@ -17,16 +17,17 @@ import { useApiKeysForModels } from '@/hooks/useApiKeysForModels';
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { authFilesApi, pluginsApi } from '@/services/api';
 import {
-  USAGE_STATS_STALE_TIME_MS,
   useAuthStore,
   useConfigStore,
   useModelsStore,
-  useUsageStatsStore,
 } from '@/stores';
 import type { AuthFileItem, Config, PluginListEntry } from '@/types';
 import { formatCompactNumber, formatDateValue, formatPercent } from '@/utils/format';
 import { getApiStats, getModelStats } from '@/utils/usage';
 import styles from './CoreWorkspace.module.scss';
+import { useUsageData } from '@/components/usage/hooks/useUsageData';
+import { useUsageQuerySummary } from '@/components/usage/hooks/useUsageQuery';
+import { makeUsageQueryView } from '@/utils/usage/queryView';
 
 const DASH = '—';
 
@@ -127,11 +128,12 @@ export function CoreWorkspace() {
   const modelsLoading = useModelsStore((state) => state.loading);
   const modelsError = useModelsStore((state) => state.error);
   const fetchModels = useModelsStore((state) => state.fetchModels);
-  const usage = useUsageStatsStore((state) => state.usage);
-  const usageLoading = useUsageStatsStore((state) => state.loading);
-  const usageError = useUsageStatsStore((state) => state.error);
-  const usageLastRefreshedAt = useUsageStatsStore((state) => state.lastRefreshedAt);
-  const loadUsageStats = useUsageStatsStore((state) => state.loadUsageStats);
+  const { usage: legacyUsage, loading: baseUsageLoading, error: baseUsageError, lastRefreshedAt, loadUsage: loadUsageStats, querySession } = useUsageData();
+  const usageQuery = useUsageQuerySummary(querySession, { modules: ['models', 'api_models'] });
+  const usage = useMemo(() => querySession ? makeUsageQueryView(usageQuery.data) : legacyUsage, [querySession, usageQuery.data, legacyUsage]);
+  const usageLoading = baseUsageLoading || usageQuery.loading;
+  const usageError = baseUsageError || usageQuery.error;
+  const usageLastRefreshedAt = lastRefreshedAt?.getTime() ?? null;
   const resolveApiKeysForModels = useApiKeysForModels();
 
   const [authFiles, setAuthFiles] = useState<AuthFileItem[] | null>(null);
@@ -188,7 +190,7 @@ export function CoreWorkspace() {
       fetchConfig(undefined, true),
       loadAuthFiles(),
       loadModels(true),
-      loadUsageStats({ force: true, staleTimeMs: USAGE_STATS_STALE_TIME_MS }),
+      loadUsageStats(),
       loadPlugins(),
     ]);
   }, [connected, fetchConfig, loadAuthFiles, loadModels, loadPlugins, loadUsageStats]);
@@ -201,7 +203,6 @@ export function CoreWorkspace() {
       fetchConfig(),
       loadAuthFiles(),
       loadModels(),
-      loadUsageStats({ staleTimeMs: USAGE_STATS_STALE_TIME_MS }),
       loadPlugins(),
     ]);
   }, [connected, fetchConfig, loadAuthFiles, loadModels, loadPlugins, loadUsageStats]);

@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useCallback,
   useId,
   useMemo,
   useRef,
@@ -45,6 +46,7 @@ import {
   LATENCY_SOURCE_FIELD,
   TTFB_SOURCE_FIELD,
   normalizeAuthIndex,
+  normalizeUsageSourceId,
   normalizeSemanticTimingMs,
   resolveServiceTier,
   summarizeUsagePerformance,
@@ -55,6 +57,7 @@ import {
   type UsageCustomTimeRange,
   type UsagePresetTimeRange,
   type UsageTimeRange,
+  type UsageDetail,
 } from '@/utils/usage';
 import {
   getUsageCacheTokenCounts,
@@ -63,6 +66,9 @@ import {
 import { normalizeReasoningEffort } from '@/utils/usage/reasoningEffort';
 import { downloadBlob } from '@/utils/download';
 import styles from '@/pages/UsagePage.module.scss';
+import type { UsageQuerySession, UsageQueryFilter } from '@/types/usageQuery';
+import { queryItemDetail, useUsageQueryDetails } from './hooks/useUsageQueryDetails';
+import { useNotificationStore } from '@/stores/useNotificationStore';
 
 const ALL_FILTER = '__all__';
 const SERVICE_TIER_FAST_FILTER = '__service_tier_fast__';
@@ -399,6 +405,7 @@ const numericFilterPopoverStylesEqual = (
   current?.maxHeight === next.maxHeight;
 
 export interface RequestEventsDetailsCardProps {
+  querySession?: UsageQuerySession | null;
   usage: unknown;
   loading: boolean;
   pageTimeRange: UsageTimeRange;
@@ -591,7 +598,8 @@ const getRequestEventCostTone = (
 
 export function RequestEventsDetailsCard({
   usage,
-  loading,
+  loading: parentLoading,
+  querySession = null,
   pageTimeRange,
   pageTimeRangeCustom = null,
   referenceNowMs,
@@ -917,8 +925,58 @@ export function RequestEventsDetailsCard({
     [claudeConfigs, codexConfigs, geminiKeys, openaiProviders, vertexConfigs]
   );
 
-  const rows = useMemo<RequestEventRow[]>(() => {
-    const details = collectUsageDetails(usage);
+  const queryWindow = useMemo(() => {
+    const selection = isRequestEventTimeRange(timeRangeFilter) ? timeRangeFilter : 'page';
+    if (selection === 'all' || selection === 'page' && pageTimeRange === 'all') return null;
+    if (selection === 'page' && pageTimeRange === 'custom') return pageTimeRangeCustom;
+    const now = selection === 'page' ? referenceNowMs : Math.max(referenceNowMs, timeRangeClockMs);
+    const preset = selection === 'page' ? pageTimeRange : selection;
+    const duration = preset in PAGE_TIME_RANGE_MS ? PAGE_TIME_RANGE_MS[preset as UsagePresetTimeRange] : 0;
+    return now > 0 && duration > 0 ? { startMs: now - duration, endMs: now } : null;
+  }, [timeRangeFilter, pageTimeRange, pageTimeRangeCustom, referenceNowMs, timeRangeClockMs]);
+  const remote = useUsageQueryDetails(querySession, queryWindow ? { from_ms: queryWindow.startMs, to_ms: queryWindow.endMs } : {}, (options) => {
+    const filter: UsageQueryFilter = {};
+    if (modelFilter !== ALL_FILTER && options?.models.includes(modelFilter)) filter.model = modelFilter;
+    if (requestKeyFilter !== ALL_FILTER) {
+      const index = Number(requestKeyFilter.replace('request-identity-', ''));
+      if (Number.isInteger(index) && options?.apis[index] !== undefined) filter.api = options.apis[index];
+    }
+    if (sourceFilter !== ALL_FILTER) {
+      const identities = options?.identities.filter((id) => {
+        const source = normalizeUsageSourceId(id.source);
+        const info = resolveSourceDisplay(source, id.auth_index, sourceInfoMap, authFileMap);
+        return (info.identityKey ?? `source:${source || info.displayName}`) === sourceFilter;
+      });
+      if (identities?.length) filter.identities = identities;
+    }
+    if (authIndexFilter !== ALL_FILTER && options?.auth_indices.includes(authIndexFilter === '-' ? '' : authIndexFilter)) filter.auth_index = authIndexFilter === '-' ? '' : authIndexFilter;
+    if (serviceTierFilter !== ALL_FILTER) filter.tier = serviceTierFilter === SERVICE_TIER_FAST_FILTER ? 'fast' : 'std';
+    if (reasoningEffortFilter !== ALL_FILTER) {
+      const effort = reasoningEffortFilter === REASONING_EFFORT_LEGACY_UNKNOWN_FILTER ? '' : decodeURIComponent(reasoningEffortFilter.slice(REASONING_EFFORT_RAW_FILTER_PREFIX.length));
+      if (options?.efforts.some((value) => value.toLowerCase() === effort)) filter.effort = effort;
+    }
+    if (resultFilter !== ALL_FILTER) filter.failed = resultFilter === RESULT_FAILED_FILTER;
+    if (cacheFilter !== ALL_FILTER) filter.cached = cacheFilter === CACHE_PRESENT_FILTER;
+    if (isRequestEventNumericMetricId(numericMetricFilter)) {
+      filter.metric = numericMetricFilter;
+      const min = parseNumericFilterBound(numericMinimumFilter), max = parseNumericFilterBound(numericMaximumFilter);
+      if (min !== null) filter.minimum = min;
+      if (max !== null) filter.maximum = max;
+    }
+    return filter;
+  });
+  const loading = parentLoading || remote.loading;
+  const remoteSources = useMemo(() => {
+    const entries = (remote.options?.identities ?? []).map((id) => {
+      const source = normalizeUsageSourceId(id.source);
+      const info = resolveSourceDisplay(source, id.auth_index, sourceInfoMap, authFileMap);
+      return { value: info.identityKey ?? `source:${source || info.displayName}`, label: info.displayName, auth: id.auth_index, raw: source, type: info.type };
+    });
+    const labels = new Map<string, Set<string>>();
+    for (const e of entries) { const set = labels.get(e.label) ?? new Set<string>(); set.add(e.value); labels.set(e.label, set); }
+    return Array.from(new Map(entries.map((e) => [e.value, { value: e.value, label: (labels.get(e.label)?.size ?? 0) > 1 ? `${e.label} · ${e.auth || (e.raw !== e.label ? e.raw : '') || e.type || e.value}` : e.label }])).values());
+  }, [remote.options, sourceInfoMap, authFileMap]);
+  const buildRows = useCallback((details: UsageDetail[]): RequestEventRow[] => {
     const configuredKeyIndexes = new Map<string, number>();
     requestApiKeys.forEach((key, index) => {
       const trimmed = String(key || '').trim();
@@ -926,9 +984,9 @@ export function RequestEventsDetailsCard({
         configuredKeyIndexes.set(trimmed, index + 1);
       }
     });
-    const requestIdentityTokens = new Map<string, string>();
+    const requestIdentityTokens = new Map<string, string>((querySession ? remote.options?.apis ?? [] : []).map((api, index) => [api || '__unknown__', `request-identity-${index}`]));
 
-    const resolveRequestIdentity = (value: unknown) => {
+    const resolveRequestIdentityUncached = (value: unknown) => {
       const apiBucket = String(value ?? '').trim();
       const identityKey = apiBucket || '__unknown__';
       let requestIdentityToken = requestIdentityTokens.get(identityKey);
@@ -986,20 +1044,33 @@ export function RequestEventsDetailsCard({
       };
     };
 
+    const identityCache = new Map<string, ReturnType<typeof resolveRequestIdentityUncached>>();
+    const resolveRequestIdentity = (value: unknown) => {
+      const key = String(value ?? '').trim();
+      const cached = identityCache.get(key);
+      if (cached) return cached;
+      const resolved = resolveRequestIdentityUncached(value);
+      identityCache.set(key, resolved);
+      return resolved;
+    };
+    const tierLabels = { fast: t('usage_stats.request_events_tier_fast'), std: t('usage_stats.request_events_tier_standard') };
+    const legacyEffortLabel = t('usage_stats.request_events_effort_legacy_unknown');
+    const sourceCache = new Map<string, ReturnType<typeof resolveSourceDisplay>>();
     const baseRows = details.map((detail, index) => {
       const timestamp = detail.timestamp;
       const timestampMs =
         typeof detail.__timestampMs === 'number' && detail.__timestampMs > 0
           ? detail.__timestampMs
           : parseTimestampMs(timestamp);
-      const date = Number.isNaN(timestampMs) ? null : new Date(timestampMs);
       const sourceRaw = String(detail.source ?? '').trim();
       const authIndexRaw = detail.auth_index as unknown;
       const authIndex =
         authIndexRaw === null || authIndexRaw === undefined || authIndexRaw === ''
           ? '-'
           : String(authIndexRaw);
-      const sourceInfo = resolveSourceDisplay(sourceRaw, authIndexRaw, sourceInfoMap, authFileMap);
+      const sourceCacheKey = JSON.stringify([sourceRaw, authIndexRaw]);
+      const sourceInfo = sourceCache.get(sourceCacheKey) ?? resolveSourceDisplay(sourceRaw, authIndexRaw, sourceInfoMap, authFileMap);
+      sourceCache.set(sourceCacheKey, sourceInfo);
       const source = sourceInfo.displayName;
       const sourceKey = sourceInfo.identityKey ?? `source:${sourceRaw || source}`;
       const sourceType = sourceInfo.type;
@@ -1019,10 +1090,7 @@ export function RequestEventsDetailsCard({
       });
       const serviceTierFilterValue =
         resolvedServiceTier.tier === 'fast' ? SERVICE_TIER_FAST_FILTER : SERVICE_TIER_STD_FILTER;
-      const getServiceTierLabel = (tier: DisplayServiceTier) =>
-        tier === 'fast'
-          ? t('usage_stats.request_events_tier_fast')
-          : t('usage_stats.request_events_tier_standard');
+      const getServiceTierLabel = (tier: DisplayServiceTier) => tierLabels[tier];
       const serviceTierLabel = getServiceTierLabel(resolvedServiceTier.tier);
       const requestDisplayServiceTier = classifyServiceTier(resolvedServiceTier.rawRequest);
       const requestServiceTierLabel = requestDisplayServiceTier
@@ -1039,10 +1107,10 @@ export function RequestEventsDetailsCard({
           raw,
         });
       };
-      const evidenceLabel = t(
+      const evidenceLabel = () => t(
         `usage_stats.request_events_tier_evidence_${resolvedServiceTier.evidence}`
       );
-      const serviceTierTitle = [
+      const serviceTierTitle = () => [
         t('usage_stats.request_events_tier_chain_client', {
           value: describeServiceTierValue(resolvedServiceTier.rawRequest),
         }),
@@ -1057,13 +1125,13 @@ export function RequestEventsDetailsCard({
         }),
         t('usage_stats.request_events_tier_chain_resolved', {
           tier: serviceTierLabel,
-          evidence: evidenceLabel,
+          evidence: evidenceLabel(),
         }),
       ].join('\n');
       const reasoningEffort = normalizeReasoningEffort(detail.reasoning_effort);
       const reasoningEffortFilterValue = getReasoningEffortFilterValue(reasoningEffort);
       const reasoningEffortLabel =
-        reasoningEffort ?? t('usage_stats.request_events_effort_legacy_unknown');
+        reasoningEffort ?? legacyEffortLabel;
       const inputTokens = Math.max(toNumber(detail.tokens?.input_tokens), 0);
       const outputTokens = Math.max(toNumber(detail.tokens?.output_tokens), 0);
       const reasoningTokens = Math.max(toNumber(detail.tokens?.reasoning_tokens), 0);
@@ -1095,10 +1163,10 @@ export function RequestEventsDetailsCard({
       const costAmount = costEstimate.status === 'priced' ? costEstimate.amount : null;
 
       return {
-        id: `${timestamp}-${model}-${requestIdentity.requestIdentityToken}-${sourceKey}-${authIndex}-${index}`,
+        id: detail.__queryId ?? `${timestamp}-${model}-${requestIdentity.requestIdentityToken}-${sourceKey}-${authIndex}-${index}`,
         timestamp,
         timestampMs: Number.isNaN(timestampMs) ? 0 : timestampMs,
-        timestampLabel: date ? date.toLocaleString(i18n.language) : timestamp || '-',
+        get timestampLabel() { return Number.isNaN(timestampMs) ? timestamp || '-' : new Date(timestampMs).toLocaleString(i18n.language); },
         model,
         ...requestIdentity,
         sourceKey,
@@ -1116,7 +1184,7 @@ export function RequestEventsDetailsCard({
         serviceTierFilterValue,
         requestServiceTierLabel,
         serviceTierLabel,
-        serviceTierTitle,
+        get serviceTierTitle() { return serviceTierTitle(); },
         reasoningEffort,
         reasoningEffortFilterValue,
         reasoningEffortLabel,
@@ -1178,12 +1246,13 @@ export function RequestEventsDetailsCard({
     };
 
     return baseRows
-      .map((row) => ({
-        ...row,
-        source: buildDisambiguatedSourceLabel(row),
-      }))
+      .map((row) => {
+        row.source = querySession ? (remoteSources.find((s) => s.value === row.sourceKey)?.label ?? row.source) : buildDisambiguatedSourceLabel(row);
+        return row;
+      })
       .sort((a, b) => b.timestampMs - a.timestampMs);
-  }, [authFileMap, i18n.language, priceProfile, requestApiKeys, sourceInfoMap, t, usage]);
+  }, [authFileMap, i18n.language, priceProfile, requestApiKeys, sourceInfoMap, t, querySession, remote.options, remoteSources]);
+  const rows = useMemo(() => buildRows(querySession ? (remote.data?.items ?? []).map(queryItemDetail) : collectUsageDetails(usage)), [buildRows, querySession, remote.data, usage]);
 
   const effectiveTimeRangeFilter = isRequestEventTimeRange(timeRangeFilter)
     ? timeRangeFilter
@@ -1228,35 +1297,42 @@ export function RequestEventsDetailsCard({
   }, [effectiveNowMs, effectiveTimeRangeFilter, pageTimeRangeWindow, rows]);
 
   const hasLatencyData = useMemo(
-    () => timeScopedRows.some((row) => row.latencyMs !== null),
-    [timeScopedRows]
+    () => querySession ? (remote.options?.metrics.latency_samples ?? 0) > 0 : timeScopedRows.some((row) => row.latencyMs !== null),
+    [timeScopedRows, querySession, remote.options]
   );
   const hasTTFBData = useMemo(
-    () => timeScopedRows.some((row) => row.ttfbMs !== null),
-    [timeScopedRows]
+    () => querySession ? (remote.options?.metrics.ttfb_samples ?? 0) > 0 : timeScopedRows.some((row) => row.ttfbMs !== null),
+    [timeScopedRows, querySession, remote.options]
   );
   const hasOutputTpsData = useMemo(
-    () => timeScopedRows.some((row) => row.outputTps !== null),
-    [timeScopedRows]
+    () => querySession ? (remote.options?.metrics.output_tps.samples ?? 0) > 0 : timeScopedRows.some((row) => row.outputTps !== null),
+    [timeScopedRows, querySession, remote.options]
   );
   const hasAverageTpsData = useMemo(
-    () => timeScopedRows.some((row) => row.averageTps !== null),
-    [timeScopedRows]
+    () => querySession ? (remote.options?.metrics.average_tps.samples ?? 0) > 0 : timeScopedRows.some((row) => row.averageTps !== null),
+    [timeScopedRows, querySession, remote.options]
   );
 
   const modelOptions = useMemo(
     () => [
       { value: ALL_FILTER, label: t('usage_stats.filter_all') },
-      ...Array.from(new Set(timeScopedRows.map((row) => row.model))).map((model) => ({
+      ...Array.from(new Set(querySession ? remote.options?.models ?? [] : timeScopedRows.map((row) => row.model))).map((model) => ({
         value: model,
         label: model,
       })),
     ],
-    [t, timeScopedRows]
+    [t, timeScopedRows, querySession, remote.options]
   );
 
   const requestKeyOptions = useMemo(() => {
     const optionMap = new Map<string, string>();
+    if (querySession) {
+      (remote.options?.apis ?? []).forEach((api, index) => {
+        const configured = requestApiKeys.findIndex((key) => key.trim() === api.trim());
+        const label = configured >= 0 ? t('usage_stats.request_events_request_key_configured', { index: configured + 1, key: maskRequestKey(api) }) : REQUEST_IDENTITY_ENDPOINT_REGEX.test(api) ? t('usage_stats.request_events_request_identity_endpoint', { value: api }) : !api || api.toLowerCase() === 'unknown' ? t('usage_stats.request_events_request_identity_unknown') : t('usage_stats.request_events_request_identity_caller', { value: maskRequestKey(api) });
+        optionMap.set(`request-identity-${index}`, label);
+      });
+    }
     timeScopedRows.forEach((row) => {
       if (!optionMap.has(row.requestIdentityToken)) {
         optionMap.set(row.requestIdentityToken, row.requestIdentityLabel);
@@ -1267,10 +1343,11 @@ export function RequestEventsDetailsCard({
       { value: ALL_FILTER, label: t('usage_stats.filter_all') },
       ...Array.from(optionMap.entries()).map(([value, label]) => ({ value, label })),
     ];
-  }, [t, timeScopedRows]);
+  }, [t, timeScopedRows, querySession, remote.options, requestApiKeys]);
 
   const sourceOptions = useMemo(() => {
     const optionMap = new Map<string, string>();
+    if (querySession) remoteSources.forEach((source) => optionMap.set(source.value, source.label));
     timeScopedRows.forEach((row) => {
       if (!optionMap.has(row.sourceKey)) {
         optionMap.set(row.sourceKey, row.source);
@@ -1284,17 +1361,17 @@ export function RequestEventsDetailsCard({
         label,
       })),
     ];
-  }, [t, timeScopedRows]);
+  }, [t, timeScopedRows, querySession, remoteSources]);
 
   const authIndexOptions = useMemo(
     () => [
       { value: ALL_FILTER, label: t('usage_stats.filter_all') },
-      ...Array.from(new Set(timeScopedRows.map((row) => row.authIndex))).map((authIndex) => ({
+      ...Array.from(new Set(querySession ? (remote.options?.auth_indices ?? []).map((id) => id || '-') : timeScopedRows.map((row) => row.authIndex))).map((authIndex) => ({
         value: authIndex,
         label: authIndex,
       })),
     ],
-    [t, timeScopedRows]
+    [t, timeScopedRows, querySession, remote.options]
   );
 
   const serviceTierOptions = useMemo(
@@ -1308,6 +1385,7 @@ export function RequestEventsDetailsCard({
 
   const reasoningEffortOptions = useMemo(() => {
     const optionMap = new Map<string, string>();
+    if (querySession) (remote.options?.efforts ?? []).forEach((effort) => optionMap.set(getReasoningEffortFilterValue(effort || null), effort || t('usage_stats.request_events_effort_legacy_unknown')));
     timeScopedRows.forEach((row) => {
       if (!optionMap.has(row.reasoningEffortFilterValue)) {
         optionMap.set(row.reasoningEffortFilterValue, row.reasoningEffortLabel);
@@ -1320,7 +1398,7 @@ export function RequestEventsDetailsCard({
         .sort(([, left], [, right]) => left.localeCompare(right, i18n.language))
         .map(([value, label]) => ({ value, label })),
     ];
-  }, [i18n.language, t, timeScopedRows]);
+  }, [i18n.language, t, timeScopedRows, querySession, remote.options]);
 
   const resultOptions = useMemo(
     () => [
@@ -1545,7 +1623,7 @@ export function RequestEventsDetailsCard({
 
   const filteredRows = useMemo(
     () =>
-      timeScopedRows.filter((row) => {
+      querySession ? rows : timeScopedRows.filter((row) => {
         const modelMatched =
           effectiveModelFilter === ALL_FILTER || row.model === effectiveModelFilter;
         const requestKeyMatched =
@@ -1601,34 +1679,43 @@ export function RequestEventsDetailsCard({
       numericMinimumValue,
       resultFilter,
       timeScopedRows,
+      querySession,
+      rows,
     ]
   );
 
   // Reset to the first page on a new filter/snapshot without an effect-driven rerender.
   const [pagination, setPagination] = useState<{ rows: RequestEventRow[]; page: number } | null>(null);
-  const pageCount = Math.max(1, Math.ceil(filteredRows.length / REQUEST_EVENTS_PAGE_SIZE));
-  const currentPage = pagination && pagination.rows === filteredRows ? Math.min(pagination.page, pageCount - 1) : 0;
+  const filteredCount = querySession ? remote.data?.total ?? 0 : filteredRows.length;
+  const pageCount = Math.max(1, Math.ceil(filteredCount / REQUEST_EVENTS_PAGE_SIZE));
+  const currentPage = querySession ? remote.page : pagination && pagination.rows === filteredRows ? Math.min(pagination.page, pageCount - 1) : 0;
   const renderedRows = useMemo(
-    () => filteredRows.slice(currentPage * REQUEST_EVENTS_PAGE_SIZE, (currentPage + 1) * REQUEST_EVENTS_PAGE_SIZE),
-    [currentPage, filteredRows]
+    () => querySession ? filteredRows : filteredRows.slice(currentPage * REQUEST_EVENTS_PAGE_SIZE, (currentPage + 1) * REQUEST_EVENTS_PAGE_SIZE),
+    [currentPage, filteredRows, querySession]
   );
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
   const changePage = (page: number) => {
-    setPagination({ rows: filteredRows, page });
+    if (querySession) remote.setPage(page); else setPagination({ rows: filteredRows, page });
     tableScrollRef.current?.scrollTo({ top: 0 });
   };
 
   const performanceSummary = useMemo(
-    () =>
-      summarizeUsagePerformance(
+    () => {
+      if (querySession && remote.data) {
+        const m = remote.data.metrics;
+        const metric = (r: typeof m.output_tps, scale: number) => ({ value: r.denominator > 0 ? r.numerator * scale / r.denominator : null, sampleCount: r.samples });
+        return { totalCount: remote.data.total, outputTps: metric(m.output_tps, 1000), averageTps: metric(m.average_tps, 1000), visibleAverageTps: metric(m.visible_tps, 1000), reasoningRatio: metric(m.reasoning_ratio, 1) };
+      }
+      return summarizeUsagePerformance(
         filteredRows.map((row) => ({
           outputTokens: row.outputTokens,
           reasoningTokens: row.reasoningTokens,
           latencyMs: row.latencyMs,
           ttfbMs: row.ttfbMs,
         }))
-      ),
-    [filteredRows]
+      );
+    },
+    [filteredRows, querySession, remote.data]
   );
 
   const hasActiveFilters =
@@ -1727,8 +1814,18 @@ export function RequestEventsDetailsCard({
     setStoredColumnVisibility(DEFAULT_COLUMN_VISIBILITY);
   };
 
-  const handleExportCsv = () => {
+  const [exportingRows, setExportingRows] = useState(false);
+  const collectExportRows = async () => {
+    if (!querySession) return filteredRows;
+    setExportingRows(true);
+    try { return buildRows(await remote.exportDetails()); }
+    catch (error) { useNotificationStore.getState().showNotification(`${t('notification.download_failed')}: ${error instanceof Error ? error.message : ''}`, 'error'); return null; }
+    finally { setExportingRows(false); }
+  };
+  const handleExportCsv = async () => {
     if (!filteredRows.length) return;
+    const exportRows = await collectExportRows();
+    if (!exportRows) return;
 
     const csvHeader = [
       'timestamp',
@@ -1770,7 +1867,7 @@ export function RequestEventsDetailsCard({
       'pricing_status',
     ];
 
-    const csvRows = filteredRows.map((row) =>
+    const csvRows = exportRows.map((row) =>
       [
         row.timestamp,
         row.model,
@@ -1822,10 +1919,12 @@ export function RequestEventsDetailsCard({
     });
   };
 
-  const handleExportJson = () => {
+  const handleExportJson = async () => {
     if (!filteredRows.length) return;
+    const exportRows = await collectExportRows();
+    if (!exportRows) return;
 
-    const payload = filteredRows.map((row) => ({
+    const payload = exportRows.map((row) => ({
       timestamp: row.timestamp,
       model: row.model,
       request_identity_type: row.requestIdentityType,
@@ -2044,7 +2143,7 @@ export function RequestEventsDetailsCard({
             variant="secondary"
             size="sm"
             onClick={handleExportCsv}
-            disabled={filteredRows.length === 0}
+            disabled={filteredRows.length === 0 || exportingRows || loading}
           >
             {t('usage_stats.export_csv')}
           </Button>
@@ -2052,7 +2151,7 @@ export function RequestEventsDetailsCard({
             variant="secondary"
             size="sm"
             onClick={handleExportJson}
-            disabled={filteredRows.length === 0}
+            disabled={filteredRows.length === 0 || exportingRows || loading}
           >
             {t('usage_stats.export_json')}
           </Button>
@@ -2364,6 +2463,7 @@ export function RequestEventsDetailsCard({
         </Sheet>
       )}
 
+      {remote.error && <div className={styles.errorBox} role="alert">{remote.error}</div>}
       {performanceSummaryGrid}
 
       {loading && timeScopedRows.length === 0 ? (
@@ -2381,7 +2481,7 @@ export function RequestEventsDetailsCard({
       ) : (
         <>
           <div className={styles.requestEventsMeta}>
-            <span>{t('usage_stats.request_events_count', { count: filteredRows.length })}</span>
+            <span>{t('usage_stats.request_events_count', { count: filteredCount })}</span>
             {hasLatencyData && <span className={styles.requestEventsLimitHint}>{latencyHint}</span>}
             {hasTTFBData && <span className={styles.requestEventsLimitHint}>{ttfbHint}</span>}
             {hasOutputTpsData && (
@@ -2842,8 +2942,8 @@ export function RequestEventsDetailsCard({
             <nav className={styles.requestEventsPagination} aria-label={t('usage_stats.request_events_pagination')}>
               <span>{t('usage_stats.request_events_page_status', {
                 start: currentPage * REQUEST_EVENTS_PAGE_SIZE + 1,
-                end: Math.min((currentPage + 1) * REQUEST_EVENTS_PAGE_SIZE, filteredRows.length),
-                total: filteredRows.length,
+                end: Math.min((currentPage + 1) * REQUEST_EVENTS_PAGE_SIZE, filteredCount),
+                total: filteredCount,
               })}</span>
               <Button variant="secondary" size="sm" disabled={currentPage === 0} onClick={() => changePage(currentPage - 1)}>
                 {t('usage_stats.request_events_previous_page')}

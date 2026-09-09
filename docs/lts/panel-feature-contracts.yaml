@@ -40,6 +40,14 @@ features:
       - src/services/api/usageImportContract.ts
       - src/services/api/config.ts
       - src/stores/useUsageStatsStore.ts
+      - src/stores/useUsageQueryStore.ts
+      - src/services/api/usageQuery.ts
+      - src/services/api/usageQuery.test.mjs
+      - src/types/usageQuery.ts
+      - src/components/usage/hooks/useUsageQuery.ts
+      - src/components/usage/hooks/useUsageQueryDetails.ts
+      - src/utils/usage/queryView.ts
+      - src/utils/usage/queryView.test.mjs
       - src/types/usage.ts
       - src/utils/usage.ts
       - src/utils/usageIndex.ts
@@ -67,11 +75,18 @@ features:
       - /v0/management/usage
       - /v0/management/usage/export
       - /v0/management/usage/import
+      - /v0/management/usage/query/capabilities
+      - /v0/management/usage/query/summary
+      - /v0/management/usage/query/details
+      - /v0/management/usage/query/pricing
       - /v0/management/usage-statistics-enabled
     required_markers:
       - usageApi.getUsage
       - usageApi.exportUsage
       - usageApi.importUsage
+      - usageQueryApi
+      - usage-query-v1
+      - buildQueryPriceRules
       - calculateStatusBarData
       - collectUsageDetailsForCandidates
       - resolveUsageTotalTokens

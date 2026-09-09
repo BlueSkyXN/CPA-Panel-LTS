@@ -9,6 +9,7 @@ import {
   buildCandidateUsageSourceIds,
   calculateStatusBarData,
   normalizeAuthIndex,
+  normalizeUsageSourceId,
   type KeyStatBucket,
   type KeyStats,
   type StatusBarData as FullUsageStatusBarData,
@@ -350,6 +351,16 @@ type UsageIdentity = {
   apiKey?: string;
   prefix?: string;
 };
+import { isUsageQueryStatusIndex } from '@/utils/usageIndex';
+import { queryStatusBar } from '@/utils/usage/queryView';
+import type { UsageQuerySummary } from '@/types/usageQuery';
+
+const queryGroupsForIdentity = (summary: UsageQuerySummary, identity: UsageIdentity) => {
+  const auth = normalizeAuthIndex(identity.authIndex);
+  if (auth && summary.groups.credentials?.some((g) => normalizeAuthIndex(g.auth_index) === auth && g.metrics.requests > 0)) return (summary.groups.status ?? []).filter((g) => normalizeAuthIndex(g.auth_index) === auth);
+  const candidates = new Set(buildCandidateUsageSourceIds({ apiKey: identity.apiKey, prefix: identity.prefix }));
+  return (summary.groups.status ?? []).filter((g) => candidates.has(normalizeUsageSourceId(g.source ?? '')));
+};
 
 export const getStatsForIdentity = (
   identity: UsageIdentity,
@@ -484,19 +495,30 @@ export const getFullUsageStatusDataForIdentity = (
   identity: UsageIdentity,
   usageDetailsBySource: UsageDetailsBySource,
   usageDetailsByAuthIndex: UsageDetailsByAuthIndex
-): FullUsageStatusBarData =>
-  calculateStatusBarData(
+): FullUsageStatusBarData => {
+  if (isUsageQueryStatusIndex(usageDetailsBySource)) return queryStatusBar(queryGroupsForIdentity(usageDetailsBySource.summary, identity), usageDetailsBySource.summary.now_ms);
+  return calculateStatusBarData(
     collectUsageDetailsForIdentity(identity, usageDetailsBySource, usageDetailsByAuthIndex)
   );
+};
 
 export const getOpenAIProviderFullUsageStatusData = (
   provider: OpenAIProviderConfig,
   usageDetailsBySource: UsageDetailsBySource,
   usageDetailsByAuthIndex: UsageDetailsByAuthIndex
-): FullUsageStatusBarData =>
-  calculateStatusBarData(
+): FullUsageStatusBarData => {
+  if (isUsageQueryStatusIndex(usageDetailsBySource)) {
+    const summary = usageDetailsBySource.summary;
+    const identities: UsageIdentity[] = !provider.apiKeyEntries?.length ? [{ authIndex: provider.authIndex, prefix: provider.prefix }] : [
+      ...(!normalizeAuthIndex(provider.authIndex) && provider.prefix ? [{ prefix: provider.prefix }] : []),
+      ...provider.apiKeyEntries.map((entry) => ({ authIndex: entry.authIndex, apiKey: entry.apiKey })),
+    ];
+    return queryStatusBar(identities.flatMap((identity) => queryGroupsForIdentity(summary, identity)), summary.now_ms);
+  }
+  return calculateStatusBarData(
     collectOpenAIProviderUsageDetails(provider, usageDetailsBySource, usageDetailsByAuthIndex)
   );
+};
 
 export const getProviderConfigKey = (
   config: {

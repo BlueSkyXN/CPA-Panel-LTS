@@ -51,6 +51,9 @@ import {
   type UsageTimeRange,
 } from '@/utils/usage';
 import styles from './UsagePage.module.scss';
+import { useUsageQuerySummary } from '@/components/usage/hooks/useUsageQuery';
+import { buildQueryPriceRules, makeUsageQueryView } from '@/utils/usage/queryView';
+import type { UsageQueryRequest } from '@/types/usageQuery';
 
 // Register Chart.js components
 ChartJS.register(
@@ -191,7 +194,8 @@ export function UsagePage() {
   // Data hook
   const {
     usage,
-    loading,
+    loading: baseLoading,
+    querySession,
     error,
     lastRefreshedAt,
     priceProfile,
@@ -262,7 +266,7 @@ export function UsagePage() {
   }, [customWindow, nowMs, timeRange]);
 
   const invalidCustomRange = timeRange === 'custom' && customWindow === null;
-  const filteredUsage = useMemo(
+  const legacyFilteredUsage = useMemo(
     () =>
       invalidCustomRange
         ? null
@@ -271,6 +275,19 @@ export function UsagePage() {
           : (usage ?? null),
     [effectiveWindow, nowMs, usage, invalidCustomRange]
   );
+
+  const queryRequest: UsageQueryRequest = {
+    ...(effectiveWindow ? { from_ms: effectiveWindow.startMs, to_ms: effectiveWindow.endMs, hour_from_ms: effectiveWindow.startMs } : {}),
+    modules: ['models', 'api_models', 'credentials', 'hours', 'days', 'minutes', 'rates', 'health'],
+  };
+  const summaryQuery = useUsageQuerySummary(invalidCustomRange ? null : querySession, queryRequest);
+  const pricingQuery = useUsageQuerySummary(invalidCustomRange ? null : querySession, {
+    ...queryRequest, modules: ['models', 'api_models', 'hours', 'days', 'minutes'],
+    rules: buildQueryPriceRules(querySession?.models ?? [], priceProfile),
+  }, true);
+  const queryView = useMemo(() => makeUsageQueryView(summaryQuery.data, pricingQuery.data), [summaryQuery.data, pricingQuery.data]);
+  const filteredUsage = querySession ? queryView : legacyFilteredUsage;
+  const loading = baseLoading || summaryQuery.loading;
 
   const handleChartLinesChange = useCallback((lines: string[]) => {
     setChartLines(normalizeChartLines(lines));
@@ -330,7 +347,7 @@ export function UsagePage() {
   } = useChartData({ usage: filteredUsage, chartLines, isMobile, timeWindow: effectiveWindow });
 
   // Derived data
-  const modelNames = useMemo(() => getModelNamesFromUsage(usage), [usage]);
+  const modelNames = useMemo(() => querySession?.models ?? getModelNamesFromUsage(usage), [querySession, usage]);
   const apiStats = useMemo(
     () => getApiStats(filteredUsage, priceProfile),
     [filteredUsage, priceProfile]
@@ -348,7 +365,7 @@ export function UsagePage() {
 
   return (
     <div className={styles.container}>
-      {loading && !usage && (
+      {loading && !filteredUsage && (
         <div className={styles.loadingOverlay} aria-busy="true">
           <div className={styles.loadingOverlayContent}>
             <LoadingSpinner size={28} className={styles.loadingOverlaySpinner} />
@@ -434,6 +451,8 @@ export function UsagePage() {
       </div>
 
       {error && <div className={styles.errorBox}>{error}</div>}
+      {summaryQuery.error && <div className={styles.errorBox}>{summaryQuery.error}</div>}
+      {pricingQuery.error && <div className={styles.errorBox}>{pricingQuery.error}</div>}
 
       {invalidCustomRange ? (
         <div className={styles.errorBox} role="alert">
@@ -445,6 +464,7 @@ export function UsagePage() {
           <StatCards
             usage={filteredUsage}
             loading={loading}
+            pricingLoading={pricingQuery.loading}
             pricingCoverage={pricingCoverage}
             onOpenPricing={openPricing}
             nowMs={nowMs}
@@ -466,7 +486,7 @@ export function UsagePage() {
           />
 
           {/* Service Health */}
-          <ServiceHealthCard usage={usage} loading={loading} />
+          <ServiceHealthCard usage={querySession ? queryView : usage} loading={loading} />
 
           {/* Charts Grid */}
           <div className={styles.chartsGrid}>
@@ -503,7 +523,7 @@ export function UsagePage() {
           {/* Cost Trend Chart */}
           <CostTrendChart
             usage={filteredUsage}
-            loading={loading}
+            loading={loading || pricingQuery.loading}
             isMobile={isMobile}
             priceProfile={priceProfile}
             onOpenPricing={openPricing}
@@ -539,6 +559,7 @@ export function UsagePage() {
 
           {showRequestEvents && (
             <RequestEventsDetailsCard
+              querySession={querySession}
               usage={usage}
               loading={loading}
               pageTimeRange={timeRange}
@@ -565,7 +586,7 @@ export function UsagePage() {
             openaiProviders={openaiProvidersForUsage}
           />
 
-          <PricingEntryCard coverage={pricingCoverage} onOpen={openPricing} />
+          {pricingQuery.loading ? <div role="status">{t('common.loading')}</div> : <PricingEntryCard coverage={pricingCoverage} onOpen={openPricing} />}
         </>
       )}
     </div>
