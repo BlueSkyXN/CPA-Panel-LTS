@@ -10,6 +10,25 @@ status_definitions:
   experimental: Optional surface that may be gated or hidden when backend support is missing.
 
 features:
+  - id: multi-instance-connections
+    status: lts-maintained
+    reason: Saved connections and tab-local sessions with isolated target probes and document-reload handoff preserve existing single-instance business pages.
+    panel_files:
+      - src/components/layout/PanelShell.tsx
+      - src/components/layout/PanelShell.module.scss
+      - src/services/storage/connectionProfiles.ts
+      - src/services/storage/connectionProfiles.test.mjs
+      - src/services/connectionSession.ts
+      - src/services/api/connectionProbe.ts
+      - src/stores/useAuthStore.ts
+      - scripts/smoke-connections.py
+    required_markers:
+      - prepareHandoff
+      - tabAuthStorage
+      - hasSessionChanges
+      - probeConnection
+      - safeSessionPath
+      - window.location.reload()
   - id: full-usage-statistics
     status: protected
     reason: Complete usage statistics are the primary CPA-Panel-LTS protected delta, including provider-sourced local pricing that preserves unsupported tiers as incomplete coverage.

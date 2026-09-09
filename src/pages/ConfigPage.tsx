@@ -19,6 +19,7 @@ import { DiffModal } from '@/components/config/DiffModal';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useActionBarHeightVar } from '@/hooks/useActionBarHeightVar';
 import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard';
+import { registerSessionBusyCheck } from '@/services/connectionSession';
 import { useVisualConfig } from '@/hooks/useVisualConfig';
 import { useNotificationStore, useAuthStore, useConfigStore } from '@/stores';
 import { configFileApi } from '@/services/api/configFile';
@@ -81,6 +82,7 @@ export function ConfigPage() {
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  useEffect(() => registerSessionBusyCheck(() => saving), [saving]);
   const [error, setError] = useState('');
   const [dirty, setDirty] = useState(false);
   const [diffModalOpen, setDiffModalOpen] = useState(false);

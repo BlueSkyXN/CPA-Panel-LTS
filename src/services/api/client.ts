@@ -18,10 +18,25 @@ import {
 import { computeApiUrl } from '@/utils/connection';
 import type { ServerRuntimeKind } from '@/types';
 import { parseApiErrorResponse } from './apiError';
+import { beginSessionWrite, isSessionFrozen } from '@/services/connectionSession';
 
 type ConnectionScopedRequestConfig = AxiosRequestConfig & {
   __cpaConnectionGeneration?: number;
+  __finishSessionWrite?: () => void;
 };
+
+// 这些 Management POST 仅查询统计，不属于需要阻止实例切换的写操作。
+const READ_ONLY_USAGE_POSTS = new Set([
+  '/usage/query/summary',
+  '/usage/query/details',
+  '/usage/query/pricing',
+]);
+
+function isMutationRequest(config: AxiosRequestConfig): boolean {
+  const method = (config.method || 'get').toLowerCase();
+  return !['get', 'head', 'options'].includes(method) &&
+    !(method === 'post' && READ_ONLY_USAGE_POSTS.has(config.url || ''));
+}
 
 class ApiClient {
   private instance: AxiosInstance;
@@ -132,8 +147,11 @@ class ApiClient {
     // 请求拦截器
     this.instance.interceptors.request.use(
       (config) => {
+        const mutation = isMutationRequest(config);
+        if (isSessionFrozen() && mutation) throw new Error('Connection switch in progress');
         const scopedConfig = config as typeof config & ConnectionScopedRequestConfig;
         scopedConfig.__cpaConnectionGeneration = this.connectionGeneration;
+        if (mutation) scopedConfig.__finishSessionWrite = beginSessionWrite();
 
         // 设置 baseURL
         config.baseURL = this.apiBase;
@@ -158,6 +176,7 @@ class ApiClient {
     // 响应拦截器
     this.instance.interceptors.response.use(
       (response) => {
+        (response.config as ConnectionScopedRequestConfig).__finishSessionWrite?.();
         if (!this.isCurrentRequest(response.config)) {
           return response;
         }
@@ -192,7 +211,10 @@ class ApiClient {
 
         return response;
       },
-      (error) => Promise.reject(this.handleError(error))
+      (error) => {
+        if (axios.isAxiosError(error)) (error.config as ConnectionScopedRequestConfig | undefined)?.__finishSessionWrite?.();
+        return Promise.reject(this.handleError(error));
+      }
     );
   }
 

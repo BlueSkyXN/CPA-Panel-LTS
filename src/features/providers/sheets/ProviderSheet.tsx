@@ -12,6 +12,7 @@ import { BaseProviderForm } from './forms/BaseProviderForm';
 import { ResourceDetailView } from './ResourceDetailView';
 import { SponsorProviderForm } from './forms/SponsorProviderForm';
 import styles from './forms/sharedForm.module.scss';
+import { registerSessionBusyCheck, registerSessionLeaveCheck } from '@/services/connectionSession';
 
 type SheetMode = 'detail' | 'create' | 'edit';
 
@@ -53,7 +54,9 @@ export function ProviderSheet({
   const { showConfirmation } = useNotificationStore();
   const formId = useId();
   const [submitting, setSubmitting] = useState(false);
+  useEffect(() => registerSessionBusyCheck(() => submitting), [submitting]);
   const [isDirty, setIsDirty] = useState(false);
+  useEffect(() => registerSessionLeaveCheck(() => state.open && (isDirty || submitting)), [state.open, isDirty, submitting]);
 
   // Reset dirty flag whenever the sheet is closed or the editing target
   // (brand / resource / mode) changes — the child form will re-mount and
