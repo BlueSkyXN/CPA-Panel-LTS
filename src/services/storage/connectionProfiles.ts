@@ -133,54 +133,70 @@ export function prepareHandoff(
   path: string,
   previousId?: string
 ): void {
-  const keys = [
+  // 旧文档仍可持久化自己的状态；只写独立交接记录，由新文档接管普通会话。
+  sessionStorage.setItem(
     HANDOFF_KEY,
-    TAB_SESSION_KEY,
-    'isLoggedIn',
-    'cpa-session-path',
-    'cpa-previous-profile',
-  ];
-  const before = keys.map((key) => sessionStorage.getItem(key));
+    JSON.stringify({
+      profileId: profile.id,
+      apiBase: validateConnectionBase(profile.apiBase),
+      rememberPassword: profile.rememberPassword,
+      managementKey,
+      expiresAt: Date.now() + 30_000,
+      path,
+      previousId,
+    })
+  );
+}
+
+function restoreHandoff(): string | null {
+  const raw = sessionStorage.getItem(HANDOFF_KEY);
+  sessionStorage.removeItem(HANDOFF_KEY);
+  if (!raw) return null;
+  let handoff: Record<string, unknown>;
+  let apiBase: string;
   try {
-    sessionStorage.setItem(
-      HANDOFF_KEY,
-      JSON.stringify({
-        profileId: profile.id,
-        apiBase: profile.apiBase,
-        managementKey,
-        expiresAt: Date.now() + 30_000,
-      })
-    );
-    sessionStorage.setItem(
-      TAB_SESSION_KEY,
-      JSON.stringify({
-        state: {
-          profileId: profile.id,
-          apiBase: profile.apiBase,
-          rememberPassword: profile.rememberPassword,
-        },
-        version: 1,
-      })
-    );
-    sessionStorage.setItem('isLoggedIn', 'true');
-    sessionStorage.setItem('cpa-session-path', path);
-    if (previousId) sessionStorage.setItem('cpa-previous-profile', previousId);
-  } catch (error) {
-    keys.forEach((key, index) => {
-      if (before[index] === null) sessionStorage.removeItem(key);
-      else sessionStorage.setItem(key, before[index]);
-    });
-    throw error;
+    const value: unknown = JSON.parse(raw);
+    if (
+      !isRecord(value) ||
+      typeof value.profileId !== 'string' ||
+      !value.profileId ||
+      typeof value.apiBase !== 'string' ||
+      typeof value.rememberPassword !== 'boolean' ||
+      typeof value.managementKey !== 'string' ||
+      !value.managementKey.trim() ||
+      typeof value.path !== 'string' ||
+      typeof value.expiresAt !== 'number' ||
+      !Number.isFinite(value.expiresAt) ||
+      value.expiresAt <= Date.now()
+    )
+      return null;
+    apiBase = validateConnectionBase(value.apiBase);
+    handoff = value;
+  } catch {
+    return null;
   }
+
+  const state = {
+    profileId: handoff.profileId,
+    apiBase,
+    rememberPassword: handoff.rememberPassword,
+  };
+  sessionStorage.setItem(TAB_SESSION_KEY, JSON.stringify({ state, version: 1 }));
+  sessionStorage.setItem('isLoggedIn', 'true');
+  sessionStorage.setItem('cpa-session-path', handoff.path as string);
+  if (typeof handoff.previousId === 'string')
+    sessionStorage.setItem('cpa-previous-profile', handoff.previousId);
+  else sessionStorage.removeItem('cpa-previous-profile');
+  return JSON.stringify({ state: { ...state, managementKey: handoff.managementKey }, version: 1 });
 }
 
 export const tabAuthStorage = {
   getItem: () => {
     if (typeof sessionStorage === 'undefined') return null;
+    const handoff = restoreHandoff();
+    if (handoff) return handoff;
     migrateLegacyConnection();
     const raw = sessionStorage.getItem(TAB_SESSION_KEY);
-    const transfer = sessionStorage.getItem(HANDOFF_KEY);
-    sessionStorage.removeItem(HANDOFF_KEY);
     if (!raw) return null;
     try {
       const data: unknown = JSON.parse(raw);
@@ -192,18 +208,6 @@ export const tabAuthStorage = {
         managementKey:
           profile && profile.apiBase === data.state.apiBase ? profile.managementKey || '' : '',
       };
-      if (transfer) {
-        const handoff: unknown = JSON.parse(transfer);
-        if (
-          isRecord(handoff) &&
-          handoff.profileId === state.profileId &&
-          handoff.apiBase === state.apiBase &&
-          typeof handoff.expiresAt === 'number' &&
-          handoff.expiresAt > Date.now() &&
-          typeof handoff.managementKey === 'string'
-        )
-          state.managementKey = handoff.managementKey;
-      }
       return JSON.stringify({ ...data, state });
     } catch {
       return null;

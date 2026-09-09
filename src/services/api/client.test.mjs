@@ -45,6 +45,33 @@ test('switch preparation blocks new writes and tracks in-flight mutations until 
   }
 });
 
+test('read-only usage POST queries neither block a switch nor become frozen writes', async () => {
+  const lifecycle = await vite.ssrLoadModule('/src/services/connectionSession.ts');
+  apiClient.setConfig({ apiBase: 'https://test.example.test', managementKey: 'synthetic' });
+  const response = (config) => ({ data: {}, status: 200, statusText: 'OK', headers: {}, config });
+  for (const path of ['/usage/query/summary', '/usage/query/details', '/usage/query/pricing']) {
+    let finish;
+    const pending = apiClient.post(path, {}, { adapter: (config) => new Promise(resolve => { finish = () => resolve(response(config)); }) });
+    try {
+      assert.equal(lifecycle.hasActiveWrites(), false, path);
+      lifecycle.setSessionFrozen(true);
+      await apiClient.post(path, {}, { adapter: async (config) => response(config) });
+      assert.equal(lifecycle.hasActiveWrites(), false);
+    } finally {
+      finish();
+      await pending;
+      lifecycle.setSessionFrozen(false);
+    }
+  }
+  lifecycle.setSessionFrozen(true);
+  try {
+    for (const path of ['/usage/import', '/usage/query/unknown', '/usage/query/summary/extra']) {
+      await assert.rejects(apiClient.post(path, {}, { adapter: async (config) => response(config) }), /Connection switch/);
+    }
+    await assert.rejects(apiClient.put('/usage/query/summary', {}, { adapter: async (config) => response(config) }), /Connection switch/);
+  } finally { lifecycle.setSessionFrozen(false); }
+});
+
 test.after(async () => {
   apiClient.clearConfig();
   await vite.close();

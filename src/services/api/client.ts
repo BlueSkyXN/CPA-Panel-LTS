@@ -25,6 +25,19 @@ type ConnectionScopedRequestConfig = AxiosRequestConfig & {
   __finishSessionWrite?: () => void;
 };
 
+// 这些 Management POST 仅查询统计，不属于需要阻止实例切换的写操作。
+const READ_ONLY_USAGE_POSTS = new Set([
+  '/usage/query/summary',
+  '/usage/query/details',
+  '/usage/query/pricing',
+]);
+
+function isMutationRequest(config: AxiosRequestConfig): boolean {
+  const method = (config.method || 'get').toLowerCase();
+  return !['get', 'head', 'options'].includes(method) &&
+    !(method === 'post' && READ_ONLY_USAGE_POSTS.has(config.url || ''));
+}
+
 class ApiClient {
   private instance: AxiosInstance;
   private apiBase: string = '';
@@ -134,10 +147,11 @@ class ApiClient {
     // 请求拦截器
     this.instance.interceptors.request.use(
       (config) => {
-        if (isSessionFrozen() && !['get', 'head', 'options'].includes(config.method || 'get')) throw new Error('Connection switch in progress');
+        const mutation = isMutationRequest(config);
+        if (isSessionFrozen() && mutation) throw new Error('Connection switch in progress');
         const scopedConfig = config as typeof config & ConnectionScopedRequestConfig;
         scopedConfig.__cpaConnectionGeneration = this.connectionGeneration;
-        if (!['get', 'head', 'options'].includes(config.method || 'get')) scopedConfig.__finishSessionWrite = beginSessionWrite();
+        if (mutation) scopedConfig.__finishSessionWrite = beginSessionWrite();
 
         // 设置 baseURL
         config.baseURL = this.apiBase;

@@ -13,7 +13,9 @@ const storage = () => {
 };
 globalThis.localStorage = storage();
 globalThis.sessionStorage = storage();
-globalThis.window = { location: { host: 'example.test' } };
+globalThis.window = Object.assign(new EventTarget(), {
+  location: { host: 'example.test', reload() {} },
+});
 const vite = await createServer({
   appType: 'custom',
   logLevel: 'silent',
@@ -110,6 +112,13 @@ test('corrupt storage and expired handoff do not restore secrets', () => {
     rememberPassword: false,
   };
   profiles.saveProfile(a);
+  profiles.tabAuthStorage.setItem(
+    '',
+    JSON.stringify({
+      state: { profileId: a.id, apiBase: a.apiBase, rememberPassword: false },
+      version: 1,
+    })
+  );
   profiles.prepareHandoff(a, 'synthetic', '/');
   sessionStorage.setItem(
     'cpa-connection-handoff-v1',
@@ -154,4 +163,39 @@ test('editing a shared profile address cannot send its new key to the old tab ad
   const state = JSON.parse(profiles.tabAuthStorage.getItem()).state;
   assert.equal(state.apiBase, a.apiBase);
   assert.equal(state.managementKey, '');
+});
+
+test('handoff remains authoritative after old response callbacks or logout before reload', async () => {
+  const { useAuthStore } = await vite.ssrLoadModule('/src/stores/useAuthStore.ts');
+  const target = {
+    id: 'b',
+    name: 'B',
+    apiBase: 'https://b.example.test',
+    environment: '',
+    rememberPassword: false,
+  };
+  profiles.saveProfile(target);
+  for (const lateAction of [
+    () => useAuthStore.getState().updateServerVersion('old-A'),
+    () => useAuthStore.getState().logout(),
+  ]) {
+    useAuthStore.setState({
+      profileId: 'a',
+      apiBase: 'https://a.example.test',
+      managementKey: 'synthetic-a',
+      rememberPassword: true,
+      isAuthenticated: true,
+    });
+    profiles.prepareHandoff(target, 'synthetic-b', '/usage', 'a');
+    lateAction();
+    const restored = JSON.parse(profiles.tabAuthStorage.getItem()).state;
+    assert.equal(restored.profileId, 'b');
+    assert.equal(restored.apiBase, target.apiBase);
+    assert.equal(restored.managementKey, 'synthetic-b');
+    assert.equal(sessionStorage.getItem('isLoggedIn'), 'true');
+    assert.equal(sessionStorage.getItem('cpa-session-path'), '/usage');
+    assert.equal(sessionStorage.getItem('cpa-previous-profile'), 'a');
+    assert.equal(sessionStorage.getItem('cpa-connection-handoff-v1'), null);
+    assert.equal(JSON.parse(profiles.tabAuthStorage.getItem()).state.managementKey, '');
+  }
 });

@@ -1,6 +1,8 @@
 """Two independent mock Cores; never connects to a live deployment."""
 import importlib.util
 import re
+import threading
+import time
 from pathlib import Path
 from urllib.parse import urlparse
 from playwright.sync_api import sync_playwright, expect
@@ -19,7 +21,26 @@ class AuthenticatedCore(baseline.MockCoreHandler):
         if urlparse(self.path).path == '/v0/management/config' and getattr(self.state, 'reject_config', False):
             self._send_json({'error': 'temporarily unavailable'}, status=503)
             return
+        if urlparse(self.path).path == '/v0/management/usage/query/capabilities' and getattr(self.state, 'query_mode', False):
+            self._send_json({'version': 1, 'bound': 'synthetic-query-bound', 'now_ms': int(time.time() * 1000), 'models': [], 'max_page_size': 200})
+            return
         super().do_GET()
+
+    def do_POST(self):
+        path = urlparse(self.path).path
+        if getattr(self.state, 'query_mode', False) and path in ['/v0/management/usage/query/summary', '/v0/management/usage/query/pricing']:
+            self._read_body_text()
+            if path.endswith('/summary'):
+                self.state.query_started.set()
+                self.state.query_release.wait(timeout=20)
+            metrics = {key: 0 for key in ['requests', 'success', 'failure', 'tokens', 'input', 'output', 'reasoning', 'cache_read', 'cache_write', 'prompt', 'latency_ms', 'latency_samples', 'ttfb_samples']}
+            metrics.update({key: {'numerator': 0, 'denominator': 0, 'samples': 0} for key in ['output_tps', 'average_tps', 'visible_tps', 'reasoning_ratio']})
+            try:
+                self._send_json({'version': 1, 'bound': 'synthetic-query-bound', 'now_ms': int(time.time() * 1000), 'totals': metrics, 'groups': {}})
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # The old page was deliberately destroyed by the switch.
+            return
+        super().do_POST()
 
 
 def run():
@@ -98,6 +119,33 @@ def run():
         open_connections()
         choose('Core A')
         current('Core A')
+
+        # Hold a real Panel read-only POST while switching. Deliver an old
+        # response event after reload begins, before the new document commits.
+        a.query_mode = True
+        a.query_started, a.query_release = threading.Event(), threading.Event()
+        try:
+            page.goto(app + '#/usage', wait_until='domcontentloaded')
+            page.reload(wait_until='domcontentloaded')
+            assert a.query_started.wait(timeout=10), 'Panel did not issue the held summary POST'
+            open_connections()
+            page.evaluate("""window.addEventListener('beforeunload', () => {
+              window.dispatchEvent(new CustomEvent('server-version-update', {detail:{version:'old-A-late'}}));
+              sessionStorage.setItem('cpa-smoke-late-callback', 'ran');
+            }, {once:true})""")
+            choose('Core B')
+            current('Core B')
+            assert page.evaluate("sessionStorage.getItem('cpa-smoke-late-callback')") == 'ran', 'late response was not delivered during reload'
+            page.evaluate("sessionStorage.removeItem('cpa-smoke-late-callback')")
+            assert page.url.endswith('#/usage')
+            assert page.evaluate("sessionStorage.getItem('cpa-connection-handoff-v1')") is None
+        finally:
+            a.query_release.set()
+            a.query_mode = False
+
+        open_connections()
+        choose('Core A')
+        current('Core A')
         page.goto(app + '#/config')
         page.get_by_role('button', name=re.compile('Source')).first.click()
         editor = page.locator('.cm-content').first
@@ -153,7 +201,7 @@ def run():
         expect(page.get_by_role('button', name='Switch instance', exact=True)).to_be_visible()
         assert not errors, errors
         browser.close()
-    print('Connections smoke passed: cross-origin auth, failed target, A-B-A, tab isolation, dirty edits, desktop/mobile.')
+    print('Connections smoke passed: cross-origin auth, failed target, A-B-A, tab isolation, dirty edits, pending read-only POST, late response during reload, desktop/mobile.')
 
 
 if __name__ == '__main__':
