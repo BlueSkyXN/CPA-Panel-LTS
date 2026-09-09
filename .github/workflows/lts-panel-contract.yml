@@ -36,7 +36,7 @@ jobs:
         run: npm run test:config
 
       - name: Test provider and connection contracts
-        run: npm run test:providers && npm run test:auth-files && npm run test:api-client
+        run: npm run test:providers && npm run test:auth-files && npm run test:api-client && npm run test:connections
 
       - name: Test plugin trust contract
         run: npm run test:plugins
