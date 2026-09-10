@@ -7,6 +7,7 @@ import { Select } from '@/components/ui/Select';
 import { authFilesApi } from '@/services/api/authFiles';
 import { patProvidersApi } from '@/services/api/patProviders';
 import { useAuthStore } from '@/stores';
+import { registerSessionBusyCheck, registerSessionLeaveCheck } from '@/services/connectionSession';
 import type { AuthFileItem } from '@/types';
 import { buildPatAuth, isPatProvider, newPatAuthFileName, type PatProvider } from '../patProviders';
 
@@ -36,6 +37,12 @@ export function PatAccountModal({ file, onClose, onSaved }: Props) {
   const base = useAuthStore((s) => s.apiBase);
   const key = useAuthStore((s) => s.managementKey);
   const previousConnection = useRef({ base, key });
+
+  useEffect(() => registerSessionBusyCheck(() => saving), [saving]);
+  useEffect(
+    () => registerSessionLeaveCheck(() => Boolean(pat || label !== String(file?.label || file?.name || ''))),
+    [pat, label, file]
+  );
 
   useEffect(() => {
     if (previousConnection.current.base !== base || previousConnection.current.key !== key)
