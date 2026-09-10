@@ -39,6 +39,8 @@ import {
   type QuotaProviderType,
 } from '@/features/authFiles/constants';
 import { AuthFileCard } from '@/features/authFiles/components/AuthFileCard';
+import { PatAccountModal } from '@/features/authFiles/components/PatAccountModal';
+import type { AuthFileItem } from '@/types';
 import { ProviderIcon } from '@/features/authFiles/components/ProviderIcon';
 import { AuthFileModelsModal } from '@/features/authFiles/components/AuthFileModelsModal';
 import { AuthFilesPrefixProxyEditorModal } from '@/features/authFiles/components/AuthFilesPrefixProxyEditorModal';
@@ -93,6 +95,8 @@ export function AuthFilesPage() {
   const requestedProvider = normalizeProviderKey(searchParams.get('provider') || '');
 
   const [filter, setFilter] = useState<'all' | string>('all');
+  const [patTarget, setPatTarget] = useState<AuthFileItem | null | undefined>(undefined);
+  const supportsPat = useAuthStore((s) => s.pluginSupportKnown && s.supportsPlugin);
   const [problemOnly, setProblemOnly] = useState(false);
   const [disabledOnly, setDisabledOnly] = useState(false);
   const [compactMode, setCompactMode] = useState(false);
@@ -694,6 +698,15 @@ export function AuthFilesPage() {
         extra={
           <div className={styles.headerActions}>
             <Button
+              size="sm"
+              variant="secondary"
+              disabled={disableControls || !supportsPat}
+              title={!supportsPat ? t('pat_accounts.plugin_unavailable') : undefined}
+              onClick={() => setPatTarget(null)}
+            >
+              {t('pat_accounts.add')}
+            </Button>
+            <Button
               variant="secondary"
               size="sm"
               onClick={handleHeaderRefresh}
@@ -865,6 +878,7 @@ export function AuthFilesPage() {
                       file.name
                     )}
                     onShowModels={showModels}
+                    onUpdatePat={supportsPat ? setPatTarget : undefined}
                     onShowCodexRemoteCloudConnectEnvironments={
                       openCodexRemoteCloudConnectEnvironments
                     }
@@ -936,6 +950,19 @@ export function AuthFilesPage() {
         onRenameAlias={handleRenameAlias}
         onDeleteAlias={handleDeleteAlias}
       />
+
+      {patTarget !== undefined && (
+        <PatAccountModal
+          file={patTarget ?? undefined}
+          onClose={() => setPatTarget(undefined)}
+          onSaved={(name) => {
+            invalidateDerivedCaches([name]);
+            setPatTarget(undefined);
+            showNotification(t('pat_accounts.saved'), 'success');
+            void loadFiles({ background: true });
+          }}
+        />
+      )}
 
       <AuthFileModelsModal
         open={modelsModalOpen}
