@@ -41,6 +41,8 @@ import {
 import type { AuthFileStatusBarData } from '@/features/authFiles/hooks/useAuthFilesStatusBarCache';
 import { AuthFileQuotaSection } from '@/features/authFiles/components/AuthFileQuotaSection';
 import { ProviderIcon } from '@/features/authFiles/components/ProviderIcon';
+import { PatAccountSummary } from './PatAccountSummary';
+import { isPatProvider } from '../patProviders';
 import styles from '@/pages/AuthFilesPage.module.scss';
 
 export type AuthFileCardProps = {
@@ -60,6 +62,7 @@ export type AuthFileCardProps = {
   onDelete: (name: string) => void;
   onToggleStatus: (file: AuthFileItem, enabled: boolean) => void;
   onToggleSelect: (name: string) => void;
+  onUpdatePat?: (file: AuthFileItem) => void;
 };
 
 const resolveQuotaType = (file: AuthFileItem): QuotaProviderType | null => {
@@ -87,6 +90,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
     onDelete,
     onToggleStatus,
     onToggleSelect,
+    onUpdatePat,
   } = props;
 
   const recentBuckets = normalizeRecentRequestBuckets(file.recent_requests ?? file.recentRequests);
@@ -271,8 +275,22 @@ export function AuthFileCard(props: AuthFileCardProps) {
             )}
           </div>
 
+          {!isRuntimeOnly && !compact && (
+            <PatAccountSummary file={file} disabled={disableControls} />
+          )}
+
           <div className={styles.cardActions}>
             <div className={styles.cardActionsMain}>
+              {!isRuntimeOnly && isPatProvider(providerKey) && onUpdatePat && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={disableControls}
+                  onClick={() => onUpdatePat(file)}
+                >
+                  {t('pat_accounts.update')}
+                </Button>
+              )}
               {showModelsButton && (
                 <Button
                   variant="secondary"

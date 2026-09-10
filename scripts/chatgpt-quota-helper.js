@@ -61,6 +61,7 @@
     image: null,
     codex5h: null,
     codex7d: null,
+    gpt6ProLimit: null,
     codexError: '',
     codexLoading: false,
     codexBackoffUntil: 0,
@@ -1089,6 +1090,7 @@
           <span class="cqh-row-label">Codex7D</span>
           <span class="cqh-row-value" data-cqh="codex7d">-</span>
         </div>
+        <div class="cqh-error-line" data-cqh="gpt6-pro-limit" hidden></div>
         <div class="cqh-error-line" data-cqh="error-line" hidden></div>
         <div class="cqh-footer">
           <span data-cqh="updated">未更新</span>
@@ -1128,7 +1130,7 @@
 
     // 首次加载、什么数据都没有：保持中性灰
     if (!state.lastUpdated && !state.dr && !state.image) {
-      if (state.codexError) return 'cqh-warn';
+      if (state.codexError || state.gpt6ProLimit) return 'cqh-warn';
       return '';
     }
 
@@ -1149,7 +1151,7 @@
       (imageRemaining !== null && imageRemaining < DR_IMAGE_LOW) ||
       (codex5hPct !== null && codex5hPct < CODEX_LOW_PERCENT) ||
       (codex7dPct !== null && codex7dPct < CODEX_LOW_PERCENT);
-    if (anyLow) return 'cqh-warn';
+    if (anyLow || state.gpt6ProLimit) return 'cqh-warn';
 
     return 'cqh-ok';
   }
@@ -1203,6 +1205,24 @@
     return true;
   }
 
+  function buildGpt6ProLimitText() {
+    if (!state.gpt6ProLimit) return '';
+
+    const resetAtMs = state.gpt6ProLimit.resetAtMs;
+    if (resetAtMs === null) return 'GPT-6 Pro 已限额';
+    if (resetAtMs <= Date.now()) return 'GPT-6 Pro 限额预计恢复时间已到，等待状态更新';
+
+    const resetText = new Date(resetAtMs).toLocaleString(undefined, {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+    return `GPT-6 Pro 已限额，${resetText} 恢复（本地时间）`;
+  }
+
   function renderPanel() {
     if (!document.body && !document.documentElement) return;
 
@@ -1219,7 +1239,7 @@
     // 警告徽标（折叠状态下可见，不展开也能感知异常，不影响折叠宽度）
     const warnBadge = panel.querySelector('[data-cqh="warn-badge"]');
     if (warnBadge) {
-      const hasIssue = Boolean(state.pageIssue || state.codexAutoPaused);
+      const hasIssue = Boolean(state.pageIssue || state.codexAutoPaused || state.gpt6ProLimit);
       warnBadge.hidden = !hasIssue;
       if (hasIssue) {
         warnBadge.style.color = state.pageIssue ? '#ef4444' : '#f59e0b';
@@ -1274,6 +1294,10 @@
     } else {
       codex7dCell.textContent = '-';
     }
+
+    const modelLimitLine = panel.querySelector('[data-cqh="gpt6-pro-limit"]');
+    modelLimitLine.textContent = buildGpt6ProLimitText();
+    modelLimitLine.hidden = !state.gpt6ProLimit;
 
     // 错误和恢复提示（只显示净化后的短消息）
     const errorLine = panel.querySelector('[data-cqh="error-line"]');
@@ -1504,9 +1528,21 @@
   // ========== 数据捕获 ==========
 
   function handleConversationInitData(data) {
-    if (capturedConversationInitOnce) return;
-
     if (!data || typeof data !== 'object') return;
+
+    // 模型限额随每次有效响应更新，不受 DR / Image 的一次性捕获限制。
+    if (Array.isArray(data.model_limits)) {
+      const limit = data.model_limits.find(item => item?.model_slug === 'gpt-6-pro');
+      const resetAtMs = typeof limit?.resets_after === 'string'
+        ? Date.parse(limit.resets_after)
+        : NaN;
+      state.gpt6ProLimit = limit
+        ? { resetAtMs: Number.isFinite(resetAtMs) ? resetAtMs : null }
+        : null;
+      if (!isExcludedPath()) renderPanel();
+    }
+
+    if (capturedConversationInitOnce) return;
     if (!Array.isArray(data.limits_progress)) return;
 
     const dr = getLimit(data, 'deep_research');
