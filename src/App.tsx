@@ -4,16 +4,24 @@ import { LoginPage } from '@/pages/LoginPage';
 import { NotificationContainer } from '@/components/common/NotificationContainer';
 import { ConfirmationModal } from '@/components/common/ConfirmationModal';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { PanelShell } from '@/components/layout/PanelShell';
 import { ProtectedRoute } from '@/router/ProtectedRoute';
 import { useLanguageStore, useThemeStore, useWorkspaceStore } from '@/stores';
+import { safeSessionPath } from '@/services/connectionSession';
+
+const sessionPath = sessionStorage.getItem('cpa-session-path');
+if (sessionPath) {
+  sessionStorage.removeItem('cpa-session-path');
+  window.history.replaceState(null, '', `#${safeSessionPath(sessionPath)}`);
+}
 
 function RootShell() {
   return (
-    <>
+    <PanelShell>
       <NotificationContainer />
       <ConfirmationModal />
       <Outlet />
-    </>
+    </PanelShell>
   );
 }
 

@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/Button';
 import { PageTransition } from '@/components/common/PageTransition';
 import { SidebarNavigation } from '@/components/layout/SidebarNavigation';
 import { CommandPalette } from '@/components/layout/CommandPalette';
+import { readProfiles } from '@/services/storage/connectionProfiles';
 import {
   flattenSidebarNavPaths,
   type SidebarNavGroup,
@@ -779,6 +780,13 @@ export function MainLayout() {
   };
 
   const paletteActions = [
+    ...readProfiles().map((profile) => ({
+      id: `connection-${profile.id}`,
+      label: `${t('connections.switch')} · ${profile.name}`,
+      keywords: `${profile.apiBase} ${profile.environment}`,
+      icon: headerIcons.layout,
+      run: () => window.dispatchEvent(new CustomEvent('cpa-open-connections', { detail: { profileId: profile.id } })),
+    })),
     {
       id: 'refresh',
       label: t('header.refresh_all'),
@@ -808,6 +816,13 @@ export function MainLayout() {
       label: t('header.logout'),
       icon: headerIcons.logout,
       run: () => logout(),
+    },
+    {
+      id: 'connections',
+      label: t('connections.switch'),
+      keywords: t('connections.search'),
+      icon: headerIcons.layout,
+      run: () => window.dispatchEvent(new Event('cpa-open-connections')),
     },
   ];
   const mobileSidebarToggleLabel = sidebarOpen

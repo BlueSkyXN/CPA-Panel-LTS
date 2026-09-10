@@ -2707,6 +2707,14 @@ def run_usage_pricing_entry_smoke(page: Any) -> None:
     page.get_by_role("option", name="Last 24 Hours", exact=True).click()
 
 
+def inherit_smoke_tab_session(context: Any, target: Any) -> None:
+    # Test-created pages intentionally select the main smoke connection. Browser
+    # storage_state includes localStorage, but not the new per-tab selection.
+    source = next(page for page in context.pages if page != target and page.url != 'about:blank')
+    selection = source.evaluate("() => sessionStorage.getItem('cpa-tab-session-v1')")
+    target.add_init_script("sessionStorage.setItem('cpa-tab-session-v1', " + json.dumps(selection) + "); sessionStorage.setItem('isLoggedIn', 'true');")
+
+
 def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
     empty_usage_payload = {
         "usage": {
@@ -2718,6 +2726,7 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
         }
     }
     page = context.new_page()
+    inherit_smoke_tab_session(context, page)
     page.set_default_timeout(15_000)
     page.route(
         "**/v0/management/usage",
@@ -3636,6 +3645,7 @@ def assert_request_events_sticky_header(page: Any, region: Any) -> None:
 
 def run_usage_events_workspace_smoke(context: Any, app_url: str) -> None:
     workspace = context.new_page()
+    inherit_smoke_tab_session(context, workspace)
     workspace.set_default_timeout(15_000)
     now = datetime.now(timezone.utc)
     details = [
@@ -4897,6 +4907,7 @@ def run_usage_request_event_clock_smoke(context: Any, app_url: str) -> None:
         raise AssertionError("Request-event clock smoke cannot create an isolated context")
     clock_context = browser.new_context(storage_state=context.storage_state())
     clock_page = clock_context.new_page()
+    inherit_smoke_tab_session(context, clock_page)
     clock_page.set_default_timeout(15_000)
     try:
         # Install before navigation so React never mixes native and fake timers.
@@ -4974,6 +4985,7 @@ def run_usage_request_event_clock_smoke(context: Any, app_url: str) -> None:
 
 def run_usage_request_event_column_storage_smoke(context: Any, app_url: str) -> None:
     storage_page = context.new_page()
+    inherit_smoke_tab_session(context, storage_page)
     storage_page.set_default_timeout(15_000)
     storage_key = "cli-proxy-usage-request-event-columns-v3"
     legacy_keys = [

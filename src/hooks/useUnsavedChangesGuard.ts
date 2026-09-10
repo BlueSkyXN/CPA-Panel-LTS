@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { BlockerFunction } from 'react-router';
 import { useBlocker, useLocation } from 'react-router';
 import { useNotificationStore } from '@/stores';
+import { registerSessionLeaveCheck } from '@/services/connectionSession';
 
 type ConfirmationVariant = 'danger' | 'primary' | 'secondary';
 
@@ -26,6 +27,9 @@ export function useUnsavedChangesGuard(options: UseUnsavedChangesGuardOptions) {
   const allowNextNavigationUntilRef = useRef(0);
   const allowNextNavigationKeyRef = useRef('');
   const location = useLocation();
+  useEffect(() => registerSessionLeaveCheck(() => enabled && (typeof shouldBlock === 'boolean' ? shouldBlock : shouldBlock({
+    currentLocation: location, nextLocation: { ...location, pathname: '/login' }, historyAction: 'REPLACE' as Parameters<BlockerFunction>[0]['historyAction'],
+  }))), [enabled, shouldBlock, location]);
 
   const allowNextNavigation = useCallback(() => {
     // Allow one programmatic navigation after successful save.
