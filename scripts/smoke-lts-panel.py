@@ -2246,6 +2246,17 @@ def run_oauth_editor_smoke(page: Any, app_url: str) -> None:
         raise AssertionError("empty OAuth alias draft must not trigger the unsaved changes guard")
 
     page.goto(
+        f"{app_url}?route=oauth-alias-edit#/auth-files/oauth-model-alias?provider=codex",
+        wait_until="domcontentloaded",
+    )
+    page.get_by_text("Edit model aliases for codex", exact=True).wait_for()
+    assert page.get_by_label("Provider", exact=True).input_value() == "codex"
+    assert page.get_by_role("button", name="Codex", exact=True).get_attribute("aria-pressed") == "true"
+    page.get_by_role("button", name="Back", exact=True).click()
+    page.wait_for_function("() => window.location.hash.endsWith('/auth-files')")
+    assert page.get_by_role("dialog", name="Unsaved changes").count() == 0
+
+    page.goto(
         f"{app_url}?route=oauth-editor#/auth-files/oauth-excluded",
         wait_until="domcontentloaded",
     )
@@ -2253,6 +2264,8 @@ def run_oauth_editor_smoke(page: Any, app_url: str) -> None:
     page.get_by_text("Add provider model disablement", exact=False).first.wait_for()
     page.get_by_role("button", name="Codex", exact=True).click()
     page.get_by_text("Edit model disablement for codex", exact=False).first.wait_for()
+    assert page.get_by_label("Provider", exact=True).input_value() == "codex"
+    assert page.get_by_role("button", name="Codex", exact=True).get_attribute("aria-pressed") == "true"
     page.get_by_label("Custom model rule", exact=True).fill("gpt-*")
 
     page.get_by_role("button", name="Back", exact=True).click()

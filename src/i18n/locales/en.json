@@ -964,6 +964,7 @@
     "title": "OAuth Model Aliases",
     "add": "Add Alias",
     "add_title": "Add provider model aliases",
+    "edit_title": "Edit model aliases for {{provider}}",
     "provider_label": "Provider",
     "provider_placeholder": "e.g. gemini-cli / vertex",
     "provider_hint": "Defaults to the current filter; pick an existing provider or type a new name.",

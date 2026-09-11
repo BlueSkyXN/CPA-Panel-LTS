@@ -964,6 +964,7 @@
     "title": "OAuth 模型別名",
     "add": "新增別名",
     "add_title": "新增供應商模型別名",
+    "edit_title": "編輯 {{provider}} 的模型別名",
     "provider_label": "供應商",
     "provider_placeholder": "例如 gemini-cli / vertex",
     "provider_hint": "預設選取目前篩選的供應商，也可直接輸入或選擇其他名稱。",
