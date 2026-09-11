@@ -3145,12 +3145,50 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
             "Short context",
             "Long context",
             "Official API ×2.50",
-            "Fast long context unsupported",
         ]:
             if expected_text not in catalog_text:
                 raise AssertionError(
                     f"Empty-usage preset catalog is missing {expected_text!r}: {catalog_text!r}"
                 )
+
+        def gpt54_long_fast_text() -> str:
+            return catalog.locator(
+                '[data-testid="preset-pricing-model"][data-model="gpt-5.4"] '
+                'tr[data-context-band="long"] td[data-label="Fast policies"]'
+            ).inner_text()
+
+        if "unsupported" in gpt54_long_fast_text().lower():
+            raise AssertionError(
+                "Fast long-context is restricted by default; the policy should default to allow"
+            )
+        if "Fast long context unsupported" in catalog_text:
+            raise AssertionError(
+                "Default Fast long-context policy still shows the official restriction: "
+                f"{catalog_text!r}"
+            )
+
+        fast_long_toggle = page.locator(
+            '[data-testid="pricing-fast-long-context-toggle"] input[type="checkbox"]'
+        )
+        if not fast_long_toggle.is_checked():
+            raise AssertionError("Fast long-context policy did not default to allow")
+        fast_long_toggle.evaluate("(element) => element.click()")
+        for _ in range(50):
+            if "Fast long context unsupported" in gpt54_long_fast_text():
+                break
+            page.wait_for_timeout(100)
+        else:
+            raise AssertionError(
+                "Enabling the official Fast long-context restriction did not mark gpt-5.4: "
+                f"{gpt54_long_fast_text()!r}"
+            )
+        fast_long_toggle.evaluate("(element) => element.click()")
+        for _ in range(50):
+            if "Fast long context unsupported" not in gpt54_long_fast_text():
+                break
+            page.wait_for_timeout(100)
+        else:
+            raise AssertionError("Disabling the restriction did not restore Fast long-context pricing")
 
         table_region = catalog.get_by_role(
             "region", name="Complete preset price table", exact=True
@@ -3270,8 +3308,8 @@ def run_usage_pricing_smoke(page: Any) -> None:
     summary.wait_for()
     summary_text = summary.inner_text()
     for expected in [
-        "6 / 8 requests",
-        "75.0%",
+        "7 / 8 requests",
+        "87.5%",
     ]:
         if expected not in summary_text:
             raise AssertionError(
@@ -3299,13 +3337,17 @@ def run_usage_pricing_smoke(page: Any) -> None:
     gpt54_text = gpt54_row.text_content() or ""
     for expected in [
         "Needs review",
-        "Fast long context unsupported",
         "Official API ×2.00",
     ]:
         if expected not in gpt54_text:
             raise AssertionError(
-                f"Long-context pricing anomaly is not visible in the model row: {gpt54_text!r}"
+                f"gpt-5.4 pricing row lost expected status {expected!r}: {gpt54_text!r}"
             )
+    if "unsupported" in gpt54_text.lower():
+        raise AssertionError(
+            "Fast long context is still restricted under the default pricing policy: "
+            f"{gpt54_text!r}"
+        )
 
     filter_select = page.get_by_label("Pricing status filter", exact=True)
     filter_select.click()
@@ -3415,8 +3457,8 @@ def run_usage_pricing_smoke(page: Any) -> None:
             raise AssertionError(
                 f"Saved pricing alias is not visible in the model row: {unmatched_text!r}"
             )
-    summary.get_by_text("7 / 8 requests", exact=True).wait_for()
-    summary.get_by_text("87.5%", exact=True).first.wait_for()
+    summary.get_by_text("8 / 8 requests", exact=True).wait_for()
+    summary.get_by_text("100.0%", exact=True).first.wait_for()
 
     editor.get_by_role("button", name="Delete configuration", exact=True).click()
     page.get_by_text("Custom pricing removed", exact=True).last.wait_for()
