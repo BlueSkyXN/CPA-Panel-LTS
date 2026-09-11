@@ -1,15 +1,456 @@
+@use './configTokens' as config;
 @use '../../styles/mixins' as *;
 @use '../../styles/variables' as *;
 
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.editorWorkspace {
+  display: grid;
+  grid-template-columns: 224px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+  min-width: 0;
+}
+.editorContent {
+  container-type: inline-size;
+  min-width: 0;
+  color: var(--config-text);
+  background: var(--config-surface);
+}
+.editorContent > section[hidden],
+.visualEditor [hidden] {
+  display: none !important;
+}
+.editorHeading {
+  padding: 0 0 18px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--config-group-border);
+  scroll-margin-top: calc(var(--header-height, 64px) + 120px);
+}
+.editorHeading p {
+  margin: 0 0 8px;
+  color: var(--config-muted);
+  font-size: 13px;
+}
+.editorHeading h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.5;
+}
+.editorNavigation {
+  position: sticky;
+  top: calc(var(--header-height, 64px) + 12px);
+  max-height: calc(
+    100dvh - var(--header-height, 64px) - var(--config-action-bar-height, 64px) - 48px
+  );
+  overflow-y: auto;
+  padding-right: 12px;
+  border-right: 1px solid var(--config-group-border);
+}
+.editorNavigation ul,
+.searchResults ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.directoryGroup {
+  margin-bottom: 18px;
+}
+.directoryGroup h2 {
+  margin: 0 10px 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--config-muted);
+}
+.editorNavigation button {
+  display: flex;
+  width: 100%;
+  min-height: 40px;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 6px;
+  padding: 8px 10px;
+  text-align: left;
+  font: inherit;
+  font-size: 14px;
+  background: transparent;
+  color: var(--config-text);
+  cursor: pointer;
+}
+.editorNavigation button > span:first-child {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.editorNavigation button:hover {
+  background: var(--config-group-surface);
+}
+.editorNavigation button:focus-visible,
+.searchResults button:focus-visible,
+.fieldMount:focus-visible {
+  outline: 2px solid var(--config-focus-ring);
+  outline-offset: 2px;
+}
+.directoryDomain {
+  font-weight: 600 !important;
+}
+.directoryPages {
+  margin-left: 12px !important;
+  padding-left: 8px !important;
+  border-left: 1px solid var(--config-group-border);
+}
+.directoryPages button[aria-current='page'] {
+  background: var(--config-accent-surface);
+  color: var(--config-accent-strong);
+  box-shadow: inset 3px 0 var(--config-accent);
+}
+.changeDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--config-accent);
+  flex: none;
+}
+.editorSearch {
+  position: relative;
+  min-width: 0;
+}
+.searchResults {
+  padding: 12px;
+  border: 1px solid var(--config-group-border);
+  border-radius: 8px;
+  background: var(--config-surface);
+  margin-top: 8px;
+}
+.searchResults p {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--config-muted);
+}
+.searchResults ul {
+  max-height: 360px;
+  overflow-y: auto;
+}
+.searchResults button {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--config-group-border);
+  background: transparent;
+  color: var(--config-text);
+  text-align: left;
+  padding: 12px 8px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.searchResults button:hover {
+  background: var(--config-accent-surface);
+}
+.searchResults strong {
+  font-size: 14px;
+}
+.searchResults span,
+.searchResults code {
+  font-size: 13px;
+  color: var(--config-muted);
+}
+.fieldsGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+.fieldMount {
+  min-width: 0;
+  scroll-margin-block: 140px calc(var(--config-action-bar-height, 64px) + 24px);
+}
+.fieldWide {
+  grid-column: 1 / -1;
+}
+.choiceGroup {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  legend {
+    padding: 0 0 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--config-text);
+  }
+  &:disabled .choiceRow {
+    cursor: not-allowed;
+  }
+}
+.choiceRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  min-height: 44px;
+  border-block-start: 1px solid var(--config-group-border);
+  border-inline-start: 3px solid transparent;
+  cursor: pointer;
+  color: var(--config-text);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  > span {
+    min-width: 0;
+  }
+  strong {
+    font-weight: 600;
+  }
+  input[type='radio'] {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    margin: 2px 0 0;
+    accent-color: var(--config-accent);
+  }
+  &:has(input:checked) {
+    border-inline-start-color: var(--config-accent);
+    background: var(--config-accent-surface);
+  }
+  &:has(input:focus-visible) {
+    outline: 2px solid var(--config-focus-ring);
+    outline-offset: -2px;
+  }
+}
+.choiceDescription {
+  display: block;
+  margin-top: 4px;
+  color: var(--config-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.fieldWithNote {
+  background: var(--config-group-surface);
+  border-radius: 8px;
+}
+.fieldCondition {
+  padding: 0 14px 12px;
+  color: var(--config-muted);
+  font-size: 13px;
+  line-height: 1.6;
+  p {
+    margin: 0;
+  }
+  button {
+    min-height: 32px;
+    padding: 4px 0;
+    background: transparent;
+    border: 0;
+    color: var(--config-accent-strong);
+    text-decoration: underline;
+    font: inherit;
+    cursor: pointer;
+    &:focus-visible {
+      outline: 2px solid var(--config-focus-ring);
+      outline-offset: 2px;
+    }
+  }
+}
+.fieldHeading {
+  font-size: 16px;
+  margin: 0 0 12px;
+}
+.ruleDisclosure {
+  border: 0;
+  border-top: 1px solid var(--config-group-border);
+  border-radius: 0;
+  margin: 0;
+  background: var(--config-surface);
+}
+.ruleDisclosure > summary {
+  min-height: 44px;
+  color: var(--config-text);
+  font-size: 14px;
+}
+.ruleDisclosure > div {
+  padding: 12px 0 20px;
+}
+.ruleDisclosure .ruleCardTitle {
+  display: none;
+}
+.ruleDisclosure .ruleCardHeader {
+  justify-content: flex-end;
+}
+.fieldMount .fieldLabel,
+.fieldMount .toggleTitle {
+  font-size: 14px;
+  color: var(--config-text);
+}
+.fieldMount .fieldHint,
+.fieldMount .fieldSelectionHint,
+.fieldMount .toggleDescription,
+.visualEditor :global(.hint) {
+  font-size: 13px;
+  color: var(--config-muted);
+}
+.fieldMount .toggleRow {
+  background: var(--config-group-surface);
+  padding: 12px 14px;
+  border-radius: 8px;
+}
+.fieldMount :global(button[aria-haspopup='listbox']) {
+  min-height: 40px;
+  border-color: var(--config-control-border);
+  background: var(--config-surface);
+  color: var(--config-text);
+}
+.visualEditor :global(.error-box) {
+  color: var(--config-error-text);
+  background: var(--config-error-bg);
+}
+.fieldMount :global(.btn.btn-danger) {
+  color: var(--config-error-text);
+}
+
+.toggleRow label > input[type='checkbox'] + span {
+  outline: 1px solid var(--config-control-border);
+  outline-offset: -1px;
+}
+.toggleRow label > input[type='checkbox']:focus-visible + span {
+  outline: 2px solid var(--config-focus-ring);
+  outline-offset: 3px;
+}
+.draftSummary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  margin-bottom: 24px;
+  background: var(--config-group-surface);
+  border-radius: 8px;
+  font-size: 14px;
+}
+.draftSummary span {
+  color: var(--config-accent-strong);
+}
+.contextNotice {
+  padding: 12px 16px;
+  margin: 0 0 16px;
+  border-left: 3px solid var(--config-accent);
+  background: var(--config-group-surface);
+  color: var(--config-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.pageIntroduction {
+  margin: 0 0 12px;
+  color: var(--config-muted);
+  font-size: 14px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.configHelp {
+  margin: 0 0 24px;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--config-muted);
+  overflow-wrap: anywhere;
+  summary {
+    cursor: pointer;
+    color: var(--config-accent-strong);
+    min-height: 32px;
+    padding-block: 6px;
+    &:focus-visible {
+      outline: 2px solid var(--config-focus-ring);
+      outline-offset: 2px;
+    }
+  }
+  p {
+    margin: 8px 0;
+  }
+}
+.configHelp.editorHelp {
+  margin: -8px 0 0;
+  padding-inline: 12px;
+  background: var(--config-surface);
+  border-radius: 6px;
+  summary {
+    text-align: end;
+  }
+  p {
+    max-width: 80ch;
+    margin-inline-start: auto;
+  }
+}
+.attentionNotice {
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  color: var(--config-attention-text);
+  background: var(--config-attention-bg);
+  border-left: 3px solid currentColor;
+  border-radius: 4px;
+  font-size: 13px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.contextNotice button,
+.errorSummary button {
+  color: inherit;
+  background: transparent;
+  border: 0;
+  text-decoration: underline;
+  padding: 6px;
+  font: inherit;
+  cursor: pointer;
+  min-height: 32px;
+}
+.errorSummary {
+  border-left: 3px solid var(--config-error-text);
+  background: var(--config-error-bg);
+  color: var(--config-error-text);
+  padding: 12px 16px;
+  font-size: 14px;
+}
+.errorSummary summary {
+  cursor: pointer;
+}
+.errorSummary ul {
+  margin-bottom: 0;
+  padding-left: 18px;
+}
+
+@container (min-width: 640px) {
+  .fieldsGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 1180px) {
+  .editorWorkspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .editorWorkspace .compactNavigation {
+    position: static;
+    top: auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    background: var(--config-surface);
+    box-shadow: none;
+  }
+}
+@media (max-width: 768px) {
+  .editorWorkspace .compactNavigation {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .visualEditor :global(.input) {
+    min-height: 44px;
+  }
+}
+
 .visualEditor {
-  --config-accent: #526b94;
-  --config-accent-strong: #344b70;
-  --config-accent-surface: color-mix(in srgb, var(--bg-primary) 94%, var(--config-accent) 6%);
-  --config-accent-border: color-mix(in srgb, var(--border-color) 78%, var(--config-accent) 22%);
-  --config-focus-ring: color-mix(in srgb, var(--config-accent) 18%, transparent);
-  --config-group-surface: color-mix(in srgb, var(--bg-primary) 96%, var(--text-primary) 4%);
-  --config-group-border: color-mix(in srgb, var(--border-color) 88%, transparent);
-  --config-gold: #a8792e;
+  @include config.config-tokens;
+  color: var(--config-text);
 
   display: flex;
   flex-direction: column;
@@ -22,16 +463,17 @@
 
   :global(.form-group > label) {
     color: var(--text-secondary);
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 650;
     letter-spacing: 0.02em;
   }
 
   :global(.input) {
-    min-height: 42px;
+    min-height: 40px;
     border-radius: 8px;
-    background: var(--bg-secondary);
-    border-color: var(--border-color);
+    background: var(--config-surface);
+    color: var(--config-text);
+    border-color: var(--config-control-border);
     box-shadow: none;
   }
 

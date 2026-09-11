@@ -391,6 +391,12 @@
   }
 }
 
+.sidebar-connection-switcher {
+  flex-shrink: 0;
+  margin-top: auto;
+  padding-top: 8px;
+}
+
 .sidebar-backdrop {
   display: none;
   border: 0;
@@ -414,7 +420,7 @@
   flex-direction: column;
   gap: $spacing-sm;
   flex-shrink: 0;
-  overflow-y: auto;
+  overflow: hidden;
   background: var(--bg-primary);
   border: 0;
   border-right: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
@@ -522,6 +528,8 @@
     flex-direction: column;
     gap: 10px;
     flex: 1;
+    min-height: 0;
+    overflow-y: auto;
   }
 
   .nav-group {

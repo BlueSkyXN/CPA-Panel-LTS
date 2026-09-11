@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useId, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@codemirror/state';
 import { Chunk } from '@codemirror/merge';
@@ -13,6 +13,7 @@ type DiffModalProps = {
   onConfirm: () => void;
   onCancel: () => void;
   loading?: boolean;
+  targetName?: string;
 };
 
 type UnifiedLineType = 'context' | 'addition' | 'deletion';
@@ -205,9 +206,11 @@ export function DiffModal({
   modified,
   onConfirm,
   onCancel,
-  loading = false
+  loading = false,
+  targetName,
 }: DiffModalProps) {
   const { t } = useTranslation();
+  const targetId = useId();
 
   const diff = useMemo<DiffResult>(
     () => computeUnifiedDiff(original, modified),
@@ -227,13 +230,18 @@ export function DiffModal({
           <Button variant="secondary" onClick={onCancel} disabled={loading}>
             {t('common.cancel')}
           </Button>
-          <Button onClick={onConfirm} loading={loading} disabled={loading}>
+          <Button onClick={onConfirm} loading={loading} disabled={loading} aria-describedby={targetName ? targetId : undefined}>
             {t('config_management.diff.confirm')}
           </Button>
         </>
       }
     >
       <div className={styles.content}>
+        {targetName && (
+          <p className={styles.saveTarget} id={targetId} data-testid="config-diff-target">
+            {t('config_management.save_target', { name: targetName })}
+          </p>
+        )}
         {diff.hunks.length === 0 ? (
           <div className={styles.emptyState}>{t('config_management.diff.no_changes')}</div>
         ) : (

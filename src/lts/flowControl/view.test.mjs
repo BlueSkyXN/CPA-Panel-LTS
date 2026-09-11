@@ -10,6 +10,7 @@ const originalStorage=Object.getOwnPropertyDescriptor(globalThis,'localStorage')
 const storage=new Map();
 Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)}});
 globalThis.window=new EventTarget();globalThis.window.matchMedia=()=>({matches:false,media:'',addEventListener(){},removeEventListener(){}});
+globalThis.window.parent=globalThis.window;
 const vite=await createServer({appType:'custom',logLevel:'silent',server:{middlewareMode:true}});
 const [{FlowControlFieldsView:View},{LiveMonitor},models,i18nModule]=await Promise.all([
  vite.ssrLoadModule('/src/lts/flowControl/FlowControlFields.tsx'),vite.ssrLoadModule('/src/lts/flowControl/LiveMonitor.tsx'),

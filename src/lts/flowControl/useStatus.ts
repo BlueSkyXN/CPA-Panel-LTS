@@ -3,6 +3,7 @@ import { apiClient } from '@/services/api/client';
 import { useAuthStore } from '@/stores';
 import { FLOW_CONTROL_ENDPOINTS } from '@/services/api/flowControl';
 import { computeApiUrl } from '@/utils/connection';
+import { getConnectionFrameElement } from '@/services/connectionRuntime';
 import {
   asRecord, canObserveLive, mergeSummary, parseFlowCapabilities, parseFlowEvent,
   type FlowSupport, type FlowStatus,
@@ -12,26 +13,42 @@ import { FlowSSEDecoder } from './sse';
 export type FlowLiveState = 'off' | 'connecting' | 'live' | 'reconnecting' | 'paused' | 'disabled' | 'error';
 type Point = { requests: number; attempts: number; waiting: number };
 
-export function useFlowControlStatus() {
+function isObservationVisible() {
+  return typeof document === 'undefined' || (
+    !document.hidden && getConnectionFrameElement()?.getAttribute('data-active') !== 'false'
+  );
+}
+
+export function useFlowControlStatus({ active = true, observationVisible = true }: { active?: boolean; observationVisible?: boolean } = {}) {
   const apiBase = useAuthStore((state) => state.apiBase);
   const managementKey = useAuthStore((state) => state.managementKey);
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
   const [revision, setRevision] = useState(0);
+  const [statusVersion, setStatusVersion] = useState(0);
   const [support, setSupport] = useState<FlowSupport>({ state: 'loading' });
   const loadedPolicyState = useRef<FlowStatus | null>(null);
   const [live, setLive] = useState(false);
   const [liveState, setLiveState] = useState<FlowLiveState>('off');
-  const [visible, setVisible] = useState(() => typeof document === 'undefined' || !document.hidden);
+  const [visible, setVisible] = useState(isObservationVisible);
   const [history, setHistory] = useState<Point[]>([]);
 
   useEffect(() => {
-    const change = () => setVisible(!document.hidden);
+    const change = () => setVisible(isObservationVisible());
+    // Hiding a connected instance does not fire the document visibility event.
+    const frame = getConnectionFrameElement();
+    const observer = frame ? new MutationObserver(change) : null;
+    if (frame) observer?.observe(frame, { attributes: true, attributeFilter: ['data-active'] });
     document.addEventListener('visibilitychange', change);
-    return () => document.removeEventListener('visibilitychange', change);
+    change();
+    return () => {
+      observer?.disconnect();
+      document.removeEventListener('visibilitychange', change);
+    };
   }, []);
 
   useEffect(() => {
     let stopped = false;
+    if (!active) return;
     loadedPolicyState.current = null;
     setSupport({ state: 'loading' });
     setHistory([]);
@@ -41,6 +58,7 @@ export function useFlowControlStatus() {
         const data = parseFlowCapabilities(raw);
         loadedPolicyState.current = data?.state ?? null;
         setSupport(data ? { state: 'ready', data } : { state: 'unsupported' });
+        setStatusVersion(version => version + 1);
       }).catch((error: unknown) => {
         if (stopped) return;
         const detail = asRecord(error);
@@ -48,7 +66,7 @@ export function useFlowControlStatus() {
       });
     }
     return () => { stopped = true; };
-  }, [apiBase, managementKey, connectionStatus, revision]);
+  }, [apiBase, managementKey, connectionStatus, revision, active]);
 
   const ready = support.state === 'ready' && support.data.supported;
   const enabled = canObserveLive(support.state === 'ready' ? support.data : null);
@@ -56,8 +74,11 @@ export function useFlowControlStatus() {
 
   useEffect(() => {
     if (!live) { setLiveState('off'); return; }
+    if (!active || !observationVisible) { setLiveState('paused'); return; }
     if (!visible) { setLiveState('paused'); return; }
     if (!ready || connectionStatus !== 'connected') { setLiveState('error'); return; }
+    // A newly opened page must wait for its fresh capability read, not connect using the previous visit's state.
+    if (!loadedPolicyState.current) { setLiveState('connecting'); return; }
     if (!enabled) { setLiveState('disabled'); return; }
 
     let stopped = false;
@@ -180,7 +201,7 @@ export function useFlowControlStatus() {
       clearWatchdog();
       if (retry) clearTimeout(retry);
     };
-  }, [apiBase, managementKey, connectionStatus, ready, enabled, interval, live, visible, revision]);
+  }, [apiBase, managementKey, connectionStatus, ready, enabled, interval, live, visible, revision, active, observationVisible, statusVersion]);
 
   return { support, refresh: () => setRevision((value) => value + 1), live, setLive, liveState, history };
 }

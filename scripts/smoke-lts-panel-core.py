@@ -8,6 +8,7 @@ of browser routes.
 """
 
 from __future__ import annotations
+from panel_browser import PanelBrowser
 
 import argparse
 import contextlib
@@ -1613,11 +1614,20 @@ def run_endpoint_smoke(
     return seen, supports_plugin, core_usage_version
 
 
+
+def locate_config_field(page: Any, field: str, key: str) -> None:
+    search = page.get_by_role("searchbox")
+    search.fill(key)
+    page.locator(f'[data-config-search-field="{field}"]').click()
+    page.locator(f'[data-config-field="{field}"]').wait_for(state="visible")
+    page.wait_for_function("field => document.activeElement?.closest('[data-config-field]')?.dataset.configField === field", arg=field)
+
+
 def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
     seen: list[str] = []
 
     page.evaluate("() => { window.location.hash = '/config'; }")
-    page.wait_for_function("() => window.location.hash.endsWith('/config')")
+    page.wait_for_function("() => window.location.hash.split('?')[0].endsWith('/config')")
     page.get_by_text("Config Panel", exact=False).first.wait_for()
     page.get_by_role("button", name="Source File Editor").click()
     editor = page.locator(".cm-content").first
@@ -1656,22 +1666,26 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
         raise AssertionError("Browser source save did not persist plugins.store-sources")
 
     page.get_by_role("button", name="Visual Editor").click()
+    locate_config_field(page, "loggingToFile", "logging-to-file")
     logging_toggle = page.get_by_label("Log to File")
     logging_toggle.scroll_into_view_if_needed()
     logging_was_checked = logging_toggle.is_checked()
     logging_toggle.evaluate("(element) => element.click()")
     expected_logging = not logging_was_checked
+    locate_config_field(page, "antigravitySensitiveWords", "sensitive-words")
     words = page.locator('[data-testid="antigravity-sensitive-words"]')
     words.get_by_role('button', name='Add', exact=True).click()
     words.get_by_role('textbox').last.fill('word-obfuscation-smoke')
-    page.get_by_role("tab", name="Network & Routing", exact=True).click()
+    locate_config_field(page, "transientErrorCooldownSeconds", "transient-error-cooldown-seconds")
     transient_cooldown_input = page.get_by_label("Transient Error Cooldown (seconds)")
     transient_cooldown_input.scroll_into_view_if_needed()
     transient_cooldown_input.fill("0")
+    locate_config_field(page, "routingStrategy", "routing.strategy")
     routing_strategy_select = page.get_by_label("Routing Strategy")
     routing_strategy_select.scroll_into_view_if_needed()
     routing_strategy_select.click()
     page.get_by_role("option", name="Weighted Round Robin", exact=True).click()
+    locate_config_field(page, "disableImageGeneration", "disable-image-generation")
     disable_image_generation_select = page.get_by_label("Disable Image Generation")
     disable_image_generation_select.scroll_into_view_if_needed()
     if disable_image_generation_select.inner_text().strip() != (
@@ -1684,14 +1698,13 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
     page.get_by_role(
         "option", name="passthrough (preserve client tools)", exact=True
     ).click()
-    page.get_by_role("tab", name="Headers & Codex Strategy", exact=True).click()
-    retry_action_select = page.get_by_label("Retry action")
-    retry_action_select.scroll_into_view_if_needed()
-    retry_action_select.click()
-    page.get_by_role("option", name="Retry").click()
+    locate_config_field(page, "codexAbnormalReasoningRetryAction", "abnormal-reasoning-retry.action")
+    page.get_by_role("group", name="Retry action", exact=True).get_by_role("radio", name="Retry", exact=True).check()
+    locate_config_field(page, "codexAbnormalReasoningRetryStreamBufferMaxBytes", "stream-buffer-max-bytes")
     stream_buffer_max_input = page.get_by_label("Stream buffer max bytes")
     stream_buffer_max_input.scroll_into_view_if_needed()
     stream_buffer_max_input.fill("4096")
+    locate_config_field(page, "codexAbnormalReasoningRetryHedgedRetryEnabled", "hedged-retry.enabled")
     hedged_retry_toggle = page.get_by_label("Enable Hedged Retry")
     hedged_retry_toggle.scroll_into_view_if_needed()
     hedged_retry_toggle.evaluate("(element) => { if (!element.checked) element.click(); }")
@@ -1703,10 +1716,8 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
     require_distinct_auth_toggle.evaluate(
         "(element) => { if (!element.checked) element.click(); }"
     )
-    hedged_retry_mode_select = page.get_by_label("Hedged retry mode")
-    hedged_retry_mode_select.scroll_into_view_if_needed()
-    hedged_retry_mode_select.click()
-    page.get_by_role("option", name="Speed").click()
+    page.get_by_role("group", name="Hedged retry mode", exact=True).get_by_role("radio", name="Speed", exact=True).check()
+    locate_config_field(page, "codexAbnormalReasoningRetryExhaustedBehavior", "exhausted-behavior")
     exhausted_behavior_select = page.get_by_label("Exhausted behavior")
     exhausted_behavior_select.scroll_into_view_if_needed()
     exhausted_behavior_select.click()
@@ -1805,13 +1816,14 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
     seen.append("BROWSER visual save preserved plugins.store-sources")
 
     page.reload(wait_until="domcontentloaded")
-    page.wait_for_function("() => window.location.hash.endsWith('/config')")
+    page.wait_for_function("() => window.location.hash.split('?')[0].endsWith('/config')")
     page.get_by_text("Config Panel", exact=False).first.wait_for()
     page.get_by_role("button", name="Visual Editor").click()
-    page.get_by_role("tab", name="Network & Routing", exact=True).click()
+    locate_config_field(page, "routingStrategy", "routing.strategy")
     if page.get_by_label("Routing Strategy").inner_text().strip() != "Weighted Round Robin":
         raise AssertionError("Browser visual editor did not reload weighted-round-robin")
     seen.append("BROWSER visual save and reload weighted-round-robin")
+    locate_config_field(page, "disableImageGeneration", "disable-image-generation")
     if page.get_by_label("Disable Image Generation").inner_text().strip() != (
         "passthrough (preserve client tools)"
     ):
@@ -1844,12 +1856,12 @@ def run_browser_flow_control_smoke(page: Any, app_url: str, api_url: str) -> lis
 
     page.goto(f"{app_url}/#/config", wait_until="domcontentloaded")
     page.get_by_role("button", name="Visual Editor").click()
-    page.get_by_role("tab", name="Headers & Codex Strategy", exact=True).click()
+    locate_config_field(page, "flowControlRulesText", "flow-control.rules")
     flow = page.get_by_test_id("flow-control-settings")
     flow.get_by_role("button", name="Add rule", exact=True).click()
     flow.get_by_label("Maximum in flight (0 = unlimited concurrency)", exact=True).fill("2")
     flow.get_by_label("Enable local flow control", exact=True).evaluate("element => element.click()")
-    flow.get_by_text("Observation settings", exact=True).click()
+    locate_config_field(page, "flowControlRealtime", "flow-control.observation.realtime")
     flow.get_by_label("Allow live updates", exact=True).evaluate("element => element.click()")
 
     def save() -> None:
@@ -2667,7 +2679,7 @@ def run_browser_smoke(
             );
             """
         )
-        page = context.new_page()
+        page = PanelBrowser(context.new_page())
         page.set_default_timeout(20_000)
 
         try:

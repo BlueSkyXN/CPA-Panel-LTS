@@ -28,6 +28,7 @@ import { generateSecureApiKey } from '@/utils/apiKey';
 import { maskApiKey } from '@/utils/format';
 import { isValidApiKeyCharset } from '@/utils/validation';
 import { ApiKeyStrengthMeter } from './ApiKeyStrengthMeter';
+import { RuleDisclosure } from './RuleDisclosure';
 
 /** Minimum character count before the expand/collapse toggle appears. */
 const EXPAND_THRESHOLD = 30;
@@ -535,6 +536,7 @@ export const PluginStoreAuthEditor = memo(function PluginStoreAuthEditor({
   const updateRule = (id: string, patch: Partial<PluginStoreAuthRule>) => {
     onChange(value.map((rule) => (rule.id === id ? { ...rule, ...patch } : rule)));
   };
+  const [initialRuleIds] = useState(() => new Set(value.map((rule) => rule.id)));
   const addRule = () => onChange([...value, createPluginStoreAuthRule()]);
   const removeRule = (id: string) => onChange(value.filter((rule) => rule.id !== id));
   const toggleApplyTo = (rule: PluginStoreAuthRule, kind: PluginStoreAuthApplyTo) => {
@@ -551,12 +553,16 @@ export const PluginStoreAuthEditor = memo(function PluginStoreAuthEditor({
           {t('config_management.visual.sections.system.store_auth_empty')}
         </p>
       ) : null}
-      {value.map((rule) => {
+      {value.map((rule, ruleIndex) => {
         const usesToken = rule.type === 'bearer' || rule.type === 'github-token';
         const usesBasic = rule.type === 'basic';
         const usesHeader = rule.type === 'header';
         return (
-          <div key={rule.id} className={styles.storeAuthRule}>
+          <RuleDisclosure
+            key={rule.id}
+            label={t('config_management.editor.rule_title', { index: ruleIndex + 1 })}
+            defaultOpen={ruleIndex === 0 || !initialRuleIds.has(rule.id)}
+          >
             <div className={styles.storeAuthRuleHeader}>
               <strong>
                 {rule.match || t('config_management.visual.sections.system.store_auth_rule')}
@@ -693,7 +699,7 @@ export const PluginStoreAuthEditor = memo(function PluginStoreAuthEditor({
               />
               <span>{t('config_management.visual.sections.system.store_auth_allow_insecure')}</span>
             </label>
-          </div>
+          </RuleDisclosure>
         );
       })}
       <div className={styles.actionRow}>
@@ -774,6 +780,7 @@ export const PayloadRulesEditor = memo(function PayloadRulesEditor({
     [t]
   );
   const [modelAdvancedOverrides, setModelAdvancedOverrides] = useState<Record<string, boolean>>({});
+  const [initialRuleIds] = useState(() => new Set(rules.map((rule) => rule.id)));
 
   const addRule = () => onChange([...rules, { id: makeClientId(), models: [], params: [] }]);
   const removeRule = (ruleIndex: number) => onChange(rules.filter((_, i) => i !== ruleIndex));
@@ -1045,7 +1052,22 @@ export const PayloadRulesEditor = memo(function PayloadRulesEditor({
   return (
     <div className={styles.blockStack}>
       {rules.map((rule, ruleIndex) => (
-        <div key={rule.id} className={styles.ruleCard}>
+        <RuleDisclosure
+          key={rule.id}
+          label={t('config_management.editor.rule_summary', {
+            index: ruleIndex + 1,
+            count: rule.params.length,
+          })}
+          defaultOpen={ruleIndex === 0 || !initialRuleIds.has(rule.id)}
+          hasErrors={
+            rule.params.some((param) => !!getParamErrorMessage(param)) ||
+            rule.models.some((model) =>
+              [...(model.match ?? []), ...(model.notMatch ?? [])].some(
+                (param) => !!getPayloadParamValidationError(param)
+              )
+            )
+          }
+        >
           <div className={styles.ruleCardHeader}>
             <div className={styles.ruleCardTitle}>
               {t('config_management.visual.payload_rules.rule')} {ruleIndex + 1}
@@ -1462,7 +1484,7 @@ export const PayloadRulesEditor = memo(function PayloadRulesEditor({
               </Button>
             </div>
           </div>
-        </div>
+        </RuleDisclosure>
       ))}
 
       {rules.length === 0 && (
@@ -1491,6 +1513,7 @@ export const PayloadFilterRulesEditor = memo(function PayloadFilterRulesEditor({
 }) {
   const { t } = useTranslation();
   const rules = value;
+  const [initialRuleIds] = useState(() => new Set(rules.map((rule) => rule.id)));
   const protocolOptions = useMemo(() => buildProtocolOptions(t, rules), [rules, t]);
 
   const addRule = () => onChange([...rules, { id: makeClientId(), models: [], params: [] }]);
@@ -1524,7 +1547,14 @@ export const PayloadFilterRulesEditor = memo(function PayloadFilterRulesEditor({
   return (
     <div className={styles.blockStack}>
       {rules.map((rule, ruleIndex) => (
-        <div key={rule.id} className={styles.ruleCard}>
+        <RuleDisclosure
+          key={rule.id}
+          label={t('config_management.editor.rule_summary', {
+            index: ruleIndex + 1,
+            count: rule.params.length,
+          })}
+          defaultOpen={ruleIndex === 0 || !initialRuleIds.has(rule.id)}
+        >
           <div className={styles.ruleCardHeader}>
             <div className={styles.ruleCardTitle}>
               {t('config_management.visual.payload_rules.rule')} {ruleIndex + 1}
@@ -1609,7 +1639,7 @@ export const PayloadFilterRulesEditor = memo(function PayloadFilterRulesEditor({
               onChange={(params) => updateRule(ruleIndex, { params })}
             />
           </div>
-        </div>
+        </RuleDisclosure>
       ))}
 
       {rules.length === 0 && (

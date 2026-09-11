@@ -17,6 +17,11 @@ import { useModelsStore } from './useModelsStore';
 import { useQuotaStore } from './useQuotaStore';
 import { detectApiBaseFromLocation, normalizeApiBase } from '@/utils/connection';
 import { generateId } from '@/utils/helpers';
+import {
+  getManagedConnection,
+  sessionWasLoggedIn,
+  setSessionLoggedIn,
+} from '@/services/connectionRuntime';
 
 type PluginSupportState = Pick<
   AuthState,
@@ -30,7 +35,7 @@ interface AuthStoreState extends AuthState {
 
   // 操作
   login: (credentials: LoginCredentials) => Promise<boolean>;
-  logout: () => void;
+  logout: (reason?: 'unauthorized') => void;
   checkAuth: () => Promise<boolean>;
   restoreSession: () => Promise<boolean>;
   updateServerVersion: (
@@ -117,7 +122,7 @@ export const useAuthStore = create<AuthStoreState>()(
         if (restoreSessionPromise) return restoreSessionPromise;
 
         restoreSessionPromise = (async () => {
-          const wasLoggedIn = sessionStorage.getItem('isLoggedIn') === 'true';
+          const wasLoggedIn = sessionWasLoggedIn();
           const { apiBase, managementKey, rememberPassword } = get();
           const resolvedBase = normalizeApiBase(apiBase || detectApiBaseFromLocation());
           const resolvedKey = managementKey || '';
@@ -209,11 +214,7 @@ export const useAuthStore = create<AuthStoreState>()(
             ...pluginSupport,
             ...(runtimeKind !== 'unknown' ? { serverRuntimeKind: runtimeKind } : {})
           });
-          if (rememberPassword) {
-            sessionStorage.setItem('isLoggedIn', 'true');
-          } else {
-            sessionStorage.removeItem('isLoggedIn');
-          }
+          setSessionLoggedIn(rememberPassword);
           return true;
         } catch (error: unknown) {
           if (!apiClient.isCurrentConnection(connectionGeneration)) {
@@ -234,7 +235,12 @@ export const useAuthStore = create<AuthStoreState>()(
       },
 
       // 登出
-      logout: () => {
+      logout: (reason) => {
+        const managed = getManagedConnection();
+        if (managed && reason !== 'unauthorized') {
+          managed.host.disconnect(managed.id, window);
+          return;
+        }
         const wasAuthenticated = get().isAuthenticated;
         restoreSessionPromise = null;
         apiClient.clearConfig();
@@ -252,11 +258,11 @@ export const useAuthStore = create<AuthStoreState>()(
           supportsPlugin: false,
           pluginSupportKnown: false,
           pluginSupportSource: 'unknown',
-          connectionStatus: 'disconnected',
+          connectionStatus: reason === 'unauthorized' ? 'error' : 'disconnected',
           connectionError: null
         });
-        sessionStorage.removeItem('isLoggedIn');
-        if (wasAuthenticated) window.location.reload();
+        setSessionLoggedIn(false);
+        if (wasAuthenticated && !managed) window.location.reload();
       },
 
       // 检查认证状态
@@ -369,7 +375,7 @@ export const useAuthStore = create<AuthStoreState>()(
 // 监听全局未授权事件
 if (typeof window !== 'undefined') {
   window.addEventListener('unauthorized', () => {
-    useAuthStore.getState().logout();
+    useAuthStore.getState().logout('unauthorized');
   });
 
   window.addEventListener(

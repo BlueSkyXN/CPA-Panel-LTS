@@ -25,7 +25,7 @@
     "test:usage-time-range": "node --test src/utils/usage/timeRangeFilter.test.mjs",
     "test:usage-query": "node --test src/utils/usage/queryView.test.mjs src/services/api/usageQuery.test.mjs",
     "test:dashboard": "node --test src/features/dashboard/dashboardMetrics.test.mjs",
-    "test:config": "node --test src/components/config/apiKeySecurity.test.mjs src/components/config/antigravitySensitiveWords.test.mjs && npm run test:flow-control",
+    "test:config": "node --test src/components/config/apiKeySecurity.test.mjs src/components/config/antigravitySensitiveWords.test.mjs src/components/config/configNavigation.test.mjs && npm run test:flow-control",
     "test:provider-xai": "node --test src/features/providers/xaiApiKeyProvider.test.mjs",
     "test:provider-integrity": "node --test src/features/providers/providerIntegrity.test.mjs",
     "test:provider-recent": "node --test src/components/providers/hooks/providerRecentRequests.test.mjs",
@@ -43,6 +43,7 @@
     "check:lts": "scripts/check-lts-panel-contract.sh",
     "validate:lts": "npm run test:usage && npm run test:dashboard && npm run test:config && npm run test:providers && npm run test:plugins && npm run test:auth-files && npm run test:codex-remote && npm run test:api-client && npm run test:connections && npm run test:logs && npm run test:ui && npm run check:lts && npm run type-check && npm run lint && npm run build",
     "smoke:lts": "npm run build && python3 scripts/smoke-lts-panel.py",
+    "smoke:config": "npm run build && python3 scripts/smoke-config-editor.py",
     "smoke:lts:core": "npm run build && python3 scripts/smoke-lts-panel-core.py",
     "test:flow-control": "node --test src/lts/flowControl/*.test.mjs",
     "test:usage-pricing-fixtures": "node --test scripts/usage-pricing-smoke-fixtures.test.mjs"

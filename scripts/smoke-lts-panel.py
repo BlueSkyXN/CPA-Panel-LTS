@@ -7,6 +7,7 @@ the single-file dist first.
 """
 
 from __future__ import annotations
+from panel_browser import PanelBrowser
 
 import argparse
 import csv
@@ -2725,7 +2726,7 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
             "apis": {},
         }
     }
-    page = context.new_page()
+    page = PanelBrowser(context.new_page())
     inherit_smoke_tab_session(context, page)
     page.set_default_timeout(15_000)
     page.route(
@@ -3686,7 +3687,7 @@ def assert_request_events_sticky_header(page: Any, region: Any) -> None:
 
 
 def run_usage_events_workspace_smoke(context: Any, app_url: str) -> None:
-    workspace = context.new_page()
+    workspace = PanelBrowser(context.new_page())
     inherit_smoke_tab_session(context, workspace)
     workspace.set_default_timeout(15_000)
     now = datetime.now(timezone.utc)
@@ -4948,7 +4949,7 @@ def run_usage_request_event_clock_smoke(context: Any, app_url: str) -> None:
     if browser is None:
         raise AssertionError("Request-event clock smoke cannot create an isolated context")
     clock_context = browser.new_context(storage_state=context.storage_state())
-    clock_page = clock_context.new_page()
+    clock_page = PanelBrowser(clock_context.new_page())
     inherit_smoke_tab_session(context, clock_page)
     clock_page.set_default_timeout(15_000)
     try:
@@ -5026,7 +5027,7 @@ def run_usage_request_event_clock_smoke(context: Any, app_url: str) -> None:
 
 
 def run_usage_request_event_column_storage_smoke(context: Any, app_url: str) -> None:
-    storage_page = context.new_page()
+    storage_page = PanelBrowser(context.new_page())
     inherit_smoke_tab_session(context, storage_page)
     storage_page.set_default_timeout(15_000)
     storage_key = "cli-proxy-usage-request-event-columns-v3"
@@ -5552,14 +5553,10 @@ def run_plugin_runtime_mismatch_smoke(
     def logout() -> None:
         expand_header_toolbar(page)
         page.get_by_title("Logout").click()
-        page.wait_for_function("() => window.location.hash.endsWith('/login')")
+        page.raw.wait_for_selector('iframe[data-active=true]', state='detached')
 
     def login() -> None:
-        page.locator('input[type="checkbox"]').first.check(force=True)
-        page.locator("input.input").first.fill(api_url)
-        page.locator('input[name="cpa-management-key"]').fill("smoke-management-key")
-        page.get_by_role("button", name=re.compile("Login|Connect", re.I)).click()
-        page.wait_for_function("() => window.location.hash === '#/'")
+        page.reconnect()
 
     def open_diagnostic_from_nav() -> None:
         unavailable_link = page.get_by_role("link", name="Plugins (runtime unavailable)")
@@ -5917,6 +5914,15 @@ def run_sidebar_navigation_smoke(page: Any, state: MockCoreState) -> None:
     page.set_viewport_size({"width": 1280, "height": 720})
 
 
+
+def locate_config_field(page: Any, field: str, key: str) -> None:
+    search = page.get_by_role("searchbox")
+    search.fill(key)
+    page.locator(f'[data-config-search-field="{field}"]').click()
+    page.locator(f'[data-config-field="{field}"]').wait_for(state="visible")
+    page.wait_for_function("field => document.activeElement?.closest('[data-config-field]')?.dataset.configField === field", arg=field)
+
+
 def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: bool) -> None:
     try:
         from playwright.sync_api import Error as PlaywrightError
@@ -5964,7 +5970,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             });
             """.replace("__LTS_SMOKE_V2_PROFILE__", json.dumps(PRICING_FIXTURES["v2"]["profile"]))
         )
-        page = context.new_page()
+        page = PanelBrowser(context.new_page())
         page.set_default_timeout(15_000)
 
         try:
@@ -6388,7 +6394,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             run_branded_provider_visibility_smoke(page, app_url, state)
 
             page.goto(f"{app_url}?route=config-source-save#/config", wait_until="domcontentloaded")
-            page.wait_for_function("() => window.location.hash.endsWith('/config')")
+            page.wait_for_function("() => window.location.hash.split('?')[0].endsWith('/config')")
             page.get_by_text("Config Panel", exact=False).first.wait_for()
             page.get_by_role("button", name="Source File Editor").click()
             editor = page.locator(".cm-content").first
@@ -6405,9 +6411,11 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             page.get_by_text("Configuration saved successfully", exact=False).first.wait_for()
 
             page.get_by_role("button", name="Visual Editor").click()
+            locate_config_field(page, "loggingToFile", "logging-to-file")
             page.get_by_label("Log to File").evaluate(
                 "(element) => { if (element.checked) element.click(); }"
             )
+            locate_config_field(page, "antigravitySensitiveWords", "sensitive-words")
             words = page.locator('[data-testid="antigravity-sensitive-words"]')
             words.get_by_role('button', name='Add', exact=True).click()
             words.get_by_role('textbox').first.fill('word-obfuscation-smoke')
@@ -6415,12 +6423,14 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             words.get_by_role('textbox').first.press('Control+b')
             if page.locator('.app-shell').evaluate("node => node.classList.contains('sidebar-is-collapsed')") != before:
                 raise AssertionError('Sidebar shortcut intercepted the config editor')
+            locate_config_field(page, "redisUsageQueueRetentionSeconds", "redis-usage-queue-retention-seconds")
             redis_retention = page.get_by_label("Redis Usage Queue Retention (seconds)")
             redis_retention.fill("0")
             page.get_by_text("Enter a whole number between 1 and 3600", exact=True).wait_for()
             redis_retention.fill("60")
-            page.get_by_role("tab", name="Network & Routing", exact=True).click()
+            locate_config_field(page, "transientErrorCooldownSeconds", "transient-error-cooldown-seconds")
             page.get_by_label("Transient Error Cooldown (seconds)").fill("-1")
+            locate_config_field(page, "disableImageGeneration", "disable-image-generation")
             disable_image_generation_select = page.get_by_label("Disable Image Generation")
             if disable_image_generation_select.inner_text().strip() != (
                 "chat (remove image tool from non-image endpoints)"
@@ -6432,10 +6442,11 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             page.get_by_role(
                 "option", name="passthrough (preserve client tools)", exact=True
             ).click()
-            page.get_by_role("tab", name="Headers & Codex Strategy", exact=True).click()
-            page.get_by_label("Retry action").click()
-            page.get_by_role("option", name="Retry").click()
+            locate_config_field(page, "codexAbnormalReasoningRetryAction", "abnormal-reasoning-retry.action")
+            page.get_by_role("group", name="Retry action", exact=True).get_by_role("radio", name="Retry", exact=True).check()
+            locate_config_field(page, "codexAbnormalReasoningRetryStreamBufferMaxBytes", "stream-buffer-max-bytes")
             page.get_by_label("Stream buffer max bytes").fill("4096")
+            locate_config_field(page, "codexAbnormalReasoningRetryHedgedRetryEnabled", "hedged-retry.enabled")
             page.get_by_label("Enable Hedged Retry").evaluate(
                 "(element) => { if (!element.checked) element.click(); }"
             )
@@ -6443,8 +6454,8 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             page.get_by_label("Require Distinct Auth").evaluate(
                 "(element) => { if (!element.checked) element.click(); }"
             )
-            page.get_by_label("Hedged retry mode").click()
-            page.get_by_role("option", name="Speed").click()
+            page.get_by_role("group", name="Hedged retry mode", exact=True).get_by_role("radio", name="Speed", exact=True).check()
+            locate_config_field(page, "codexAbnormalReasoningRetryExhaustedBehavior", "exhausted-behavior")
             page.get_by_label("Exhausted behavior").click()
             page.get_by_role("option", name="Pass through abnormal response").click()
             page.get_by_label("Client usage aggregation").click()
@@ -6469,10 +6480,12 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             page.get_by_text("Configuration saved successfully", exact=False).first.wait_for()
 
             page.reload(wait_until="domcontentloaded")
-            page.wait_for_function("() => window.location.hash.endsWith('/config')")
+            page.wait_for_function("() => window.location.hash.split('?')[0].endsWith('/config')")
             page.get_by_text("Config Panel", exact=False).first.wait_for()
             page.get_by_role("button", name="Visual Editor").click()
-            page.get_by_role("tab", name="Network & Routing", exact=True).click()
+            locate_config_field(page, "loggingToFile", "logging-to-file")
+            locate_config_field(page, "transientErrorCooldownSeconds", "transient-error-cooldown-seconds")
+            locate_config_field(page, "disableImageGeneration", "disable-image-generation")
             if page.get_by_label("Disable Image Generation").inner_text().strip() != (
                 "passthrough (preserve client tools)"
             ):

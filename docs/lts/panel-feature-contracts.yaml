@@ -12,10 +12,13 @@ status_definitions:
 features:
   - id: multi-instance-connections
     status: lts-maintained
-    reason: Saved connections and tab-local sessions with isolated target probes and document-reload handoff preserve existing single-instance business pages.
+    reason: Independent same-origin runtime documents preserve per-instance pages, drafts, and clients while sidebar switching keeps other enabled sessions connected.
     panel_files:
       - src/components/layout/PanelShell.tsx
       - src/components/layout/PanelShell.module.scss
+      - src/components/layout/ConnectionSwitcher.tsx
+      - src/components/layout/ConnectionRuntime.tsx
+      - src/services/connectionRuntime.ts
       - src/services/storage/connectionProfiles.ts
       - src/services/storage/connectionProfiles.test.mjs
       - src/services/connectionSession.ts
@@ -23,12 +26,13 @@ features:
       - src/stores/useAuthStore.ts
       - scripts/smoke-connections.py
     required_markers:
-      - prepareHandoff
+      - getManagedConnection
       - tabAuthStorage
       - hasSessionChanges
       - probeConnection
       - safeSessionPath
-      - window.location.reload()
+      - data-connection-frame
+      - keep_connected
   - id: full-usage-statistics
     status: protected
     reason: Complete usage statistics are the primary CPA-Panel-LTS protected delta, including provider-sourced local pricing that preserves unsupported tiers as incomplete coverage.
@@ -496,6 +500,12 @@ features:
       - src/features/plugins/components/PluginInstallGateModal.tsx
       - src/features/plugins/components/PluginInstallGateModal.module.scss
       - src/components/config/VisualConfigEditor.tsx
+      - src/components/config/ConfigFieldControls.tsx
+      - src/lts/codexPolicy/useCodexPolicyControls.tsx
+      - src/components/config/ConfigFieldShells.tsx
+      - src/components/config/ConfigEditorWorkspace.tsx
+      - src/components/config/ConfigDomainPanels.tsx
+      - src/components/config/configNavigation.ts
       - src/components/config/VisualConfigEditorBlocks.tsx
       - src/hooks/useVisualConfig.ts
       - src/services/api/plugins.ts
@@ -672,6 +682,11 @@ features:
       - /config
     panel_files:
       - src/components/config/VisualConfigEditor.tsx
+      - src/components/config/ConfigFieldControls.tsx
+      - src/lts/codexPolicy/useCodexPolicyControls.tsx
+      - src/components/config/ConfigEditorWorkspace.tsx
+      - src/components/config/ConfigDomainPanels.tsx
+      - src/components/config/configNavigation.ts
       - src/components/config/VisualConfigEditor.module.scss
       - src/hooks/useVisualConfig.ts
       - src/services/api/configFile.ts
@@ -718,16 +733,20 @@ features:
       - require-distinct-auth
       - hasCodexAbnormalReasoningRetryDirtyFields
       - dirtyFields.has('codexAbnormalReasoningRetryAction')
-      - StrategyBadge
-      - StrategyGroup
+      - useCodexPolicyControls
+      - ConfigFieldsProps
+      - CONFIG_DOMAINS
+      - CONFIG_FIELDS
+      - resolveConfigLocation
+      - focusConfigField
+      - codex-draft-summary
       - ABNORMAL_RETRY_ACTION_HINT_KEYS
       - ABNORMAL_RETRY_EXHAUSTED_BEHAVIOR_HINT_KEYS
       - ABNORMAL_RETRY_USAGE_AGGREGATION_HINT_KEYS
       - ABNORMAL_RETRY_DELIVERY_POLICY_HINT_KEYS
       - ABNORMAL_RETRY_FALLBACK_POLICY_HINT_KEYS
       - ABNORMAL_RETRY_HEDGED_MODE_HINT_KEYS
-      - strategySummary
-      - strategyBadgeGrid
+      - draftSummary
       - fieldSelectionHint
       - codex_abnormal_reasoning_retry_title
       - codex_abnormal_reasoning_retry_desc
@@ -1067,6 +1086,11 @@ features:
       - src/types/visualConfig.ts
       - src/hooks/useVisualConfig.ts
       - src/components/config/VisualConfigEditor.tsx
+      - src/components/config/ConfigFieldControls.tsx
+      - src/lts/codexPolicy/useCodexPolicyControls.tsx
+      - src/components/config/ConfigEditorWorkspace.tsx
+      - src/components/config/ConfigDomainPanels.tsx
+      - src/components/config/configNavigation.ts
       - src/lts/i18n/
       - docs/lts/flow-control.md
     core_endpoints:

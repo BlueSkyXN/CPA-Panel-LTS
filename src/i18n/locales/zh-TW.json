@@ -1621,6 +1621,136 @@
     "upgrade_required_desc": "目前伺服器版本不支援記錄檢視功能，請升級到最新版本的 CLI Proxy API 以使用此功能。"
   },
   "config_management": {
+    "save_target": "目標實例：{{name}}",
+    "editor": {
+      "guidance": {
+        "editor_help": "設定說明",
+        "hedging_needs_retry": "暫不執行：需先選擇「自動重試」。下方參數可預先編輯並保留。",
+        "hedging_off": "對沖已關閉。下方參數會保留，目前草稿下暫不執行。",
+        "hedging_ready": "草稿符合啟用條件；實際執行仍取決於請求命中、延遲與可用認證。儲存不代表已驗證執行狀態。",
+        "open_scope": "前往模式與範圍",
+        "reading_title": "如何理解設定值與預設值",
+        "reading": "控制項顯示目前草稿，不代表執行端已生效。輸入框內的淺色預留位置文字是填寫提示，不是已儲存的值。「預設」描述未設定時的行為，不是推薦；不同 Core 版本可能不同。修改後需查看差異並儲存，儲存成功僅代表設定已重新讀取。",
+        "compare_title": "選項差異與選擇建議",
+        "scope_compare": "關閉：不使用這套異常處理策略。僅觀察：記錄偵測結果，不因該策略重試，適合先確認命中情況。自動重試：對命中的請求執行異常重試，會增加等待和上游用量；建議先限定模型與認證範圍。切換模式不會清空其他參數。",
+        "hedging_compare": "品質優先：等待已發出的通道，再依交付策略選擇候選，可能等得更久；不保證回答更準確。速度優先：首個可交付通道成功後盡快回傳，減少等待，但不等待所有候選。需要比較候選時選前者，首要目標是回應速度時考慮後者；兩者都可能增加上游用量。",
+        "hedging_inactive": "暫不參與執行：需同時選擇「自動重試」並開啟對沖。下方參數仍可預先編輯，不會被自動清空。",
+        "hedging_cost": "草稿已符合模式與開關條件；實際是否發起對沖仍取決於請求命中、延遲和可用認證，不代表執行端已生效。",
+        "buffer_warning": "注意：草稿中串流快取已關閉。自動重試模式下，已傳送給用戶端的內容無法撤回；快取上限不能視為用戶端已收內容的保護措施。保留此設定前，請確認能接受串流交付與異常處理的取捨。",
+        "default_reference": "未設定時：{{value}}（目前 LTS 行為參考；不是執行值或推薦值）。",
+        "pages": {
+          "service": {
+            "listener": "設定服務監聽位址與 TLS 憑證；反向代理的 HTTPS 與此處的 Core TLS 是兩層設定。",
+            "management": "控制誰能存取管理介面及面板如何更新；管理金鑰不同於用戶端 API 金鑰。",
+            "credentials": "設定用戶端存取憑證和認證檔案位置；請勿將上游帳號憑證填入用戶端 API 金鑰清單。"
+          },
+          "operations": {
+            "runtime": "設定診斷與執行模式。建議僅在排查問題時開啟偵錯，並結合實際日誌判斷問題。",
+            "logging": "控制檔案日誌及磁碟用量；容量限制不是用量統計資料的保留策略。",
+            "usage": "控制用量收集與 Redis 佇列保留時間；用戶端收到的 token 數顯示策略在 Codex「交付與用量」中設定。"
+          },
+          "routing": {
+            "connection": "設定出站代理與上游回應標頭透傳；Claude/Codex 發出的請求標頭在「請求頭與身分」中設定。",
+            "selection": "決定請求分配給哪個帳號。需要工作階段連續性時再啟用黏性；TTL 僅在黏性開啟時參與，黏性不保證每次都能使用同一帳號。",
+            "retries": "處理一般請求失敗、帳號切換與冷卻；不同於偵測到 Codex 異常推理後的重試，增加次數可能延長等待。",
+            "fallback": "設定配額不足時的替代路徑；切換專案或預覽模型可能改變實際使用的資源或模型。",
+            "streaming": "設定一般串流與非串流保活。保活用於維持連線，不是模型生成進度，也不是 Codex 異常回應快取。"
+          },
+          "flow-control": {
+            "rules": "依比對條件限制並行與頻率。先限定目標請求，再查看規則效果；開關開啟不代表執行端已接受目前草稿。",
+            "queue": "設定超限後的等待與記憶體容量。較長等待可減少立即拒絕，但會增加延遲和佇列資源用量。",
+            "monitoring": "對照草稿與執行狀態；觀察連線僅在本頁可見且開啟觀察時運作，離開本頁會暫停。"
+          },
+          "headers": {
+            "claude": "設定 Claude 請求標頭預設值與裝置指紋；此處不是回應標頭透傳，也不修改用戶端 API 金鑰。",
+            "codex": "設定 Codex 請求身分資訊；異常偵測、重試與對沖在「Codex 降智對抗」中設定。"
+          },
+          "codex-policy": {
+            "scope": "先選擇處理模式，再限定模型與認證範圍。異常標記是規則判斷，不代表對回答準確性的評估。",
+            "retry": "設定異常後的重試次數與串流快取；快取便於在交付前處理異常，但會增加首段等待和記憶體用量。",
+            "hedging": "透過額外請求通道比較候選或減少等待，可能增加上游請求與用量。",
+            "delivery": "分別決定正常候選如何選擇、無正常結果時如何回傳，以及用戶端如何顯示用量；面板仍保留完整用量紀錄。"
+          },
+          "compatibility": {
+            "antigravity": "調整 Antigravity 專屬相容行為；額度補償屬於此提供者，不是一般配額回退。",
+            "gemini": "選擇 Gemini CLI 使用的端點；建議有明確連通性或相容性需求時再調整。",
+            "images": "設定圖像生成模式與基礎模型；模式決定請求處理方式，基礎模型不等於用戶端請求的圖像模型名稱。"
+          },
+          "payload": {
+            "defaults": "僅補齊請求中缺少的參數；需要保留用戶端選擇時優先使用預設規則。Raw 版本填寫 JSON 值，不是一般字串。",
+            "overrides": "覆寫符合請求的參數，包括用戶端已提供的值；僅在需要統一行為時使用。Raw 版本須使用有效 JSON。",
+            "filters": "刪除符合請求中的指定參數，而非賦予預設值。請先確認上游不需要這些參數。"
+          },
+          "plugins": {
+            "runtime": "設定外掛執行開關；可用能力由 Core 決定，設定開啟不等於外掛已安裝或正在執行。",
+            "sources": "設定商店來源清單；此處僅編輯來源，不執行外掛安裝。",
+            "auth": "為商店請求設定認證比對規則；縮小比對範圍，避免將認證資訊傳送至無關來源。"
+          }
+        }
+      },
+      "saved": "已儲存",
+      "domains": {
+        "service": "服務與存取",
+        "operations": "執行與觀測",
+        "routing": "網路與路由",
+        "flow-control": "並行與頻率",
+        "headers": "請求標頭與身分",
+        "codex-policy": "Codex 降智對抗",
+        "compatibility": "模型與協定相容",
+        "payload": "請求改寫（Payload）",
+        "plugins": "外掛與擴充"
+      },
+      "pages": {
+        "service_listener": "監聽與 TLS",
+        "service_management": "管理存取",
+        "service_credentials": "用戶端驗證",
+        "operations_runtime": "執行模式",
+        "operations_logging": "日誌管理",
+        "operations_usage": "用量收集",
+        "routing_connection": "代理與回應標頭",
+        "routing_selection": "帳號選擇",
+        "routing_retries": "失敗重試",
+        "routing_fallback": "配額後援",
+        "routing_streaming": "串流與保活",
+        "flow-control_rules": "限流規則",
+        "flow-control_queue": "佇列與容量",
+        "flow-control_monitoring": "執行觀察",
+        "headers_claude": "Claude",
+        "headers_codex": "Codex",
+        "codex-policy_scope": "模式與範圍",
+        "codex-policy_retry": "異常重試",
+        "codex-policy_hedging": "對沖重試",
+        "codex-policy_delivery": "交付與用量",
+        "compatibility_antigravity": "Antigravity",
+        "compatibility_gemini": "Gemini CLI",
+        "compatibility_images": "影像生成",
+        "payload_defaults": "預設規則",
+        "payload_overrides": "覆寫規則",
+        "payload_filters": "過濾規則",
+        "plugins_runtime": "外掛執行",
+        "plugins_sources": "商店來源",
+        "plugins_auth": "商店驗證"
+      },
+      "navigation": "設定目錄",
+      "foundation": "基礎環境",
+      "requests": "請求處理",
+      "features": "特色與擴充",
+      "search": "搜尋設定名稱或 YAML 鍵",
+      "search_results": "設定搜尋結果",
+      "no_results": "沒有相符的設定項",
+      "results_count": "找到 {{count}} 項設定",
+      "changed": "有未儲存修改",
+      "source_dirty": "原始碼含未儲存修改",
+      "review_errors": "定位並修正設定錯誤",
+      "legacy_notice": "目錄已重新整理；原有設定仍保留。相關功能：",
+      "draft_summary": "目前草稿策略",
+      "inactive_policy": "目前模式不執行異常重試；重試參數仍可預先編輯，儲存時不會清空。",
+      "saved_not_runtime": "設定草稿；儲存不代表所有執行狀態已驗證。",
+      "details": "詳細設定",
+      "rule_summary": "規則 {{index}} · {{count}} 項",
+      "rule_title": "規則 {{index}}",
+      "jump": "定位"
+    },
     "title": "設定面板",
     "editor_title": "設定檔",
     "reload": "重新載入",
@@ -1824,9 +1954,9 @@
           "codex_abnormal_reasoning_retry_action_retry": "自動重試",
           "codex_abnormal_reasoning_retry_action_observe_only": "僅觀察",
           "codex_abnormal_reasoning_retry_action_disabled": "關閉",
-          "codex_abnormal_reasoning_retry_action_retry_desc": "目前會丟棄命中異常推理權杖數的回應，並依重試上限重新請求。",
-          "codex_abnormal_reasoning_retry_action_observe_only_desc": "目前只記錄命中結果，不會改變回傳給客戶端的回應。",
-          "codex_abnormal_reasoning_retry_action_disabled_desc": "目前不啟用降智對抗策略，符合條件不會影響回應交付。",
+          "codex_abnormal_reasoning_retry_action_retry_desc": "對命中的異常回應重試，可能增加等待和上游用量。建議先限定模型與認證範圍。",
+          "codex_abnormal_reasoning_retry_action_observe_only_desc": "記錄偵測結果，不因該策略重試。適合先確認哪些請求會命中。",
+          "codex_abnormal_reasoning_retry_action_disabled_desc": "不執行這套異常處理策略；已填寫的範圍和參數仍保留。",
           "codex_abnormal_reasoning_retry_stream_buffer": "快取串流回應",
           "codex_abnormal_reasoning_retry_stream_buffer_desc": "在回應完成前暫存串流片段，命中異常時可避免提前交付異常內容",
           "codex_abnormal_reasoning_retry_stream_buffer_max_bytes_label": "串流快取上限位元組數",
@@ -1837,8 +1967,8 @@
           "codex_abnormal_reasoning_retry_hedged_retry_mode_hint": "選擇第二路請求啟動後的回傳策略",
           "codex_abnormal_reasoning_retry_hedged_retry_mode_quality": "品質優先（預設）",
           "codex_abnormal_reasoning_retry_hedged_retry_mode_speed": "速度優先",
-          "codex_abnormal_reasoning_retry_hedged_retry_mode_quality_desc": "目前會等待已發出的請求通道，再依交付策略挑選更穩的結果。",
-          "codex_abnormal_reasoning_retry_hedged_retry_mode_speed_desc": "目前會在首個可交付請求通道成功後儘快回傳，以較短等待換取回應速度。",
+          "codex_abnormal_reasoning_retry_hedged_retry_mode_quality_desc": "等待已發出的請求通道，再依交付策略選擇候選；可能增加等待，不保證回答更準確。",
+          "codex_abnormal_reasoning_retry_hedged_retry_mode_speed_desc": "首個可交付通道成功後儘快回傳，不等待全部候選。適合優先減少等待。",
           "codex_abnormal_reasoning_retry_hedge_delay_ms_label": "對沖延遲（毫秒）",
           "codex_abnormal_reasoning_retry_hedge_delay_ms_hint": "異常請求嘗試觸發重試後，啟動第二路請求前等待的時間",
           "codex_abnormal_reasoning_retry_require_distinct_auth": "要求不同驗證",
@@ -2615,8 +2745,8 @@
       "testAll": "全部測試",
       "success": "連通",
       "baseUrlRequired": "服務位址必填",
-        "weightInteger": "調度權重必須是整數",
-        "weightMax": "調度權重不能超過 {{max}}",
+      "weightInteger": "調度權重必須是整數",
+      "weightMax": "調度權重不能超過 {{max}}",
       "endpointInvalid": "服務位址不合法",
       "apiKeyRequired": "API 金鑰必填",
       "modelRequired": "測試模型必填",
