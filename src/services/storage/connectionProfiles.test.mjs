@@ -22,6 +22,7 @@ const vite = await createServer({
   server: { middlewareMode: true },
 });
 const profiles = await vite.ssrLoadModule('/src/services/storage/connectionProfiles.ts');
+const runtime = await vite.ssrLoadModule('/src/services/connectionRuntime.ts');
 const { obfuscatedStorage } = await vite.ssrLoadModule('/src/services/storage/secureStorage.ts');
 const { STORAGE_KEY_AUTH } = await vite.ssrLoadModule('/src/utils/constants.ts');
 const lifecycle = await vite.ssrLoadModule('/src/services/connectionSession.ts');
@@ -29,6 +30,24 @@ test.after(() => vite.close());
 test.beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
+});
+
+test('partial browser mocks are not mistaken for managed connection frames', () => {
+  const original = globalThis.window;
+  try {
+    for (const mock of [undefined, new EventTarget(), { location: { search: '' } }, { parent: {} }]) {
+      globalThis.window = mock;
+      assert.equal(runtime.isConnectionFrame(), false);
+    }
+    const top = { location: { search: '?cpa-session=synthetic' } };
+    top.parent = top;
+    globalThis.window = top;
+    assert.equal(runtime.isConnectionFrame(), false);
+    globalThis.window = { parent: {}, location: { search: '?cpa-session=synthetic' } };
+    assert.equal(runtime.isConnectionFrame(), true);
+  } finally {
+    globalThis.window = original;
+  }
 });
 
 test('legacy migration preserves opt-in and removes duplicate credential storage', () => {
@@ -199,3 +218,40 @@ test('handoff remains authoritative after old response callbacks or logout befor
     assert.equal(JSON.parse(profiles.tabAuthStorage.getItem()).state.managementKey, '');
   }
 });
+
+for (const authorized of [true, false]) {
+  test(`managed frame ${authorized ? 'uses its own in-memory credentials' : 'fails closed without a matching host session'}`, async () => {
+    const previousWindow = globalThis.window;
+    const isolated = await createServer({ appType: 'custom', logLevel: 'silent', server: { middlewareMode: true } });
+    sessionStorage.setItem(profiles.TAB_SESSION_KEY, JSON.stringify({ state: { profileId: 'other-tab', managementKey: 'synthetic-other' }, version: 1 }));
+    const original = sessionStorage.getItem(profiles.TAB_SESSION_KEY);
+    globalThis.window = Object.assign(new EventTarget(), {
+      location: { host: 'example.test', search: '?cpa-session=frame-a' },
+      parent: { __cpaConnectionHost: {
+        bootstrap: (id, source) => authorized && id === 'frame-a' && source === globalThis.window ? {
+          profile: { id: 'a', name: 'A', apiBase: 'https://a.example.test', environment: '', rememberPassword: false },
+          managementKey: 'synthetic-frame-a',
+        } : null,
+      } },
+    });
+    try {
+      const module = await isolated.ssrLoadModule('/src/services/storage/connectionProfiles.ts');
+      const runtime = await isolated.ssrLoadModule('/src/services/connectionRuntime.ts');
+      const restored = module.tabAuthStorage.getItem();
+      if (authorized) {
+        assert.equal(JSON.parse(restored).state.profileId, 'a');
+        assert.equal(JSON.parse(restored).state.managementKey, 'synthetic-frame-a');
+        module.tabAuthStorage.setItem('', JSON.stringify({ state: { profileId: 'a' }, version: 1 }));
+      } else assert.equal(restored, null);
+      assert.equal(runtime.sessionWasLoggedIn(), authorized);
+      runtime.setSessionLoggedIn(true);
+      assert.equal(sessionStorage.getItem('isLoggedIn'), null);
+      module.tabAuthStorage.removeItem();
+      assert.equal(module.tabAuthStorage.getItem(), null);
+      assert.equal(sessionStorage.getItem(profiles.TAB_SESSION_KEY), original);
+    } finally {
+      globalThis.window = previousWindow;
+      await isolated.close();
+    }
+  });
+}

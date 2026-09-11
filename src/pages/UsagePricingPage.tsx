@@ -506,6 +506,18 @@ export function UsagePricingPage() {
     });
   };
 
+  const fastLongContextAllow = priceProfile.assumptions.fastLongContext === 'allow';
+
+  const setFastLongContextAllow = (allow: boolean) => {
+    setPriceProfile({
+      ...priceProfile,
+      assumptions: {
+        ...priceProfile.assumptions,
+        fastLongContext: allow ? 'allow' : 'official',
+      },
+    });
+  };
+
   const renderEditor = () => {
     if (!selectedSummary || !draft) return null;
     const modelIsCanonicalPreset =
@@ -664,6 +676,7 @@ export function UsagePricingPage() {
             <ToggleSwitch
               checked={draft.fastLongSupported}
               onChange={(value) => updateDraft('fastLongSupported', value)}
+              disabled={fastLongContextAllow}
               label={t('usage_stats.pricing_fast_long_supported')}
             />
           )}
@@ -855,7 +868,24 @@ export function UsagePricingPage() {
         />
       </section>
 
-      <PresetPricingCatalog />
+      <section
+        className={styles.assumptionsBar}
+        aria-label={t('usage_stats.pricing_fast_long_context_title')}
+        data-testid="pricing-fast-long-context-toggle"
+      >
+        <div className={styles.assumptionsCopy}>
+          <strong>{t('usage_stats.pricing_fast_long_context_title')}</strong>
+          <span>{t('usage_stats.pricing_fast_long_context_description')}</span>
+        </div>
+        <ToggleSwitch
+          checked={fastLongContextAllow}
+          onChange={setFastLongContextAllow}
+          label={t('usage_stats.pricing_fast_long_context_allow')}
+          ariaLabel={t('usage_stats.pricing_fast_long_context_title')}
+        />
+      </section>
+
+      <PresetPricingCatalog allowFastLongContext={fastLongContextAllow} />
 
       {baseError && <div className={styles.notice} role="alert">{baseError}</div>}
       {summaryQuery.error && <div className={styles.notice} role="alert">{summaryQuery.error}</div>}

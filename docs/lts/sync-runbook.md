@@ -10,7 +10,7 @@
 
 ## Summary
 
-最新分支收尾和逐提交决策见 [2026-09-07 intake](upstream-intake-20260907.md)：审计至上游 `v1.22.14`，按 LTS 架构适配快捷键、Sheet、俄语和 Antigravity 配置；推广、不同 UI 架构及未确认合同不混入主线。
+最新分支收尾和逐提交决策见 [2026-09-11 intake](upstream-intake-20260911.md)：审计至上游 `v1.22.15`，按 hunk 适配 OAuth 标题和表单语义；保留 LTS 的 Core 侧额度重置清理和配置检测分组，不搬入另一套 UI 架构。此前快捷键、Sheet、俄语和 Antigravity 适配见 [2026-09-07 intake](upstream-intake-20260907.md)。
 
 `CPA-Panel-LTS` should not use the same full-sync strategy as `CPA-Core-LTS`.
 

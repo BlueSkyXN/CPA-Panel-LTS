@@ -26,6 +26,17 @@ $diff-hunk-color: #388bfd;
   height: 70vh;
   min-height: 420px;
 }
+.saveTarget {
+  flex: none;
+  margin: 0;
+  padding: 12px 16px;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.5;
+}
 
 .emptyState {
   flex: 1;

@@ -7,6 +7,7 @@ the single-file dist first.
 """
 
 from __future__ import annotations
+from panel_browser import PanelBrowser
 
 import argparse
 import csv
@@ -2245,6 +2246,17 @@ def run_oauth_editor_smoke(page: Any, app_url: str) -> None:
         raise AssertionError("empty OAuth alias draft must not trigger the unsaved changes guard")
 
     page.goto(
+        f"{app_url}?route=oauth-alias-edit#/auth-files/oauth-model-alias?provider=codex",
+        wait_until="domcontentloaded",
+    )
+    page.get_by_text("Edit model aliases for codex", exact=True).wait_for()
+    assert page.get_by_label("Provider", exact=True).input_value() == "codex"
+    assert page.get_by_role("button", name="Codex", exact=True).get_attribute("aria-pressed") == "true"
+    page.get_by_role("button", name="Back", exact=True).click()
+    page.wait_for_function("() => window.location.hash.endsWith('/auth-files')")
+    assert page.get_by_role("dialog", name="Unsaved changes").count() == 0
+
+    page.goto(
         f"{app_url}?route=oauth-editor#/auth-files/oauth-excluded",
         wait_until="domcontentloaded",
     )
@@ -2252,6 +2264,8 @@ def run_oauth_editor_smoke(page: Any, app_url: str) -> None:
     page.get_by_text("Add provider model disablement", exact=False).first.wait_for()
     page.get_by_role("button", name="Codex", exact=True).click()
     page.get_by_text("Edit model disablement for codex", exact=False).first.wait_for()
+    assert page.get_by_label("Provider", exact=True).input_value() == "codex"
+    assert page.get_by_role("button", name="Codex", exact=True).get_attribute("aria-pressed") == "true"
     page.get_by_label("Custom model rule", exact=True).fill("gpt-*")
 
     page.get_by_role("button", name="Back", exact=True).click()
@@ -2725,7 +2739,7 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
             "apis": {},
         }
     }
-    page = context.new_page()
+    page = PanelBrowser(context.new_page())
     inherit_smoke_tab_session(context, page)
     page.set_default_timeout(15_000)
     page.route(
@@ -3145,12 +3159,50 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
             "Short context",
             "Long context",
             "Official API ×2.50",
-            "Fast long context unsupported",
         ]:
             if expected_text not in catalog_text:
                 raise AssertionError(
                     f"Empty-usage preset catalog is missing {expected_text!r}: {catalog_text!r}"
                 )
+
+        def gpt54_long_fast_text() -> str:
+            return catalog.locator(
+                '[data-testid="preset-pricing-model"][data-model="gpt-5.4"] '
+                'tr[data-context-band="long"] td[data-label="Fast policies"]'
+            ).inner_text()
+
+        if "unsupported" in gpt54_long_fast_text().lower():
+            raise AssertionError(
+                "Fast long-context is restricted by default; the policy should default to allow"
+            )
+        if "Fast long context unsupported" in catalog_text:
+            raise AssertionError(
+                "Default Fast long-context policy still shows the official restriction: "
+                f"{catalog_text!r}"
+            )
+
+        fast_long_toggle = page.locator(
+            '[data-testid="pricing-fast-long-context-toggle"] input[type="checkbox"]'
+        )
+        if not fast_long_toggle.is_checked():
+            raise AssertionError("Fast long-context policy did not default to allow")
+        fast_long_toggle.evaluate("(element) => element.click()")
+        for _ in range(50):
+            if "Fast long context unsupported" in gpt54_long_fast_text():
+                break
+            page.wait_for_timeout(100)
+        else:
+            raise AssertionError(
+                "Enabling the official Fast long-context restriction did not mark gpt-5.4: "
+                f"{gpt54_long_fast_text()!r}"
+            )
+        fast_long_toggle.evaluate("(element) => element.click()")
+        for _ in range(50):
+            if "Fast long context unsupported" not in gpt54_long_fast_text():
+                break
+            page.wait_for_timeout(100)
+        else:
+            raise AssertionError("Disabling the restriction did not restore Fast long-context pricing")
 
         table_region = catalog.get_by_role(
             "region", name="Complete preset price table", exact=True
@@ -3270,8 +3322,8 @@ def run_usage_pricing_smoke(page: Any) -> None:
     summary.wait_for()
     summary_text = summary.inner_text()
     for expected in [
-        "6 / 8 requests",
-        "75.0%",
+        "7 / 8 requests",
+        "87.5%",
     ]:
         if expected not in summary_text:
             raise AssertionError(
@@ -3299,13 +3351,17 @@ def run_usage_pricing_smoke(page: Any) -> None:
     gpt54_text = gpt54_row.text_content() or ""
     for expected in [
         "Needs review",
-        "Fast long context unsupported",
         "Official API ×2.00",
     ]:
         if expected not in gpt54_text:
             raise AssertionError(
-                f"Long-context pricing anomaly is not visible in the model row: {gpt54_text!r}"
+                f"gpt-5.4 pricing row lost expected status {expected!r}: {gpt54_text!r}"
             )
+    if "unsupported" in gpt54_text.lower():
+        raise AssertionError(
+            "Fast long context is still restricted under the default pricing policy: "
+            f"{gpt54_text!r}"
+        )
 
     filter_select = page.get_by_label("Pricing status filter", exact=True)
     filter_select.click()
@@ -3415,8 +3471,8 @@ def run_usage_pricing_smoke(page: Any) -> None:
             raise AssertionError(
                 f"Saved pricing alias is not visible in the model row: {unmatched_text!r}"
             )
-    summary.get_by_text("7 / 8 requests", exact=True).wait_for()
-    summary.get_by_text("87.5%", exact=True).first.wait_for()
+    summary.get_by_text("8 / 8 requests", exact=True).wait_for()
+    summary.get_by_text("100.0%", exact=True).first.wait_for()
 
     editor.get_by_role("button", name="Delete configuration", exact=True).click()
     page.get_by_text("Custom pricing removed", exact=True).last.wait_for()
@@ -3644,7 +3700,7 @@ def assert_request_events_sticky_header(page: Any, region: Any) -> None:
 
 
 def run_usage_events_workspace_smoke(context: Any, app_url: str) -> None:
-    workspace = context.new_page()
+    workspace = PanelBrowser(context.new_page())
     inherit_smoke_tab_session(context, workspace)
     workspace.set_default_timeout(15_000)
     now = datetime.now(timezone.utc)
@@ -4906,7 +4962,7 @@ def run_usage_request_event_clock_smoke(context: Any, app_url: str) -> None:
     if browser is None:
         raise AssertionError("Request-event clock smoke cannot create an isolated context")
     clock_context = browser.new_context(storage_state=context.storage_state())
-    clock_page = clock_context.new_page()
+    clock_page = PanelBrowser(clock_context.new_page())
     inherit_smoke_tab_session(context, clock_page)
     clock_page.set_default_timeout(15_000)
     try:
@@ -4984,7 +5040,7 @@ def run_usage_request_event_clock_smoke(context: Any, app_url: str) -> None:
 
 
 def run_usage_request_event_column_storage_smoke(context: Any, app_url: str) -> None:
-    storage_page = context.new_page()
+    storage_page = PanelBrowser(context.new_page())
     inherit_smoke_tab_session(context, storage_page)
     storage_page.set_default_timeout(15_000)
     storage_key = "cli-proxy-usage-request-event-columns-v3"
@@ -5510,14 +5566,10 @@ def run_plugin_runtime_mismatch_smoke(
     def logout() -> None:
         expand_header_toolbar(page)
         page.get_by_title("Logout").click()
-        page.wait_for_function("() => window.location.hash.endsWith('/login')")
+        page.raw.wait_for_selector('iframe[data-active=true]', state='detached')
 
     def login() -> None:
-        page.locator('input[type="checkbox"]').first.check(force=True)
-        page.locator("input.input").first.fill(api_url)
-        page.locator('input[name="cpa-management-key"]').fill("smoke-management-key")
-        page.get_by_role("button", name=re.compile("Login|Connect", re.I)).click()
-        page.wait_for_function("() => window.location.hash === '#/'")
+        page.reconnect()
 
     def open_diagnostic_from_nav() -> None:
         unavailable_link = page.get_by_role("link", name="Plugins (runtime unavailable)")
@@ -5875,6 +5927,15 @@ def run_sidebar_navigation_smoke(page: Any, state: MockCoreState) -> None:
     page.set_viewport_size({"width": 1280, "height": 720})
 
 
+
+def locate_config_field(page: Any, field: str, key: str) -> None:
+    search = page.get_by_role("searchbox")
+    search.fill(key)
+    page.locator(f'[data-config-search-field="{field}"]').click()
+    page.locator(f'[data-config-field="{field}"]').wait_for(state="visible")
+    page.wait_for_function("field => document.activeElement?.closest('[data-config-field]')?.dataset.configField === field", arg=field)
+
+
 def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: bool) -> None:
     try:
         from playwright.sync_api import Error as PlaywrightError
@@ -5922,7 +5983,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             });
             """.replace("__LTS_SMOKE_V2_PROFILE__", json.dumps(PRICING_FIXTURES["v2"]["profile"]))
         )
-        page = context.new_page()
+        page = PanelBrowser(context.new_page())
         page.set_default_timeout(15_000)
 
         try:
@@ -6346,7 +6407,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             run_branded_provider_visibility_smoke(page, app_url, state)
 
             page.goto(f"{app_url}?route=config-source-save#/config", wait_until="domcontentloaded")
-            page.wait_for_function("() => window.location.hash.endsWith('/config')")
+            page.wait_for_function("() => window.location.hash.split('?')[0].endsWith('/config')")
             page.get_by_text("Config Panel", exact=False).first.wait_for()
             page.get_by_role("button", name="Source File Editor").click()
             editor = page.locator(".cm-content").first
@@ -6363,9 +6424,11 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             page.get_by_text("Configuration saved successfully", exact=False).first.wait_for()
 
             page.get_by_role("button", name="Visual Editor").click()
+            locate_config_field(page, "loggingToFile", "logging-to-file")
             page.get_by_label("Log to File").evaluate(
                 "(element) => { if (element.checked) element.click(); }"
             )
+            locate_config_field(page, "antigravitySensitiveWords", "sensitive-words")
             words = page.locator('[data-testid="antigravity-sensitive-words"]')
             words.get_by_role('button', name='Add', exact=True).click()
             words.get_by_role('textbox').first.fill('word-obfuscation-smoke')
@@ -6373,12 +6436,14 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             words.get_by_role('textbox').first.press('Control+b')
             if page.locator('.app-shell').evaluate("node => node.classList.contains('sidebar-is-collapsed')") != before:
                 raise AssertionError('Sidebar shortcut intercepted the config editor')
+            locate_config_field(page, "redisUsageQueueRetentionSeconds", "redis-usage-queue-retention-seconds")
             redis_retention = page.get_by_label("Redis Usage Queue Retention (seconds)")
             redis_retention.fill("0")
             page.get_by_text("Enter a whole number between 1 and 3600", exact=True).wait_for()
             redis_retention.fill("60")
-            page.get_by_role("tab", name="Network & Routing", exact=True).click()
+            locate_config_field(page, "transientErrorCooldownSeconds", "transient-error-cooldown-seconds")
             page.get_by_label("Transient Error Cooldown (seconds)").fill("-1")
+            locate_config_field(page, "disableImageGeneration", "disable-image-generation")
             disable_image_generation_select = page.get_by_label("Disable Image Generation")
             if disable_image_generation_select.inner_text().strip() != (
                 "chat (remove image tool from non-image endpoints)"
@@ -6390,10 +6455,11 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             page.get_by_role(
                 "option", name="passthrough (preserve client tools)", exact=True
             ).click()
-            page.get_by_role("tab", name="Headers & Codex Strategy", exact=True).click()
-            page.get_by_label("Retry action").click()
-            page.get_by_role("option", name="Retry").click()
+            locate_config_field(page, "codexAbnormalReasoningRetryAction", "abnormal-reasoning-retry.action")
+            page.get_by_role("group", name="Retry action", exact=True).get_by_role("radio", name="Retry", exact=True).check()
+            locate_config_field(page, "codexAbnormalReasoningRetryStreamBufferMaxBytes", "stream-buffer-max-bytes")
             page.get_by_label("Stream buffer max bytes").fill("4096")
+            locate_config_field(page, "codexAbnormalReasoningRetryHedgedRetryEnabled", "hedged-retry.enabled")
             page.get_by_label("Enable Hedged Retry").evaluate(
                 "(element) => { if (!element.checked) element.click(); }"
             )
@@ -6401,8 +6467,8 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             page.get_by_label("Require Distinct Auth").evaluate(
                 "(element) => { if (!element.checked) element.click(); }"
             )
-            page.get_by_label("Hedged retry mode").click()
-            page.get_by_role("option", name="Speed").click()
+            page.get_by_role("group", name="Hedged retry mode", exact=True).get_by_role("radio", name="Speed", exact=True).check()
+            locate_config_field(page, "codexAbnormalReasoningRetryExhaustedBehavior", "exhausted-behavior")
             page.get_by_label("Exhausted behavior").click()
             page.get_by_role("option", name="Pass through abnormal response").click()
             page.get_by_label("Client usage aggregation").click()
@@ -6427,10 +6493,12 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             page.get_by_text("Configuration saved successfully", exact=False).first.wait_for()
 
             page.reload(wait_until="domcontentloaded")
-            page.wait_for_function("() => window.location.hash.endsWith('/config')")
+            page.wait_for_function("() => window.location.hash.split('?')[0].endsWith('/config')")
             page.get_by_text("Config Panel", exact=False).first.wait_for()
             page.get_by_role("button", name="Visual Editor").click()
-            page.get_by_role("tab", name="Network & Routing", exact=True).click()
+            locate_config_field(page, "loggingToFile", "logging-to-file")
+            locate_config_field(page, "transientErrorCooldownSeconds", "transient-error-cooldown-seconds")
+            locate_config_field(page, "disableImageGeneration", "disable-image-generation")
             if page.get_by_label("Disable Image Generation").inner_text().strip() != (
                 "passthrough (preserve client tools)"
             ):

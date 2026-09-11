@@ -12,7 +12,10 @@ protected_deltas:
       - shared connection profiles with per-profile credential opt-in
       - independent tab-local active sessions and bounded one-shot credential handoff
       - isolated target probe; failed target preserves the current instance and drafts
-      - full document reconstruction on successful switch; no hot global client replacement
+      - independent same-origin frame runtimes isolate each instance client, stores and authentication
+      - switching connected instances preserves mounted drafts without replacing the global client
+      - dirty and busy checks before disconnect; paused flow observation in hidden instances
+      - credentials never enter navigation URLs; bounded parent-to-frame credential handoff
       - full usage and global pricing semantics unchanged
   - id: full-usage-statistics-ui
     reason: CPA-Panel-LTS exists to preserve the full usage statistics UI after upstream moved toward recent requests and API-key summaries.

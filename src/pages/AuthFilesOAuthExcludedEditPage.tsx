@@ -421,7 +421,9 @@ export function AuthFilesOAuthExcludedEditPage() {
             <div className={styles.settingsSection}>
               <div className={styles.settingsRow}>
                 <div className={styles.settingsInfo}>
-                  <div className={styles.settingsLabel}>{t('oauth_excluded.provider_label')}</div>
+                  <label className={styles.settingsLabel} htmlFor="oauth-excluded-provider">
+                    {t('oauth_excluded.provider_label')}
+                  </label>
                   <div className={styles.settingsDesc}>{t('oauth_excluded.provider_hint')}</div>
                 </div>
                 <div className={styles.settingsControl}>
@@ -447,6 +449,7 @@ export function AuthFilesOAuthExcludedEditPage() {
                         key={option}
                         type="button"
                         className={`${styles.tag} ${isActive ? styles.tagActive : ''}`}
+                        aria-pressed={isActive}
                         onClick={() => updateProvider(option)}
                         disabled={disableControls || saving}
                       >

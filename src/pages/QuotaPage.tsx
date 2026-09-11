@@ -138,7 +138,7 @@ export function QuotaPage() {
 
   const displayLoadedCount = useCountUp(loadedCount);
   const showProvider = (provider: QuotaProviderType) =>
-    activeProvider === 'all' || activeProvider === provider;
+    providerCounts[provider] > 0 && (activeProvider === 'all' || activeProvider === provider);
 
   return (
     <div className={styles.container} ref={revealRef}>

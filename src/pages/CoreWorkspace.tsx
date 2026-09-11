@@ -243,7 +243,7 @@ export function CoreWorkspace() {
         { path: '/ai-providers?provider=claudeApi', label: t('core_workspace.action_api_keys') },
         { path: '/quota?provider=claude', label: t('core_workspace.action_quota') },
         {
-          path: '/config?section=system&subsection=headers',
+          path: '/config?section=headers&subsection=claude',
           label: t('core_workspace.action_behavior'),
         },
       ],
@@ -261,7 +261,7 @@ export function CoreWorkspace() {
         { path: '/ai-providers?provider=codex', label: t('core_workspace.action_api_keys') },
         { path: '/quota?provider=codex', label: t('core_workspace.action_quota') },
         {
-          path: '/config?section=system&subsection=headers',
+          path: '/config?section=codex-policy&subsection=scope',
           label: t('core_workspace.action_behavior'),
         },
       ],
@@ -291,7 +291,7 @@ export function CoreWorkspace() {
         { path: '/auth-files?provider=antigravity', label: t('core_workspace.action_credentials') },
         { path: '/quota?provider=antigravity', label: t('core_workspace.action_quota') },
         {
-          path: '/config?section=system&subsection=runtime',
+          path: '/config?section=compatibility&subsection=antigravity',
           label: t('core_workspace.action_behavior'),
         },
       ],

@@ -1,10 +1,14 @@
-.card { border: 1px solid var(--border-color); border-radius: 12px; padding: 18px; margin: 16px 0; min-width: 0; }
+.card { border: 0; padding: 0; margin: 0; min-width: 0; color: var(--config-text, var(--text-primary)); font-size: 14px; }
+.card [hidden] { display: none !important; }
+.card [data-config-field] { scroll-margin-block: 140px; }
+.card [data-config-field] > label > input[type='checkbox'] + span { outline: 1px solid var(--config-control-border, var(--border-color)); outline-offset: -1px; }
+.card [data-config-field] > label > input[type='checkbox']:focus-visible + span { outline: 2px solid var(--config-focus-ring, var(--text-primary)); outline-offset: 3px; }
 .heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-.hint { color: var(--text-secondary); line-height: 1.6; margin: 8px 0; overflow-wrap: anywhere; }
+.hint { color: var(--config-muted, var(--text-secondary)); font-size: 13px; line-height: 1.6; margin: 8px 0; overflow-wrap: anywhere; }
 .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.rule { border: 1px solid var(--border-color); border-radius: 8px; padding: 14px; margin: 14px 0; }
+.rule { border: 0; padding: 0; margin: 12px 0; min-width: 0; }
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.field select, .field input { width: 100%; min-width: 0; box-sizing: border-box; font: inherit; padding: 9px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-primary); color: var(--text-primary); }
+.field select, .field input { width: 100%; min-width: 0; box-sizing: border-box; font: inherit; padding: 9px; border: 1px solid var(--config-control-border, var(--border-color)); border-radius: 6px; background: var(--config-surface, var(--bg-primary)); color: var(--config-text, var(--text-primary)); }
 .window { display: grid; grid-template-columns: 1fr 1fr auto; align-items: end; gap: 10px; margin: 10px 0; }
 .status { display: flex; flex-wrap: wrap; gap: 12px; margin: 12px 0; }
 .metric { padding: 10px; border: 1px solid var(--border-color); border-radius: 6px; }

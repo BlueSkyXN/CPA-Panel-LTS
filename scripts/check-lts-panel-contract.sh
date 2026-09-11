@@ -59,6 +59,14 @@ require_repo_not_contains() {
   fi
 }
 
+# Multi-instance runtime isolation must not regress to document-reload switching.
+require_file_contains src/components/layout/PanelShell.tsx "data-connection-frame"
+require_file_contains src/components/layout/PanelShell.tsx "controls.current.get(session.id)?.inspect()"
+require_file_not_contains src/components/layout/PanelShell.tsx "window.location.reload()"
+require_file_contains src/services/storage/connectionProfiles.ts "frameAuthState"
+require_file_contains src/components/layout/ConnectionRuntime.tsx "hasSessionChanges()"
+require_file_contains src/components/layout/MainLayout.tsx "ConnectionSwitcher"
+
 for path in \
   src/router/MainRoutes.tsx \
   src/features/dashboard/DashboardPage.tsx \
@@ -251,7 +259,7 @@ require_file_contains src/components/layout/MainLayout.tsx 'sidebar-mode-${effec
 require_file_contains src/components/layout/MainLayout.tsx "CommandPalette"
 require_file_contains src/components/layout/MainLayout.tsx "isSidebarToggleShortcut"
 require_file_contains src/hooks/useVisualConfig.ts "dirtyFields.has('antigravitySensitiveWords')"
-require_file_contains src/components/config/VisualConfigEditor.tsx "antigravity-sensitive-words"
+require_file_contains src/components/config/ConfigFieldControls.tsx "antigravity-sensitive-words"
 require_file_contains scripts/smoke-lts-panel.py "word-obfuscation-smoke"
 require_file_contains src/stores/useThemeStore.ts "normalizeTheme"
 require_file_contains src/stores/useThemeStore.ts "version: 4"
@@ -758,8 +766,8 @@ require_file_contains src/router/MainRoutes.tsx "path: '/config'"
 require_file_contains src/services/api/config.ts "'/config'"
 require_file_contains src/services/api/configFile.ts "'/config.yaml'"
 require_file_contains src/services/api/models.ts "/v1/models"
-require_file_contains src/components/config/VisualConfigEditor.tsx "plugin_store_sources"
-require_file_contains src/components/config/VisualConfigEditor.tsx "plugin_store_auth"
+require_file_contains src/components/config/ConfigFieldControls.tsx "plugin_store_sources"
+require_file_contains src/components/config/ConfigFieldControls.tsx "plugin_store_auth"
 require_file_contains src/components/config/VisualConfigEditorBlocks.tsx "PluginStoreAuthEditor"
 require_file_contains src/hooks/useVisualConfig.ts "store-sources"
 require_file_contains src/hooks/useVisualConfig.ts "store-auth"
@@ -780,7 +788,7 @@ require_file_contains src/hooks/useVisualConfig.ts "dirtyFields.has('host')"
 require_file_contains src/hooks/useVisualConfig.ts "integer_range_1_3600"
 require_file_contains src/types/visualConfig.ts "transientErrorCooldownSeconds"
 require_file_contains src/hooks/useVisualConfig.ts "transient-error-cooldown-seconds"
-require_file_contains src/components/config/VisualConfigEditor.tsx "transient_error_cooldown_seconds"
+require_file_contains src/components/config/ConfigFieldControls.tsx "transient_error_cooldown_seconds"
 require_file_contains src/i18n/locales/en.json "transient_error_cooldown_seconds"
 require_file_contains src/i18n/locales/zh-CN.json "transient_error_cooldown_seconds"
 require_file_contains src/i18n/locales/zh-TW.json "transient_error_cooldown_seconds"
@@ -792,7 +800,7 @@ require_file_contains docs/lts/panel-feature-contracts.yaml "transientErrorCoold
 require_file_contains docs/lts/panel-feature-contracts.yaml "transient-error-cooldown-seconds"
 require_file_contains src/types/visualConfig.ts "'passthrough'"
 require_file_contains src/hooks/useVisualConfig.ts "normalized === 'passthrough'"
-require_file_contains src/components/config/VisualConfigEditor.tsx "disable_image_generation_passthrough"
+require_file_contains src/components/config/ConfigFieldControls.tsx "disable_image_generation_passthrough"
 require_file_contains src/i18n/locales/en.json "disable_image_generation_passthrough"
 require_file_contains src/i18n/locales/zh-CN.json "disable_image_generation_passthrough"
 require_file_contains src/i18n/locales/zh-TW.json "disable_image_generation_passthrough"
@@ -838,21 +846,21 @@ require_file_contains src/hooks/useVisualConfig.ts "hedge-delay-ms"
 require_file_contains src/hooks/useVisualConfig.ts "require-distinct-auth"
 require_file_contains src/hooks/useVisualConfig.ts "hasCodexAbnormalReasoningRetryDirtyFields"
 require_file_contains src/hooks/useVisualConfig.ts "dirtyFields.has('codexAbnormalReasoningRetryAction')"
-require_file_contains src/components/config/VisualConfigEditor.tsx "codex_abnormal_reasoning_retry_title"
-require_file_contains src/components/config/VisualConfigEditor.tsx "codex_abnormal_reasoning_retry_action_label"
-require_file_contains src/components/config/VisualConfigEditor.tsx "codex_abnormal_reasoning_retry_stream_buffer_max_bytes_label"
-require_file_contains src/components/config/VisualConfigEditor.tsx "codex_abnormal_reasoning_retry_reasoning_efforts_label"
-require_file_contains src/components/config/VisualConfigEditor.tsx "codex_abnormal_reasoning_retry_max_retries_label"
-require_file_contains src/components/config/VisualConfigEditor.tsx "codex_abnormal_reasoning_retry_exhausted_behavior_label"
-require_file_contains src/components/config/VisualConfigEditor.tsx "codex_abnormal_reasoning_retry_client_usage_aggregation_label"
-require_file_contains src/components/config/VisualConfigEditor.tsx "codex_abnormal_reasoning_retry_client_usage_aggregation_delivered_only"
-require_file_contains src/components/config/VisualConfigEditor.tsx "codex_abnormal_reasoning_retry_client_usage_aggregation_sum_with_delivered_total"
-require_file_contains src/components/config/VisualConfigEditor.tsx "codex_abnormal_reasoning_retry_delivery_policy_label"
-require_file_contains src/components/config/VisualConfigEditor.tsx "codex_abnormal_reasoning_retry_delivery_policy_best_non_special"
-require_file_contains src/components/config/VisualConfigEditor.tsx "codex_abnormal_reasoning_retry_fallback_policy_label"
-require_file_contains src/components/config/VisualConfigEditor.tsx "codex_abnormal_reasoning_retry_fallback_policy_best_special"
-require_file_contains src/components/config/VisualConfigEditor.tsx "codex_abnormal_reasoning_retry_hedged_retry_enabled"
-require_file_contains src/components/config/VisualConfigEditor.tsx "codex_abnormal_reasoning_retry_hedged_retry_mode_label"
+require_file_contains src/components/config/ConfigDomainPanels.tsx "CodexPolicyPanel"
+require_file_contains src/lts/codexPolicy/useCodexPolicyControls.tsx "codex_abnormal_reasoning_retry_action_label"
+require_file_contains src/lts/codexPolicy/useCodexPolicyControls.tsx "codex_abnormal_reasoning_retry_stream_buffer_max_bytes_label"
+require_file_contains src/lts/codexPolicy/useCodexPolicyControls.tsx "codex_abnormal_reasoning_retry_reasoning_efforts_label"
+require_file_contains src/lts/codexPolicy/useCodexPolicyControls.tsx "codex_abnormal_reasoning_retry_max_retries_label"
+require_file_contains src/lts/codexPolicy/useCodexPolicyControls.tsx "codex_abnormal_reasoning_retry_exhausted_behavior_label"
+require_file_contains src/lts/codexPolicy/useCodexPolicyControls.tsx "codex_abnormal_reasoning_retry_client_usage_aggregation_label"
+require_file_contains src/lts/codexPolicy/useCodexPolicyControls.tsx "codex_abnormal_reasoning_retry_client_usage_aggregation_delivered_only"
+require_file_contains src/lts/codexPolicy/useCodexPolicyControls.tsx "codex_abnormal_reasoning_retry_client_usage_aggregation_sum_with_delivered_total"
+require_file_contains src/lts/codexPolicy/useCodexPolicyControls.tsx "codex_abnormal_reasoning_retry_delivery_policy_label"
+require_file_contains src/lts/codexPolicy/useCodexPolicyControls.tsx "codex_abnormal_reasoning_retry_delivery_policy_best_non_special"
+require_file_contains src/lts/codexPolicy/useCodexPolicyControls.tsx "codex_abnormal_reasoning_retry_fallback_policy_label"
+require_file_contains src/lts/codexPolicy/useCodexPolicyControls.tsx "codex_abnormal_reasoning_retry_fallback_policy_best_special"
+require_file_contains src/lts/codexPolicy/useCodexPolicyControls.tsx "codex_abnormal_reasoning_retry_hedged_retry_enabled"
+require_file_contains src/lts/codexPolicy/useCodexPolicyControls.tsx "codex_abnormal_reasoning_retry_hedged_retry_mode_label"
 require_file_contains src/i18n/locales/en.json "codex_abnormal_reasoning_retry_title"
 require_file_contains src/i18n/locales/zh-CN.json "codex_abnormal_reasoning_retry_title"
 require_file_contains src/i18n/locales/zh-TW.json "codex_abnormal_reasoning_retry_title"
@@ -904,8 +912,8 @@ config_locale_files=(
   src/i18n/locales/ru.json
 )
 codex_abnormal_retry_code_markers=(
-  "StrategyBadge"
-  "StrategyGroup"
+  "useCodexPolicyControls"
+  "ConfigFieldsProps"
   "ABNORMAL_RETRY_ACTION_HINT_KEYS"
   "ABNORMAL_RETRY_EXHAUSTED_BEHAVIOR_HINT_KEYS"
   "ABNORMAL_RETRY_USAGE_AGGREGATION_HINT_KEYS"
@@ -915,16 +923,14 @@ codex_abnormal_retry_code_markers=(
 )
 for marker in "${codex_abnormal_retry_code_markers[@]}"; do
   require_file_contains docs/lts/panel-feature-contracts.yaml "$marker"
-  require_file_contains src/components/config/VisualConfigEditor.tsx "$marker"
+  require_file_contains src/lts/codexPolicy/useCodexPolicyControls.tsx "$marker"
 done
 codex_abnormal_retry_style_markers=(
-  "strategySummary"
-  "strategyBadgeGrid"
   "fieldSelectionHint"
 )
 for marker in "${codex_abnormal_retry_style_markers[@]}"; do
   require_file_contains docs/lts/panel-feature-contracts.yaml "$marker"
-  require_file_contains src/components/config/VisualConfigEditor.tsx "$marker"
+  require_file_contains src/components/config/ConfigFieldShells.tsx "$marker"
   require_file_contains src/components/config/VisualConfigEditor.module.scss ".$marker"
 done
 codex_abnormal_retry_visual_i18n_markers=(
@@ -984,7 +990,6 @@ codex_abnormal_retry_visual_i18n_markers=(
 )
 for marker in "${codex_abnormal_retry_visual_i18n_markers[@]}"; do
   require_file_contains docs/lts/panel-feature-contracts.yaml "$marker"
-  require_file_contains src/components/config/VisualConfigEditor.tsx "$marker"
   for locale_file in "${config_locale_files[@]}"; do
     require_file_contains "$locale_file" "$marker"
   done
@@ -1406,7 +1411,7 @@ done
 
 # Keep this optional Core-owned settings surface and its status reader together.
 require_path src/lts/flowControl
-require_file_contains src/components/config/VisualConfigEditor.tsx "FlowControlFields"
+require_file_contains src/components/config/ConfigDomainPanels.tsx "FlowControlFields"
 require_file_contains src/lts/flowControl/useStatus.ts "FLOW_CONTROL_ENDPOINTS.status"
 require_file_contains src/lts/flowControl/model.ts "key-model"
 require_file_contains src/lts/flowControl/model.ts "account-model"
@@ -1421,3 +1426,10 @@ if [ "$failures" -ne 0 ]; then
 fi
 
 printf 'LTS panel contract check passed.\n'
+
+# Navigation ownership and real draft state replace presentation-only strategy markers.
+require_file_contains src/components/config/ConfigEditorWorkspace.tsx "focusConfigField"
+require_file_contains src/components/config/configNavigation.ts "CONFIG_DOMAINS"
+require_file_contains src/components/config/configNavigation.ts "CONFIG_FIELDS"
+require_file_contains src/components/config/configNavigation.ts "resolveConfigLocation"
+require_file_contains src/components/config/ConfigDomainPanels.tsx "codex-draft-summary"

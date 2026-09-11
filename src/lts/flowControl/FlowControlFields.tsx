@@ -14,11 +14,15 @@ import { RuleInspector } from './RuleInspector';
 import { LiveMonitor } from './LiveMonitor';
 import { ruleSentence } from './insights';
 import styles from './styles.module.scss';
+import { RuleDisclosure } from '@/components/config/RuleDisclosure';
+import { useRuleIdentity } from './useRuleIdentity';
 
 type Props = {
   values: FlowControlValues;
   disabled?: boolean;
   onChange: (patch: Partial<FlowControlValues>) => void;
+  active?: boolean;
+  page?: string;
 };
 type ViewProps = Props & {
   support: FlowSupport;
@@ -41,6 +45,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 
 export function FlowControlFieldsView({
   values, disabled = false, onChange, support, onRefresh,
+  page = 'all',
   live = false, setLive = () => {}, liveState = 'off', history = [],
 }: ViewProps) {
   const { t, i18n } = useTranslation();
@@ -50,6 +55,7 @@ export function FlowControlFieldsView({
   const legacy = Number(values.flowControlVersion || 0) < 3;
   const editable = supported && !legacy;
   const rules = parseRules(values.flowControlRulesText);
+  const ruleIdentity = useRuleIdentity(rules?.map(rule => rule.id) ?? []);
   const issues = flowIssues(values);
   const refs = { keys: data?.keys ?? [], accounts: data?.accounts ?? [] };
   const [migration, setMigration] = useState<MigrationPreview | null>(null);
@@ -70,13 +76,13 @@ export function FlowControlFieldsView({
   );
   const changeRules = (items: FlowRule[]) => onChange({ flowControlRulesText: JSON.stringify(items, null, 2) });
   const scalar = (field: keyof FlowControlValues, label: string, placeholder: string, allow = editable) => (
-    <Field label={t(`flow_control.${label}`)}>
+    <div id={`config-field-${field}`} data-config-field={field} tabIndex={-1}><Field label={t(`flow_control.${label}`)}>
       <input
         type="number" min="0" step="1" disabled={!allow}
         value={String(values[field])} placeholder={placeholder}
         onChange={e => onChange({ [field]: e.target.value })}
       />
-    </Field>
+    </Field></div>
   );
 
   const previewMigration = async () => {
@@ -107,7 +113,7 @@ export function FlowControlFieldsView({
 
   return (
     <section className={styles.card} aria-labelledby={`${id}-title`} data-testid="flow-control-settings">
-      <div className={styles.heading}>
+      <div className={styles.heading} id="config-field-flowControlEnabled" data-config-field="flowControlEnabled" tabIndex={-1}>
         <h3 id={`${id}-title`}>{t('flow_control.title')}</h3>
         <ToggleSwitch
           checked={values.flowControlEnabled} disabled={!supported}
@@ -127,6 +133,7 @@ export function FlowControlFieldsView({
           {failure?.['rejected-at'] && <small>{failure['rejected-at']}</small>}
         </div>
       )}
+      <div hidden={page !== 'all' && page !== 'monitoring'}>
       <div className={styles.table}>
         <table aria-label={t('flow_control.switch_status')}>
           <thead>
@@ -144,21 +151,22 @@ export function FlowControlFieldsView({
       </div>
       <p className={styles.hint}>{t('flow_control.save_apply_hint')}</p>
       <LiveMonitor data={data} live={live} setLive={setLive} liveState={liveState} history={history} onRefresh={onRefresh} />
+      </div>
 
-      <details className={styles.inspector}>
+      <details className={styles.inspector} hidden={page !== 'all' && page !== 'monitoring'} open={page === 'monitoring' ? true : undefined}>
         <summary>{t('flow_control.v3_observation')}</summary>
         <p className={styles.hint}>{t('flow_control.v3_observation_hint')}</p>
         <div className={styles.grid}>
-          <ToggleSwitch
+          <div id="config-field-flowControlRealtime" data-config-field="flowControlRealtime" tabIndex={-1}><ToggleSwitch
             checked={values.flowControlRealtime} disabled={!supported}
             label={t('flow_control.v3_realtime')} ariaLabel={t('flow_control.v3_realtime')}
             onChange={flowControlRealtime => onChange({ flowControlRealtime })}
-          />
-          <ToggleSwitch
+          /></div>
+          <div id="config-field-flowControlResources" data-config-field="flowControlResources" tabIndex={-1}><ToggleSwitch
             checked={values.flowControlResources} disabled={!supported}
             label={t('flow_control.v3_resources')} ariaLabel={t('flow_control.v3_resources')}
             onChange={flowControlResources => onChange({ flowControlResources })}
-          />
+          /></div>
           {scalar('flowControlIntervalMs', 'v3_interval', '2000', supported)}
           {scalar('flowControlMaxObservers', 'v3_observers', '4', supported)}
         </div>
@@ -166,7 +174,7 @@ export function FlowControlFieldsView({
       </details>
 
       {legacy && (
-        <section className={styles.notice} aria-label={t('flow_control.v3_migration')}>
+        <section id="config-field-flowControlRulesText" data-config-field="flowControlRulesText" tabIndex={-1} className={styles.notice} aria-label={t('flow_control.v3_migration')} hidden={page !== 'all' && page !== 'rules'}>
           <h4>{t('flow_control.v3_migration')}</h4>
           <p>{t('flow_control.v3_migration_hint')}</p>
           <Button
@@ -209,8 +217,8 @@ export function FlowControlFieldsView({
       )}
       {!legacy && (
         <>
-          <RuleInspector values={values} data={data} />
-          <h4>{t('flow_control.edit_policy')}</h4>
+          <div hidden={page !== 'all' && page !== 'queue'}>
+          <h4>{t('config_management.editor.pages.flow-control_queue')}</h4>
           <div className={styles.grid}>
             {scalar('flowControlMaxWaiting', 'max_waiting', '0')}
             {scalar('flowControlMaxWaitingPerKey', 'max_waiting_key', t('flow_control.same_as_queue'))}
@@ -225,6 +233,10 @@ export function FlowControlFieldsView({
               {scalar('flowControlMaxHistory', 'max_history', '200000')}
             </div>
           </details>
+          </div>
+          <div id="config-field-flowControlRulesText" data-config-field="flowControlRulesText" tabIndex={-1} hidden={page !== 'all' && page !== 'rules'}>
+          <RuleInspector values={values} data={data} />
+          <h4>{t('flow_control.edit_policy')}</h4>
           <p className={styles.notice}>{t('flow_control.v3_rule_hint')}</p>
           {!rules && <p className="error-box">{t('flow_control.invalid_rules')}</p>}
           {values.flowControlEnabled && rules?.length === 0 && (
@@ -238,11 +250,20 @@ export function FlowControlFieldsView({
             </div>
           )}
           {data && rules?.map((rule, index) => (
+            <RuleDisclosure key={ruleIdentity.rows[index].key} label={rule.label || t('config_management.editor.rule_title', {index:index + 1})}
+              defaultOpen={index === 0 || ruleIdentity.rows[index].isNew} hasErrors={issues.some(issue=>issue.rule === index + 1)}>
             <FlowRuleEditor
-              key={index} rule={rule} index={index} data={data} disabled={!editable}
-              onChange={value => changeRules(rules.map((old, position) => position === index ? value : old))}
-              onRemove={() => changeRules(rules.filter((_, position) => position !== index))}
+              rule={rule} index={index} data={data} disabled={!editable}
+              onChange={value => {
+                ruleIdentity.rename(index, value.id);
+                changeRules(rules.map((old, position) => position === index ? value : old));
+              }}
+              onRemove={() => {
+                ruleIdentity.remove(index);
+                changeRules(rules.filter((_, position) => position !== index));
+              }}
             />
+            </RuleDisclosure>
           ))}
           <Button
             type="button" variant="secondary" disabled={!editable || !rules || rules.length >= 128}
@@ -250,6 +271,7 @@ export function FlowControlFieldsView({
           >
             {t('flow_control.add_rule')}
           </Button>
+          </div>
         </>
       )}
     </section>
@@ -257,7 +279,7 @@ export function FlowControlFieldsView({
 }
 
 export function FlowControlFields(props: Props) {
-  const { support, refresh, live, setLive, liveState, history } = useFlowControlStatus();
+  const { support, refresh, live, setLive, liveState, history } = useFlowControlStatus({ active: props.active, observationVisible: props.page === undefined || props.page === 'all' || props.page === 'monitoring' });
   return (
     <FlowControlFieldsView
       {...props} support={support} onRefresh={refresh} live={live}

@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
@@ -15,11 +15,17 @@ import {
   IconSearch,
 } from '@/components/ui/icons';
 import { VisualConfigEditor } from '@/components/config/VisualConfigEditor';
+import {
+  isConfigNavigationChange,
+  type ConfigLocation,
+} from '@/components/config/configNavigation';
 import { DiffModal } from '@/components/config/DiffModal';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useActionBarHeightVar } from '@/hooks/useActionBarHeightVar';
 import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard';
 import { registerSessionBusyCheck } from '@/services/connectionSession';
+import { getManagedConnection } from '@/services/connectionRuntime';
+import { readProfiles } from '@/services/storage/connectionProfiles';
 import { useVisualConfig } from '@/hooks/useVisualConfig';
 import { useNotificationStore, useAuthStore, useConfigStore } from '@/stores';
 import { configFileApi } from '@/services/api/configFile';
@@ -53,16 +59,25 @@ export function ConfigPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedSection = searchParams.get('section');
   const requestedSubsection = searchParams.get('subsection');
+  const requestedField = searchParams.get('field');
   const pageTransitionLayer = usePageTransitionLayer();
   const isCurrentLayer = pageTransitionLayer ? pageTransitionLayer.isCurrentLayer : true;
   const showNotification = useNotificationStore((state) => state.showNotification);
   const showConfirmation = useNotificationStore((state) => state.showConfirmation);
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
+  const profileId = useAuthStore((state) => state.profileId);
+  const apiBase = useAuthStore((state) => state.apiBase);
+  const profile =
+    getManagedConnection()?.bootstrap.profile ??
+    readProfiles().find((entry) => entry.id === profileId);
+  const connectionName = profile?.name || apiBase || t('connections.disconnected');
+  const saveTargetId = useId();
   const isMobile = useMediaQuery('(max-width: 768px)');
 
   const {
     visualValues,
     visualDirty,
+    visualDirtyFields,
     visualParseError,
     visualValidationErrors,
     visualHasPayloadValidationErrors,
@@ -82,6 +97,7 @@ export function ConfigPage() {
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   useEffect(() => registerSessionBusyCheck(() => saving), [saving]);
   const [error, setError] = useState('');
   const [dirty, setDirty] = useState(false);
@@ -120,12 +136,14 @@ export function ConfigPage() {
 
   useUnsavedChangesGuard({
     enabled: isCurrentLayer,
-    shouldBlock: isDirty,
+    shouldBlock: ({ currentLocation, nextLocation }) =>
+      isDirty && !isConfigNavigationChange(currentLocation, nextLocation),
     dialog: unsavedChangesDialog,
   });
 
   const loadConfig = useCallback(async () => {
     setLoading(true);
+    setSaved(false);
     setError('');
     try {
       const data = await configFileApi.fetchConfigYaml();
@@ -191,6 +209,7 @@ export function ConfigPage() {
 
       await configFileApi.saveConfigYaml(mergedYaml);
       const latestContent = await configFileApi.fetchConfigYaml();
+      setSaved(true);
       setDirty(false);
       setDiffModalOpen(false);
       setContent(latestContent);
@@ -342,6 +361,7 @@ export function ConfigPage() {
         const nextParams = new URLSearchParams(searchParams);
         nextParams.delete('section');
         nextParams.delete('subsection');
+        nextParams.delete('field');
         setSearchParams(nextParams, { replace: true });
       }
     },
@@ -476,7 +496,7 @@ export function ConfigPage() {
       return t('config_management.visual.validation.validation_blocked');
     if (saving) return t('config_management.status_saving');
     if (isDirty) return t('config_management.status_dirty');
-    return t('config_management.status_loaded');
+    return saved ? t('config_management.editor.saved') : t('config_management.status_loaded');
   };
 
   const getStatusClass = () => {
@@ -498,7 +518,9 @@ export function ConfigPage() {
       return t('config_management.visual.validation_blocked_short', { defaultValue: 'Fix errors' });
     if (saving) return t('config_management.status_saving_short', { defaultValue: 'Saving' });
     if (isDirty) return t('config_management.status_dirty_short', { defaultValue: 'Unsaved' });
-    return t('config_management.status_loaded_short', { defaultValue: 'Loaded' });
+    return saved
+      ? t('config_management.editor.saved')
+      : t('config_management.status_loaded_short', { defaultValue: 'Loaded' });
   };
 
   const handleReload = useCallback(() => {
@@ -522,6 +544,14 @@ export function ConfigPage() {
   const actionBar = (
     <div className={styles.actionBar} ref={actionBarRef}>
       <div className={styles.actionBarStatusGroup}>
+        <div
+          id={saveTargetId}
+          className={styles.saveTarget}
+          data-testid="config-save-target"
+          title={connectionName}
+        >
+          {t('config_management.save_target', { name: connectionName })}
+        </div>
         <div
           className={`${styles.actionStatus} ${
             isMobile ? styles.actionStatusCompact : ''
@@ -557,6 +587,7 @@ export function ConfigPage() {
           }
           title={t('config_management.save')}
           aria-label={t('config_management.save')}
+          aria-describedby={saveTargetId}
         >
           <IconCheck size={16} />
           <span>{t('config_management.save')}</span>
@@ -601,10 +632,20 @@ export function ConfigPage() {
 
           {effectiveTab === 'visual' ? (
             <VisualConfigEditor
-              key={`${requestedSection ?? 'default'}:${requestedSubsection ?? 'default'}`}
               values={visualValues}
               initialSection={requestedSection}
               initialSubsection={requestedSubsection}
+              initialField={requestedField}
+              dirtyFields={visualDirtyFields}
+              sourceDirty={dirty}
+              onNavigate={(location: ConfigLocation) => {
+                const next = new URLSearchParams(searchParams);
+                next.set('section', location.section);
+                next.set('subsection', location.subsection);
+                if (location.field) next.set('field', location.field);
+                else next.delete('field');
+                setSearchParams(next, { replace: true });
+              }}
               validationErrors={visualValidationErrors}
               hasPayloadValidationErrors={visualHasPayloadValidationErrors}
               disabled={disableControls || loading}
@@ -701,6 +742,7 @@ export function ConfigPage() {
         onConfirm={handleConfirmSave}
         onCancel={() => setDiffModalOpen(false)}
         loading={saving}
+        targetName={connectionName}
       />
     </div>
   );

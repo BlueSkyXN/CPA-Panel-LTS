@@ -1,0 +1,45 @@
+// Scoped to the editor and its portalled action bar, not the application theme.
+@mixin config-tokens {
+  --config-accent: #526b94;
+  --config-accent-strong: #344b70;
+  --config-accent-hover: #425b86;
+  --config-button-text: #fff;
+  --config-surface: #fff;
+  --config-group-surface: #f5f7fa;
+  --config-group-border: #dbe2eb;
+  --config-control-border: #8190a4;
+  --config-text: #262626;
+  --config-muted: #536174;
+  --config-attention-text: #92400e;
+  --config-attention-bg: #fffbeb;
+  --config-error-text: #a12b35;
+  --config-error-bg: #fff1f2;
+  --config-accent-surface: #eaf0f8;
+  --config-accent-border: #a1b3cd;
+  --config-focus-ring: #526b94;
+
+  :global([data-theme='aurora-nebula']) & {
+    --config-accent: #c4b5fd;
+    --config-accent-strong: #e2d9ff;
+    --config-accent-hover: #ddd3ff;
+    --config-button-text: #241839;
+    --config-surface: #241839;
+    --config-group-surface: #302343;
+    --config-group-border: #594b70;
+    --config-control-border: #a59bbb;
+    --config-text: #f5f0ff;
+    --config-muted: #c9b8e1;
+    --config-attention-text: #fcd34d;
+    --config-attention-bg: #3b2f22;
+    --config-error-text: #fda4af;
+    --config-error-bg: #432335;
+    --config-accent-surface: #3f3158;
+    --config-accent-border: #a89bc9;
+    --config-focus-ring: #c4b5fd;
+  }
+
+  :global([data-theme='aurora-dawn']) & {
+    --config-group-surface: #f6f3fb;
+    --config-accent-surface: #efebfa;
+  }
+}

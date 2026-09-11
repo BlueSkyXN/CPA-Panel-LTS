@@ -134,7 +134,9 @@ export function AuthFilesOAuthModelAliasEditPage() {
     shouldBlock: isDirty,
     dialog: unsavedChangesDialog,
   });
-  const title = useMemo(() => t('oauth_model_alias.add_title'), [t]);
+  const title = isEditing
+    ? t('oauth_model_alias.edit_title', { provider: provider.trim() || resolvedProviderKey })
+    : t('oauth_model_alias.add_title');
   const headerHint = useMemo(() => {
     if (!provider.trim()) {
       return t('oauth_model_alias.provider_hint');
@@ -466,9 +468,9 @@ export function AuthFilesOAuthModelAliasEditPage() {
             <div className={styles.settingsSection}>
               <div className={styles.settingsRow}>
                 <div className={styles.settingsInfo}>
-                  <div className={styles.settingsLabel}>
+                  <label className={styles.settingsLabel} htmlFor="oauth-model-alias-provider">
                     {t('oauth_model_alias.provider_label')}
-                  </div>
+                  </label>
                   <div className={styles.settingsDesc}>{t('oauth_model_alias.provider_hint')}</div>
                 </div>
                 <div className={styles.settingsControl}>
@@ -494,6 +496,7 @@ export function AuthFilesOAuthModelAliasEditPage() {
                         key={option}
                         type="button"
                         className={`${styles.tag} ${isActive ? styles.tagActive : ''}`}
+                        aria-pressed={isActive}
                         onClick={() => updateProvider(option)}
                         disabled={disableControls || saving}
                       >

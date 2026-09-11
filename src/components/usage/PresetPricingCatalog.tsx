@@ -23,6 +23,11 @@ interface FastPolicyPresentation {
   tone: 'fast' | 'muted';
 }
 
+interface PresetPricingCatalogProps {
+  /** Effective Fast long-context policy from the active price profile assumptions. */
+  allowFastLongContext?: boolean;
+}
+
 const formatRate = (value: number): string =>
   `$${value.toLocaleString(undefined, { maximumFractionDigits: 4 })}`;
 
@@ -43,7 +48,7 @@ const getCatalogBands = (entry: PriceCatalogEntry): CatalogBand[] => [
     : []),
 ];
 
-export function PresetPricingCatalog() {
+export function PresetPricingCatalog({ allowFastLongContext = false }: PresetPricingCatalogProps) {
   const { t } = useTranslation();
 
   const getFastPolicyPresentation = (
@@ -58,7 +63,7 @@ export function PresetPricingCatalog() {
         tone: 'muted',
       };
     }
-    if (band.kind === 'long' && !fast.longSupported) {
+    if (band.kind === 'long' && !fast.longSupported && !allowFastLongContext) {
       return {
         label: t('usage_stats.pricing_long_unsupported'),
         detail: null,
@@ -74,7 +79,7 @@ export function PresetPricingCatalog() {
         tone: 'fast',
       };
     }
-    const rates = getCatalogExplicitFastRates(entry, band.kind);
+    const rates = getCatalogExplicitFastRates(entry, band.kind, allowFastLongContext);
     return {
       label: t('usage_stats.pricing_api_priority_explicit_rates'),
       detail:

@@ -1,15 +1,10 @@
+@use '../components/config/configTokens' as config;
 @use '../styles/mixins' as *;
 @use '../styles/variables' as *;
 
 .container {
-  --config-accent: #526b94;
-  --config-accent-strong: #344b70;
-  --config-accent-hover: #425b86;
-  --config-accent-surface: color-mix(in srgb, var(--bg-primary) 94%, var(--config-accent) 6%);
-  --config-accent-border: color-mix(in srgb, var(--border-color) 78%, var(--config-accent) 22%);
-  --config-focus-ring: color-mix(in srgb, var(--config-accent) 18%, transparent);
-  --config-group-surface: color-mix(in srgb, var(--bg-primary) 96%, var(--text-primary) 4%);
-  --config-group-border: color-mix(in srgb, var(--border-color) 88%, transparent);
+  @include config.config-tokens;
+  color: var(--config-text);
 
   width: min(100%, 1320px);
   min-height: 100%;
@@ -78,7 +73,7 @@
 }
 
 .pageTitle {
-  font-size: 26px;
+  font-size: 22px;
   font-weight: 700;
   color: var(--text-primary);
   margin: 0;
@@ -332,15 +327,15 @@
 }
 
 .modified {
-  --config-status-color: var(--quota-medium-color, #d4a64f);
+  --config-status-color: var(--config-accent);
 
-  color: var(--warning-text);
+  color: var(--config-accent-strong);
 }
 
 .saved {
-  --config-status-color: var(--success-color);
+  --config-status-color: var(--config-muted);
 
-  color: var(--text-secondary);
+  color: var(--config-muted);
 }
 
 .error {
@@ -350,13 +345,8 @@
 }
 
 .actionBar {
-  --config-accent: #526b94;
-  --config-accent-strong: #344b70;
-  --config-accent-hover: #425b86;
-  --config-accent-surface: color-mix(in srgb, var(--bg-primary) 94%, var(--config-accent) 6%);
-  --config-accent-border: color-mix(in srgb, var(--border-color) 78%, var(--config-accent) 22%);
-  --config-focus-ring: color-mix(in srgb, var(--config-accent) 18%, transparent);
-  --config-group-border: color-mix(in srgb, var(--border-color) 88%, transparent);
+  @include config.config-tokens;
+  color: var(--config-text);
 
   position: fixed;
   left: var(--content-center-x, 50%);
@@ -377,16 +367,29 @@
   padding: 8px 10px;
   border: 1px solid var(--config-group-border);
   border-radius: 10px;
-  background: var(--bg-primary);
+  background: var(--config-surface);
   box-shadow: 0 10px 24px -12px rgb(45 42 38 / 0.24);
   transform: translateX(-50%);
 }
 
 .actionBarStatusGroup {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
   min-width: 0;
   flex: 1;
+}
+.saveTarget {
+  min-width: 0;
+  max-width: 100%;
+  padding: 0 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--config-text);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .actionStatus {
@@ -480,12 +483,12 @@
 .actionButtonPrimary {
   border-color: var(--config-accent);
   background: var(--config-accent);
-  color: #fff;
+  color: var(--config-button-text);
 
   &:hover:not(:disabled) {
     border-color: var(--config-accent-hover);
     background: var(--config-accent-hover);
-    color: #fff;
+    color: var(--config-button-text);
   }
 }
 

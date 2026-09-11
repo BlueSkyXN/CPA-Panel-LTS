@@ -100,7 +100,8 @@ Panel pricing 是 **browser-local estimate**，不是 Core billing API 或服务
 - model matching 使用 canonical id 和显式 alias，不做模糊 substring 猜测。
 - `cacheWrite` 缺失表示 Auto/继承 input，显式 `0` 才表示免费。
 - Fast 可以使用独立费率或 `Standard × multiplier`；没有已验证 Fast policy 时不得默认为 Standard 价格。
-- long-context threshold 和 Fast long-context 支持按具体 catalog entry 决定，不是全局统一能力。
+- long-context threshold 按具体 catalog entry 决定，不是全局统一能力。
+- Fast long-context 支持同样来自每个 catalog entry，但 profile 的 `fastLongContext` policy 决定是否执行该限制：默认 `allow`（默认不限制，Fast 请求按长上下文费率估算），`official` 时对 preset 与 custom override 一律按各自 `longSupported` 判定；per-model“允许 Fast 与长上下文组合”开关只在 `official` policy 下生效，`allow` 时禁用。
 - unmatched、unsupported 或 coverage 不完整返回明确状态和 `amount: null`，不能显示成 `$0`。
 - request events 使用当前 browser-local `priceProfile` 和同一套 `calculateCostEstimate` 逻辑；表格、图表和 coverage 不得形成第二套计价口径。
 - request-event CSV/JSON 导出保留 `estimated_cost_usd` 与 `pricing_status`；未匹配或不支持时费用保持空值，不能导出为免费。

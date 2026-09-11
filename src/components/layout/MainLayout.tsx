@@ -14,6 +14,7 @@ import { PageTransition } from '@/components/common/PageTransition';
 import { SidebarNavigation } from '@/components/layout/SidebarNavigation';
 import { CommandPalette } from '@/components/layout/CommandPalette';
 import { readProfiles } from '@/services/storage/connectionProfiles';
+import { ConnectionSwitcher } from './ConnectionSwitcher';
 import {
   flattenSidebarNavPaths,
   type SidebarNavGroup,
@@ -1106,7 +1107,7 @@ export function MainLayout() {
                 </div>
               )}
             </div>
-            <Button variant="ghost" size="sm" onClick={logout} title={t('header.logout')}>
+            <Button variant="ghost" size="sm" onClick={() => logout()} title={t('header.logout')}>
               {headerIcons.logout}
             </Button>
           </div>
@@ -1195,6 +1196,7 @@ export function MainLayout() {
               </Link>
             </div>
           )}
+          <div className="sidebar-connection-switcher"><ConnectionSwitcher collapsed={!showSidebarLabels} /></div>
         </aside>
 
         <div className={`content${isLogsPage ? ' content-logs' : ''}`} ref={contentRef}>

@@ -2,6 +2,7 @@ import { obfuscatedStorage } from './secureStorage';
 import { STORAGE_KEY_AUTH } from '@/utils/constants';
 import { normalizeApiBase } from '@/utils/connection';
 import { generateId, isRecord } from '@/utils/helpers';
+import { getManagedConnection, isConnectionFrame } from '@/services/connectionRuntime';
 
 export const PROFILES_KEY = 'cpa-connection-profiles-v1';
 export const TAB_SESSION_KEY = 'cpa-tab-session-v1';
@@ -190,8 +191,26 @@ function restoreHandoff(): string | null {
   return JSON.stringify({ state: { ...state, managementKey: handoff.managementKey }, version: 1 });
 }
 
+let frameAuthState: string | null | undefined;
+
 export const tabAuthStorage = {
   getItem: () => {
+    if (isConnectionFrame()) {
+      if (frameAuthState !== undefined) return frameAuthState;
+      const boot = getManagedConnection()?.bootstrap;
+      frameAuthState = boot
+        ? JSON.stringify({
+            state: {
+              profileId: boot.profile.id,
+              apiBase: boot.profile.apiBase,
+              managementKey: boot.managementKey,
+              rememberPassword: boot.profile.rememberPassword,
+            },
+            version: 1,
+          })
+        : null;
+      return frameAuthState;
+    }
     if (typeof sessionStorage === 'undefined') return null;
     const handoff = restoreHandoff();
     if (handoff) return handoff;
@@ -214,9 +233,17 @@ export const tabAuthStorage = {
     }
   },
   setItem: (_name: string, value: string) => {
+    if (isConnectionFrame()) {
+      frameAuthState = value;
+      return;
+    }
     if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(TAB_SESSION_KEY, value);
   },
   removeItem: () => {
+    if (isConnectionFrame()) {
+      frameAuthState = null;
+      return;
+    }
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.removeItem(TAB_SESSION_KEY);
       sessionStorage.removeItem(HANDOFF_KEY);

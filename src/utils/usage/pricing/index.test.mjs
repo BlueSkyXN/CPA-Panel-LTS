@@ -562,6 +562,7 @@ test('normalization keeps the GPT long-context assumption backward compatible', 
     overrides: {},
   });
   assert.equal(legacy.profile.assumptions.gptLongContext, 'auto');
+  assert.equal(legacy.profile.assumptions.fastLongContext, 'allow');
   assert.deepEqual(legacy.warnings, []);
 
   const invalid = pricing.normalizePriceProfileV3({
@@ -577,6 +578,34 @@ test('normalization keeps the GPT long-context assumption backward compatible', 
   });
   assert.equal(invalid.profile.assumptions.gptLongContext, 'auto');
   assert.deepEqual(invalid.warnings, ['gpt-long-context-invalid']);
+
+  const official = pricing.normalizePriceProfileV3({
+    schemaVersion: 3,
+    currency: 'USD',
+    assumptions: {
+      historicalPricing: 'current',
+      unknownServiceTier: 'standard',
+      fastLongContext: 'official',
+    },
+    aliases: {},
+    overrides: {},
+  });
+  assert.equal(official.profile.assumptions.fastLongContext, 'official');
+  assert.deepEqual(official.warnings, []);
+
+  const invalidFast = pricing.normalizePriceProfileV3({
+    schemaVersion: 3,
+    currency: 'USD',
+    assumptions: {
+      historicalPricing: 'current',
+      unknownServiceTier: 'standard',
+      fastLongContext: 'bogus',
+    },
+    aliases: {},
+    overrides: {},
+  });
+  assert.equal(invalidFast.profile.assumptions.fastLongContext, 'allow');
+  assert.deepEqual(invalidFast.warnings, ['fast-long-context-invalid']);
 });
 
 test('GLM-5.2 keeps official Standard rates and explicit free cache write', () => {
@@ -774,11 +803,24 @@ test('Grok 4.6 switches the entire request to long-context rates at 200K prompt 
   assert.equal(fast.rates, null);
 });
 
-test('Fast long context remains unsupported and evidence warnings stay explicit', () => {
-  const unsupported = pricing.estimateUsageCost(
+test('Fast long context is estimated by default and only restricted under the official policy', () => {
+  const allowed = pricing.estimateUsageCost(
     'gpt-5.5',
     { input_tokens: 272_000 },
     undefined,
+    tier('fast', 'request')
+  );
+  assert.equal(allowed.status, 'priced');
+  assert.equal(allowed.contextBand, 'long');
+  assert.deepEqual(allowed.rates, { input: 25, cachedInput: 2.5, output: 112.5 });
+  assert.deepEqual(allowed.warnings, ['requestedEstimate']);
+
+  const official = pricing.createDefaultPriceProfileV3();
+  official.assumptions.fastLongContext = 'official';
+  const unsupported = pricing.estimateUsageCost(
+    'gpt-5.5',
+    { input_tokens: 272_000 },
+    official,
     tier('fast', 'request')
   );
   assert.equal(unsupported.status, 'unsupported');
@@ -792,6 +834,41 @@ test('Fast long context remains unsupported and evidence warnings stay explicit'
     tier('std', 'assumed')
   );
   assert.deepEqual(assumed.warnings, ['assumedStandard']);
+});
+
+test('the Fast long-context policy also governs explicit custom Fast cards', () => {
+  const profile = pricing.createDefaultPriceProfileV3();
+  profile.overrides['tenant/gpt-5.5'] = {
+    standard: {
+      short: { input: 5, cachedInput: 0.5, output: 30 },
+      long: {
+        thresholdTokens: 272_000,
+        basis: 'inputTokens',
+        appliesTo: 'entireRequest',
+        rates: { input: 10, cachedInput: 1, output: 45 },
+      },
+    },
+    fast: { multiplier: 2, longSupported: false },
+  };
+  const allowedByDefault = pricing.estimateUsageCost(
+    'tenant/gpt-5.5',
+    { input_tokens: 272_000 },
+    profile,
+    tier('fast', 'request')
+  );
+  assert.equal(allowedByDefault.status, 'priced');
+  assert.equal(allowedByDefault.contextBand, 'long');
+  assert.deepEqual(allowedByDefault.rates, { input: 20, cachedInput: 2, output: 90 });
+
+  profile.assumptions.fastLongContext = 'official';
+  const restricted = pricing.estimateUsageCost(
+    'tenant/gpt-5.5',
+    { input_tokens: 272_000 },
+    profile,
+    tier('fast', 'request')
+  );
+  assert.equal(restricted.status, 'unsupported');
+  assert.equal(restricted.amount, null);
 });
 
 test('cost uses the normalized cache split and honors Auto versus explicit free cache write', () => {
@@ -883,10 +960,12 @@ test('coverage reports request, token, model, amount, and assumed-tier completen
     undefined,
     tier('std', 'assumed')
   );
+  const official = pricing.createDefaultPriceProfileV3();
+  official.assumptions.fastLongContext = 'official';
   const unsupported = pricing.estimateUsageCost(
     'gpt-5.5',
     { input_tokens: 272_000 },
-    undefined,
+    official,
     tier('fast')
   );
   assert.deepEqual(
@@ -915,10 +994,12 @@ test('coverage reports request, token, model, amount, and assumed-tier completen
 
 test('a model is covered only when every request for that model is priced', () => {
   const priced = pricing.estimateUsageCost('gpt-5.4', { input_tokens: 1_000 }, undefined, tier());
+  const official = pricing.createDefaultPriceProfileV3();
+  official.assumptions.fastLongContext = 'official';
   const unsupported = pricing.estimateUsageCost(
     'gpt-5.4',
     { input_tokens: 272_000 },
-    undefined,
+    official,
     tier('fast')
   );
   const coverage = pricing.aggregateCostEstimateCoverage([

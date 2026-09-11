@@ -55,6 +55,8 @@ export interface PriceOverride {
 
 export type GptLongContextAssumption = 'auto' | 'shortOnly';
 
+export type FastLongContextAssumption = 'allow' | 'official';
+
 export interface PriceProfileAssumptions {
   historicalPricing: 'current';
   unknownServiceTier: 'standard';
@@ -64,6 +66,13 @@ export interface PriceProfileAssumptions {
    * rates. Provider-branded long bands (for example grok) are never affected.
    */
   gptLongContext: GptLongContextAssumption;
+  /**
+   * 'allow' (default) estimates Fast/Priority long-context requests with the
+   * model's long-context band even when an entry marks the Fast tier as
+   * long-context unsupported; 'official' re-applies that per-entry restriction
+   * for presets and custom overrides alike.
+   */
+  fastLongContext: FastLongContextAssumption;
 }
 
 /** A profile holds only user intent; immutable preset catalog cards stay external. */
@@ -303,7 +312,12 @@ export function createDefaultPriceProfileV3(): PriceProfileV3 {
   return {
     schemaVersion: PRICE_PROFILE_SCHEMA_VERSION,
     currency: PRICE_CURRENCY,
-    assumptions: { historicalPricing: 'current', unknownServiceTier: 'standard', gptLongContext: 'auto' },
+    assumptions: {
+      historicalPricing: 'current',
+      unknownServiceTier: 'standard',
+      gptLongContext: 'auto',
+      fastLongContext: 'allow',
+    },
     aliases: {},
     overrides: {},
   };
@@ -365,6 +379,7 @@ export function normalizePriceProfileV3(value: unknown): PriceProfileNormalizati
   const aliases: Record<string, string> = {};
   const overrides: Record<string, PriceOverride> = {};
   let gptLongContext: GptLongContextAssumption = 'auto';
+  let fastLongContext: FastLongContextAssumption = 'allow';
 
   if (isRecord(value.overrides)) {
     Object.entries(value.overrides).forEach(([modelName, raw]) => {
@@ -400,13 +415,22 @@ export function normalizePriceProfileV3(value: unknown): PriceProfileNormalizati
     if (rawGptLongContext === 'shortOnly') gptLongContext = 'shortOnly';
     else if (rawGptLongContext !== undefined && rawGptLongContext !== 'auto')
       warnings.push('gpt-long-context-invalid');
+    const rawFastLongContext = value.assumptions.fastLongContext;
+    if (rawFastLongContext === 'official') fastLongContext = 'official';
+    else if (rawFastLongContext !== undefined && rawFastLongContext !== 'allow')
+      warnings.push('fast-long-context-invalid');
   }
 
   return {
     profile: {
       schemaVersion: PRICE_PROFILE_SCHEMA_VERSION,
       currency: PRICE_CURRENCY,
-      assumptions: { historicalPricing: 'current', unknownServiceTier: 'standard', gptLongContext },
+      assumptions: {
+        historicalPricing: 'current',
+        unknownServiceTier: 'standard',
+        gptLongContext,
+        fastLongContext,
+      },
       aliases,
       overrides,
     },
@@ -691,7 +715,13 @@ export function estimateUsageCost(
     if (resolved.fast === null) {
       warnings.push('fallbackStandard');
     } else {
-      if (contextBand === 'long' && !resolved.fast.longSupported) {
+      // The Fast long-context restriction defaults to off; the profile policy
+      // decides whether each entry's own Fast long-context support is enforced.
+      const fastLongRestricted =
+        contextBand === 'long' &&
+        !resolved.fast.longSupported &&
+        profile.assumptions.fastLongContext === 'official';
+      if (fastLongRestricted) {
         return {
           amount: null,
           status: 'unsupported',

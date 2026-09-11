@@ -43,6 +43,10 @@ test('explicit Fast catalog cards expose every rate in each supported context ba
   assert.deepEqual(catalogUi.getCatalogExplicitFastRates(entry(true), 'short'), explicitRates);
   assert.deepEqual(catalogUi.getCatalogExplicitFastRates(entry(true), 'long'), explicitRates);
   assert.equal(catalogUi.getCatalogExplicitFastRates(entry(false), 'long'), null);
+  assert.deepEqual(
+    catalogUi.getCatalogExplicitFastRates(entry(false), 'long', true),
+    explicitRates
+  );
 });
 
 test('multiplier Fast catalog cards do not masquerade as explicit rates', () => {

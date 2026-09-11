@@ -25,6 +25,7 @@ Object.defineProperty(globalThis, 'localStorage', {
   },
 });
 globalThis.window = new EventTarget();
+globalThis.window.parent = globalThis.window;
 globalThis.window.matchMedia = () => ({
   matches: false,
   media: '',
@@ -119,11 +120,11 @@ test('announces visible config navigation validation counts', () => {
     })
   );
   const accessibleLabel = [
-    i18n.t('config_management.visual.sections.server.title'),
+    i18n.t('config_management.editor.domains.service'),
     i18n.t('config_management.meta_errors', { count: 1 }),
   ].join(', ');
 
-  assert.ok(markup.includes(`aria-label="${accessibleLabel}"`));
+  assert.ok(markup.includes(`aria-label="${accessibleLabel.replaceAll('&', '&amp;').replaceAll('"', '&quot;')}"`));
 });
 
 test('keeps every strength label available in all active locales', async () => {
@@ -139,4 +140,23 @@ test('keeps every strength label available in all active locales', async () => {
   }
 
   await i18n.changeLanguage(originalLanguage);
+});
+
+test('Codex decision pages show native choice groups and a single editor help entry', async () => {
+  const previousLanguage = i18n.language;
+  for (const locale of ['en', 'zh-CN', 'zh-TW', 'ru']) {
+    await i18n.changeLanguage(locale);
+    for (const [subsection, count] of [['scope', 3], ['hedging', 2]]) {
+      const markup = renderToStaticMarkup(createElement(VisualConfigEditor, {
+        values: DEFAULT_VISUAL_VALUES, initialSection: 'codex-policy', initialSubsection: subsection,
+        disabled: true, onChange() {},
+      }));
+      assert.equal(markup.match(/type="radio"/g)?.length, count);
+      assert.match(markup, /<fieldset[^>]*disabled=""/);
+      assert.equal(markup.match(/data-testid="config-editor-help"/g)?.length, 1);
+      assert.ok(!markup.includes('data-testid="codex-draft-summary"'));
+      assert.equal(markup.match(/aria-describedby="[^"]+-description"/g)?.length, count);
+    }
+  }
+  await i18n.changeLanguage(previousLanguage);
 });

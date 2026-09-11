@@ -89,6 +89,6 @@
 | Upstream SHA | 分类 | Diff 与 LTS 决策 |
 |---|---|---|
 | `5b4d52b38929454491674e130d7368c908353e65` | `defer` | OAuth editor provider card 将两个 LTS OAuth 编辑页改成新的共享卡片、映射行、页面样式和 locale/test 组合，并删除现有页面 SCSS。它已经从 `upstream/dev` 进入 `upstream/main`，但仍属于依赖新 AuthFiles/Vault 视觉架构的跨页重构；当前 LTS 的 load failure、dirty/force-mapping、excluded-model、缓存失效和完整 usage 兼容边界不能由这组 UI 替换隐含满足。等待独立的 LTS 适配与浏览器验收，不 cherry-pick 或文件级覆盖。 |
-| `ed5f1c48e11ba7335f1e8f676f228c280196af85` (`v1.22.15`) | `reject` | Infistar follow-up 将其从 quick-fill 顺序移除，并加入 `TEMPORARILY_HIDDEN_SPONSOR_BRANDS`，使已配置 Infistar 资源不再进入 provider groups。LTS 的 Infistar 适配要求商业中立、配置检测可见、保留 `sourceIndex`/未知字段；临时 sponsor roster 变化不是管理功能正确性理由，不能隐藏用户已配置凭据。因此不移植该提交；现有 `CONFIG_DETECTED_BRANDS`/provider integrity 约束保持。 |
+| `ed5f1c48e11ba7335f1e8f676f228c280196af85` (`v1.22.15`) | `reject` | Infistar follow-up 将其从 quick-fill 顺序移除，并加入 `TEMPORARILY_HIDDEN_SPONSOR_BRANDS`。2026-09-11 复核纠正：隐藏的是品牌入口，`infistarHidden || ...` 让其配置回归通用协议组，并非凭据消失。LTS 仍保留商业中立的 `CONFIG_DETECTED_BRANDS` 配置检测、`sourceIndex`/未知字段；不引入随 sponsor 名单变化的品牌重分组。 |
 
 这次 readback 不改变 protected `/usage`、Core Management API、四套 locale、plugin gate、LTS sidecars、npm/package-lock 或 `management.html` release contract，也不创建 Release、tag、部署或 live UAT 结论。`5b4d52b` 的上游实现和 `ed5f1c48` 的 sponsor hiding 均不进入 Panel LTS main；需要吸收的 Panel 本地 usage/layout 工作另按当前工作树 diff 与实际验证记录。
