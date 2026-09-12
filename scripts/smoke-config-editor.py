@@ -121,6 +121,108 @@ def check_contrast(page):
     assert not failures, failures
 
 
+def run_payload_integrity_smoke(page, state):
+    original = state.config_yaml
+    a = '    - models: [{name: model-a}]\n      params: {temperature: 1}\n      extension: belongs-to-a\n'
+    b = '    - models: [{name: model-b}]\n      params: {temperature: 3}\n      extension: belongs-to-b\n'
+    source = 'payload:\n  default:\n' + a + b
+    conflict_text = 'The payload section you edited has also changed on the server.'
+    failure_text = 'Unable to convert the visual draft to YAML.'
+
+    def load(yaml):
+        state.config_yaml = original + '\n' + yaml
+        page.reload()
+        page.get_by_role('button', name='Visual Editor', exact=True).click()
+        locate(page, 'payloadDefaultRules', 'payload.default')
+        return page.locator('[data-config-field="payloadDefaultRules"]')
+
+    def writes():
+        return len(state.config_yaml_puts)
+
+    def assert_draft(field, value):
+        assert field.get_by_label('Parameter Value', exact=True).first.input_value() == value
+        assert page.locator('button[aria-label="Save"]').is_enabled()
+
+    try:
+        # Saving before preview: remote reorder and insertion must not reach PUT.
+        for target in ['payload:\n  default:\n' + b + a, source + a.replace('model-a', 'new-server-rule')]:
+            field = load(source)
+            field.get_by_label('Parameter Value', exact=True).first.fill('2')
+            state.config_yaml = original + '\n' + target
+            before = writes()
+            page.locator('button[aria-label="Save"]').click()
+            page.get_by_text(conflict_text, exact=False).wait_for()
+            assert writes() == before
+            assert page.get_by_role('dialog').count() == 0
+            assert_draft(field, '2')
+            assert state.config_yaml == original + '\n' + target
+
+        # A conflict arriving after preview also blocks confirm and retains the draft.
+        field = load(source)
+        field.get_by_label('Parameter Value', exact=True).first.fill('2')
+        page.locator('button[aria-label="Save"]').click()
+        confirm = page.get_by_role('button', name='Confirm Save', exact=True)
+        confirm.wait_for()
+        state.config_yaml = original + '\n' + 'payload:\n  default:\n' + b + a
+        before = writes()
+        confirm.click()
+        page.get_by_text(conflict_text, exact=False).wait_for()
+        assert writes() == before
+        assert confirm.is_visible()
+        page.get_by_role('dialog').get_by_role('button', name='Cancel', exact=True).click()
+        assert_draft(field, '2')
+
+        anchored = '''payload:
+  default:
+    - models: [{name: model-a}]
+      params:
+        temperature: 1
+        options: &options {limit: 1}
+  override:
+    - models: [{name: model-b}]
+      params:
+        options: *options
+'''
+        field = load(anchored)
+        field.get_by_label('Parameter Value', exact=True).first.fill('2')
+        # Both source materialization and save must preserve cross-rule aliases.
+        for _ in range(2):
+            page.get_by_role('button', name='Source File Editor', exact=True).click()
+            # CodeMirror only renders visible lines; inspect the complete editor document.
+            assert page.locator('.cm-content').evaluate('''node => {
+              const text = node.cmView.rootView.view.state.doc.toString();
+              return text.includes('&options') && text.includes('*options');
+            }''')
+            page.get_by_role('button', name='Visual Editor', exact=True).click()
+            locate(page, 'payloadDefaultRules', 'payload.default')
+        page.locator('button[aria-label="Save"]').click()
+        page.get_by_role('button', name='Confirm Save', exact=True).click()
+        page.get_by_text('Configuration saved successfully', exact=False).first.wait_for()
+        assert 'temperature: 2' in state.config_yaml
+        assert '&options' in state.config_yaml and '*options' in state.config_yaml
+
+        # Removing a referenced anchor is an actual serialization error.
+        field = load(anchored)
+        field.locator('[class*="payloadRuleParamRow"]').nth(1).get_by_role('button', name='Delete', exact=True).click()
+        before = writes()
+        page.get_by_role('button', name='Source File Editor', exact=True).click()
+        page.get_by_text(failure_text, exact=False).wait_for()
+        assert field.is_visible(), 'Failed source conversion must stay in the visual editor'
+        assert field.get_by_label('Parameter Value', exact=True).count() == 1
+        assert page.locator('button[aria-label="Save"]').is_enabled()
+        with page.page.expect_response(lambda response: response.request.method == 'GET' and response.url.endswith('/v0/management/config.yaml')):
+            page.locator('button[aria-label="Save"]').click()
+        page.wait_for_function('!document.querySelector(\'button[aria-label="Save"]\').disabled')
+        assert page.get_by_role('dialog').count() == 0
+        assert writes() == before
+        assert field.get_by_label('Parameter Value', exact=True).count() == 1
+        assert state.config_yaml == original + '\n' + anchored
+    finally:
+        state.config_yaml = original
+        page.reload()
+        page.get_by_role('button', name='Visual Editor', exact=True).click()
+
+
 def run():
     OUTPUT.mkdir(parents=True, exist_ok=True)
     app_port, api_port = base.find_free_port(), base.find_free_port()
@@ -289,6 +391,8 @@ def run():
         page.locator('button[aria-label="Reload"]').click()
         page.get_by_role('dialog').get_by_role('button', name='Reload', exact=True).click()
         page.wait_for_function("!document.querySelector('button[aria-label=\"Save\"]:not([disabled])')")
+
+        run_payload_integrity_smoke(page, state)
 
         for width, height in [(1440,900),(1280,800),(1024,768),(768,1024),(390,844),(320,844)]:
             page.set_viewport_size({'width':width,'height':height})
