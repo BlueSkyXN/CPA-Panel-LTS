@@ -23,7 +23,9 @@ class ConfigSurface:
     """Keep browser operations on the page and editor operations in the active workspace."""
 
     def __init__(self, page):
-        self.page = page
+        # Resolve the active frame once; nested PanelBrowser scoping cannot see
+        # the outer iframe when the source editor has no visual search input.
+        self.page = page.raw if isinstance(page, PanelBrowser) else page
 
     def __getattr__(self, name):
         if name in {'goto', 'reload', 'screenshot', 'set_viewport_size'}:
@@ -207,15 +209,27 @@ def run():
         assert page.get_by_label('Hedge delay (ms)').input_value() == '250'
         assert page.locator('[data-config-domain="codex-policy"]').get_attribute('aria-label').endswith('Unsaved changes')
 
+        # Inspecting generated source must not turn field edits into a whole-document overwrite.
+        page.get_by_role('button', name='Source File Editor', exact=True).click()
+        page.get_by_role('button', name='Visual Editor', exact=True).click()
+        locate(page, 'codexAbnormalReasoningRetryHedgeDelayMs', 'hedge-delay-ms')
+        assert page.get_by_label('Hedge delay (ms)').input_value() == '250'
+        assert page.locator('[data-config-domain="codex-policy"]').get_attribute('aria-label').endswith('Unsaved changes')
+        page.get_by_role('button', name='Source File Editor', exact=True).click()
         state.config_yaml += '\nconcurrent-editor-marker: preserve-me\n'
         page.locator('button[aria-label="Save"]').click()
         assert page.get_by_test_id('config-diff-target').inner_text() == page.get_by_test_id('config-save-target').inner_text()
+        state.config_yaml += '\nconcurrent-after-preview: preserve-too\n'
+        page.get_by_role('button', name='Confirm Save').click()
+        page.get_by_role('button', name='Confirm Save').wait_for(state='visible')
         page.get_by_role('button', name='Confirm Save').click()
         page.get_by_text('Configuration saved successfully', exact=False).first.wait_for()
         assert 'hedge-delay-ms: 250' in state.config_yaml
         assert 'unmanaged-lts-smoke: keep-me' in state.config_yaml
         assert 'concurrent-editor-marker: preserve-me' in state.config_yaml
+        assert 'concurrent-after-preview: preserve-too' in state.config_yaml
         assert 'action: retry' in state.config_yaml
+        page.get_by_role('button', name='Visual Editor', exact=True).click()
         assert not page.locator('[data-config-domain="codex-policy"]').get_attribute('aria-label').endswith('Unsaved changes')
 
         locate(page, 'flowControlRulesText', 'flow-control.rules')

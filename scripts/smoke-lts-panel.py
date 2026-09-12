@@ -2233,6 +2233,50 @@ def run_plugin_config_patch_smoke(page: Any, app_url: str) -> None:
     page.get_by_text("Plugin config saved", exact=False).first.wait_for()
 
 
+def run_oauth_attempt_smoke(page: Any, app_url: str) -> None:
+    """Mock OAuth only: a late callback must not overwrite successful polling."""
+    pending_callbacks = []
+    polls = []
+    context = page.context
+
+    def start(route):
+        route.fulfill(json={"url": "https://oauth.invalid/login", "state": "mock-attempt"})
+
+    def poll(route):
+        polls.append(route)
+        route.fulfill(json={"status": "wait" if len(polls) == 1 else "ok"})
+
+    def callback(route):
+        pending_callbacks.append(route)
+
+    routes = [
+        ("**/v0/management/codex-auth-url*", start),
+        ("**/v0/management/get-auth-status*", poll),
+        ("**/v0/management/oauth-callback", callback),
+    ]
+    for pattern, handler in routes:
+        context.route(pattern, handler)
+    try:
+        page.goto(f"{app_url}?route=oauth-attempt#/oauth", wait_until="domcontentloaded")
+        page.get_by_role("button", name="Start Codex Login", exact=True).click()
+        page.get_by_label("Callback URL", exact=True).fill("https://callback.invalid/?code=mock&state=mock-attempt")
+        page.get_by_role("button", name="Submit Callback URL", exact=True).click()
+        page.locator('.status-badge.success').filter(has_text="Authentication successful!").wait_for()
+        assert len(polls) == 2
+        assert len(pending_callbacks) == 1
+        with page.expect_response(lambda response: response.url.endswith('/oauth-callback')):
+            pending_callbacks.pop().fulfill(status=500, json={"message": "late callback failure"})
+        # Give the rejected promise and React update a rendering turn.
+        page.evaluate("() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
+        assert page.locator('.status-badge.success').filter(has_text="Authentication successful!").is_visible()
+        assert page.get_by_text("late callback failure", exact=False).count() == 0
+    finally:
+        for route in pending_callbacks:
+            route.abort()
+        for pattern, handler in routes:
+            context.unroute(pattern, handler)
+
+
 def run_oauth_editor_smoke(page: Any, app_url: str) -> None:
     page.goto(
         f"{app_url}?route=oauth-alias-empty-draft#/auth-files/oauth-model-alias",
@@ -6084,6 +6128,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             page.get_by_text("Platforms: darwin/arm64", exact=False).first.wait_for()
 
             run_plugin_config_patch_smoke(page, app_url)
+            run_oauth_attempt_smoke(page, app_url)
             run_oauth_editor_smoke(page, app_url)
             run_oauth_load_failure_smoke(page, app_url, state)
             run_auth_file_using_api_smoke(page, app_url)
