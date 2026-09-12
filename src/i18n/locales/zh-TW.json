@@ -1782,6 +1782,8 @@
     "visual_mode_unavailable_detail": "目前設定存在無效 YAML，暫時無法使用視覺化編輯：{{message}}",
     "visual_mode_save_blocked": "請先修復 YAML 語法錯誤，再從視覺化模式儲存",
     "visual_mode_latest_yaml_invalid": "伺服器最新設定包含無效 YAML，請先切回原始碼模式檢查後再儲存視覺化修改：{{message}}",
+    "visual_payload_conflict": "你編輯的 payload 設定區塊在伺服器端也發生了變化。本次未儲存，草稿已保留，請先處理衝突再儲存。",
+    "visual_apply_failed": "無法將視覺化草稿轉換為 YAML。本次未儲存，草稿已保留。請檢查 YAML 錨點與引用，或復原最後一次修改。",
     "editor_placeholder": "key: value",
     "search_placeholder": "搜尋設定內容...",
     "search_button": "搜尋",

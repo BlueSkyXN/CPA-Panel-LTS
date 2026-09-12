@@ -26,7 +26,7 @@ import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard';
 import { registerSessionBusyCheck } from '@/services/connectionSession';
 import { getManagedConnection } from '@/services/connectionRuntime';
 import { readProfiles } from '@/services/storage/connectionProfiles';
-import { useVisualConfig } from '@/hooks/useVisualConfig';
+import { useVisualConfig, VisualConfigApplyError } from '@/hooks/useVisualConfig';
 import { useNotificationStore, useAuthStore, useConfigStore } from '@/stores';
 import { configFileApi } from '@/services/api/configFile';
 import styles from './ConfigPage.module.scss';
@@ -64,6 +64,12 @@ export function ConfigPage() {
   const isCurrentLayer = pageTransitionLayer ? pageTransitionLayer.isCurrentLayer : true;
   const showNotification = useNotificationStore((state) => state.showNotification);
   const showConfirmation = useNotificationStore((state) => state.showConfirmation);
+  const notifyConfigFailure = useCallback((error: unknown) => {
+    const message = error instanceof VisualConfigApplyError
+      ? t(`config_management.${error.code}`)
+      : `${t('notification.save_failed')}: ${error instanceof Error ? error.message : ''}`;
+    showNotification(message, 'error');
+  }, [showNotification, t]);
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
   const profileId = useAuthStore((state) => state.profileId);
   const apiBase = useAuthStore((state) => state.apiBase);
@@ -241,8 +247,7 @@ export function ConfigPage() {
         showNotification(t('notification.commercial_mode_restart_required'), 'warning');
       }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : '';
-      showNotification(`${t('notification.save_failed')}: ${message}`, 'error');
+      notifyConfigFailure(err);
     } finally {
       setSaving(false);
     }
@@ -319,8 +324,7 @@ export function ConfigPage() {
       setPreviewTab(dirty ? 'source' : 'visual');
       setDiffModalOpen(true);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : '';
-      showNotification(`${t('notification.save_failed')}: ${message}`, 'error');
+      notifyConfigFailure(err);
     } finally {
       setSaving(false);
     }
@@ -338,9 +342,14 @@ export function ConfigPage() {
       if (tab === 'source') {
         // Only rewrite YAML when there are pending visual changes; otherwise preserve raw YAML + comments.
         if (visualDirty) {
-          const nextContent = applyVisualChangesToYaml(dirty ? content : previewServerYaml);
-          if (nextContent !== content) {
-            setContent(nextContent);
+          try {
+            const nextContent = applyVisualChangesToYaml(dirty ? content : previewServerYaml);
+            if (nextContent !== content) {
+              setContent(nextContent);
+            }
+          } catch (error: unknown) {
+            notifyConfigFailure(error);
+            return;
           }
         }
       } else if (dirty || visualParseError !== null) {
@@ -370,6 +379,7 @@ export function ConfigPage() {
       content,
       dirty,
       loadVisualValuesFromYaml,
+      notifyConfigFailure,
       previewServerYaml,
       requestedSection,
       searchParams,

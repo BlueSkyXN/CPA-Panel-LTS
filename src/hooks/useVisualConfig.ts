@@ -1,7 +1,7 @@
 import { FLOW_FIELDS, flowControlValidation, readFlowControlValues } from '@/lts/flowControl/model';
 import { writeFlowControlValues } from '@/lts/flowControl/yaml';
 import { useCallback, useMemo, useReducer } from 'react';
-import { isMap, isScalar, isSeq, parse as parseYaml, parseDocument } from 'yaml';
+import { isAlias, isMap, isNode, isScalar, isSeq, parse as parseYaml, parseDocument } from 'yaml';
 import type { Node, Pair, YAMLMap, YAMLSeq } from 'yaml';
 import type {
   CodexAbnormalReasoningRetryAction,
@@ -249,6 +249,45 @@ const PAYLOAD_DIRTY_FIELDS = [
   'payloadOverrideRawRules',
   'payloadFilterRules',
 ] as const;
+
+type PayloadDirtyField = (typeof PAYLOAD_DIRTY_FIELDS)[number];
+const PAYLOAD_SECTIONS: Record<PayloadDirtyField, string> = {
+  payloadDefaultRules: 'default',
+  payloadDefaultRawRules: 'default-raw',
+  payloadOverrideRules: 'override',
+  payloadOverrideRawRules: 'override-raw',
+  payloadFilterRules: 'filter',
+};
+
+export class VisualConfigApplyError extends Error {
+  constructor(readonly code: 'visual_payload_conflict' | 'visual_apply_failed') {
+    super(code);
+    this.name = 'VisualConfigApplyError';
+  }
+}
+
+// 不比较源码 offset/缩进，但保留节点顺序、未知字段、注释和 anchor 身份。
+function payloadNodeIdentity(node: unknown): unknown {
+  if (!isNode(node)) return node;
+  const metadata = [node.comment, node.commentBefore, node.anchor, node.tag];
+  if (isAlias(node)) return ['alias', metadata, node.source];
+  if (isMap(node)) {
+    return ['map', metadata, node.items.map(pair => [payloadNodeIdentity(pair.key), payloadNodeIdentity(pair.value)])];
+  }
+  if (isSeq(node)) return ['seq', metadata, node.items.map(payloadNodeIdentity)];
+  return ['scalar', metadata, node.value];
+}
+
+function snapshotPayloadSections(
+  doc: YamlDocument,
+  payload: Record<string, unknown> | null
+): Record<PayloadDirtyField, string> {
+  return Object.fromEntries(PAYLOAD_DIRTY_FIELDS.map(field => {
+    const section = PAYLOAD_SECTIONS[field];
+    // resolved value 也参与比较，捕获定义在该子树之外的 anchor 被修改的情况。
+    return [field, JSON.stringify([payloadNodeIdentity(doc.getIn(['payload', section], true)), payload?.[section]])];
+  })) as Record<PayloadDirtyField, string>;
+}
 
 const CODEX_ABNORMAL_REASONING_RETRY_DIRTY_FIELDS = [
   'codexAbnormalReasoningRetryAction',
@@ -890,6 +929,7 @@ function preserveNodeComments(previous: Node | null | undefined, next: Node): No
   next.comment = previous.comment;
   next.commentBefore = previous.commentBefore;
   next.spaceBefore = previous.spaceBefore;
+  if (!isAlias(next)) next.anchor = previous.anchor;
   return next;
 }
 
@@ -918,6 +958,7 @@ function deleteMapValue(map: YAMLMap, key: string): void {
 
 function ensureMapValue(doc: YamlDocument, map: YAMLMap, key: string): YAMLMap {
   const pair = mapPair(map, key);
+  if (isAlias(pair?.value)) throw new VisualConfigApplyError('visual_apply_failed');
   if (pair && isMap(pair.value)) return pair.value;
   const next = doc.createNode({});
   if (!isMap(next)) throw new Error('Expected YAML map');
@@ -934,6 +975,7 @@ function ensureMapValue(doc: YamlDocument, map: YAMLMap, key: string): YAMLMap {
 
 function ensureSeqValue(doc: YamlDocument, map: YAMLMap, key: string): YAMLSeq {
   const pair = mapPair(map, key);
+  if (isAlias(pair?.value)) throw new VisualConfigApplyError('visual_apply_failed');
   if (pair && isSeq(pair.value)) return pair.value;
   const next = doc.createNode([]);
   if (!isSeq(next)) throw new Error('Expected YAML sequence');
@@ -1031,9 +1073,13 @@ function syncEntryMap<T extends { id: string }>(
   const items = entries.map((entry) => {
     const key = getKey(entry).trim();
     const pair = pairsById.get(entry.id) ?? doc.createPair(key, getValue(entry));
+    const prior = baseline.find(candidate => candidate.id === entry.id);
     if (isScalar(pair.key)) pair.key.value = key;
     else pair.key = doc.createNode(key);
-    updatePairValue(doc, pair, getValue(entry));
+    // 未修改的对象/alias 保留原节点；不能因编辑同级参数而重建它们。
+    if (!prior || JSON.stringify(getValue(prior)) !== JSON.stringify(getValue(entry))) {
+      updatePairValue(doc, pair, getValue(entry));
+    }
     return pair;
   });
   const unmanagedItems = map.items.filter((pair) => {
@@ -1059,6 +1105,7 @@ function syncConditionSequence(
   const nodesById = new Map((baseline ?? []).map((entry, index) => [entry.id, seq.items[index]]));
   const items = entries.map((entry) => {
     const existing = nodesById.get(entry.id);
+    if (isAlias(existing)) throw new VisualConfigApplyError('visual_apply_failed');
     const item = isMap(existing) ? existing : (doc.createNode({}) as YAMLMap);
     const prior = baseline?.find((candidate) => candidate.id === entry.id);
     syncEntryMap(
@@ -1085,6 +1132,7 @@ function syncPayloadModels(
   const nodesById = new Map(baseline.map((model, index) => [model.id, seq.items[index]]));
   const items = models.map((model) => {
     const existing = nodesById.get(model.id);
+    if (isAlias(existing)) throw new VisualConfigApplyError('visual_apply_failed');
     const modelMap = isMap(existing) ? existing : (doc.createNode({}) as YAMLMap);
     const prior = baseline.find((candidate) => candidate.id === model.id);
     setMapValue(doc, modelMap, 'name', model.name.trim());
@@ -1136,6 +1184,7 @@ function syncPayloadRuleSequence(
   const nodesById = new Map(baseline.map((rule, index) => [rule.id, seq.items[index]]));
   const items = rules.map((rule) => {
     const existing = nodesById.get(rule.id);
+    if (isAlias(existing)) throw new VisualConfigApplyError('visual_apply_failed');
     const ruleMap = isMap(existing) ? existing : (doc.createNode({}) as YAMLMap);
     const prior = baseline.find((candidate) => candidate.id === rule.id);
     syncPayloadModels(doc, ruleMap, prior?.models ?? [], rule.models);
@@ -1170,6 +1219,7 @@ function syncPayloadFilterSequence(
   const nodesById = new Map(baseline.map((rule, index) => [rule.id, seq.items[index]]));
   const items = rules.map((rule) => {
     const existing = nodesById.get(rule.id);
+    if (isAlias(existing)) throw new VisualConfigApplyError('visual_apply_failed');
     const ruleMap = isMap(existing) ? existing : (doc.createNode({}) as YAMLMap);
     const prior = baseline.find((candidate) => candidate.id === rule.id);
     syncPayloadModels(doc, ruleMap, prior?.models ?? [], rule.models);
@@ -1182,6 +1232,7 @@ function syncPayloadFilterSequence(
 type VisualConfigState = {
   visualValues: VisualConfigValues;
   baselineValues: VisualConfigValues;
+  payloadBaseline: Record<PayloadDirtyField, string>;
   dirtyFields: Set<string>;
   visualParseError: string | null;
 };
@@ -1190,6 +1241,7 @@ type VisualConfigAction =
   | {
       type: 'load_success';
       values: VisualConfigValues;
+      payloadBaseline: Record<PayloadDirtyField, string>;
     }
   | {
       type: 'load_error';
@@ -1205,6 +1257,7 @@ function createInitialVisualConfigState(): VisualConfigState {
   return {
     visualValues: initialValues,
     baselineValues: deepClone(initialValues),
+    payloadBaseline: snapshotPayloadSections(parseDocument(''), null),
     dirtyFields: new Set(),
     visualParseError: null,
   };
@@ -1445,6 +1498,7 @@ function visualConfigReducer(
       return {
         visualValues: action.values,
         baselineValues: deepClone(action.values),
+        payloadBaseline: action.payloadBaseline,
         dirtyFields: new Set(),
         visualParseError: null,
       };
@@ -1479,7 +1533,7 @@ export function useVisualConfig() {
     undefined,
     createInitialVisualConfigState
   );
-  const { visualValues, baselineValues, visualParseError, dirtyFields } = state;
+  const { visualValues, baselineValues, payloadBaseline, visualParseError, dirtyFields } = state;
   const visualDirty = dirtyFields.size > 0;
   const visualValidationErrors = useMemo(
     () => getVisualConfigValidationErrors(visualValues, dirtyFields),
@@ -1709,7 +1763,7 @@ export function useVisualConfig() {
         },
       };
 
-      dispatch({ type: 'load_success', values: newValues });
+      dispatch({ type: 'load_success', values: newValues, payloadBaseline: snapshotPayloadSections(document, payload) });
       return { ok: true as const };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Invalid YAML';
@@ -1722,7 +1776,17 @@ export function useVisualConfig() {
     (currentYaml: string): string => {
       try {
         const doc = parseDocument(currentYaml);
-        if (doc.errors.length > 0) return currentYaml;
+        if (doc.errors.length > 0) throw new VisualConfigApplyError('visual_apply_failed');
+        if (hasPayloadDirtyFields(dirtyFields)) {
+          if (isAlias(doc.getIn(['payload'], true))) throw new VisualConfigApplyError('visual_apply_failed');
+          const currentPayload = asRecord(asRecord(doc.toJS())?.payload);
+          const currentSnapshots = snapshotPayloadSections(doc, currentPayload);
+          for (const field of PAYLOAD_DIRTY_FIELDS) {
+            if (dirtyFields.has(field) && currentSnapshots[field] !== payloadBaseline[field]) {
+              throw new VisualConfigApplyError('visual_payload_conflict');
+            }
+          }
+        }
         if (!isMap(doc.contents)) {
           doc.contents = doc.createNode({}) as unknown as typeof doc.contents;
         }
@@ -2247,11 +2311,13 @@ export function useVisualConfig() {
         }
 
         return doc.toString({ indent: 2, lineWidth: 120, minContentWidth: 0 });
-      } catch {
-        return currentYaml;
+      } catch (error: unknown) {
+        if (error instanceof VisualConfigApplyError) throw error;
+        // 不将包含配置值的底层 YAML 异常带入 UI，也不返回原文伪装成成功。
+        throw new VisualConfigApplyError('visual_apply_failed');
       }
     },
-    [baselineValues, dirtyFields, visualValues]
+    [baselineValues, payloadBaseline, dirtyFields, visualValues]
   );
 
   const setVisualValues = useCallback((newValues: Partial<VisualConfigValues>) => {
