@@ -25,6 +25,8 @@ interface ModelsState {
   isCacheValid: (apiBase: string, apiKey?: string) => boolean;
 }
 
+let modelsRequestToken = 0;
+
 export const useModelsStore = create<ModelsState>((set, get) => ({
   models: [],
   loading: false,
@@ -32,12 +34,13 @@ export const useModelsStore = create<ModelsState>((set, get) => ({
   cache: null,
 
   fetchModels: async (apiBase, apiKey, forceRefresh = false) => {
+    const requestId = ++modelsRequestToken;
     const { cache, isCacheValid } = get();
     const apiKeyScope = apiKey?.trim() || '';
 
     // 检查缓存
     if (!forceRefresh && isCacheValid(apiBase, apiKeyScope) && cache) {
-      set({ models: cache.data, error: null });
+      set({ models: cache.data, loading: false, error: null });
       return cache.data;
     }
 
@@ -45,6 +48,7 @@ export const useModelsStore = create<ModelsState>((set, get) => ({
 
     try {
       const list = await modelsApi.fetchModels(apiBase, apiKeyScope || undefined);
+      if (requestId !== modelsRequestToken) return list;
       const now = Date.now();
 
       set({
@@ -55,6 +59,7 @@ export const useModelsStore = create<ModelsState>((set, get) => ({
 
       return list;
     } catch (error: unknown) {
+      if (requestId !== modelsRequestToken) throw error;
       const message =
         error instanceof Error ? error.message : typeof error === 'string' ? error : 'Failed to fetch models';
       set({
@@ -67,7 +72,8 @@ export const useModelsStore = create<ModelsState>((set, get) => ({
   },
 
   clearCache: () => {
-    set({ cache: null, models: [] });
+    modelsRequestToken += 1;
+    set({ cache: null, models: [], loading: false, error: null });
   },
 
   isCacheValid: (apiBase, apiKey) => {

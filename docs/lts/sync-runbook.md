@@ -10,7 +10,7 @@
 
 ## Summary
 
-最新分支收尾和逐提交决策见 [2026-09-11 intake](upstream-intake-20260911.md)：审计至上游 `v1.22.15`，按 hunk 适配 OAuth 标题和表单语义；保留 LTS 的 Core 侧额度重置清理和配置检测分组，不搬入另一套 UI 架构。此前快捷键、Sheet、俄语和 Antigravity 适配见 [2026-09-07 intake](upstream-intake-20260907.md)。
+最新分支复查和逐提交决策见 [2026-09-12 intake](upstream-intake-20260912.md)：自有四分支已合并，上游 main 仍为 `v1.22.15`；新增审查 dev 至 `7aa8618`，在现有架构内适配模型请求失效、配置模式合并、payload AST 保留和 OAuth attempt 隔离。此前 OAuth 表单适配见 [2026-09-11 intake](upstream-intake-20260911.md)，快捷键、Sheet、俄语和 Antigravity 适配见 [2026-09-07 intake](upstream-intake-20260907.md)。
 
 `CPA-Panel-LTS` should not use the same full-sync strategy as `CPA-Core-LTS`.
 

@@ -39,3 +39,4 @@ settings.local.json
 *.njsproj
 *.sln
 *.sw?
+/output

@@ -4,11 +4,12 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { useNotificationStore } from '@/stores';
+import { useAuthStore, useNotificationStore } from '@/stores';
 import { oauthApi, type OAuthProvider } from '@/services/api/oauth';
 import { vertexApi, type VertexImportResponse } from '@/services/api/vertex';
 import { copyToClipboard } from '@/utils/clipboard';
 import { getErrorMessage, isRecord } from '@/utils/helpers';
+import { createOAuthAttempts, type OAuthAttempt } from './oauthAttempts';
 import styles from './OAuthPage.module.scss';
 import { registerSessionBusyCheck, registerSessionLeaveCheck } from '@/services/connectionSession';
 import iconCodex from '@/assets/icons/codex.svg';
@@ -159,9 +160,11 @@ export function OAuthPage() {
     location: '',
     loading: false
   });
-  const pollingTimers = useRef<Partial<Record<OAuthProvider, number>>>({});
+  const attempts = useRef(createOAuthAttempts({
+    setTimeout: (callback, delay) => window.setTimeout(callback, delay),
+    clearTimeout: (timer) => window.clearTimeout(timer),
+  }));
   useEffect(() => registerSessionBusyCheck(() => vertexState.loading || Object.values(states).some((state) => state.callbackSubmitting)), [states, vertexState.loading]);
-  const successResetTimers = useRef<Partial<Record<OAuthProvider, number>>>({});
   const vertexFileInputRef = useRef<HTMLInputElement | null>(null);
   const providerCardRefs = useRef<Partial<Record<OAuthProvider, HTMLDivElement | null>>>({});
   const providerQuery = searchParams.get('provider')?.trim().toLowerCase() || '';
@@ -173,18 +176,19 @@ export function OAuthPage() {
   const hasFocusedProvider = PROVIDERS.some((provider) => provider.id === focusedProvider);
 
   const clearTimers = useCallback(() => {
-    Object.values(pollingTimers.current).forEach((timer) => {
-      if (timer !== undefined) window.clearInterval(timer);
-    });
-    Object.values(successResetTimers.current).forEach((timer) => {
-      if (timer !== undefined) window.clearTimeout(timer);
-    });
-    pollingTimers.current = {};
-    successResetTimers.current = {};
+    attempts.current.invalidateAll();
   }, []);
 
   useEffect(() => {
+    const unsubscribe = useAuthStore.subscribe((next, previous) => {
+      if (next.apiBase !== previous.apiBase || next.managementKey !== previous.managementKey ||
+          next.connectionStatus !== previous.connectionStatus) {
+        clearTimers();
+        setStates({} as Record<OAuthProvider, ProviderState>);
+      }
+    });
     return () => {
+      unsubscribe();
       clearTimers();
     };
   }, [clearTimers]);
@@ -207,29 +211,8 @@ export function OAuthPage() {
     }));
   };
 
-  const clearPollingTimer = (provider: OAuthProvider) => {
-    const timer = pollingTimers.current[provider];
-    if (timer !== undefined) {
-      window.clearInterval(timer);
-      delete pollingTimers.current[provider];
-    }
-  };
-
-  const clearSuccessResetTimer = (provider: OAuthProvider) => {
-    const timer = successResetTimers.current[provider];
-    if (timer !== undefined) {
-      window.clearTimeout(timer);
-      delete successResetTimers.current[provider];
-    }
-  };
-
-  const clearProviderTimers = (provider: OAuthProvider) => {
-    clearPollingTimer(provider);
-    clearSuccessResetTimer(provider);
-  };
-
   const resetProviderAttempt = (provider: OAuthProvider) => {
-    clearProviderTimers(provider);
+    attempts.current.get(provider)?.invalidate();
     setStates((prev) => {
       const current = prev[provider] ?? {};
       const next: ProviderState = {};
@@ -244,8 +227,7 @@ export function OAuthPage() {
   };
 
   const completeProviderAuth = (provider: OAuthProvider) => {
-    clearPollingTimer(provider);
-    clearSuccessResetTimer(provider);
+    const resetAttempt = attempts.current.begin(provider);
     updateProviderState(provider, {
       url: undefined,
       state: undefined,
@@ -257,16 +239,15 @@ export function OAuthPage() {
       callbackStatus: undefined,
       callbackError: undefined
     });
-    successResetTimers.current[provider] = window.setTimeout(() => {
+    resetAttempt.schedule(() => {
       resetProviderAttempt(provider);
     }, SUCCESS_RESET_DELAY_MS);
   };
 
-  const startPolling = (provider: OAuthProvider, state: string) => {
-    clearPollingTimer(provider);
-    const timer = window.setInterval(async () => {
-      try {
-        const res = await oauthApi.getAuthStatus(state);
+  const startPolling = (provider: OAuthProvider, state: string, attempt: OAuthAttempt) => {
+    attempt.poll(
+      () => oauthApi.getAuthStatus(state),
+      (res) => {
         if (res.status === 'ok') {
           completeProviderAuth(provider);
           showNotification(t(getAuthKey(provider, 'oauth_status_success')), 'success');
@@ -276,20 +257,18 @@ export function OAuthPage() {
             `${t(getAuthKey(provider, 'oauth_status_error'))} ${res.error || ''}`,
             'error'
           );
-          window.clearInterval(timer);
-          delete pollingTimers.current[provider];
         }
-      } catch (err: unknown) {
+        return res.status === 'wait';
+      },
+      (err) => {
         updateProviderState(provider, { status: 'error', error: getErrorMessage(err), polling: false });
-        window.clearInterval(timer);
-        delete pollingTimers.current[provider];
-      }
-    }, 3000);
-    pollingTimers.current[provider] = timer;
+      },
+      3000
+    );
   };
 
   const startAuth = async (provider: OAuthProvider) => {
-    clearProviderTimers(provider);
+    const attempt = attempts.current.begin(provider);
     const geminiState = provider === 'gemini-cli' ? states[provider] : undefined;
     const rawProjectId = provider === 'gemini-cli' ? (geminiState?.projectId || '').trim() : '';
     const projectId = rawProjectId
@@ -309,13 +288,15 @@ export function OAuthPage() {
       error: undefined,
       callbackStatus: undefined,
       callbackError: undefined,
-      callbackUrl: ''
+      callbackUrl: '',
+      callbackSubmitting: false
     });
     try {
       const res = await oauthApi.startAuth(
         provider,
         provider === 'gemini-cli' ? { projectId: projectId || undefined } : undefined
       );
+      if (!attempt.isCurrent()) return;
       if (!res.state) {
         const message = t('auth_login.missing_state');
         updateProviderState(provider, {
@@ -329,8 +310,9 @@ export function OAuthPage() {
         return;
       }
       updateProviderState(provider, { url: res.url, state: res.state, status: 'waiting', polling: true });
-      startPolling(provider, res.state);
+      startPolling(provider, res.state, attempt);
     } catch (err: unknown) {
+      if (!attempt.isCurrent()) return;
       const message = getErrorMessage(err);
       updateProviderState(provider, { status: 'error', error: message, polling: false });
       showNotification(
@@ -350,6 +332,8 @@ export function OAuthPage() {
   };
 
   const submitCallback = async (provider: OAuthProvider) => {
+    const attempt = attempts.current.get(provider);
+    if (!attempt?.isCurrent()) return;
     const callbackInput = (states[provider]?.callbackUrl || '').trim();
     if (!callbackInput) {
       showNotification(
@@ -370,10 +354,12 @@ export function OAuthPage() {
     });
     try {
       await oauthApi.submitCallback(provider, redirectUrl);
+      if (!attempt.isCurrent()) return;
       updateProviderState(provider, { callbackSubmitting: false, callbackStatus: 'success' });
       showNotification(t('auth_login.oauth_callback_success'), 'success');
     } catch (err: unknown) {
       const status = getErrorStatus(err);
+      if (!attempt.isCurrent()) return;
       const message = getErrorMessage(err);
       const errorMessage =
         status === 404

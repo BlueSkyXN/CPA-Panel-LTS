@@ -100,6 +100,7 @@ export function ConfigPage() {
   const [saved, setSaved] = useState(false);
   useEffect(() => registerSessionBusyCheck(() => saving), [saving]);
   const [error, setError] = useState('');
+  // 仅记录用户源码编辑；可视化草稿物化不改变并发合并策略。
   const [dirty, setDirty] = useState(false);
   const [diffModalOpen, setDiffModalOpen] = useState(false);
   const [serverYaml, setServerYaml] = useState('');
@@ -259,7 +260,7 @@ export function ConfigPage() {
 
       const visualBaseYaml = dirty ? content : latestServerYaml;
 
-      if (effectiveTab !== 'source') {
+      if (effectiveTab === 'visual' || !dirty) {
         const latestDocument = parseDocument(latestServerYaml);
         if (latestDocument.errors.length > 0) {
           showNotification(
@@ -289,16 +290,15 @@ export function ConfigPage() {
         }
       }
 
-      // In source mode, save exactly what the user edited. In visual mode, preserve the
-      // local source draft when it has unsaved edits so source-only backend fields are not dropped.
+      // 只有真正编辑过源码才保存完整草稿；查看生成的源码仍按字段合并最新服务端配置。
       const nextMergedYaml =
-        effectiveTab === 'source' ? content : applyVisualChangesToYaml(visualBaseYaml);
+        effectiveTab === 'source' && dirty ? content : applyVisualChangesToYaml(visualBaseYaml);
 
       // In visual mode, applyVisualChangesToYaml re-serializes YAML via parseDocument → toString,
       // which may reformat comments/whitespace. Normalize the server YAML through the same pipeline
       // so the diff only shows actual value changes, not cosmetic reformatting.
       let diffOriginal = latestServerYaml;
-      if (effectiveTab !== 'source') {
+      if (!dirty) {
         diffOriginal = normalizeYamlForVisualDiff(latestServerYaml);
       }
 
@@ -316,7 +316,7 @@ export function ConfigPage() {
       setServerYaml(diffOriginal);
       setMergedYaml(nextMergedYaml);
       setPreviewServerYaml(latestServerYaml);
-      setPreviewTab(effectiveTab);
+      setPreviewTab(dirty ? 'source' : 'visual');
       setDiffModalOpen(true);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '';
@@ -338,13 +338,12 @@ export function ConfigPage() {
       if (tab === 'source') {
         // Only rewrite YAML when there are pending visual changes; otherwise preserve raw YAML + comments.
         if (visualDirty) {
-          const nextContent = applyVisualChangesToYaml(content);
+          const nextContent = applyVisualChangesToYaml(dirty ? content : previewServerYaml);
           if (nextContent !== content) {
             setContent(nextContent);
-            setDirty(true);
           }
         }
-      } else {
+      } else if (dirty || visualParseError !== null) {
         const result = loadVisualValuesFromYaml(content);
         if (!result.ok) {
           showNotification(
@@ -369,13 +368,16 @@ export function ConfigPage() {
       effectiveTab,
       applyVisualChangesToYaml,
       content,
+      dirty,
       loadVisualValuesFromYaml,
+      previewServerYaml,
       requestedSection,
       searchParams,
       setSearchParams,
       showNotification,
       t,
       visualDirty,
+      visualParseError,
     ]
   );
 
