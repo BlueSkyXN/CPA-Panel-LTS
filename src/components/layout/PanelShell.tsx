@@ -8,6 +8,8 @@ import { SelectionCheckbox } from '@/components/ui/SelectionCheckbox';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import {
   readProfiles,
+  readResidentLock,
+  writeResidentLock,
   saveProfile,
   deleteProfile,
   validateConnectionBase,
@@ -23,6 +25,7 @@ import { safeSessionPath } from '@/services/connectionSession';
 import { generateId, isRecord } from '@/utils/helpers';
 import { isSupportedLanguage } from '@/utils/language';
 import { normalizeTheme } from '@/stores/useThemeStore';
+import { useMultiInstanceEnabled } from '@/hooks/useMultiInstanceEnabled';
 import type { ConnectionStatus } from '@/types';
 import { apiClient } from '@/services/api/client';
 import styles from './PanelShell.module.scss';
@@ -101,6 +104,28 @@ function restoreWorkspace() {
       started: true,
     };
   }
+  // 常驻连接：本标签页没有会话时，直接进入唯一/最近使用的已记住密钥实例，无需重复登录。
+  // 档案数组会因 lastUsedAt 写入而重排，这里按 lastUsedAt 取最近使用的一个。
+  // 显式退出后锁定，本机新标签页回到登录页，直到再次登录或主动连接。
+  const remembered = profiles.filter(
+    (item): item is ConnectionProfile & { managementKey: string } =>
+      typeof item.managementKey === 'string' && item.managementKey.length > 0
+  );
+  const resident = !readResidentLock()
+    ? remembered.length
+      ? remembered.reduce(
+          (latest, item) => ((item.lastUsedAt ?? 0) > (latest.lastUsedAt ?? 0) ? item : latest),
+          remembered[0]
+        )
+      : undefined
+    : undefined;
+  if (resident) {
+    return {
+      sessions: [makeSession(resident, resident.managementKey, path)],
+      activeId: resident.id,
+      started: true,
+    };
+  }
   return { sessions: [] as Session[], activeId: profile?.id || '', started: false };
 }
 
@@ -116,6 +141,7 @@ export function PanelShell({ children }: PropsWithChildren) {
   const [started, setStarted] = useState(initial?.started || false);
   const selectionIntent = useRef('');
   const [profiles, setProfiles] = useState(readProfiles);
+  const [multiInstance, setMultiInstance] = useMultiInstanceEnabled();
   const [open, setOpen] = useState(false);
   const [managing, setManaging] = useState(false);
   const [search, setSearch] = useState('');
@@ -174,19 +200,33 @@ export function PanelShell({ children }: PropsWithChildren) {
       }
       return;
     }
-    if (!secret.trim()) {
+    if (!secret.trim() || !profile.name.trim()) {
       edit(profile, activate);
       return;
+    }
+    let apiBase: string;
+    try {
+      apiBase = validateConnectionBase(profile.apiBase);
+    } catch {
+      setError(t('connections.invalid'));
+      return;
+    }
+    if (!multiInstance) {
+      // 单实例模式：连接新实例时替换当前连接，而不是并行保持多个会话。
+      // 校验通过后才执行替换，避免旧连接已断开而新连接无法建立。
+      const others = sessionsRef.current.filter((item) => item.profile.id !== profile.id);
+      for (const other of others) if (!detach(other)) return;
     }
     try {
       const next = {
         ...profile,
         name: profile.name.trim(),
-        apiBase: validateConnectionBase(profile.apiBase),
+        apiBase,
         managementKey: secret.trim(),
         lastUsedAt: Date.now(),
       };
-      if (!next.name) throw new Error('Invalid name');
+      // 主动连接视为解除退出锁定的用户意图。
+      writeResidentLock(false);
       saveProfile(next);
       refresh();
       const path = activate ? safeSessionPath(current?.path || '/') : '/';
@@ -205,23 +245,24 @@ export function PanelShell({ children }: PropsWithChildren) {
       setError(t('connections.invalid'));
     }
   };
-  const disconnect = (session: Session) => {
+  // 断开保护：忙时拒绝、有未保存编辑时确认；返回是否成功退出。
+  const detach = (session: Session): boolean => {
     const inspection = controls.current.get(session.id)?.inspect();
     if (inspection?.busy) {
       setOpen(true);
       setError(t('connections.busy'));
-      return;
+      return false;
     }
     if (
       inspection?.dirty &&
       !window.confirm(t('connections.disconnect_confirm', { name: session.profile.name }))
     )
-      return;
+      return false;
     controls.current.delete(session.id);
     commit(sessionsRef.current.filter((item) => item.id !== session.id));
     setError('');
+    return true;
   };
-
   // 同源运行上下文按 iframe Window 校验归属，不共享单例 client/store 或密钥持久化。
   const hostRef = useRef<ConnectionHost | null>(null);
   hostRef.current = {
@@ -288,7 +329,7 @@ export function PanelShell({ children }: PropsWithChildren) {
     disconnect: (id, source) => {
       if (frames.current.get(id)?.contentWindow !== source) return;
       const session = sessionsRef.current.find((item) => item.id === id);
-      if (session) disconnect(session);
+      if (session) detach(session);
     },
   };
   useLayoutEffect(() => {
@@ -361,6 +402,8 @@ export function PanelShell({ children }: PropsWithChildren) {
       if (!auth.isAuthenticated) return;
       const profile = readProfiles().find((item) => item.id === auth.profileId);
       if (!profile || sessionsRef.current.length) return;
+      // 登录成功同样是解除退出锁定的用户意图。
+      writeResidentLock(false);
       const next = makeSession(profile, auth.managementKey, '/');
       sessionsRef.current = [next];
       setSessions([next]);
@@ -370,6 +413,16 @@ export function PanelShell({ children }: PropsWithChildren) {
       setStarted(true);
     });
   }, [started]);
+  useEffect(() => {
+    if (multiInstance || !started) return;
+    // 关闭多实例后仅保留当前实例；其余实例按断开保护逐个退出。
+    for (const session of sessionsRef.current) {
+      if (session.profile.id === activeRef.current) continue;
+      if (!detach(session)) break;
+    }
+    // detach 取当次渲染的闭包；仅在模式或启动状态变化时执行。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [multiInstance, started]);
   useEffect(() => {
     const show = () => {
       setProfiles(readProfiles());
@@ -543,7 +596,20 @@ export function PanelShell({ children }: PropsWithChildren) {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
-            <p className={styles.hint}>{t('connections.hint')}</p>
+            <p className={styles.hint}>
+              {t(multiInstance ? 'connections.hint' : 'connections.hint_single')}
+            </p>
+            <div className={styles.modeRow}>
+              <ToggleSwitch
+                checked={multiInstance}
+                ariaLabel={t('connections.multi_instance')}
+                onChange={setMultiInstance}
+              />
+              <div className={styles.modeText}>
+                <strong>{t('connections.multi_instance')}</strong>
+                <small>{t('connections.multi_instance_hint')}</small>
+              </div>
+            </div>
             {error && (
               <div role="alert" className={styles.error}>
                 {error}
@@ -587,14 +653,16 @@ export function PanelShell({ children }: PropsWithChildren) {
                             {t(`connections.${session?.status || 'disconnected'}`)}
                           </small>
                         </button>
-                        <ToggleSwitch
-                          checked={Boolean(session)}
-                          ariaLabel={t('connections.keep_connected', { name: profile.name })}
-                          onChange={(enabled) => {
-                            if (enabled) connect(profile, profile.managementKey || '', false);
-                            else if (session) disconnect(session);
-                          }}
-                        />
+                        {multiInstance && (
+                          <ToggleSwitch
+                            checked={Boolean(session)}
+                            ariaLabel={t('connections.keep_connected', { name: profile.name })}
+                            onChange={(enabled) => {
+                              if (enabled) connect(profile, profile.managementKey || '', false);
+                              else if (session) detach(session);
+                            }}
+                          />
+                        )}
                       </div>
                       {session?.status === 'error' && (
                         <p className={styles.hint} role="alert">

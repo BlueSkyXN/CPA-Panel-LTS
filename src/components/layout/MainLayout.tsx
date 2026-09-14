@@ -29,6 +29,7 @@ import {
   IconSidebarLogs,
   IconMaximize2,
   IconMinimize2,
+  IconNetwork,
   IconSlidersHorizontal,
   IconSidebarOauth,
   IconSidebarPlugins,
@@ -48,6 +49,7 @@ import {
 } from '@/stores';
 import { triggerHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { useMultiInstanceEnabled } from '@/hooks/useMultiInstanceEnabled';
 import { pluginsApi } from '@/services/api';
 import {
   collectPluginResourceEntries,
@@ -219,6 +221,7 @@ export function MainLayout() {
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [pluginResourceEntries, setPluginResourceEntries] = useState<PluginResourceEntry[]>([]);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [multiInstance] = useMultiInstanceEnabled();
   const contentRef = useRef<HTMLDivElement | null>(null);
   const languageMenuRef = useRef<HTMLDivElement | null>(null);
   const themeMenuRef = useRef<HTMLDivElement | null>(null);
@@ -1111,6 +1114,21 @@ export function MainLayout() {
               {headerIcons.logout}
             </Button>
           </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="multi-instance-toggle"
+            onClick={() => window.dispatchEvent(new Event('cpa-open-connections'))}
+            aria-label={t('connections.title')}
+            data-active={multiInstance || undefined}
+            title={
+              multiInstance
+                ? `${t('connections.title')} · ${t('connections.multi_instance')}`
+                : t('connections.title')
+            }
+          >
+            <IconNetwork size={16} />
+          </Button>
           <button
             ref={toolbarToggleRef}
             type="button"
@@ -1196,7 +1214,11 @@ export function MainLayout() {
               </Link>
             </div>
           )}
-          <div className="sidebar-connection-switcher"><ConnectionSwitcher collapsed={!showSidebarLabels} /></div>
+          {multiInstance && (
+            <div className="sidebar-connection-switcher">
+              <ConnectionSwitcher collapsed={!showSidebarLabels} />
+            </div>
+          )}
         </aside>
 
         <div className={`content${isLogsPage ? ' content-logs' : ''}`} ref={contentRef}>

@@ -7,7 +7,12 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { AuthState, LoginCredentials, ConnectionStatus, ServerRuntimeKind } from '@/types';
 import { STORAGE_KEY_AUTH } from '@/utils/constants';
-import { readProfiles, saveProfile, tabAuthStorage } from '@/services/storage/connectionProfiles';
+import {
+  readProfiles,
+  saveProfile,
+  tabAuthStorage,
+  writeResidentLock,
+} from '@/services/storage/connectionProfiles';
 import { apiClient } from '@/services/api/client';
 import { versionApi } from '@/services/api/version';
 import { pluginsApi } from '@/services/api/plugins';
@@ -237,7 +242,12 @@ export const useAuthStore = create<AuthStoreState>()(
       // 登出
       logout: (reason) => {
         const managed = getManagedConnection();
+        // 退出锁只记录"用户明确离开"：显式退出后本机新标签页不再按常驻连接
+        // 自动进入，直到再次登录/连接。401 引发的登出不上锁——密钥被拒不是
+        // 用户意图，保留自动进入可自愈瞬时拒答；代价仅是密钥确实失效时每个
+        // 新标签页多一次注定失败的认证请求。
         if (managed && reason !== 'unauthorized') {
+          writeResidentLock(true);
           managed.host.disconnect(managed.id, window);
           return;
         }
@@ -262,6 +272,8 @@ export const useAuthStore = create<AuthStoreState>()(
           connectionError: null
         });
         setSessionLoggedIn(false);
+        // 同上：仅显式退出上锁，401 保持自动进入以自愈瞬时拒答。
+        if (reason !== 'unauthorized') writeResidentLock(true);
         if (wasAuthenticated && !managed) window.location.reload();
       },
 

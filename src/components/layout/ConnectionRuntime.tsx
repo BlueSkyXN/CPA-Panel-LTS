@@ -93,6 +93,7 @@ export function ConnectionRuntime({ children }: PropsWithChildren) {
         })}
       </p>
       <div className={styles.fallbackSwitcher}>
+        {/* 未认证视图只出现在连接中/失败态；此切换器是密钥失效时的唯一逃生门，与模式无关。 */}
         <ConnectionSwitcher />
       </div>
     </div>

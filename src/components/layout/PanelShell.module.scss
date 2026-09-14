@@ -165,6 +165,29 @@
   color: var(--text-secondary);
   overflow-wrap: anywhere;
 }
+.modeRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 9px;
+}
+.modeText {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  strong {
+    font-size: 13px;
+  }
+  small {
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+}
 .error {
   padding: 10px;
   color: var(--error-color, #c65746);

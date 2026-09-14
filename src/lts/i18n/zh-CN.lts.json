@@ -33,7 +33,10 @@
     "disconnect_confirm": "断开「{{name}}」？该实例未保存的编辑及进行中的 OAuth 流程将丢失。",
     "off_hint": "当前实例已断开，其他已开启的实例不受影响。选择实例继续操作。",
     "retry_hint": "连接不可用，可关闭此连接后重新开启。",
-    "frame_unavailable": "无法启动此会话，请正常打开 Panel 并重新连接实例。"
+    "frame_unavailable": "无法启动此会话，请正常打开 Panel 并重新连接实例。",
+    "multi_instance": "多实例管理",
+    "multi_instance_hint": "同时保持多个实例的连接；关闭后仅保留当前实例。",
+    "hint_single": "点击名称切换连接；默认仅保留一个实例连接，可在下方开启多实例管理。"
   },
   "codex_quota": {
     "title": "Codex 额度",

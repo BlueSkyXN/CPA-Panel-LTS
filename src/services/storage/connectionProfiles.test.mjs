@@ -255,3 +255,25 @@ for (const authorized of [true, false]) {
     }
   });
 }
+
+test('multi-instance preference defaults to off and only stores an explicit opt-in', () => {
+  assert.equal(localStorage.getItem(profiles.MULTI_INSTANCE_KEY), null);
+  assert.equal(profiles.readMultiInstanceEnabled(), false);
+  profiles.writeMultiInstanceEnabled(true);
+  assert.equal(localStorage.getItem(profiles.MULTI_INSTANCE_KEY), 'true');
+  assert.equal(profiles.readMultiInstanceEnabled(), true);
+  profiles.writeMultiInstanceEnabled(false);
+  assert.equal(localStorage.getItem(profiles.MULTI_INSTANCE_KEY), null);
+  assert.equal(profiles.readMultiInstanceEnabled(), false);
+});
+
+test('resident lock defaults to off and clears on explicit re-entry', () => {
+  assert.equal(localStorage.getItem(profiles.RESIDENT_LOCK_KEY), null);
+  assert.equal(profiles.readResidentLock(), false);
+  profiles.writeResidentLock(true);
+  assert.equal(localStorage.getItem(profiles.RESIDENT_LOCK_KEY), 'true');
+  assert.equal(profiles.readResidentLock(), true);
+  profiles.writeResidentLock(false);
+  assert.equal(localStorage.getItem(profiles.RESIDENT_LOCK_KEY), null);
+  assert.equal(profiles.readResidentLock(), false);
+});

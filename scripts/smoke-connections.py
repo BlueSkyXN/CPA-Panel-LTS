@@ -102,24 +102,28 @@ def run(file_mode=False, flow_only=False):
 
         def open_connections(target=page):
             scope = active(target)
-            trigger = scope.get_by_role('button', name='Switch instance', exact=True)
+            # Multi-instance mode uses the sidebar switcher; single-instance mode keeps
+            # the header entry. Wait for either to survive early-render races.
+            trigger = scope.get_by_role('button', name='Switch instance', exact=True).or_(
+                scope.get_by_role('button', name='Instances', exact=True)
+            )
             if scope != target and target.viewport_size['width'] <= 768 and not scope.locator('.sidebar.open').count():
                 scope.locator('button.mobile-menu-btn').click()
-            trigger.click()
+            trigger.first.click()
             expect(target.get_by_role('dialog')).to_be_visible()
 
         def close_connections(target=page):
             target.get_by_role('dialog').get_by_role('button', name='Close', exact=True).click()
 
-        def add(name, port, remember=True):
-            page.get_by_role('button', name='Add connection', exact=True).click()
-            page.get_by_label('Name', exact=True).fill(name)
-            page.get_by_label('Address', exact=True).fill(f'http://127.0.0.1:{port}')
-            page.get_by_label('Environment', exact=True).fill('Test')
-            page.locator('[role="dialog"] input[type=password]').fill('synthetic-a' if port == a_port else 'synthetic-b')
+        def add(name, port, remember=True, target=page):
+            target.get_by_role('button', name='Add connection', exact=True).click()
+            target.get_by_label('Name', exact=True).fill(name)
+            target.get_by_label('Address', exact=True).fill(f'http://127.0.0.1:{port}')
+            target.get_by_label('Environment', exact=True).fill('Test')
+            target.locator('[role="dialog"] input[type=password]').fill('synthetic-a' if port == a_port else 'synthetic-b')
             if remember:
-                page.locator('[role="dialog"] label').filter(has=page.locator('input[type=checkbox]')).click()
-            page.get_by_role('button', name='Save profile', exact=True).click()
+                target.locator('[role="dialog"] label').filter(has=target.locator('input[type=checkbox]')).first.click()
+            target.get_by_role('button', name='Save profile', exact=True).click()
 
         def choose(name, target=page):
             target.get_by_role('dialog').get_by_role('button', name=re.compile('^' + name)).click()
@@ -127,6 +131,12 @@ def run(file_mode=False, flow_only=False):
         def toggle(name, target=page):
             checkbox = target.get_by_role('checkbox', name=f'Keep {name} connected', exact=True)
             target.locator('label').filter(has=checkbox).click()
+
+        def toggle_multi(checked, target=page):
+            dialog = target.get_by_role('dialog')
+            checkbox = dialog.get_by_role('checkbox', name='Multi-instance', exact=True)
+            if checkbox.is_checked() != checked:
+                dialog.locator('label').filter(has=target.get_by_role('checkbox', name='Multi-instance', exact=True)).first.click()
 
         def current(name, target=page):
             expect(target.locator('iframe[data-active=true]')).to_have_attribute('title', name)
@@ -138,6 +148,8 @@ def run(file_mode=False, flow_only=False):
         open_connections()
         add('Core A', a_port)
         add('Core B', b_port)
+        # Multi-instance management is opt-in; the concurrent-session flows below need it on.
+        toggle_multi(True)
         choose('Core A')
         current('Core A')
         expect(frame('Core A').get_by_role('button', name='Switch instance', exact=True)).to_contain_text('Connected')
@@ -367,10 +379,67 @@ def run(file_mode=False, flow_only=False):
         page.reload()
         expect(page.locator('iframe[title="Temporary"]')).to_have_count(0)
         expect(page.get_by_text('This instance is disconnected.', exact=False)).to_be_visible()
+
+        # A fresh panel defaults to single instance: it auto-enters the first remembered
+        # instance and connects a chosen instance by replacing the resident one.
+        fresh = browser.new_context(locale='en-US', viewport={'width': 1440, 'height': 1000})
+        fresh.add_init_script("localStorage.setItem('cli-proxy-language', JSON.stringify({state:{language:'en'},version:0}));")
+        fp = fresh.new_page()
+        fp.set_default_timeout(15000)
+        fp.goto(app + '#/login')
+        open_connections(fp)
+        add('Solo', a_port, target=fp)
+        choose('Solo', fp)
+        current('Solo', fp)
+        sp = fresh.new_page()
+        sp.set_default_timeout(15000)
+        sp.goto(app + '#/login')
+        current('Solo', sp)
+        expect(sp.locator('iframe')).to_have_count(1)
+        solo = frame('Solo', sp)
+        assert not solo.get_by_role('button', name='Switch instance', exact=True).count(), 'single-instance mode must hide the sidebar switcher'
+        # A rejected stored key must leave the escape hatch visible in the failed frame.
+        a.reject_config = True
+        sp.reload()
+        failed = frame('Solo', sp)
+        expect(failed.get_by_role('button', name='Switch instance', exact=True)).to_be_visible(timeout=25000)
+        a.reject_config = False
+        sp.reload()
+        current('Solo', sp)
+
+        # Logout is the inverse of login: new tabs stay on the login page until the
+        # user logs in or reconnects an instance, which clears the resident lock.
+        solo_sp = frame('Solo', sp)
+        solo_sp.locator('.toolbar-toggle').click()
+        solo_sp.get_by_role('button', name='Logout', exact=True).click()
+        expect(sp.locator('iframe')).to_have_count(0)
+        expect(sp.get_by_text('This instance is disconnected.', exact=False)).to_be_visible()
+        locked = fresh.new_page()
+        locked.set_default_timeout(15000)
+        locked.goto(app + '#/login')
+        expect(locked.locator('iframe')).to_have_count(0)
+        expect(locked.get_by_role('button', name='Login', exact=True)).to_be_visible()
+        open_connections(sp)
+        choose('Solo', sp)
+        current('Solo', sp)
+        sp2 = fresh.new_page()
+        sp2.set_default_timeout(15000)
+        sp2.goto(app + '#/login')
+        current('Solo', sp2)
+        locked.close()
+        sp2.close()
+        open_connections(sp)
+        assert not sp.get_by_role('dialog').get_by_role('checkbox', name='Multi-instance', exact=True).is_checked()
+        assert not sp.get_by_role('checkbox', name='Keep Solo connected', exact=True).count()
+        add('Second', b_port, target=sp)
+        choose('Second', sp)
+        current('Second', sp)
+        expect(sp.locator('iframe')).to_have_count(1)
+        fresh.close()
         assert not errors, errors
         browser.close()
     mode = 'file' if file_mode else 'HTTP'
-    print(f'Connections smoke passed ({mode}): concurrent sessions, distinct credentials, independent toggles, failed/cancelled target, warm A-B-A, drafts, inactive disconnect guard, in-flight write protection, pending read-only POST, 401 isolation, tab restore, transient credentials, desktop/mobile.')
+    print(f'Connections smoke passed ({mode}): resident auto-enter, opt-in multi-instance, single-instance replacement, concurrent sessions, distinct credentials, independent toggles, failed/cancelled target, warm A-B-A, drafts, inactive disconnect guard, in-flight write protection, pending read-only POST, 401 isolation, tab restore, transient credentials, desktop/mobile.')
 
 
 if __name__ == '__main__':

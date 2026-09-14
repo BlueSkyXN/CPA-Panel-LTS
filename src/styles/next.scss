@@ -97,6 +97,11 @@
   background: var(--error-color);
 }
 
+.multi-instance-toggle[data-active] {
+  color: var(--primary-color);
+  background: color-mix(in srgb, var(--primary-color) 12%, transparent);
+}
+
 @keyframes connection-pill-pulse {
   0%,
   100% {

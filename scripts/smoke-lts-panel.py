@@ -5752,7 +5752,8 @@ def run_toolbar_and_usage_range_smoke(page: Any) -> None:
     original_viewport = page.viewport_size
     for width in [1440, 390]:
         page.set_viewport_size({'width': width, 'height': 900})
-        if page.locator('.header-actions').bounding_box()['width'] > 64:
+        # Collapsed state keeps only the permanent instance entry plus the toolbar toggle.
+        if page.locator('.header-actions').bounding_box()['width'] > 104:
             raise AssertionError('Collapsed toolbar still occupies too much space')
         expand_header_toolbar(page)
         controls.wait_for(state='visible')
