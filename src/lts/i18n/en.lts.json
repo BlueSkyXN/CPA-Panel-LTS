@@ -33,7 +33,10 @@
     "disconnect_confirm": "Disconnect {{name}}? Its unsaved edits and active OAuth flow will be discarded.",
     "off_hint": "This instance is disconnected. Other enabled instances stay connected. Choose an instance to continue.",
     "retry_hint": "Connection unavailable. Turn this connection off and on to retry.",
-    "frame_unavailable": "This session cannot start. Open the Panel normally and reconnect the instance."
+    "frame_unavailable": "This session cannot start. Open the Panel normally and reconnect the instance.",
+    "multi_instance": "Multi-instance",
+    "multi_instance_hint": "Keep several instances connected at once; when off, only the current instance stays connected.",
+    "hint_single": "Click a name to switch connections. Only one instance stays connected unless you enable multi-instance below."
   },
   "codex_quota": {
     "title": "Codex Quota",

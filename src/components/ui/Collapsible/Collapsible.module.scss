@@ -49,6 +49,12 @@
   font-weight: 400;
 }
 
+.summaryAction {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
 .chevron {
   width: 16px;
   height: 16px;

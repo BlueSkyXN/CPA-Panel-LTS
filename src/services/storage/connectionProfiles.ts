@@ -6,6 +6,8 @@ import { getManagedConnection, isConnectionFrame } from '@/services/connectionRu
 
 export const PROFILES_KEY = 'cpa-connection-profiles-v1';
 export const TAB_SESSION_KEY = 'cpa-tab-session-v1';
+export const MULTI_INSTANCE_KEY = 'cpa-multi-instance-v1';
+export const RESIDENT_LOCK_KEY = 'cpa-resident-lock-v1';
 const HANDOFF_KEY = 'cpa-connection-handoff-v1';
 
 export interface ConnectionProfile {
@@ -79,6 +81,45 @@ export function deleteProfile(id: string): void {
     PROFILES_KEY,
     readProfiles().filter((item) => item.id !== id)
   );
+}
+
+/** 多实例管理默认关闭；开启状态只记录在本机 localStorage，不含任何敏感数据。 */
+export function readMultiInstanceEnabled(): boolean {
+  try {
+    return localStorage.getItem(MULTI_INSTANCE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function writeMultiInstanceEnabled(enabled: boolean): void {
+  try {
+    if (enabled) localStorage.setItem(MULTI_INSTANCE_KEY, 'true');
+    else localStorage.removeItem(MULTI_INSTANCE_KEY);
+  } catch {
+    /* 存储不可用时保持本会话默认。 */
+  }
+}
+
+/**
+ * 退出锁定：显式退出登录后，本机新标签页不再按常驻连接自动进入，
+ * 直到用户再次登录或主动连接实例。只记录布尔标记，不含任何敏感数据。
+ */
+export function readResidentLock(): boolean {
+  try {
+    return localStorage.getItem(RESIDENT_LOCK_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function writeResidentLock(locked: boolean): void {
+  try {
+    if (locked) localStorage.setItem(RESIDENT_LOCK_KEY, 'true');
+    else localStorage.removeItem(RESIDENT_LOCK_KEY);
+  } catch {
+    /* 存储不可用时保持本会话默认。 */
+  }
 }
 
 /** 先成功写入档案，再清理旧认证存储；不把一个标签页的选择广播给其他标签页。 */

@@ -12,18 +12,20 @@ status_definitions:
 features:
   - id: multi-instance-connections
     status: lts-maintained
-    reason: Independent same-origin runtime documents preserve per-instance pages, drafts, and clients while sidebar switching keeps other enabled sessions connected.
+    reason: Independent same-origin runtime documents preserve per-instance pages, drafts, and clients. Multi-instance management is opt-in and off by default, so the panel auto-enters the only or first remembered instance with a resident connection, and keeping several instances connected requires enabling the dedicated toggle.
     panel_files:
       - src/components/layout/PanelShell.tsx
       - src/components/layout/PanelShell.module.scss
       - src/components/layout/ConnectionSwitcher.tsx
       - src/components/layout/ConnectionRuntime.tsx
+      - src/components/layout/MainLayout.tsx
       - src/services/connectionRuntime.ts
       - src/services/storage/connectionProfiles.ts
       - src/services/storage/connectionProfiles.test.mjs
       - src/services/connectionSession.ts
       - src/services/api/connectionProbe.ts
       - src/stores/useAuthStore.ts
+      - src/hooks/useMultiInstanceEnabled.ts
       - scripts/smoke-connections.py
     required_markers:
       - getManagedConnection
@@ -33,6 +35,8 @@ features:
       - safeSessionPath
       - data-connection-frame
       - keep_connected
+      - readMultiInstanceEnabled
+      - useMultiInstanceEnabled
   - id: full-usage-statistics
     status: protected
     reason: Complete usage statistics are the primary CPA-Panel-LTS protected delta, including provider-sourced local pricing that preserves unsupported tiers as incomplete coverage.

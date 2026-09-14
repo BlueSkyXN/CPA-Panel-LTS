@@ -97,6 +97,11 @@
   background: var(--error-color);
 }
 
+.multi-instance-toggle[data-active] {
+  color: var(--primary-color);
+  background: color-mix(in srgb, var(--primary-color) 12%, transparent);
+}
+
 @keyframes connection-pill-pulse {
   0%,
   100% {
@@ -556,6 +561,12 @@
   display: none;
 }
 
+.tower-runtime-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 6px;
+}
+
 .tower-runtime-label {
   padding: 0 10px 6px;
   font-family: $font-mono;
@@ -567,15 +578,13 @@
 
 .tower-runtime-item {
   min-width: 0;
-  padding: 6px 10px;
+  padding: 4px 8px;
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
+  flex-direction: column;
+  gap: 2px;
   border-radius: 8px;
   color: inherit;
   text-decoration: none;
-  white-space: nowrap;
 
   span {
     font-size: 10px;
@@ -586,9 +595,10 @@
   }
 
   strong {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-family: $font-mono;
     font-size: 11px;
     font-weight: 700;
@@ -596,10 +606,13 @@
   }
 
   i {
+    display: inline-block;
     width: 6px;
     height: 6px;
+    margin-right: 5px;
     border-radius: 50%;
     background: var(--error-color);
+    vertical-align: middle;
   }
 
   &[data-status='connected'] i {
@@ -657,6 +670,10 @@
 
   .sidebar.collapsed .tower-runtime-bar {
     display: flex;
+  }
+
+  .sidebar.collapsed .tower-runtime-grid {
+    grid-template-columns: 1fr;
   }
 }
 

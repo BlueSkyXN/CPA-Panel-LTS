@@ -33,7 +33,10 @@
     "disconnect_confirm": "中斷「{{name}}」連線？此實例未儲存的編輯及進行中的 OAuth 流程將遺失。",
     "off_hint": "目前實例已中斷連線，其他已開啟的實例不受影響。選擇實例繼續操作。",
     "retry_hint": "連線無法使用，可關閉此連線後重新開啟。",
-    "frame_unavailable": "無法啟動此工作階段，請正常開啟 Panel 並重新連線。"
+    "frame_unavailable": "無法啟動此工作階段，請正常開啟 Panel 並重新連線。",
+    "multi_instance": "多實例管理",
+    "multi_instance_hint": "同時保持多個實例的連線；關閉後僅保留目前實例。",
+    "hint_single": "點擊名稱切換連線；預設僅保留一個實例連線，可在下方開啟多實例管理。"
   },
   "codex_quota": {
     "title": "Codex 配額",

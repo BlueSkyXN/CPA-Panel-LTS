@@ -647,19 +647,108 @@ export function RequestEventsDetailsCard({
     [i18n.language]
   );
 
-  const [modelFilter, setModelFilter] = useState(ALL_FILTER);
-  const [requestKeyFilter, setRequestKeyFilter] = useState(ALL_FILTER);
-  const [sourceFilter, setSourceFilter] = useState(ALL_FILTER);
-  const [authIndexFilter, setAuthIndexFilter] = useState(ALL_FILTER);
-  const [serviceTierFilter, setServiceTierFilter] = useState(ALL_FILTER);
-  const [reasoningEffortFilter, setReasoningEffortFilter] = useState(ALL_FILTER);
-  const [resultFilter, setResultFilter] = useState(ALL_FILTER);
-  const [timeRangeFilter, setTimeRangeFilter] = useState<RequestEventTimeRange>('page');
+  // 筛选状态在空结果响应触发的运行区重建后仍需存活，否则用户会看到筛选被
+  // 静默清空、"筛选只剩当前页数据"的假象；与页面级 range 的 draft 保留策略一致。
+  const REQUEST_EVENT_FILTERS_STORAGE_KEY = 'cpa-request-event-filters-v1';
+  const loadPersistedFilters = (): Record<string, string> => {
+    try {
+      const raw = sessionStorage.getItem(REQUEST_EVENT_FILTERS_STORAGE_KEY);
+      const parsed: unknown = raw ? JSON.parse(raw) : null;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const entries = Object.entries(parsed as Record<string, unknown>);
+        return Object.fromEntries(
+          entries.filter((entry) => typeof entry[1] === 'string') as [string, string][]
+        );
+      }
+    } catch {
+      /* 损坏的记录不影响默认筛选。 */
+    }
+    return {};
+  };
+  // 惰性初始化：useRef 的参数每次渲染都会求值，直接传入会在时钟 tick 等
+  // 重渲染里反复读 sessionStorage。
+  const persistedFiltersRef = useRef<Record<string, string> | null>(null);
+  if (persistedFiltersRef.current === null) persistedFiltersRef.current = loadPersistedFilters();
+  const persistedFilters = persistedFiltersRef;
+  const persistFilter = (name: string, value: string) => {
+    persistedFilters.current = { ...persistedFilters.current, [name]: value };
+    try {
+      sessionStorage.setItem(
+        REQUEST_EVENT_FILTERS_STORAGE_KEY,
+        JSON.stringify(persistedFilters.current)
+      );
+    } catch {
+      /* 存储不可用时仅保留内存中的筛选。 */
+    }
+  };
+  const persisted = persistedFiltersRef.current ?? {};
+  const [modelFilter, setModelFilter] = useState(persisted.model ?? ALL_FILTER);
+  const [requestKeyFilter, setRequestKeyFilter] = useState(persisted.requestKey ?? ALL_FILTER);
+  const [sourceFilter, setSourceFilter] = useState(persisted.source ?? ALL_FILTER);
+  const [authIndexFilter, setAuthIndexFilter] = useState(persisted.authIndex ?? ALL_FILTER);
+  const [serviceTierFilter, setServiceTierFilter] = useState(
+    persisted.serviceTier ?? ALL_FILTER
+  );
+  const [reasoningEffortFilter, setReasoningEffortFilter] = useState(
+    persisted.reasoningEffort ?? ALL_FILTER
+  );
+  const [resultFilter, setResultFilter] = useState(persisted.result ?? ALL_FILTER);
+  const [timeRangeFilter, setTimeRangeFilterBase] = useState<RequestEventTimeRange>(
+    isRequestEventTimeRange(persisted.timeRange) ? persisted.timeRange : 'page'
+  );
+  const setTimeRangeFilter = (value: RequestEventTimeRange) => {
+    setTimeRangeFilterBase(value);
+    persistFilter('timeRange', value);
+  };
   const [timeRangeClockMs, setTimeRangeClockMs] = useState(0);
-  const [cacheFilter, setCacheFilter] = useState(ALL_FILTER);
-  const [numericMetricFilter, setNumericMetricFilter] = useState(ALL_FILTER);
+  const [cacheFilter, setCacheFilter] = useState(persisted.cache ?? ALL_FILTER);
+  const [numericMetricFilter, setNumericMetricFilter] = useState(
+    isRequestEventNumericMetricId(persisted.numericMetric) ? persisted.numericMetric : ALL_FILTER
+  );
   const [numericMinimumFilter, setNumericMinimumFilter] = useState('');
   const [numericMaximumFilter, setNumericMaximumFilter] = useState('');
+  // 各筛选 setter 统一持久化；载荷是枚举值或原始值，不含任何敏感数据。
+  const setModelFilterPersisted = (value: string) => {
+    setModelFilter(value);
+    persistFilter('model', value);
+  };
+  // request key 的提交函数在选项构建之后定义（commitRequestKeyFilter），
+  // 以便同时持久化解析出的 api 字符串与展示标签。
+  const setSourceFilterPersisted = (value: string) => {
+    setSourceFilter(value);
+    persistFilter('source', value);
+  };
+  const setAuthIndexFilterPersisted = (value: string) => {
+    setAuthIndexFilter(value);
+    persistFilter('authIndex', value);
+  };
+  const setServiceTierFilterPersisted = (value: string) => {
+    setServiceTierFilter(value);
+    persistFilter('serviceTier', value);
+  };
+  const setReasoningEffortFilterPersisted = (value: string) => {
+    setReasoningEffortFilter(value);
+    persistFilter('reasoningEffort', value);
+  };
+  const setResultFilterPersisted = (value: string) => {
+    setResultFilter(value);
+    persistFilter('result', value);
+  };
+  const setCacheFilterPersisted = (value: string) => {
+    setCacheFilter(value);
+    persistFilter('cache', value);
+  };
+  // 记住"值→展示标签"，窗口收窄导致选项消失时保持触发器文本可读。
+  // 上次会话持久化的标签作为初始种子，新挂载在 options 未就绪时也能显示可读文本。
+  const requestKeyLabelSeed = useRef(
+    new Map<string, string>(
+      persisted.requestKeyLabel && persisted.requestKey !== ALL_FILTER
+        ? [[persisted.requestKey, persisted.requestKeyLabel]]
+        : []
+    )
+  );
+  const requestKeyLabelMemory = useRef(new Map<string, string>());
+  const sourceLabelMemory = useRef(new Map<string, string>());
   const [numericFilterOpen, setNumericFilterOpen] = useState(false);
   const [numericFilterPresentation, setNumericFilterPresentation] = useState<
     'popover' | 'sheet' | null
@@ -936,10 +1025,22 @@ export function RequestEventsDetailsCard({
   }, [timeRangeFilter, pageTimeRange, pageTimeRangeCustom, referenceNowMs, timeRangeClockMs]);
   const remote = useUsageQueryDetails(querySession, queryWindow ? { from_ms: queryWindow.startMs, to_ms: queryWindow.endMs } : {}, (options) => {
     const filter: UsageQueryFilter = {};
-    if (modelFilter !== ALL_FILTER && options?.models.includes(modelFilter)) filter.model = modelFilter;
+    // 筛选是用户意图：窗口收窄后 options 可能不再包含已选值（该窗口内无流量）。
+    // 此时仍然下推，由服务端返回真实的 0 条；丢掉条件会造成"筛选失效、
+    // 只剩当前页数据"的假象。
+    if (modelFilter !== ALL_FILTER) filter.model = modelFilter;
     if (requestKeyFilter !== ALL_FILTER) {
       const index = Number(requestKeyFilter.replace('request-identity-', ''));
-      if (Number.isInteger(index) && options?.apis[index] !== undefined) filter.api = options.apis[index];
+      if (Number.isInteger(index)) {
+        // options 未就绪或该下标已不在当前窗口时，优先用上次会话解析出的
+        // api 字符串下推；两者都没有才退回占位符，保证条件不被丢弃。
+        const persistedNow = persistedFilters.current;
+        const rememberedApi =
+          persistedNow !== null && persistedNow.requestKey === requestKeyFilter
+            ? persistedNow.requestKeyValue
+            : '';
+        filter.api = options?.apis[index] ?? (rememberedApi || `__unresolved-${requestKeyFilter}`);
+      }
     }
     if (sourceFilter !== ALL_FILTER) {
       const identities = options?.identities.filter((id) => {
@@ -947,13 +1048,23 @@ export function RequestEventsDetailsCard({
         const info = resolveSourceDisplay(source, id.auth_index, sourceInfoMap, authFileMap);
         return (info.identityKey ?? `source:${source || info.displayName}`) === sourceFilter;
       });
-      if (identities?.length) filter.identities = identities;
+      if (identities?.length) {
+        filter.identities = identities;
+      } else {
+        // 窗口收窄后该来源在此窗口没有流量；按 identityKey 前缀反解出原始值
+        // 继续下推，让服务端返回真实的 0 条，而不是丢掉来源条件。
+        if (sourceFilter.startsWith('auth:')) {
+          filter.identities = [{ source: '', auth_index: sourceFilter.slice(5) }];
+        } else if (sourceFilter.startsWith('source:')) {
+          filter.identities = [{ source: sourceFilter.slice(7), auth_index: '' }];
+        }
+      }
     }
-    if (authIndexFilter !== ALL_FILTER && options?.auth_indices.includes(authIndexFilter === '-' ? '' : authIndexFilter)) filter.auth_index = authIndexFilter === '-' ? '' : authIndexFilter;
+    if (authIndexFilter !== ALL_FILTER) filter.auth_index = authIndexFilter === '-' ? '' : authIndexFilter;
     if (serviceTierFilter !== ALL_FILTER) filter.tier = serviceTierFilter === SERVICE_TIER_FAST_FILTER ? 'fast' : 'std';
     if (reasoningEffortFilter !== ALL_FILTER) {
       const effort = reasoningEffortFilter === REASONING_EFFORT_LEGACY_UNKNOWN_FILTER ? '' : decodeURIComponent(reasoningEffortFilter.slice(REASONING_EFFORT_RAW_FILTER_PREFIX.length));
-      if (options?.efforts.some((value) => value.toLowerCase() === effort)) filter.effort = effort;
+      filter.effort = effort;
     }
     if (resultFilter !== ALL_FILTER) filter.failed = resultFilter === RESULT_FAILED_FILTER;
     if (cacheFilter !== ALL_FILTER) filter.cached = cacheFilter === CACHE_PRESENT_FILTER;
@@ -1316,43 +1427,87 @@ export function RequestEventsDetailsCard({
   const modelOptions = useMemo(
     () => [
       { value: ALL_FILTER, label: t('usage_stats.filter_all') },
+      // 已选值不随窗口收窄消失：丢失选项会让用户以为筛选被重置，
+      // 实际上下推仍在生效，窗口内无匹配时显示真实的 0 条。
+      ...(modelFilter !== ALL_FILTER ? [{ value: modelFilter, label: modelFilter }] : []),
       ...Array.from(new Set(querySession ? remote.options?.models ?? [] : timeScopedRows.map((row) => row.model))).map((model) => ({
         value: model,
         label: model,
       })),
     ],
-    [t, timeScopedRows, querySession, remote.options]
+    [t, timeScopedRows, querySession, remote.options, modelFilter]
   );
 
   const requestKeyOptions = useMemo(() => {
     const optionMap = new Map<string, string>();
     if (querySession) {
+      // 选项只来自服务端 options（覆盖整个查询窗口）：本地页行值可能与服务端
+      // 规范化键不一致，选中后无法下推，会退化为当前页本地过滤。
       (remote.options?.apis ?? []).forEach((api, index) => {
         const configured = requestApiKeys.findIndex((key) => key.trim() === api.trim());
         const label = configured >= 0 ? t('usage_stats.request_events_request_key_configured', { index: configured + 1, key: maskRequestKey(api) }) : REQUEST_IDENTITY_ENDPOINT_REGEX.test(api) ? t('usage_stats.request_events_request_identity_endpoint', { value: api }) : !api || api.toLowerCase() === 'unknown' ? t('usage_stats.request_events_request_identity_unknown') : t('usage_stats.request_events_request_identity_caller', { value: maskRequestKey(api) });
         optionMap.set(`request-identity-${index}`, label);
       });
+    } else {
+      timeScopedRows.forEach((row) => {
+        if (!optionMap.has(row.requestIdentityToken)) {
+          optionMap.set(row.requestIdentityToken, row.requestIdentityLabel);
+        }
+      });
     }
-    timeScopedRows.forEach((row) => {
-      if (!optionMap.has(row.requestIdentityToken)) {
-        optionMap.set(row.requestIdentityToken, row.requestIdentityLabel);
-      }
-    });
+    requestKeyLabelMemory.current = new Map(
+      Array.from(optionMap.entries()).filter(([value]) => value !== ALL_FILTER)
+    );
+    // 已选值不随窗口收窄消失；沿用记忆中的标签（含上次会话的种子），
+    // 避免触发器显示成原始值。
+    if (requestKeyFilter !== ALL_FILTER && !optionMap.has(requestKeyFilter))
+      optionMap.set(
+        requestKeyFilter,
+        requestKeyLabelMemory.current.get(requestKeyFilter) ??
+          requestKeyLabelSeed.current.get(requestKeyFilter) ??
+          requestKeyFilter
+      );
 
     return [
       { value: ALL_FILTER, label: t('usage_stats.filter_all') },
       ...Array.from(optionMap.entries()).map(([value, label]) => ({ value, label })),
     ];
-  }, [t, timeScopedRows, querySession, remote.options, requestApiKeys]);
+  }, [t, timeScopedRows, querySession, remote.options, requestApiKeys, requestKeyFilter]);
+  // 选中 request key 时同步记下解析出的 api 字符串与标签；下次挂载在 options
+  // 未就绪或窗口内已无该下标时，可直接下推真实值并保持触发器文本可读，
+  // 省掉一次注定为空的占位查询。
+  const commitRequestKeyFilter = (value: string) => {
+    setRequestKeyFilter(value);
+    persistFilter('requestKey', value);
+    if (value === ALL_FILTER) {
+      persistFilter('requestKeyValue', '');
+      persistFilter('requestKeyLabel', '');
+      return;
+    }
+    const index = Number(value.replace('request-identity-', ''));
+    const resolved = Number.isInteger(index) ? remote.options?.apis[index] : undefined;
+    persistFilter('requestKeyValue', resolved ?? '');
+    persistFilter(
+      'requestKeyLabel',
+      requestKeyOptions.find((option) => option.value === value)?.label ?? ''
+    );
+  };
 
   const sourceOptions = useMemo(() => {
     const optionMap = new Map<string, string>();
     if (querySession) remoteSources.forEach((source) => optionMap.set(source.value, source.label));
-    timeScopedRows.forEach((row) => {
-      if (!optionMap.has(row.sourceKey)) {
-        optionMap.set(row.sourceKey, row.source);
-      }
-    });
+    else
+      timeScopedRows.forEach((row) => {
+        if (!optionMap.has(row.sourceKey)) {
+          optionMap.set(row.sourceKey, row.source);
+        }
+      });
+    sourceLabelMemory.current = new Map(
+      Array.from(optionMap.entries()).filter(([value]) => value !== ALL_FILTER)
+    );
+    // 已选值不随窗口收窄消失；沿用记忆中的标签，避免触发器显示成原始值。
+    if (sourceFilter !== ALL_FILTER && !optionMap.has(sourceFilter))
+      optionMap.set(sourceFilter, sourceLabelMemory.current.get(sourceFilter) ?? sourceFilter);
 
     return [
       { value: ALL_FILTER, label: t('usage_stats.filter_all') },
@@ -1361,17 +1516,18 @@ export function RequestEventsDetailsCard({
         label,
       })),
     ];
-  }, [t, timeScopedRows, querySession, remoteSources]);
+  }, [t, timeScopedRows, querySession, remoteSources, sourceFilter]);
 
   const authIndexOptions = useMemo(
     () => [
       { value: ALL_FILTER, label: t('usage_stats.filter_all') },
+      ...(authIndexFilter !== ALL_FILTER ? [{ value: authIndexFilter, label: authIndexFilter }] : []),
       ...Array.from(new Set(querySession ? (remote.options?.auth_indices ?? []).map((id) => id || '-') : timeScopedRows.map((row) => row.authIndex))).map((authIndex) => ({
         value: authIndex,
         label: authIndex,
       })),
     ],
-    [t, timeScopedRows, querySession, remote.options]
+    [t, timeScopedRows, querySession, remote.options, authIndexFilter]
   );
 
   const serviceTierOptions = useMemo(
@@ -1385,12 +1541,22 @@ export function RequestEventsDetailsCard({
 
   const reasoningEffortOptions = useMemo(() => {
     const optionMap = new Map<string, string>();
-    if (querySession) (remote.options?.efforts ?? []).forEach((effort) => optionMap.set(getReasoningEffortFilterValue(effort || null), effort || t('usage_stats.request_events_effort_legacy_unknown')));
-    timeScopedRows.forEach((row) => {
-      if (!optionMap.has(row.reasoningEffortFilterValue)) {
-        optionMap.set(row.reasoningEffortFilterValue, row.reasoningEffortLabel);
-      }
-    });
+    if (querySession)
+      // 同上：query 模式只提供可下推的服务端值，避免选中后只能过滤当前页。
+      (remote.options?.efforts ?? []).forEach((effort) => optionMap.set(getReasoningEffortFilterValue(effort || null), effort || t('usage_stats.request_events_effort_legacy_unknown')));
+    else
+      timeScopedRows.forEach((row) => {
+        if (!optionMap.has(row.reasoningEffortFilterValue)) {
+          optionMap.set(row.reasoningEffortFilterValue, row.reasoningEffortLabel);
+        }
+      });
+    if (reasoningEffortFilter !== ALL_FILTER && !optionMap.has(reasoningEffortFilter)) {
+      const legacy = reasoningEffortFilter === REASONING_EFFORT_LEGACY_UNKNOWN_FILTER;
+      const raw = legacy
+        ? null
+        : decodeURIComponent(reasoningEffortFilter.slice(REASONING_EFFORT_RAW_FILTER_PREFIX.length));
+      optionMap.set(reasoningEffortFilter, raw || t('usage_stats.request_events_effort_legacy_unknown'));
+    }
 
     return [
       { value: ALL_FILTER, label: t('usage_stats.filter_all') },
@@ -1398,7 +1564,7 @@ export function RequestEventsDetailsCard({
         .sort(([, left], [, right]) => left.localeCompare(right, i18n.language))
         .map(([value, label]) => ({ value, label })),
     ];
-  }, [i18n.language, t, timeScopedRows, querySession, remote.options]);
+  }, [i18n.language, t, timeScopedRows, querySession, remote.options, reasoningEffortFilter]);
 
   const resultOptions = useMemo(
     () => [
@@ -1545,18 +1711,59 @@ export function RequestEventsDetailsCard({
     [numericMetricOptions]
   );
 
-  const effectiveModelFilter = modelOptionSet.has(modelFilter) ? modelFilter : ALL_FILTER;
-  const effectiveRequestKeyFilter = requestKeyOptionSet.has(requestKeyFilter)
+  // 筛选是用户意图：窗口收窄后，已选值可能不在当前窗口的 options 里（例如
+  // All Time 选中 gpt-b 后切到 24h）。此时不能把筛选静默重置为 All，否则
+  // 下推条件被丢弃，用户会看到"筛选只作用于当前页"的假象。把仍在生效的
+  // 已选值并入选项集合，保持下推诚实——窗口内无匹配就是真实的 0 条。
+  const withSelection = (set: Set<string>, value: string): Set<string> => {
+    if (value === ALL_FILTER || set.has(value)) return set;
+    const next = new Set(set);
+    next.add(value);
+    return next;
+  };
+  const modelOptionSetWithSelection = useMemo(
+    () => withSelection(modelOptionSet, modelFilter),
+    [modelOptionSet, modelFilter]
+  );
+  const requestKeyOptionSetWithSelection = useMemo(
+    () => withSelection(requestKeyOptionSet, requestKeyFilter),
+    [requestKeyOptionSet, requestKeyFilter]
+  );
+  const sourceOptionSetWithSelection = useMemo(
+    () => withSelection(sourceOptionSet, sourceFilter),
+    [sourceOptionSet, sourceFilter]
+  );
+  const authIndexOptionSetWithSelection = useMemo(
+    () => withSelection(authIndexOptionSet, authIndexFilter),
+    [authIndexOptionSet, authIndexFilter]
+  );
+  const serviceTierOptionSetWithSelection = useMemo(
+    () => withSelection(serviceTierOptionSet, serviceTierFilter),
+    [serviceTierOptionSet, serviceTierFilter]
+  );
+  const reasoningEffortOptionSetWithSelection = useMemo(
+    () => withSelection(reasoningEffortOptionSet, reasoningEffortFilter),
+    [reasoningEffortOptionSet, reasoningEffortFilter]
+  );
+
+  const effectiveModelFilter = modelOptionSetWithSelection.has(modelFilter)
+    ? modelFilter
+    : ALL_FILTER;
+  const effectiveRequestKeyFilter = requestKeyOptionSetWithSelection.has(requestKeyFilter)
     ? requestKeyFilter
     : ALL_FILTER;
-  const effectiveSourceFilter = sourceOptionSet.has(sourceFilter) ? sourceFilter : ALL_FILTER;
-  const effectiveAuthIndexFilter = authIndexOptionSet.has(authIndexFilter)
+  const effectiveSourceFilter = sourceOptionSetWithSelection.has(sourceFilter)
+    ? sourceFilter
+    : ALL_FILTER;
+  const effectiveAuthIndexFilter = authIndexOptionSetWithSelection.has(authIndexFilter)
     ? authIndexFilter
     : ALL_FILTER;
-  const effectiveServiceTierFilter = serviceTierOptionSet.has(serviceTierFilter)
+  const effectiveServiceTierFilter = serviceTierOptionSetWithSelection.has(serviceTierFilter)
     ? serviceTierFilter
     : ALL_FILTER;
-  const effectiveReasoningEffortFilter = reasoningEffortOptionSet.has(reasoningEffortFilter)
+  const effectiveReasoningEffortFilter = reasoningEffortOptionSetWithSelection.has(
+    reasoningEffortFilter
+  )
     ? reasoningEffortFilter
     : ALL_FILTER;
   const effectiveNumericMetricFilter = numericMetricOptionSet.has(numericMetricFilter)
@@ -1763,6 +1970,7 @@ export function RequestEventsDetailsCard({
   const handleApplyNumericFilter = () => {
     if (draftNumericFilterInvalid || !draftNumericFilterHasBounds) return;
     setNumericMetricFilter(draftNumericMetricFilter);
+    persistFilter('numericMetric', draftNumericMetricFilter);
     setNumericMinimumFilter(draftNumericMinimumFilter.trim());
     setNumericMaximumFilter(draftNumericMaximumFilter.trim());
     closeNumericFilter();
@@ -1770,6 +1978,7 @@ export function RequestEventsDetailsCard({
 
   const handleClearNumericFilter = () => {
     setNumericMetricFilter(ALL_FILTER);
+    persistFilter('numericMetric', ALL_FILTER);
     setNumericMinimumFilter('');
     setNumericMaximumFilter('');
     setDraftNumericMetricFilter('totalTokens');
@@ -1796,6 +2005,12 @@ export function RequestEventsDetailsCard({
     setDraftNumericMaximumFilter('');
     setNumericFilterOpen(false);
     setNumericFilterPresentation(null);
+    persistedFilters.current = {};
+    try {
+      sessionStorage.removeItem(REQUEST_EVENT_FILTERS_STORAGE_KEY);
+    } catch {
+      /* 存储不可用时忽略。 */
+    }
   };
 
   const stableVisibleColumnCount = REQUEST_EVENT_COLUMN_IDS.reduce(
@@ -2253,7 +2468,7 @@ export function RequestEventsDetailsCard({
           <Select
             value={effectiveModelFilter}
             options={modelOptions}
-            onChange={setModelFilter}
+            onChange={setModelFilterPersisted}
             className={styles.requestEventsSelect}
             ariaLabel={t('usage_stats.request_events_filter_model')}
             fullWidth={false}
@@ -2266,7 +2481,7 @@ export function RequestEventsDetailsCard({
           <Select
             value={effectiveRequestKeyFilter}
             options={requestKeyOptions}
-            onChange={setRequestKeyFilter}
+            onChange={commitRequestKeyFilter}
             className={styles.requestEventsSelect}
             ariaLabel={t('usage_stats.request_events_filter_request_key')}
             fullWidth={false}
@@ -2279,7 +2494,7 @@ export function RequestEventsDetailsCard({
           <Select
             value={effectiveSourceFilter}
             options={sourceOptions}
-            onChange={setSourceFilter}
+            onChange={setSourceFilterPersisted}
             className={styles.requestEventsSelect}
             ariaLabel={t('usage_stats.request_events_filter_source')}
             fullWidth={false}
@@ -2292,7 +2507,7 @@ export function RequestEventsDetailsCard({
           <Select
             value={effectiveAuthIndexFilter}
             options={authIndexOptions}
-            onChange={setAuthIndexFilter}
+            onChange={setAuthIndexFilterPersisted}
             className={styles.requestEventsSelect}
             ariaLabel={t('usage_stats.request_events_filter_auth_index')}
             fullWidth={false}
@@ -2305,7 +2520,7 @@ export function RequestEventsDetailsCard({
           <Select
             value={effectiveServiceTierFilter}
             options={serviceTierOptions}
-            onChange={setServiceTierFilter}
+            onChange={setServiceTierFilterPersisted}
             className={styles.requestEventsSelect}
             ariaLabel={t('usage_stats.request_events_filter_tier')}
             fullWidth={false}
@@ -2318,7 +2533,7 @@ export function RequestEventsDetailsCard({
           <Select
             value={effectiveReasoningEffortFilter}
             options={reasoningEffortOptions}
-            onChange={setReasoningEffortFilter}
+            onChange={setReasoningEffortFilterPersisted}
             className={styles.requestEventsSelect}
             ariaLabel={t('usage_stats.request_events_filter_effort')}
             fullWidth={false}
@@ -2331,7 +2546,7 @@ export function RequestEventsDetailsCard({
           <Select
             value={resultFilter}
             options={resultOptions}
-            onChange={setResultFilter}
+            onChange={setResultFilterPersisted}
             className={styles.requestEventsSelect}
             ariaLabel={t('usage_stats.request_events_result')}
             fullWidth={false}
@@ -2361,7 +2576,7 @@ export function RequestEventsDetailsCard({
           <Select
             value={cacheFilter}
             options={cacheOptions}
-            onChange={setCacheFilter}
+            onChange={setCacheFilterPersisted}
             className={styles.requestEventsSelect}
             ariaLabel={t('usage_stats.request_events_filter_cache')}
             fullWidth={false}

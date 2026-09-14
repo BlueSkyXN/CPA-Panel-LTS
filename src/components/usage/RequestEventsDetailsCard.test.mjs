@@ -6,24 +6,30 @@ import { createServer } from 'vite';
 
 const originalWindow = globalThis.window;
 const localStorageValues = new Map();
-const testWindow = new EventTarget();
-testWindow.localStorage = {
+const sessionStorageValues = new Map();
+const buildStorage = (values) => ({
   getItem(key) {
-    return localStorageValues.get(key) ?? null;
+    return values.get(key) ?? null;
   },
   setItem(key, value) {
-    localStorageValues.set(key, String(value));
+    values.set(key, String(value));
   },
   removeItem(key) {
-    localStorageValues.delete(key);
+    values.delete(key);
   },
-};
+});
+const testWindow = new EventTarget();
+testWindow.localStorage = buildStorage(localStorageValues);
+testWindow.sessionStorage = buildStorage(sessionStorageValues);
 testWindow.matchMedia = () => ({
   matches: false,
   addEventListener() {},
   removeEventListener() {},
 });
 globalThis.window = testWindow;
+if (typeof globalThis.sessionStorage === 'undefined') {
+  globalThis.sessionStorage = testWindow.sessionStorage;
+}
 
 const vite = await createServer({
   appType: 'custom',
@@ -358,4 +364,99 @@ test('fully redacts short caller keys instead of exposing every original charact
   assert.match(markup, /Caller · \*{2}/);
   assert.doesNotMatch(markup, /ab\*+cd/);
   assert.doesNotMatch(markup, /x\*+z/);
+});
+
+test('previously selected filters survive a workspace remount via the session draft', async () => {
+  await i18n.changeLanguage('en');
+  const usage = {
+    apis: {
+      'POST /v1/responses': {
+        models: {
+          'gpt-a': {
+            details: [
+              {
+                timestamp: '2026-08-17T00:01:00Z',
+                tokens: { input_tokens: 1, total_tokens: 1 },
+              },
+            ],
+          },
+        },
+      },
+    },
+  };
+  sessionStorage.setItem(
+    'cpa-request-event-filters-v1',
+    JSON.stringify({ model: 'gpt-b', serviceTier: '__service_tier_fast__' })
+  );
+  try {
+    const markup = renderToStaticMarkup(
+      createElement(RequestEventsDetailsCard, {
+        usage,
+        loading: false,
+        pageTimeRange: 'all',
+        referenceNowMs: Date.parse('2026-08-17T00:00:00Z'),
+        priceProfile: pricingModule.createDefaultPriceProfileV3(),
+        requestApiKeys: [],
+        geminiKeys: [],
+        claudeConfigs: [],
+        codexConfigs: [],
+        vertexConfigs: [],
+        openaiProviders: [],
+      })
+    );
+    // The restored selection stays visible instead of silently resetting to All.
+    assert.match(markup, />gpt-b</);
+    assert.match(markup, /Fast</);
+  } finally {
+    sessionStorage.removeItem('cpa-request-event-filters-v1');
+  }
+});
+
+test('restored request key filter shows the remembered label, not the raw token', async () => {
+  await i18n.changeLanguage('en');
+  const usage = {
+    apis: {
+      'POST /v1/responses': {
+        models: {
+          'gpt-a': {
+            details: [
+              {
+                timestamp: '2026-08-17T00:01:00Z',
+                tokens: { input_tokens: 1, total_tokens: 1 },
+              },
+            ],
+          },
+        },
+      },
+    },
+  };
+  sessionStorage.setItem(
+    'cpa-request-event-filters-v1',
+    JSON.stringify({
+      requestKey: 'request-identity-9',
+      requestKeyValue: 'POST /v1/responses',
+      requestKeyLabel: 'Configured key #4',
+    })
+  );
+  try {
+    const markup = renderToStaticMarkup(
+      createElement(RequestEventsDetailsCard, {
+        usage,
+        loading: false,
+        pageTimeRange: 'all',
+        referenceNowMs: Date.parse('2026-08-17T00:00:00Z'),
+        priceProfile: pricingModule.createDefaultPriceProfileV3(),
+        requestApiKeys: [],
+        geminiKeys: [],
+        claudeConfigs: [],
+        codexConfigs: [],
+        vertexConfigs: [],
+        openaiProviders: [],
+      })
+    );
+    // The seeded label memory keeps the trigger readable before options resolve.
+    assert.match(markup, /Configured key #4/);
+  } finally {
+    sessionStorage.removeItem('cpa-request-event-filters-v1');
+  }
 });
