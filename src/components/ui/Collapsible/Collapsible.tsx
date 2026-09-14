@@ -11,6 +11,12 @@ import styles from './Collapsible.module.scss';
 interface CollapsibleProps extends HTMLAttributes<HTMLDetailsElement> {
   label: ReactNode;
   hint?: ReactNode;
+  /**
+   * Optional row action rendered inside the summary, before the chevron.
+   * Callers must call `event.preventDefault()` and `event.stopPropagation()`
+   * in interactive handlers, otherwise the summary's default toggle fires.
+   */
+  action?: ReactNode;
   defaultOpen?: boolean;
   open?: boolean;
   onToggle?: (event: SyntheticEvent<HTMLDetailsElement>) => void;
@@ -20,6 +26,7 @@ interface CollapsibleProps extends HTMLAttributes<HTMLDetailsElement> {
 export function Collapsible({
   label,
   hint,
+  action,
   defaultOpen = false,
   open,
   onToggle,
@@ -46,6 +53,7 @@ export function Collapsible({
           <span>{label}</span>
           {hint ? <span className={styles.summaryHint}>{hint}</span> : null}
         </span>
+        {action ? <span className={styles.summaryAction}>{action}</span> : null}
         <span className={styles.chevron} aria-hidden="true">
           <IconChevronDown size={16} />
         </span>

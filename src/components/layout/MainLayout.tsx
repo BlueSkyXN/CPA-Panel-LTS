@@ -1185,33 +1185,35 @@ export function MainLayout() {
           {layout === 'tower' && (
             <div className="tower-runtime-bar" aria-label={t('workspace.runtime_status')}>
               <span className="tower-runtime-label">CPA-Core-LTS</span>
-              <Link to="/config" className="tower-runtime-item">
-                <span>{t('workspace.runtime_routing')}</span>
-                <strong>{routingStatusText}</strong>
-              </Link>
-              <Link to="/config" className="tower-runtime-item">
-                <span>{t('workspace.runtime_retry')}</span>
-                <strong>{requestRetryText}</strong>
-              </Link>
-              <Link to="/config" className="tower-runtime-item">
-                <span>{t('workspace.runtime_fallback')}</span>
-                <strong>
-                  {quotaFallbackEnabled
-                    ? t('workspace.runtime_enabled')
-                    : t('workspace.runtime_disabled')}
-                </strong>
-              </Link>
-              <Link to="/system" className="tower-runtime-item" data-status={connectionStatus}>
-                <span>{t('workspace.runtime_connection')}</span>
-                <strong>
-                  <i aria-hidden="true" />
-                  {connectionStatus === 'connected'
-                    ? t('common.connected')
-                    : connectionStatus === 'connecting'
-                      ? t('common.connecting_status')
-                      : t('common.disconnected')}
-                </strong>
-              </Link>
+              <div className="tower-runtime-grid">
+                <Link to="/config" className="tower-runtime-item">
+                  <span>{t('workspace.runtime_routing')}</span>
+                  <strong>{routingStatusText}</strong>
+                </Link>
+                <Link to="/config" className="tower-runtime-item">
+                  <span>{t('workspace.runtime_retry')}</span>
+                  <strong>{requestRetryText}</strong>
+                </Link>
+                <Link to="/config" className="tower-runtime-item">
+                  <span>{t('workspace.runtime_fallback')}</span>
+                  <strong>
+                    {quotaFallbackEnabled
+                      ? t('workspace.runtime_enabled')
+                      : t('workspace.runtime_disabled')}
+                  </strong>
+                </Link>
+                <Link to="/system" className="tower-runtime-item" data-status={connectionStatus}>
+                  <span>{t('workspace.runtime_connection')}</span>
+                  <strong>
+                    <i aria-hidden="true" />
+                    {connectionStatus === 'connected'
+                      ? t('common.connected')
+                      : connectionStatus === 'connecting'
+                        ? t('common.connecting_status')
+                        : t('common.disconnected')}
+                  </strong>
+                </Link>
+              </div>
             </div>
           )}
           {multiInstance && (

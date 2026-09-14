@@ -12,7 +12,7 @@
 }
 .editorWorkspace {
   display: grid;
-  grid-template-columns: 224px minmax(0, 1fr);
+  grid-template-columns: 208px minmax(0, 1fr);
   gap: 24px;
   align-items: start;
   min-width: 0;
@@ -23,24 +23,29 @@
   color: var(--config-text);
   background: var(--config-surface);
 }
+.editorContent > header,
+.editorContent > p,
+.editorContent > section {
+  max-width: 920px;
+}
 .editorContent > section[hidden],
 .visualEditor [hidden] {
   display: none !important;
 }
 .editorHeading {
-  padding: 0 0 18px;
-  margin-bottom: 24px;
+  padding: 0 0 12px;
+  margin-bottom: 16px;
   border-bottom: 1px solid var(--config-group-border);
   scroll-margin-top: calc(var(--header-height, 64px) + 120px);
 }
 .editorHeading p {
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   color: var(--config-muted);
-  font-size: 13px;
+  font-size: 12px;
 }
 .editorHeading h2 {
   margin: 0;
-  font-size: 18px;
+  font-size: 16px;
   line-height: 1.5;
 }
 .editorNavigation {
@@ -60,26 +65,26 @@
   margin: 0;
 }
 .directoryGroup {
-  margin-bottom: 18px;
+  margin-bottom: 14px;
 }
 .directoryGroup h2 {
-  margin: 0 10px 6px;
-  font-size: 13px;
+  margin: 0 10px 4px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--config-muted);
 }
 .editorNavigation button {
   display: flex;
   width: 100%;
-  min-height: 40px;
+  min-height: 34px;
   align-items: center;
   gap: 6px;
   border: 0;
   border-radius: 6px;
-  padding: 8px 10px;
+  padding: 6px 10px;
   text-align: left;
   font: inherit;
-  font-size: 14px;
+  font-size: 13px;
   background: transparent;
   color: var(--config-text);
   cursor: pointer;
@@ -121,6 +126,12 @@
 .editorSearch {
   position: relative;
   min-width: 0;
+}
+@media (min-width: 1181px) {
+  .editorSearch {
+    margin-left: 232px;
+    max-width: 920px;
+  }
 }
 .searchResults {
   padding: 12px;
@@ -165,7 +176,7 @@
 .fieldsGrid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
+  gap: 12px;
 }
 .fieldMount {
   min-width: 0;
@@ -193,8 +204,8 @@
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 12px;
-  min-height: 44px;
+  padding: 10px;
+  min-height: 40px;
   border-block-start: 1px solid var(--config-group-border);
   border-inline-start: 3px solid transparent;
   cursor: pointer;
@@ -259,8 +270,8 @@
   }
 }
 .fieldHeading {
-  font-size: 16px;
-  margin: 0 0 12px;
+  font-size: 14px;
+  margin: 0 0 10px;
 }
 .ruleDisclosure {
   border: 0;
@@ -270,41 +281,45 @@
   background: var(--config-surface);
 }
 .ruleDisclosure > summary {
-  min-height: 44px;
+  min-height: 34px;
+  padding: 4px 12px;
   color: var(--config-text);
-  font-size: 14px;
+  font-size: 13px;
+}
+.ruleDisclosure > summary :global(.btn) {
+  min-height: 26px;
+  padding: 2px 8px;
+  font-size: 12px;
 }
 .ruleDisclosure > div {
-  padding: 12px 0 20px;
-}
-.ruleDisclosure .ruleCardTitle {
-  display: none;
-}
-.ruleDisclosure .ruleCardHeader {
-  justify-content: flex-end;
+  padding: 10px 0 14px;
 }
 .fieldMount .fieldLabel,
 .fieldMount .toggleTitle {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--config-text);
 }
 .fieldMount .fieldHint,
 .fieldMount .fieldSelectionHint,
 .fieldMount .toggleDescription,
 .visualEditor :global(.hint) {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--config-muted);
 }
 .fieldMount .toggleRow {
-  background: var(--config-group-surface);
-  padding: 12px 14px;
-  border-radius: 8px;
+  background: transparent;
+  padding: 2px 0;
+  border-radius: 0;
 }
 .fieldMount :global(button[aria-haspopup='listbox']) {
-  min-height: 40px;
+  min-height: 34px;
   border-color: var(--config-control-border);
   background: var(--config-surface);
   color: var(--config-text);
+  font-size: 13px;
+}
+.fieldShell > :global(button[aria-haspopup='listbox']) {
+  max-width: 360px;
 }
 .visualEditor :global(.error-box) {
   color: var(--config-error-text);
@@ -327,28 +342,29 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 12px;
-  padding: 12px 16px;
-  margin-bottom: 24px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
   background: var(--config-group-surface);
   border-radius: 8px;
-  font-size: 14px;
+  font-size: 13px;
 }
 .draftSummary span {
   color: var(--config-accent-strong);
 }
 .contextNotice {
-  padding: 12px 16px;
-  margin: 0 0 16px;
+  padding: 8px 12px;
+  margin: 0 0 12px;
   border-left: 3px solid var(--config-accent);
   background: var(--config-group-surface);
   color: var(--config-muted);
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.6;
 }
 .pageIntroduction {
-  margin: 0 0 12px;
+  margin: 0 0 10px;
+  max-width: 78ch;
   color: var(--config-muted);
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.65;
   overflow-wrap: anywhere;
 }
@@ -384,15 +400,20 @@
     max-width: 80ch;
     margin-inline-start: auto;
   }
+
+  @media (min-width: 1181px) {
+    margin-left: 232px;
+    max-width: 920px;
+  }
 }
 .attentionNotice {
-  margin: 0 0 16px;
-  padding: 12px 16px;
+  margin: 0 0 12px;
+  padding: 8px 12px;
   color: var(--config-attention-text);
   background: var(--config-attention-bg);
   border-left: 3px solid currentColor;
   border-radius: 4px;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.65;
   overflow-wrap: anywhere;
 }
@@ -454,7 +475,7 @@
 
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 14px;
 
   :global(.form-group) {
     gap: 7px;
@@ -469,12 +490,14 @@
   }
 
   :global(.input) {
-    min-height: 40px;
+    min-height: 34px;
+    padding: 6px 10px;
     border-radius: 8px;
     background: var(--config-surface);
     color: var(--config-text);
     border-color: var(--config-control-border);
     box-shadow: none;
+    font-size: 13px;
   }
 
   :global(.input:focus) {
@@ -491,7 +514,7 @@
   }
 
   :global(textarea.input) {
-    min-height: 112px;
+    min-height: 96px;
   }
 
   :global(.hint) {
@@ -1424,8 +1447,8 @@
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 14px;
   align-items: center;
-  min-height: 60px;
-  padding: 12px 0;
+  min-height: 40px;
+  padding: 8px 0;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -1446,7 +1469,7 @@
 
 .toggleTitle {
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 650;
   line-height: 1.25;
 }
@@ -1460,7 +1483,7 @@
 .fieldShell {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -1482,10 +1505,6 @@
 }
 
 .fieldSelectionHint {
-  padding: 9px 10px;
-  border: 1px solid var(--config-group-border);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-secondary) 68%, transparent);
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.55;
@@ -1559,32 +1578,7 @@
 .blockStack {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-}
-
-.ruleCard {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 12px;
-  border: 1px solid var(--config-group-border);
-  border-radius: 10px;
-  background: var(--bg-primary);
-}
-
-.ruleCardHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.ruleCardTitle {
-  color: var(--text-primary);
-  font-size: 14px;
-  font-weight: 650;
-  line-height: 1.25;
+  gap: 8px;
 }
 
 .blockLabel {
@@ -1596,15 +1590,15 @@
 
 .actionRow {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
+  gap: 8px;
 }
 
 .emptyState {
-  border: 1px dashed var(--config-group-border);
-  border-radius: 8px;
-  padding: 16px;
+  padding: 6px 0;
   color: var(--text-secondary);
-  text-align: center;
+  font-size: 12px;
+  text-align: left;
   background: transparent;
 }
 
@@ -1632,6 +1626,11 @@
   grid-template-columns: 160px 1fr auto auto;
 }
 
+.payloadRuleModelRow .expandableInputWrapper,
+.payloadFilterModelRow .expandableInputWrapper {
+  max-width: 440px;
+}
+
 .payloadModelGroup {
   display: flex;
   flex-direction: column;
@@ -1641,16 +1640,16 @@
 .payloadModelAdvanced {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-left: 10px;
-  padding-left: 12px;
+  gap: 10px;
+  margin-left: 8px;
+  padding-left: 10px;
   border-left: 2px solid var(--border-color);
 }
 
 .payloadAdvancedGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 340px));
+  gap: 8px;
 }
 
 .payloadHeaderRow {
@@ -1678,7 +1677,7 @@
 }
 
 .payloadJsonInput {
-  min-height: 112px;
+  min-height: 96px;
   resize: vertical;
   font-family:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
@@ -1787,21 +1786,15 @@
     padding-bottom: 14px;
   }
 
-  .ruleCard {
-    padding: 14px;
-  }
-
   .subsection {
     padding-top: 0;
   }
 
-  .blockHeaderRow,
-  .ruleCardHeader {
+  .blockHeaderRow {
     align-items: stretch;
   }
 
   .blockHeaderRow :global(.btn),
-  .ruleCardHeader :global(.btn),
   .actionRow :global(.btn),
   .stringListRow :global(.btn) {
     width: 100%;
@@ -1814,12 +1807,6 @@
 
   .stringListRow {
     align-items: stretch;
-  }
-}
-
-@media (max-width: 380px) {
-  .ruleCard {
-    padding: 12px;
   }
 }
 

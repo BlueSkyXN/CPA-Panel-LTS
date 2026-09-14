@@ -1058,6 +1058,20 @@ export const PayloadRulesEditor = memo(function PayloadRulesEditor({
             index: ruleIndex + 1,
             count: rule.params.length,
           })}
+          action={
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                removeRule(ruleIndex);
+              }}
+              disabled={disabled}
+            >
+              {t('config_management.visual.common.delete')}
+            </Button>
+          }
           defaultOpen={ruleIndex === 0 || !initialRuleIds.has(rule.id)}
           hasErrors={
             rule.params.some((param) => !!getParamErrorMessage(param)) ||
@@ -1068,23 +1082,19 @@ export const PayloadRulesEditor = memo(function PayloadRulesEditor({
             )
           }
         >
-          <div className={styles.ruleCardHeader}>
-            <div className={styles.ruleCardTitle}>
-              {t('config_management.visual.payload_rules.rule')} {ruleIndex + 1}
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => removeRule(ruleIndex)}
-              disabled={disabled}
-            >
-              {t('config_management.visual.common.delete')}
-            </Button>
-          </div>
-
           <div className={styles.blockStack}>
-            <div className={styles.blockLabel}>
-              {t('config_management.visual.payload_rules.models')}
+            <div className={styles.blockHeaderRow}>
+              <div className={styles.blockLabel}>
+                {t('config_management.visual.payload_rules.models')}
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => addModel(ruleIndex)}
+                disabled={disabled}
+              >
+                {t('config_management.visual.payload_rules.add_model')}
+              </Button>
             </div>
             {(rule.models.length ? rule.models : []).map((model, modelIndex) => {
               const hasAdvancedSettings = hasPayloadModelAdvancedSettings(model);
@@ -1208,8 +1218,18 @@ export const PayloadRulesEditor = memo(function PayloadRulesEditor({
                       </div>
 
                       <div className={styles.blockStack}>
-                        <div className={styles.blockLabel}>
-                          {t('config_management.visual.payload_rules.headers')}
+                        <div className={styles.blockHeaderRow}>
+                          <div className={styles.blockLabel}>
+                            {t('config_management.visual.payload_rules.headers')}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => addHeader(ruleIndex, modelIndex)}
+                            disabled={disabled}
+                          >
+                            {t('config_management.visual.payload_rules.add_header')}
+                          </Button>
                         </div>
                         {(model.headers ?? []).map((header, headerIndex) => (
                           <div key={header.id} className={styles.payloadHeaderRow}>
@@ -1246,22 +1266,22 @@ export const PayloadRulesEditor = memo(function PayloadRulesEditor({
                             </Button>
                           </div>
                         ))}
-                        <div className={styles.actionRow}>
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => addHeader(ruleIndex, modelIndex)}
-                            disabled={disabled}
-                          >
-                            {t('config_management.visual.payload_rules.add_header')}
-                          </Button>
-                        </div>
                       </div>
 
                       {(['match', 'notMatch'] as const).map((conditionKey) => (
                         <div key={conditionKey} className={styles.blockStack}>
-                          <div className={styles.blockLabel}>
-                            {t(`config_management.visual.payload_rules.${conditionKey}`)}
+                          <div className={styles.blockHeaderRow}>
+                            <div className={styles.blockLabel}>
+                              {t(`config_management.visual.payload_rules.${conditionKey}`)}
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => addCondition(ruleIndex, modelIndex, conditionKey)}
+                              disabled={disabled}
+                            >
+                              {t('config_management.visual.payload_rules.add_condition')}
+                            </Button>
                           </div>
                           {(model[conditionKey] ?? []).map((condition, conditionIndex) => {
                             const conditionError = getValidationMessage(
@@ -1349,16 +1369,6 @@ export const PayloadRulesEditor = memo(function PayloadRulesEditor({
                               </div>
                             );
                           })}
-                          <div className={styles.actionRow}>
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              onClick={() => addCondition(ruleIndex, modelIndex, conditionKey)}
-                              disabled={disabled}
-                            >
-                              {t('config_management.visual.payload_rules.add_condition')}
-                            </Button>
-                          </div>
                         </div>
                       ))}
 
@@ -1399,21 +1409,21 @@ export const PayloadRulesEditor = memo(function PayloadRulesEditor({
                 </div>
               );
             })}
-            <div className={styles.actionRow}>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => addModel(ruleIndex)}
-                disabled={disabled}
-              >
-                {t('config_management.visual.payload_rules.add_model')}
-              </Button>
-            </div>
           </div>
 
           <div className={styles.blockStack}>
-            <div className={styles.blockLabel}>
-              {t('config_management.visual.payload_rules.params')}
+            <div className={styles.blockHeaderRow}>
+              <div className={styles.blockLabel}>
+                {t('config_management.visual.payload_rules.params')}
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => addParam(ruleIndex)}
+                disabled={disabled}
+              >
+                {t('config_management.visual.payload_rules.add_param')}
+              </Button>
             </div>
             {(rule.params.length ? rule.params : []).map((param, paramIndex) => {
               const paramError = getParamErrorMessage(param);
@@ -1473,16 +1483,6 @@ export const PayloadRulesEditor = memo(function PayloadRulesEditor({
                 </div>
               );
             })}
-            <div className={styles.actionRow}>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => addParam(ruleIndex)}
-                disabled={disabled}
-              >
-                {t('config_management.visual.payload_rules.add_param')}
-              </Button>
-            </div>
           </div>
         </RuleDisclosure>
       ))}
@@ -1553,25 +1553,35 @@ export const PayloadFilterRulesEditor = memo(function PayloadFilterRulesEditor({
             index: ruleIndex + 1,
             count: rule.params.length,
           })}
-          defaultOpen={ruleIndex === 0 || !initialRuleIds.has(rule.id)}
-        >
-          <div className={styles.ruleCardHeader}>
-            <div className={styles.ruleCardTitle}>
-              {t('config_management.visual.payload_rules.rule')} {ruleIndex + 1}
-            </div>
+          action={
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => removeRule(ruleIndex)}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                removeRule(ruleIndex);
+              }}
               disabled={disabled}
             >
               {t('config_management.visual.common.delete')}
             </Button>
-          </div>
-
+          }
+          defaultOpen={ruleIndex === 0 || !initialRuleIds.has(rule.id)}
+        >
           <div className={styles.blockStack}>
-            <div className={styles.blockLabel}>
-              {t('config_management.visual.payload_rules.models')}
+            <div className={styles.blockHeaderRow}>
+              <div className={styles.blockLabel}>
+                {t('config_management.visual.payload_rules.models')}
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => addModel(ruleIndex)}
+                disabled={disabled}
+              >
+                {t('config_management.visual.payload_rules.add_model')}
+              </Button>
             </div>
             {rule.models.map((model, modelIndex) => (
               <div key={model.id} className={styles.payloadFilterModelRow}>
@@ -1615,16 +1625,6 @@ export const PayloadFilterRulesEditor = memo(function PayloadFilterRulesEditor({
                 </Button>
               </div>
             ))}
-            <div className={styles.actionRow}>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => addModel(ruleIndex)}
-                disabled={disabled}
-              >
-                {t('config_management.visual.payload_rules.add_model')}
-              </Button>
-            </div>
           </div>
 
           <div className={styles.blockStack}>
