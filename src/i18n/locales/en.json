@@ -1391,6 +1391,8 @@
     "token_breakdown": "Token Type Breakdown",
     "request_events_title": "Request Events",
     "request_events_filter_model": "Model",
+    "request_events_upstream_model": "Upstream: {{model}}",
+    "request_events_upstream_model_hint": "Model ID reported by the upstream response. It may be missing for legacy records or unsupported providers.",
     "request_events_filter_request_key": "Caller Key",
     "request_events_filter_source": "Source",
     "request_events_filter_auth_index": "Auth Index",

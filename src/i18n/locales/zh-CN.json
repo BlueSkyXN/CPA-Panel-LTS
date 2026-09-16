@@ -1391,6 +1391,8 @@
     "token_breakdown": "Token 类型分布",
     "request_events_title": "请求事件明细",
     "request_events_filter_model": "模型",
+    "request_events_upstream_model": "上游：{{model}}",
+    "request_events_upstream_model_hint": "上游响应报告的模型 ID。历史记录或不支持该字段的 Provider 可能没有此值。",
     "request_events_filter_request_key": "调用 Key",
     "request_events_filter_source": "来源",
     "request_events_filter_auth_index": "认证索引",

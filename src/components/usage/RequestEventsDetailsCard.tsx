@@ -282,6 +282,7 @@ type RequestEventRow = {
   timestampMs: number;
   timestampLabel: string;
   model: string;
+  upstreamModel: string | null;
   requestIdentityToken: string;
   requestIdentityType: RequestIdentityType;
   requestIdentityLabel: string;
@@ -1186,6 +1187,8 @@ export function RequestEventsDetailsCard({
       const sourceKey = sourceInfo.identityKey ?? `source:${sourceRaw || source}`;
       const sourceType = sourceInfo.type;
       const model = String(detail.__modelName ?? '').trim() || '-';
+      const upstreamModel =
+        typeof detail.upstream_model === 'string' ? detail.upstream_model.trim() || null : null;
       const requestIdentity = resolveRequestIdentity(detail.__apiBucket);
       const serviceTier = detail.service_tier ?? null;
       const requestServiceTier = detail.request_service_tier ?? null;
@@ -1279,6 +1282,7 @@ export function RequestEventsDetailsCard({
         timestampMs: Number.isNaN(timestampMs) ? 0 : timestampMs,
         get timestampLabel() { return Number.isNaN(timestampMs) ? timestamp || '-' : new Date(timestampMs).toLocaleString(i18n.language); },
         model,
+        upstreamModel,
         ...requestIdentity,
         sourceKey,
         sourceRaw: sourceRaw || '-',
@@ -2045,6 +2049,7 @@ export function RequestEventsDetailsCard({
     const csvHeader = [
       'timestamp',
       'model',
+      'upstream_model',
       'request_identity_type',
       'request_key_hint',
       'request_key_config_index',
@@ -2086,6 +2091,7 @@ export function RequestEventsDetailsCard({
       [
         row.timestamp,
         row.model,
+        row.upstreamModel ?? '',
         row.requestIdentityType,
         row.requestKeyHint,
         row.requestKeyConfigIndex ?? '',
@@ -2142,6 +2148,7 @@ export function RequestEventsDetailsCard({
     const payload = exportRows.map((row) => ({
       timestamp: row.timestamp,
       model: row.model,
+      upstream_model: row.upstreamModel,
       request_identity_type: row.requestIdentityType,
       request_key_hint: row.requestKeyHint,
       request_key_config_index: row.requestKeyConfigIndex,
@@ -2867,7 +2874,22 @@ export function RequestEventsDetailsCard({
                           {row.timestampLabel}
                         </td>
                       )}
-                      {columnVisibility.model && <td className={styles.modelCell}>{row.model}</td>}
+                      {columnVisibility.model && (
+                        <td className={styles.modelCell}>
+                          <span className={styles.requestModel}>{row.model}</span>
+                          {row.upstreamModel && (
+                            <span
+                              className={styles.upstreamModel}
+                              title={t('usage_stats.request_events_upstream_model_hint')}
+                              data-upstream-model={row.upstreamModel}
+                            >
+                              {t('usage_stats.request_events_upstream_model', {
+                                model: row.upstreamModel,
+                              })}
+                            </span>
+                          )}
+                        </td>
+                      )}
                       {columnVisibility.requestKey && (
                         <td
                           className={styles.requestEventsRequestKey}

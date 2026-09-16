@@ -217,6 +217,53 @@ test('renders Core TTFB and derived output throughput metrics', async () => {
   assert.match(markup, /Weighted Output TPS/);
 });
 
+test('renders the upstream-reported model without changing the request model', async () => {
+  await i18n.changeLanguage('en');
+  const usage = {
+    apis: {
+      'POST /v1/responses': {
+        models: {
+          'gpt-5.5-sol': {
+            details: [
+              {
+                timestamp: '2026-09-16T00:00:00Z',
+                upstream_model: 'gpt-5.5-sol-2026-0815',
+                tokens: { input_tokens: 1, output_tokens: 2, total_tokens: 3 },
+                failed: false,
+              },
+              {
+                timestamp: '2026-09-16T00:01:00Z',
+                tokens: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+                failed: false,
+              },
+            ],
+          },
+        },
+      },
+    },
+  };
+
+  const markup = renderToStaticMarkup(
+    createElement(RequestEventsDetailsCard, {
+      usage,
+      loading: false,
+      pageTimeRange: 'all',
+      referenceNowMs: Date.parse('2026-09-16T00:00:00Z'),
+      priceProfile: pricingModule.createDefaultPriceProfileV3(),
+      requestApiKeys: [],
+      geminiKeys: [],
+      claudeConfigs: [],
+      codexConfigs: [],
+      vertexConfigs: [],
+      openaiProviders: [],
+    })
+  );
+
+  assert.match(markup, />gpt-5\.5-sol</);
+  assert.match(markup, /Upstream: gpt-5\.5-sol-2026-0815/);
+  assert.equal((markup.match(/data-upstream-model=/g) ?? []).length, 1);
+});
+
 test('renders first content from assistant timing when reasoning timing is absent', async () => {
   await i18n.changeLanguage('en');
   const usage = {

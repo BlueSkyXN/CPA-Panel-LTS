@@ -1392,6 +1392,8 @@
     "token_breakdown": "Распределение типов токенов",
     "request_events_title": "События запросов",
     "request_events_filter_model": "Модель",
+    "request_events_upstream_model": "Модель upstream: {{model}}",
+    "request_events_upstream_model_hint": "Идентификатор модели, указанный в ответе upstream. Для старых записей и неподдерживаемых провайдеров он может отсутствовать.",
     "request_events_filter_request_key": "Ключ вызова",
     "request_events_filter_source": "Источник",
     "request_events_filter_auth_index": "Auth Index",

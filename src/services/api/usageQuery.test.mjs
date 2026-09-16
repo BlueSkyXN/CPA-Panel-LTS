@@ -45,6 +45,70 @@ test('capabilities require the supported version and a fixed boundary', () => {
   assert.throws(() => api.decodeUsageQuerySession({ ...session, version: 2 }));
   assert.throws(() => api.decodeUsageQuerySession({ ...session, bound: '' }));
 });
+
+const ratio = { numerator: 0, denominator: 0, samples: 0 };
+const metrics = {
+  requests: 1,
+  success: 1,
+  failure: 0,
+  tokens: 3,
+  input: 1,
+  output: 2,
+  reasoning: 0,
+  cache_read: 0,
+  cache_write: 0,
+  prompt: 1,
+  latency_ms: 0,
+  latency_samples: 0,
+  ttfb_samples: 0,
+  output_tps: ratio,
+  average_tps: ratio,
+  visible_tps: ratio,
+  reasoning_ratio: ratio,
+};
+const usageDetail = {
+  timestamp: '2026-09-16T00:00:00Z',
+  source: 'codex',
+  auth_index: 'codex-oauth-1',
+  failed: false,
+  tokens: {
+    input_tokens: 1,
+    output_tokens: 2,
+    reasoning_tokens: 0,
+    cached_tokens: 0,
+    total_tokens: 3,
+  },
+};
+const usageDetailsResponse = (detail) => ({
+  version: 1,
+  bound: 'synthetic-bound',
+  total: 1,
+  metrics,
+  items: [{ id: 'detail-1', api: 'POST /v1/responses', model: 'gpt-5.5-sol', detail }],
+});
+
+test('details accept an optional upstream model string and reject other field types', () => {
+  const withUpstreamModel = usageDetailsResponse({
+    ...usageDetail,
+    upstream_model: 'gpt-5.5-sol-2026-0815',
+  });
+  assert.equal(
+    api.decodeUsageQueryDetails(withUpstreamModel).items[0].detail.upstream_model,
+    'gpt-5.5-sol-2026-0815'
+  );
+  assert.doesNotThrow(() => api.decodeUsageQueryDetails(usageDetailsResponse(usageDetail)));
+  assert.doesNotThrow(() =>
+    api.decodeUsageQueryDetails(usageDetailsResponse({ ...usageDetail, upstream_model: null }))
+  );
+  for (const invalidValue of [42, { model: 'gpt-5.5-sol-2026-0815' }]) {
+    assert.throws(() =>
+      api.decodeUsageQueryDetails(
+        usageDetailsResponse({ ...usageDetail, upstream_model: invalidValue })
+      )
+    );
+  }
+});
+
 test('only a missing capability plus a working legacy management endpoint enables fallback', async () => {
   useAuthStore.setState({
     apiBase: 'https://query-test.example.test',

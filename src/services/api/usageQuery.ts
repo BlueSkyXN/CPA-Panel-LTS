@@ -64,6 +64,9 @@ const detail = (v: unknown) => {
     typeof v.timestamp !== 'string' ||
     typeof v.source !== 'string' ||
     typeof v.auth_index !== 'string' ||
+    (v.upstream_model !== undefined &&
+      v.upstream_model !== null &&
+      typeof v.upstream_model !== 'string') ||
     typeof v.failed !== 'boolean' ||
     !isRecord(v.tokens)
   )

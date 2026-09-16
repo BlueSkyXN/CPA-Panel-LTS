@@ -179,6 +179,7 @@ export interface UsageDetail {
   timestamp: string;
   source: string;
   auth_index: string | number | null;
+  upstream_model?: string | null;
   service_tier?: string | null;
   request_service_tier?: string | null;
   outbound_service_tier?: string | null;
@@ -453,6 +454,9 @@ const extractReasoningEffort = (detail: Record<string, unknown>): string | null 
   normalizeReasoningEffort(detail.reasoning_effort) ??
   normalizeReasoningEffort(detail.reasoningEffort) ??
   normalizeReasoningEffort(detail.ReasoningEffort);
+
+const extractUpstreamModel = (detail: Record<string, unknown>): string | null =>
+  typeof detail.upstream_model === 'string' ? detail.upstream_model : null;
 
 const USAGE_SOURCE_PREFIX_KEY = 'k:';
 const USAGE_SOURCE_PREFIX_MASKED = 'm:';
@@ -760,6 +764,7 @@ export function collectUsageDetails(usageData: unknown): UsageDetail[] {
             detailRaw?.authIndex ??
             detailRaw?.AuthIndex ??
             null) as UsageDetail['auth_index'],
+          upstream_model: extractUpstreamModel(detailRaw),
           service_tier: extractServiceTier(detailRaw),
           request_service_tier: extractRequestServiceTier(detailRaw),
           outbound_service_tier: extractOutboundServiceTier(detailRaw),
@@ -851,6 +856,7 @@ export function collectUsageDetailsWithEndpoint(usageData: unknown): UsageDetail
             detailRaw?.authIndex ??
             detailRaw?.AuthIndex ??
             null) as UsageDetail['auth_index'],
+          upstream_model: extractUpstreamModel(detailRaw),
           service_tier: extractServiceTier(detailRaw),
           request_service_tier: extractRequestServiceTier(detailRaw),
           outbound_service_tier: extractOutboundServiceTier(detailRaw),
