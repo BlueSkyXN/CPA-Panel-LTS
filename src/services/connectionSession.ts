@@ -44,6 +44,7 @@ export function safeSessionPath(path: string): string {
     '/usage/pricing',
     '/quota',
     '/config',
+    '/flow-control',
     '/logs',
     '/system',
     '/ai-providers',

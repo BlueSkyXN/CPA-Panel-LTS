@@ -26,6 +26,7 @@ import {
   IconSidebarConfig,
   IconSidebarDashboard,
   IconModelCluster,
+  IconSidebarFlow,
   IconSidebarLogs,
   IconMaximize2,
   IconMinimize2,
@@ -73,6 +74,7 @@ const sidebarIcons: Record<string, ReactNode> = {
   oauth: <IconSidebarOauth size={18} />,
   quota: <IconSidebarQuota size={18} />,
   usage: <IconSidebarUsage size={18} />,
+  flowControl: <IconSidebarFlow size={18} />,
   plugins: <IconSidebarPlugins size={18} />,
   config: <IconSidebarConfig size={18} />,
   logs: <IconSidebarLogs size={18} />,
@@ -197,6 +199,8 @@ export function MainLayout() {
   const logout = useAuthStore((state) => state.logout);
   const supportsPlugin = useAuthStore((state) => state.supportsPlugin);
   const pluginSupportKnown = useAuthStore((state) => state.pluginSupportKnown);
+  const supportsFlowControl = useAuthStore((state) => state.supportsFlowControl);
+  const flowSupportKnown = useAuthStore((state) => state.flowSupportKnown);
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
   const config = useConfigStore((state) => state.config);
   const fetchConfig = useConfigStore((state) => state.fetchConfig);
@@ -628,6 +632,18 @@ export function MainLayout() {
     meta: t('nav_meta.system_info'),
     icon: sidebarIcons.system,
   };
+  // Same capability gate as the route: a Core without the flow-control status
+  // API must not advertise the page in navigation.
+  const flowControlItem: SidebarNavItem | null =
+    flowSupportKnown && supportsFlowControl
+      ? {
+          kind: 'link',
+          path: '/flow-control',
+          label: t('nav.flow_control'),
+          meta: t('nav_meta.flow_control'),
+          icon: sidebarIcons.flowControl,
+        }
+      : null;
 
   const groupsByLayout: Record<WorkspaceLayout, SidebarNavGroup[]> = {
     tower: [
@@ -640,7 +656,7 @@ export function MainLayout() {
       {
         id: 'observe',
         label: t('workspace.group_observe'),
-        items: [quotaItem, usageItem, logsItem],
+        items: [quotaItem, usageItem, ...(flowControlItem ? [flowControlItem] : []), logsItem],
       },
       {
         id: 'runtime',

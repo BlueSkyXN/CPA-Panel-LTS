@@ -19,7 +19,7 @@ import {
   PluginStoreAuthEditor,
   StringListEditor,
 } from './VisualConfigEditorBlocks';
-import type { StandardConfigFieldId } from './configNavigation';
+import type { ConfigFieldId } from './configNavigation';
 import styles from './VisualConfigEditor.module.scss';
 export type ConfigFieldsProps = {
   values: VisualConfigValues;
@@ -41,7 +41,7 @@ export function useConfigFieldControls({
   validationErrors,
   disabled,
   onChange,
-}: ConfigFieldsProps): Record<StandardConfigFieldId, ReactNode> {
+}: ConfigFieldsProps): Record<ConfigFieldId, ReactNode> {
   const { t } = useTranslation();
   const codexControls = useCodexPolicyControls({ values, validationErrors, disabled, onChange });
   const routingStrategyLabelId = useId();

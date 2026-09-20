@@ -1,23 +1,22 @@
 import { type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Collapsible } from '@/components/ui/Collapsible/Collapsible';
-import { FlowControlFields } from '@/lts/flowControl/FlowControlFields';
 import type { ConfigFieldsProps } from './ConfigFieldControls';
 import {
   CONFIG_FIELDS,
   fieldTargetId,
+  type ConfigFieldId,
   type ConfigFieldMeta,
   type ConfigDomainId,
   type ConfigPage,
   type ConfigLocation,
-  type StandardConfigFieldId,
 } from './configNavigation';
 import styles from './VisualConfigEditor.module.scss';
 
 type Props = ConfigFieldsProps & {
   page: ConfigPage;
   active: boolean;
-  controls: Record<StandardConfigFieldId, ReactNode>;
+  controls: Record<ConfigFieldId, ReactNode>;
   issueFields: ReadonlySet<string>;
   onNavigate: (location: ConfigLocation) => void;
 };
@@ -29,15 +28,15 @@ function FieldsPage({
   issueFields,
   fieldNotes,
 }: Props & {
-  fieldNotes?: Partial<Record<StandardConfigFieldId, ReactNode>>;
+  fieldNotes?: Partial<Record<ConfigFieldId, ReactNode>>;
 }) {
   const { t } = useTranslation();
   return (
     <div className={styles.fieldsGrid}>
       {page.fields.map((field) => {
         const meta: ConfigFieldMeta = CONFIG_FIELDS[field];
-        const content = controls[field as StandardConfigFieldId];
-        const note = fieldNotes?.[field as StandardConfigFieldId];
+        const content = controls[field];
+        const note = fieldNotes?.[field];
         const count =
           field in values && Array.isArray(values[field as keyof typeof values])
             ? (values[field as keyof typeof values] as unknown[]).length
@@ -179,31 +178,12 @@ const CONFIG_DOMAIN_PANELS = {
   compatibility: CompatibilityPanel,
   payload: PayloadPanel,
   plugins: PluginsPanel,
-} satisfies Record<Exclude<ConfigDomainId, 'flow-control'>, (props: Props) => ReactNode>;
+} satisfies Record<ConfigDomainId, (props: Props) => ReactNode>;
 
 export function ConfigDomainPanel({
   section,
   ...props
-}: Props & { section: Exclude<ConfigDomainId, 'flow-control'> }) {
+}: Props & { section: ConfigDomainId }) {
   const Panel = CONFIG_DOMAIN_PANELS[section];
   return <Panel {...props} />;
-}
-
-// One mounted sidecar preserves migration and observation state across its three pages.
-export function FlowControlPanel({
-  values,
-  disabled,
-  onChange,
-  active,
-  page,
-}: ConfigFieldsProps & { active: boolean; page: string }) {
-  return (
-    <FlowControlFields
-      values={values}
-      disabled={disabled}
-      onChange={onChange}
-      active={active}
-      page={page}
-    />
-  );
 }

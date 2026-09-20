@@ -474,7 +474,17 @@
     "unresolved_catalog": "This Core does not advertise resolved targets. Public aliases will not be substituted. Enter an exact upstream target manually or update Core.",
     "catalog_truncated": "The target directory is truncated. Saved selections are retained; verify targets not listed here.",
     "stage_capacity": "Capacity in this stage",
-    "empty_active_policy": "Enabled with no rules records supported calls but imposes no concurrency or frequency limit. Add rules to apply limits."
+    "empty_active_policy": "Enabled with no rules records supported calls but imposes no concurrency or frequency limit. Add rules to apply limits.",
+    "page_description": "Draft rules, queue capacity and runtime observation for the Core-side flow control. Saving merges only flow-control keys into config.yaml through the diff confirmation; drafts, the configured policy and the applied policy are tracked separately.",
+    "admitted_total": "Admitted (total)",
+    "rejected_total": "Rejected (total)",
+    "timed_out_total": "Timed out",
+    "canceled_total": "Canceled",
+    "applied_failed": "Not applied",
+    "applied_on": "Applied: on",
+    "applied_off": "Applied: off",
+    "queue_section": "Queue & capacity",
+    "waiting_split": "{{requests}} requests · {{attempts}} attempts"
   },
   "config_management": {
     "visual": {
@@ -482,5 +492,11 @@
         "flow_control_config": "Cannot edit this rule format. Inspect the original YAML; unknown settings are preserved."
       }
     }
+  },
+  "nav": {
+    "flow_control": "Flow Control"
+  },
+  "nav_meta": {
+    "flow_control": "Concurrency & rate-limit governance"
   }
 }

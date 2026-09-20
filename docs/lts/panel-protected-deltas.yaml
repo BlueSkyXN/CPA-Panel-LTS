@@ -73,6 +73,7 @@ protected_deltas:
       - authenticated SSE with no management key in URLs and no automatic polling fallback
       - actual producer lifetime owned by Core, not page visibility or observation switches
       - src/lts/flowControl/ sidecar and four matching locale overlays
+      - dedicated /flow-control route with login-time capability probe and legacy /config?section=flow-control redirect; no flow domain inside the visual config editor
 
 upstream_boundaries:
   baseline_tag: v1.8.4

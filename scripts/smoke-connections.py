@@ -190,7 +190,7 @@ def run(file_mode=False, flow_only=False):
 
         # Keeping a session connected must not keep a hidden observation stream running.
         fa = frame('Core A')
-        fa.evaluate("location.hash = '#/config?section=flow-control&subsection=monitoring'")
+        fa.evaluate("location.hash = '#/flow-control'")
         fa.get_by_role('button', name='Observe live', exact=True).click()
         fa.wait_for_function('flowConnections.started === 1')
         for resume_count in [2, 3]:

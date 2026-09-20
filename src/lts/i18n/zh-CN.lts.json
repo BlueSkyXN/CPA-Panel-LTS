@@ -474,7 +474,17 @@
     "unresolved_catalog": "当前 Core 未提供解析后的目标目录，不会自动用公开别名替代。请手工填写明确的上游目标，或更新 Core。",
     "catalog_truncated": "目标目录已截断。已保存的选项继续保留；请单独确认未展示的目标。",
     "stage_capacity": "本阶段余量",
-    "empty_active_policy": "启用但没有规则时，只记录已接入的调用，不限制并发或频率。请添加规则后再确认实际生效结果。"
+    "empty_active_policy": "启用但没有规则时，只记录已接入的调用，不限制并发或频率。请添加规则后再确认实际生效结果。",
+    "page_description": "编辑 Core 侧流控的规则、排队容量与运行观察。保存时仅把 flow-control 相关键经差异确认合并进 config.yaml；草稿、文件期望配置与实际已应用策略分开呈现。",
+    "admitted_total": "累计准入",
+    "rejected_total": "累计拒绝",
+    "timed_out_total": "超时",
+    "canceled_total": "已取消",
+    "applied_failed": "未应用",
+    "applied_on": "已应用：开启",
+    "applied_off": "已应用：关闭",
+    "queue_section": "排队与容量",
+    "waiting_split": "{{requests}} 请求 · {{attempts}} 执行"
   },
   "config_management": {
     "visual": {
@@ -482,5 +492,11 @@
         "flow_control_config": "规则格式无法编辑，请在原始 YAML 中检查；不会丢弃未知配置。"
       }
     }
+  },
+  "nav": {
+    "flow_control": "Flow 并发与频率"
+  },
+  "nav_meta": {
+    "flow_control": "流控规则与实时观察"
   }
 }

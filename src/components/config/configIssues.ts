@@ -1,5 +1,4 @@
 import { getPayloadParamValidationError } from '@/hooks/useVisualConfig';
-import { flowIssues } from '@/lts/flowControl/model';
 import type { VisualConfigValidationErrors, VisualConfigValues } from '@/types/visualConfig';
 import type { ConfigFieldId } from './configNavigation';
 
@@ -31,17 +30,6 @@ export function getConfigIssueFields(
       )
     )
       fields.add(field);
-  }
-  if (errors.flowControlRulesText) {
-    for (const issue of flowIssues(values))
-      fields.add(
-        issue.code === 'invalid_observation'
-          ? 'flowControlIntervalMs'
-          : ['invalid_queue', 'invalid_number'].includes(issue.code)
-            ? 'flowControlMaxWaiting'
-            : 'flowControlRulesText'
-      );
-    if (!flowIssues(values).length) fields.add('flowControlRulesText');
   }
   return fields;
 }

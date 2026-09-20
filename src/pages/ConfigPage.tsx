@@ -1,17 +1,15 @@
-import { Suspense, lazy, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
-import { useSearchParams } from 'react-router-dom';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { parse as parseYaml, parseDocument } from 'yaml';
 import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import {
-  IconCheck,
   IconChevronDown,
   IconChevronUp,
-  IconRefreshCw,
   IconSearch,
 } from '@/components/ui/icons';
 import { VisualConfigEditor } from '@/components/config/VisualConfigEditor';
@@ -20,13 +18,18 @@ import {
   type ConfigLocation,
 } from '@/components/config/configNavigation';
 import { DiffModal } from '@/components/config/DiffModal';
-import { useMediaQuery } from '@/hooks/useMediaQuery';
+import {
+  ConfigDraftActionBar,
+  type ConfigDraftStatus,
+} from '@/components/config/ConfigDraftActionBar';
+import { useConfigDraftReload, useConfigSaveFailureNotifier } from '@/hooks/useConfigDraftSave';
+import { normalizeYamlForVisualDiff } from '@/components/config/configDraftYaml';
 import { useActionBarHeightVar } from '@/hooks/useActionBarHeightVar';
 import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard';
 import { registerSessionBusyCheck } from '@/services/connectionSession';
 import { getManagedConnection } from '@/services/connectionRuntime';
 import { readProfiles } from '@/services/storage/connectionProfiles';
-import { useVisualConfig, VisualConfigApplyError } from '@/hooks/useVisualConfig';
+import { useVisualConfig } from '@/hooks/useVisualConfig';
 import { useNotificationStore, useAuthStore, useConfigStore } from '@/stores';
 import { configFileApi } from '@/services/api/configFile';
 import styles from './ConfigPage.module.scss';
@@ -45,15 +48,6 @@ function readCommercialModeFromYaml(yamlContent: string): boolean {
   }
 }
 
-function normalizeYamlForVisualDiff(yamlContent: string): string {
-  try {
-    const doc = parseDocument(yamlContent);
-    return doc.toString({ indent: 2, lineWidth: 120, minContentWidth: 0 });
-  } catch {
-    return yamlContent;
-  }
-}
-
 export function ConfigPage() {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -63,13 +57,7 @@ export function ConfigPage() {
   const pageTransitionLayer = usePageTransitionLayer();
   const isCurrentLayer = pageTransitionLayer ? pageTransitionLayer.isCurrentLayer : true;
   const showNotification = useNotificationStore((state) => state.showNotification);
-  const showConfirmation = useNotificationStore((state) => state.showConfirmation);
-  const notifyConfigFailure = useCallback((error: unknown) => {
-    const message = error instanceof VisualConfigApplyError
-      ? t(`config_management.${error.code}`)
-      : `${t('notification.save_failed')}: ${error instanceof Error ? error.message : ''}`;
-    showNotification(message, 'error');
-  }, [showNotification, t]);
+  const notifyConfigFailure = useConfigSaveFailureNotifier();
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
   const profileId = useAuthStore((state) => state.profileId);
   const apiBase = useAuthStore((state) => state.apiBase);
@@ -77,8 +65,6 @@ export function ConfigPage() {
     getManagedConnection()?.bootstrap.profile ??
     readProfiles().find((entry) => entry.id === profileId);
   const connectionName = profile?.name || apiBase || t('connections.disconnected');
-  const saveTargetId = useId();
-  const isMobile = useMediaQuery('(max-width: 768px)');
 
   const {
     visualValues,
@@ -498,116 +484,42 @@ export function ConfigPage() {
 
   useActionBarHeightVar(actionBarRef, '--config-action-bar-height', shouldRenderActionBar);
 
-  // Status text
-  const getStatusText = () => {
-    if (disableControls) return t('config_management.status_disconnected');
-    if (loading) return t('config_management.status_loading');
-    if (error) return t('config_management.status_load_failed');
-    if (hasVisualModeError) return t('config_management.visual_mode_unavailable');
-    if (hasVisualValidationErrors)
-      return t('config_management.visual.validation.validation_blocked');
-    if (saving) return t('config_management.status_saving');
-    if (isDirty) return t('config_management.status_dirty');
-    return saved ? t('config_management.editor.saved') : t('config_management.status_loaded');
+  const draftStatus: ConfigDraftStatus = {
+    disconnected: disableControls,
+    loading,
+    saving,
+    loadFailed: !!error,
+    yamlUnavailable: hasVisualModeError,
+    validationBlocked: hasVisualValidationErrors,
+    dirty: isDirty,
+    saved,
   };
-
-  const getStatusClass = () => {
-    if (disableControls || loading || saving) return '';
-    if (error || hasVisualModeError || hasVisualValidationErrors) return styles.error;
-    if (isDirty) return styles.modified;
-    return styles.saved;
-  };
-
-  const getActionStatusText = () => {
-    if (!isMobile) return getStatusText();
-    if (disableControls)
-      return t('config_management.status_disconnected_short', { defaultValue: 'Disconnected' });
-    if (loading) return t('config_management.status_loading_short', { defaultValue: 'Loading' });
-    if (error) return t('config_management.status_load_failed_short', { defaultValue: 'Failed' });
-    if (hasVisualModeError)
-      return t('config_management.visual_mode_unavailable_short', { defaultValue: 'YAML issue' });
-    if (hasVisualValidationErrors)
-      return t('config_management.visual.validation_blocked_short', { defaultValue: 'Fix errors' });
-    if (saving) return t('config_management.status_saving_short', { defaultValue: 'Saving' });
-    if (isDirty) return t('config_management.status_dirty_short', { defaultValue: 'Unsaved' });
-    return saved
-      ? t('config_management.editor.saved')
-      : t('config_management.status_loaded_short', { defaultValue: 'Loaded' });
-  };
-
-  const handleReload = useCallback(() => {
-    if (!isDirty) {
-      void loadConfig();
-      return;
-    }
-
-    showConfirmation({
-      title: t('common.unsaved_changes_title'),
-      message: t('config_management.reload_confirm_message'),
-      confirmText: t('config_management.reload'),
-      cancelText: t('common.cancel'),
-      variant: 'danger',
-      onConfirm: async () => {
-        await loadConfig();
-      },
-    });
-  }, [isDirty, loadConfig, showConfirmation, t]);
+  const handleReload = useConfigDraftReload(loadConfig, isDirty);
+  const saveDisabled =
+    disableControls ||
+    loading ||
+    saving ||
+    !isDirty ||
+    diffModalOpen ||
+    hasVisualModeError ||
+    hasVisualValidationErrors;
 
   const actionBar = (
-    <div className={styles.actionBar} ref={actionBarRef}>
-      <div className={styles.actionBarStatusGroup}>
-        <div
-          id={saveTargetId}
-          className={styles.saveTarget}
-          data-testid="config-save-target"
-          title={connectionName}
-        >
-          {t('config_management.save_target', { name: connectionName })}
-        </div>
-        <div
-          className={`${styles.actionStatus} ${
-            isMobile ? styles.actionStatusCompact : ''
-          } ${getStatusClass()}`}
-        >
-          {getActionStatusText()}
-        </div>
-      </div>
-      <div className={styles.actionBarButtons}>
-        <button
-          type="button"
-          className={styles.actionButton}
-          onClick={handleReload}
-          disabled={loading || saving}
-          title={t('config_management.reload')}
-          aria-label={t('config_management.reload')}
-        >
-          <IconRefreshCw size={16} />
-          <span>{t('config_management.reload')}</span>
-        </button>
-        <button
-          type="button"
-          className={`${styles.actionButton} ${styles.actionButtonPrimary}`}
-          onClick={handleSave}
-          disabled={
-            disableControls ||
-            loading ||
-            saving ||
-            !isDirty ||
-            diffModalOpen ||
-            hasVisualModeError ||
-            hasVisualValidationErrors
-          }
-          title={t('config_management.save')}
-          aria-label={t('config_management.save')}
-          aria-describedby={saveTargetId}
-        >
-          <IconCheck size={16} />
-          <span>{t('config_management.save')}</span>
-          {isDirty && <span className={styles.dirtyDot} aria-hidden="true" />}
-        </button>
-      </div>
-    </div>
+    <ConfigDraftActionBar
+      barRef={actionBarRef}
+      connectionName={connectionName}
+      status={draftStatus}
+      saveDisabled={saveDisabled}
+      onReload={handleReload}
+      onSave={handleSave}
+    />
   );
+
+  // Flow control moved to its own /flow-control page; keep bookmarked
+  // #/config?section=flow-control deep links working.
+  if (requestedSection === 'flow-control') {
+    return <Navigate to="/flow-control" replace />;
+  }
 
   return (
     <div className={styles.container}>

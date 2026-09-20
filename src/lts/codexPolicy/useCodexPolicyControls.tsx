@@ -5,7 +5,7 @@ import { Select } from '@/components/ui/Select';
 import { ConfigChoiceGroup, FieldShell, ToggleRow } from '@/components/config/ConfigFieldShells';
 import { StringListEditor } from '@/components/config/VisualConfigEditorBlocks';
 import type { ConfigFieldsProps } from '@/components/config/ConfigFieldControls';
-import type { StandardConfigFieldId } from '@/components/config/configNavigation';
+import type { ConfigFieldId } from '@/components/config/configNavigation';
 import type {
   CodexAbnormalReasoningRetryAction,
   CodexAbnormalReasoningRetryClientUsageAggregation,
@@ -78,7 +78,7 @@ const ABNORMAL_RETRY_HEDGED_MODE_HINT_KEYS = {
     'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_hedged_retry_mode_quality_desc',
 } satisfies Record<CodexAbnormalReasoningRetryHedgedRetryMode, ConfigHeaderI18nKey>;
 
-type CodexPolicyFieldId = Extract<StandardConfigFieldId, `codexAbnormalReasoningRetry${string}`>;
+type CodexPolicyFieldId = Extract<ConfigFieldId, `codexAbnormalReasoningRetry${string}`>;
 export function useCodexPolicyControls({
   values,
   validationErrors,

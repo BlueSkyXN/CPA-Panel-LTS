@@ -1633,11 +1633,6 @@
             "fallback": "配置配额不足时的替代路径；切换项目或预览模型可能改变实际使用的资源或模型。",
             "streaming": "配置通用流式与非流式保活。保活用于维持连接，不是模型生成进度，也不是 Codex 异常响应缓存。"
           },
-          "flow-control": {
-            "rules": "按匹配条件限制并发与频率。先限定目标请求，再查看规则效果；开关开启不代表运行端已接受当前草稿。",
-            "queue": "设置超限后的等待与内存容量。更长等待可减少立即拒绝，但会增加延迟和排队资源占用。",
-            "monitoring": "对照草稿与运行状态；观察连接仅在本页可见且开启观察时工作，离开本页会暂停。"
-          },
           "headers": {
             "claude": "设置 Claude 请求头默认值与设备指纹；这里不是响应头透传，也不修改客户端 API 密钥。",
             "codex": "设置 Codex 请求身份信息；异常检测、重试与对冲在「Codex 降智对抗」中设置。"
@@ -1670,7 +1665,6 @@
         "service": "服务与访问",
         "operations": "运行与观测",
         "routing": "网络与路由",
-        "flow-control": "并发与频率",
         "headers": "请求头与身份",
         "codex-policy": "Codex 降智对抗",
         "compatibility": "模型与协议兼容",
@@ -1689,9 +1683,6 @@
         "routing_retries": "失败重试",
         "routing_fallback": "配额回退",
         "routing_streaming": "流式与保活",
-        "flow-control_rules": "限流规则",
-        "flow-control_queue": "排队与容量",
-        "flow-control_monitoring": "运行观察",
         "headers_claude": "Claude",
         "headers_codex": "Codex",
         "codex-policy_scope": "模式与范围",
@@ -2441,6 +2432,7 @@
     "data_refreshed": "数据刷新成功",
     "connection_required": "请先建立连接",
     "refresh_failed": "刷新失败",
+    "save_failed": "保存失败",
     "update_failed": "更新失败",
     "add_failed": "添加失败",
     "delete_failed": "删除失败",

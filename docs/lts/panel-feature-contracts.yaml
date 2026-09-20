@@ -629,6 +629,7 @@ features:
       - src/pages/ConfigPage.tsx
       - src/pages/ConfigPage.module.scss
       - src/components/config/
+      - src/hooks/useConfigDraftSave.ts
       - src/hooks/useVisualConfig.ts
       - src/services/api/config.ts
       - src/services/api/configFile.ts
@@ -1083,20 +1084,24 @@ features:
 
   - id: local-flow-control-config
     status: lts-maintained
-    reason: Opt-in multi-dimensional local admission settings must preserve old YAML and be editable only with a Core that provides the read-only capability/status API.
+    reason: Opt-in multi-dimensional local admission settings must preserve old YAML and be editable only with a Core that provides the read-only capability/status API. Editing and observation live on the dedicated /flow-control page, capability-gated like plugin management.
     panel_files:
       - src/lts/flowControl/
       - src/services/api/flowControl.ts
       - src/types/visualConfig.ts
       - src/hooks/useVisualConfig.ts
-      - src/components/config/VisualConfigEditor.tsx
-      - src/components/config/ConfigFieldControls.tsx
-      - src/lts/codexPolicy/useCodexPolicyControls.tsx
-      - src/components/config/ConfigEditorWorkspace.tsx
-      - src/components/config/ConfigDomainPanels.tsx
-      - src/components/config/configNavigation.ts
+      - src/pages/FlowControlPage.tsx
+      - src/pages/FlowControlPage.module.scss
+      - src/router/MainRoutes.tsx
+      - src/stores/useAuthStore.ts
       - src/lts/i18n/
       - docs/lts/flow-control.md
+    routes:
+      - /flow-control
+    capability_gates:
+      - supportsFlowControl
+      - flowSupportKnown
+      - RequireFlowSupport
     core_endpoints:
       - /v0/management/flow-control
       - /v0/management/flow-control/events
@@ -1118,3 +1123,4 @@ features:
       - npm run check:lts
       - npm run type-check
       - npm run build
+      - npm run smoke:config

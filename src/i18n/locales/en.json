@@ -1633,11 +1633,6 @@
             "fallback": "Choose fallback paths when quota is exhausted. Switching projects or preview models may change the resources or model used.",
             "streaming": "Configure streaming and non-streaming keepalives. They maintain connections, not model progress, and are separate from Codex response buffering."
           },
-          "flow-control": {
-            "rules": "Limit concurrency and frequency by matching rules. Scope the target requests first, then inspect the effects; enabling the switch does not confirm runtime acceptance.",
-            "queue": "Set waiting and capacity limits. Longer waits can reduce immediate rejection but increase latency and queue resource usage.",
-            "monitoring": "Compare the draft with runtime state. Observation connects only while this page is visible and observation is enabled; leaving pauses it."
-          },
           "headers": {
             "claude": "Set Claude request-header defaults and device fingerprints. These are not response headers or client API keys.",
             "codex": "Set Codex request identity. Abnormal-response detection, retries and hedging are configured in Codex reasoning protection."
@@ -1670,7 +1665,6 @@
         "service": "Service & access",
         "operations": "Operations & observability",
         "routing": "Network & routing",
-        "flow-control": "Concurrency & rate limits",
         "headers": "Headers & identity",
         "codex-policy": "Codex reasoning protection",
         "compatibility": "Models & protocol compatibility",
@@ -1689,9 +1683,6 @@
         "routing_retries": "Failure retries",
         "routing_fallback": "Quota fallback",
         "routing_streaming": "Streaming & keep-alive",
-        "flow-control_rules": "Rate-limit rules",
-        "flow-control_queue": "Queue & capacity",
-        "flow-control_monitoring": "Runtime observation",
         "headers_claude": "Claude",
         "headers_codex": "Codex",
         "codex-policy_scope": "Mode & scope",
@@ -2441,6 +2432,7 @@
     "data_refreshed": "Data refreshed successfully",
     "connection_required": "Please establish connection first",
     "refresh_failed": "Refresh failed",
+    "save_failed": "Save failed",
     "update_failed": "Update failed",
     "add_failed": "Add failed",
     "delete_failed": "Delete failed",

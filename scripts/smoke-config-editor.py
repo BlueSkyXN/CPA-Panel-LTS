@@ -7,6 +7,7 @@ import importlib.util
 import json
 import re
 import threading
+import time
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright
@@ -64,7 +65,9 @@ class ConfigCore(base.MockCoreHandler):
             self.end_headers()
             try:
                 while not STOP.is_set():
-                    self.wfile.write(("data: " + json.dumps(flow_payload()) + "\n\n").encode())
+                    # Match the real Core stream: snapshot frames carry an explicit
+                    # event line; bare data frames are dropped by the SSE decoder.
+                    self.wfile.write(("event: snapshot\ndata: " + json.dumps(flow_payload()) + "\n\n").encode())
                     self.wfile.flush()
                     STOP.wait(0.25)
             except (BrokenPipeError, ConnectionResetError):
@@ -258,7 +261,32 @@ def run():
         page.goto(app_url + '#/config')
         page = ConfigSurface(page)
         page.get_by_role('searchbox').wait_for()
-        assert not any('/flow-control' in request for request in state.requests), 'Hidden flow module fetched status'
+
+        def flow_status_reads():
+            return sum(1 for request in state.requests if request == 'GET /v0/management/flow-control')
+
+        def config_puts():
+            return len(state.config_yaml_puts)
+
+        def wait_for_config_puts(expected: int) -> None:
+            # A success toast stays on screen for seconds, so matching its text can
+            # return before the write lands; the recorded PUT is the real signal.
+            deadline = time.monotonic() + 15
+            while time.monotonic() < deadline and config_puts() < expected:
+                page.wait_for_timeout(50)
+            assert config_puts() >= expected, 'Config save did not reach the mock Core'
+
+        # The host login and the resident connection frame each run one capability
+        # probe; the config editor itself must not mount or fetch the flow module.
+        probe_reads = flow_status_reads()
+        assert probe_reads >= 1, 'Login capability probe did not read flow status'
+        assert not any(
+            '/flow-control' in request and request != 'GET /v0/management/flow-control'
+            for request in state.requests
+        )
+        page.wait_for_timeout(700)
+        assert flow_status_reads() == probe_reads, 'Config editor must not mount the flow module'
+        assert page.locator('[data-config-domain="flow-control"]').count() == 0
 
         locate(page, 'codexAbnormalReasoningRetryAction', 'abnormal-reasoning-retry.action')
         modes = page.get_by_role('group', name='Retry action', exact=True)
@@ -319,12 +347,14 @@ def run():
         assert page.locator('[data-config-domain="codex-policy"]').get_attribute('aria-label').endswith('Unsaved changes')
         page.get_by_role('button', name='Source File Editor', exact=True).click()
         state.config_yaml += '\nconcurrent-editor-marker: preserve-me\n'
+        puts_before_source_save = config_puts()
         page.locator('button[aria-label="Save"]').click()
         assert page.get_by_test_id('config-diff-target').inner_text() == page.get_by_test_id('config-save-target').inner_text()
         state.config_yaml += '\nconcurrent-after-preview: preserve-too\n'
         page.get_by_role('button', name='Confirm Save').click()
         page.get_by_role('button', name='Confirm Save').wait_for(state='visible')
         page.get_by_role('button', name='Confirm Save').click()
+        wait_for_config_puts(puts_before_source_save + 1)
         page.get_by_text('Configuration saved successfully', exact=False).first.wait_for()
         assert 'hedge-delay-ms: 250' in state.config_yaml
         assert 'unmanaged-lts-smoke: keep-me' in state.config_yaml
@@ -334,8 +364,13 @@ def run():
         page.get_by_role('button', name='Visual Editor', exact=True).click()
         assert not page.locator('[data-config-domain="codex-policy"]').get_attribute('aria-label').endswith('Unsaved changes')
 
-        locate(page, 'flowControlRulesText', 'flow-control.rules')
-        assert any(request == 'GET /v0/management/flow-control' for request in state.requests)
+        # Flow control is a first-class page with its own config draft.
+        page.goto(app_url + '#/flow-control')
+        page.get_by_test_id('flow-control-settings').wait_for()
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and flow_status_reads() <= probe_reads:
+            page.wait_for_timeout(100)
+        assert flow_status_reads() > probe_reads, 'Flow page did not read its own status'
         assert not any('/flow-control/events' in request for request in state.requests)
         flow_rules = page.locator('[data-config-field="flowControlRulesText"]')
         flow_rules.get_by_role('button', name='Add rule', exact=True).click()
@@ -354,14 +389,36 @@ def run():
         assert disclosures.first.get_attribute('open') is None, 'Remaining rule inherited removed rule expansion'
         disclosures.first.locator(':scope > summary').click()
         assert disclosures.first.get_by_label('Rule ID (stable IDs preserve rate history)', exact=True).input_value() == 'renamed-rule'
-        disclosures.first.get_by_role('button', name='Remove rule', exact=True).click()
-        locate(page, 'flowControlIntervalMs', 'flow-control.observation.interval-ms')
+        # The flow page saves only flow-control keys through its own diff flow.
+        # Clear the previous success toast first so the text match below proves this
+        # save, then wait for the PUT itself before asserting on the written YAML.
+        success_toast = page.get_by_text('Configuration saved successfully', exact=False)
+        if success_toast.count():
+            success_toast.first.wait_for(state='detached')
+        puts_before_flow_save = config_puts()
+        page.locator('button[aria-label="Save"]').click()
+        page.get_by_role('button', name='Confirm Save', exact=True).click()
+        wait_for_config_puts(puts_before_flow_save + 1)
+        success_toast.first.wait_for()
+        assert 'renamed-rule' in state.config_yaml
+        assert 'unmanaged-lts-smoke: keep-me' in state.config_yaml
+        assert 'hedge-delay-ms: 250' in state.config_yaml, 'Flow save must not clobber other config edits'
+        # Bookmarked editor deep links redirect to the dedicated page.
+        page.goto(app_url + '#/config?section=flow-control&subsection=monitoring')
+        page.wait_for_function("location.hash === '#/flow-control'")
+        page.get_by_test_id('flow-control-settings').wait_for()
+        # Observation connects only while the flow route is mounted; leaving the
+        # route unmounts the sidecar and drops the live subscription with it.
         page.get_by_role('button', name='Observe live', exact=True).click()
         page.wait_for_function('window.configSSE.started === 1')
+        page.goto(app_url + '#/config')
         locate(page, 'codexAbnormalReasoningRetryHedgeDelayMs', 'hedge-delay-ms')
-        page.wait_for_function('window.configSSE.aborted === window.configSSE.started')
-        locate(page, 'flowControlIntervalMs', 'flow-control.observation.interval-ms')
+        page.wait_for_function('window.configSSE.aborted === 1')
+        page.goto(app_url + '#/flow-control')
+        page.get_by_test_id('flow-control-settings').wait_for()
+        page.get_by_role('button', name='Observe live', exact=True).click()
         page.wait_for_function('window.configSSE.started === 2')
+        page.goto(app_url + '#/config')
         locate(page, 'codexAbnormalReasoningRetryHedgeDelayMs', 'hedge-delay-ms')
         page.wait_for_function('window.configSSE.aborted === 2')
 
@@ -439,7 +496,7 @@ def run():
                 assert page.get_by_test_id('config-page-introduction').inner_text().strip()
                 check_layout(page)
                 visited_pages.append(path)
-        assert len(visited_pages) == len(set(visited_pages)) == 29
+        assert len(visited_pages) == len(set(visited_pages)) == 26
         assert not errors, errors
         context.close()
         browser.close()

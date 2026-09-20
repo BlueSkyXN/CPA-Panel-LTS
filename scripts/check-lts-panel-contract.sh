@@ -1411,7 +1411,13 @@ done
 
 # Keep this optional Core-owned settings surface and its status reader together.
 require_path src/lts/flowControl
-require_file_contains src/components/config/ConfigDomainPanels.tsx "FlowControlFields"
+require_file_contains src/pages/FlowControlPage.tsx "FlowControlFields"
+require_file_contains src/router/MainRoutes.tsx "path: '/flow-control'"
+require_file_contains src/router/MainRoutes.tsx "RequireFlowSupport"
+require_file_contains src/components/layout/MainLayout.tsx "path: '/flow-control'"
+require_file_contains src/stores/useAuthStore.ts "flowSupportKnown"
+require_file_contains src/stores/useAuthStore.ts "probeFlowControlSupport"
+require_file_contains src/pages/ConfigPage.tsx "requestedSection === 'flow-control'"
 require_file_contains src/lts/flowControl/useStatus.ts "FLOW_CONTROL_ENDPOINTS.status"
 require_file_contains src/lts/flowControl/model.ts "key-model"
 require_file_contains src/lts/flowControl/model.ts "account-model"

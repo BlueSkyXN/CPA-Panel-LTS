@@ -21,6 +21,7 @@ import { QuotaPage } from '@/pages/QuotaPage';
 import { UsagePage } from '@/pages/UsagePage';
 import { UsagePricingPage } from '@/pages/UsagePricingPage';
 import { ConfigPage } from '@/pages/ConfigPage';
+import { FlowControlPage } from '@/pages/FlowControlPage';
 import { LogsPage } from '@/pages/LogsPage';
 import { SystemPage } from '@/pages/SystemPage';
 import { CoreWorkspace } from '@/pages/CoreWorkspace';
@@ -59,6 +60,23 @@ function RequirePluginSupport({ children }: { children: ReactNode }) {
   ) : (
     <Navigate to="/" replace />
   );
+}
+
+function RequireFlowSupport({ children }: { children: ReactNode }) {
+  const supportsFlowControl = useAuthStore((state) => state.supportsFlowControl);
+  const flowSupportKnown = useAuthStore((state) => state.flowSupportKnown);
+  const connectionStatus = useAuthStore((state) => state.connectionStatus);
+  if (connectionStatus !== 'connected' || !flowSupportKnown) {
+    return (
+      <div className="main-content">
+        <LoadingSpinner />
+      </div>
+    );
+  }
+  if (supportsFlowControl) {
+    return <>{children}</>;
+  }
+  return <Navigate to="/" replace />;
 }
 
 function LegacyProviderPathRedirect() {
@@ -144,6 +162,14 @@ const mainRoutes = [
   { path: '/usage/events', element: <UsageEventsPage /> },
   { path: '/usage/pricing', element: <UsagePricingPage /> },
   { path: '/usage', element: <UsagePage /> },
+  {
+    path: '/flow-control',
+    element: (
+      <RequireFlowSupport>
+        <FlowControlPage />
+      </RequireFlowSupport>
+    ),
+  },
   {
     path: '/plugins',
     element: (

@@ -1,6 +1,14 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
+import {
+  IconAlertTriangle,
+  IconCheckCircle2,
+  IconDiamond,
+  IconNetwork,
+  IconTimer,
+  IconTrendingUp,
+} from '@/components/ui/icons';
 import { FLOW_CONTROL_ENDPOINTS } from '@/services/api/flowControl';
 import { apiClient } from '@/services/api/client';
 import { asRecord, canObserveLive, type FlowActivity, type FlowCapabilities } from './model';
@@ -28,21 +36,44 @@ type DetailsPage = {
 const DETAILS_PAGE_SIZE = 100;
 
 function Trend({ history, label }: { history: Point[]; label: string }) {
-  const max = Math.max(1, ...history.flatMap((point) => [point.attempts, point.waiting]));
-  const points = (field: 'attempts' | 'waiting') =>
+  const max = Math.max(1, ...history.flatMap((point) => [point.requests, point.attempts, point.waiting]));
+  const points = (field: 'requests' | 'attempts' | 'waiting') =>
     history.map((point, index) => {
       const x = (index * 300) / Math.max(1, history.length - 1);
       return `${x},${55 - (point[field] * 48) / max}`;
     }).join(' ');
+  const area = history.length > 1
+    ? `M0,55 L${points('attempts')} L300,55 Z`
+    : '';
 
   return (
     <svg className={styles.trend} viewBox="0 0 300 60" role="img" aria-label={label} preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="flow-trend-fill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#477fa5" stopOpacity="0.2" />
+          <stop offset="100%" stopColor="#477fa5" stopOpacity="0" />
+        </linearGradient>
+      </defs>
       <path d="M0 55H300" className={styles.trendBase} />
+      {area && <path d={area} fill="url(#flow-trend-fill)" />}
+      <polyline points={points('requests')} className={styles.trendRequests} />
       <polyline points={points('attempts')} className={styles.trendActive} />
       <polyline points={points('waiting')} className={styles.trendWaiting} />
     </svg>
   );
 }
+
+type KpiCard = {
+  key: string;
+  label: string;
+  value: ReactNode;
+  icon: ReactNode;
+  accent: string;
+  soft: string;
+  border: string;
+  small?: boolean;
+  meta?: ReactNode;
+};
 
 function mib(value: number | undefined | null) {
   return value == null ? '?' : `${(value / 1048576).toFixed(1)} MiB`;
@@ -112,19 +143,105 @@ export function LiveMonitor({ data, live, setLive, liveState, history, onRefresh
       </div>
       {!canLive && <p className={styles.hint}>{t('flow_control.v3_realtime_off')}</p>}
       <div className={styles.kpis}>
-        <div><span>{t('flow_control.active_requests')}</span><strong>{state?.['active-requests'] ?? '—'}</strong></div>
-        <div><span>{t('flow_control.active_attempts')}</span><strong>{state?.['active-attempts'] ?? '—'}</strong></div>
-        <div><span>{t('flow_control.waiting')}</span><strong>{state?.waiting ?? '—'}</strong></div>
-        <div>
-          <span>{t('flow_control.queued_bytes')}</span>
-          <strong className={styles.smallMetric}>{mib(state?.['queued-bytes'])}</strong>
-        </div>
+        {([
+          {
+            key: 'requests',
+            label: t('flow_control.active_requests'),
+            value: state?.['active-requests'] ?? '—',
+            icon: <IconNetwork size={15} />,
+            accent: '#477fa5',
+            soft: 'rgba(71, 127, 165, 0.16)',
+            border: 'rgba(71, 127, 165, 0.34)',
+          },
+          {
+            key: 'attempts',
+            label: t('flow_control.active_attempts'),
+            value: state?.['active-attempts'] ?? '—',
+            icon: <IconTrendingUp size={15} />,
+            accent: '#8b5cf6',
+            soft: 'rgba(139, 92, 246, 0.16)',
+            border: 'rgba(139, 92, 246, 0.32)',
+          },
+          {
+            key: 'waiting',
+            label: t('flow_control.waiting'),
+            value: state?.waiting ?? '—',
+            icon: <IconTimer size={15} />,
+            accent: '#d97706',
+            soft: 'rgba(217, 119, 6, 0.16)',
+            border: 'rgba(217, 119, 6, 0.32)',
+            meta:
+              state?.['waiting-requests'] != null || state?.['waiting-attempts'] != null
+                ? t('flow_control.waiting_split', {
+                    requests: state?.['waiting-requests'] ?? 0,
+                    attempts: state?.['waiting-attempts'] ?? 0,
+                  })
+                : undefined,
+          },
+          {
+            key: 'queued-bytes',
+            label: t('flow_control.queued_bytes'),
+            value: mib(state?.['queued-bytes']),
+            icon: <IconDiamond size={15} />,
+            accent: '#64748b',
+            soft: 'rgba(100, 116, 139, 0.16)',
+            border: 'rgba(100, 116, 139, 0.34)',
+            small: true,
+          },
+          {
+            key: 'admitted',
+            label: t('flow_control.admitted_total'),
+            value: state?.admitted ?? '—',
+            icon: <IconCheckCircle2 size={15} />,
+            accent: '#22a45d',
+            soft: 'rgba(34, 164, 93, 0.16)',
+            border: 'rgba(34, 164, 93, 0.32)',
+          },
+          {
+            key: 'rejected',
+            label: t('flow_control.rejected_total'),
+            value: state?.rejected ?? '—',
+            icon: <IconAlertTriangle size={15} />,
+            accent: '#c25a4a',
+            soft: 'rgba(194, 90, 74, 0.16)',
+            border: 'rgba(194, 90, 74, 0.32)',
+            meta:
+              `${t('flow_control.timed_out_total')}: ${state?.['timed-out'] ?? 0}` +
+              ` · ${t('flow_control.canceled_total')}: ${state?.canceled ?? 0}`,
+          },
+        ] as KpiCard[]).map((card) => (
+          <div
+            key={card.key}
+            className={styles.kpi}
+            style={
+              {
+                '--accent': card.accent,
+                '--accent-soft': card.soft,
+                '--accent-border': card.border,
+              } as CSSProperties
+            }
+          >
+            <div className={styles.kpiHeader}>
+              <span className={styles.kpiLabel}>{card.label}</span>
+              <span className={styles.kpiIcon}>{card.icon}</span>
+            </div>
+            <strong className={card.small ? styles.smallMetric : undefined}>{card.value}</strong>
+            {card.meta && <small className={styles.kpiMeta}>{card.meta}</small>}
+          </div>
+        ))}
       </div>
       <p className={styles.hint}>{t('flow_control.counts_hint')}</p>
       {history.length > 1 && (
         <div className={styles.trendPanel}>
           <Trend history={history} label={t('flow_control.trend_label')} />
-          <small>{t('flow_control.trend_label')}</small>
+          <div className={styles.trendSide}>
+            <div className={styles.trendLegend}>
+              <span><i className={styles.dotRequests} />{t('flow_control.active_requests')}</span>
+              <span><i className={styles.dotActive} />{t('flow_control.active_attempts')}</span>
+              <span><i className={styles.dotWaiting} />{t('flow_control.waiting')}</span>
+            </div>
+            <small>{t('flow_control.trend_label')}</small>
+          </div>
         </div>
       )}
       <p className={styles.sampleLine}>
