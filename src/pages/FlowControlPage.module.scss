@@ -1,0 +1,16 @@
+// The visual shell (container, action bar, status pill) is shared with the config
+// editor page via ConfigPage.module.scss so both draft-save surfaces stay visually
+// identical; this module only owns the Flow-specific page chrome.
+.intro {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+}

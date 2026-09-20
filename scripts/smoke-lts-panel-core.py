@@ -1854,14 +1854,12 @@ def run_browser_flow_control_smoke(page: Any, app_url: str, api_url: str) -> lis
     if "flow-control:" in original_yaml:
         raise AssertionError("Unrelated visual edits unexpectedly created Flow configuration")
 
-    page.goto(f"{app_url}/#/config", wait_until="domcontentloaded")
-    page.get_by_role("button", name="Visual Editor").click()
-    locate_config_field(page, "flowControlRulesText", "flow-control.rules")
+    page.goto(f"{app_url}/#/flow-control", wait_until="domcontentloaded")
     flow = page.get_by_test_id("flow-control-settings")
+    flow.wait_for()
     flow.get_by_role("button", name="Add rule", exact=True).click()
     flow.get_by_label("Maximum in flight (0 = unlimited concurrency)", exact=True).fill("2")
     flow.get_by_label("Enable local flow control", exact=True).evaluate("element => element.click()")
-    locate_config_field(page, "flowControlRealtime", "flow-control.observation.realtime")
     flow.get_by_label("Allow live updates", exact=True).evaluate("element => element.click()")
 
     def save() -> None:
@@ -1928,7 +1926,7 @@ def run_browser_flow_control_smoke(page: Any, app_url: str, api_url: str) -> lis
     flow.get_by_label("Enable local flow control", exact=True).evaluate("element => element.click()")
     flow.get_by_label("Allow live updates", exact=True).evaluate("element => element.click()")
     save()
-    return ["BROWSER Flow V3 defaults, visual save/readback, incomplete preview, paged details, authenticated SSE, paused-policy refresh and responsive widths"]
+    return ["BROWSER Flow V3 defaults, dedicated-page save/readback, incomplete preview, paged details, authenticated SSE, paused-policy refresh and responsive widths"]
 
 
 def wait_for_no_dialog(page: Any) -> None:

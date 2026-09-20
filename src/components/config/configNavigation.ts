@@ -1,14 +1,25 @@
 import type { TFunction } from 'i18next';
 import type { VisualConfigValues } from '@/types/visualConfig';
-import type { FlowControlValues } from '@/lts/flowControl/model';
 
-export type ConfigFieldId =
-  | Exclude<
-      keyof VisualConfigValues,
-      'streaming' | 'codexAbnormalReasoningRetryEnabled' | 'flowControlVersion'
-    >
-  | `streaming.${keyof VisualConfigValues['streaming']}`;
-export type StandardConfigFieldId = Exclude<ConfigFieldId, keyof FlowControlValues>;
+export type ConfigFieldId = Exclude<
+  keyof VisualConfigValues,
+  'streaming' | 'codexAbnormalReasoningRetryEnabled' | FlowOnlyField
+> | `streaming.${keyof VisualConfigValues['streaming']}`;
+// Flow-control fields are edited on their own /flow-control page, not here.
+type FlowOnlyField =
+  | 'flowControlEnabled'
+  | 'flowControlVersion'
+  | 'flowControlRealtime'
+  | 'flowControlResources'
+  | 'flowControlIntervalMs'
+  | 'flowControlMaxObservers'
+  | 'flowControlRulesText'
+  | 'flowControlMaxWaiting'
+  | 'flowControlMaxWaitingPerKey'
+  | 'flowControlMaxWaitMs'
+  | 'flowControlMaxBytes'
+  | 'flowControlMaxBuckets'
+  | 'flowControlMaxHistory';
 export type ConfigFieldMeta = {
   labelKey: string;
   yamlKey: string;
@@ -445,66 +456,6 @@ export const CONFIG_FIELDS = {
     fullWidth: true,
     heading: true,
   },
-  flowControlEnabled: {
-    labelKey: 'flow_control.enabled',
-    yamlKey: 'flow-control.enabled',
-    fullWidth: true,
-  },
-  flowControlRulesText: {
-    labelKey: 'flow_control.edit_policy',
-    yamlKey: 'flow-control.rules',
-    fullWidth: true,
-  },
-  flowControlMaxWaiting: {
-    labelKey: 'flow_control.max_waiting',
-    yamlKey: 'flow-control.queue.max-waiting',
-    fullWidth: true,
-  },
-  flowControlMaxWaitingPerKey: {
-    labelKey: 'flow_control.max_waiting_key',
-    yamlKey: 'flow-control.queue.max-waiting-per-key',
-    fullWidth: true,
-  },
-  flowControlMaxWaitMs: {
-    labelKey: 'flow_control.wait_ms',
-    yamlKey: 'flow-control.queue.max-wait-ms',
-    fullWidth: true,
-  },
-  flowControlMaxBytes: {
-    labelKey: 'flow_control.queue_bytes',
-    yamlKey: 'flow-control.queue.max-bytes',
-    fullWidth: true,
-  },
-  flowControlMaxBuckets: {
-    labelKey: 'flow_control.max_buckets',
-    yamlKey: 'flow-control.max-buckets',
-    fullWidth: true,
-  },
-  flowControlMaxHistory: {
-    labelKey: 'flow_control.max_history',
-    yamlKey: 'flow-control.max-history',
-    fullWidth: true,
-  },
-  flowControlRealtime: {
-    labelKey: 'flow_control.v3_realtime',
-    yamlKey: 'flow-control.observation.realtime',
-    fullWidth: true,
-  },
-  flowControlResources: {
-    labelKey: 'flow_control.v3_resources',
-    yamlKey: 'flow-control.observation.resources',
-    fullWidth: true,
-  },
-  flowControlIntervalMs: {
-    labelKey: 'flow_control.v3_interval',
-    yamlKey: 'flow-control.observation.interval-ms',
-    fullWidth: true,
-  },
-  flowControlMaxObservers: {
-    labelKey: 'flow_control.v3_observers',
-    yamlKey: 'flow-control.observation.max-observers',
-    fullWidth: true,
-  },
 } satisfies Record<ConfigFieldId, ConfigFieldMeta>;
 export type ConfigPage = { id: string; fields: readonly ConfigFieldId[] };
 export type ConfigDomain = {
@@ -592,36 +543,6 @@ export const CONFIG_DOMAINS = [
           'streaming.keepaliveSeconds',
           'streaming.bootstrapRetries',
           'streaming.nonstreamKeepaliveInterval',
-        ],
-      },
-    ],
-  },
-  {
-    id: 'flow-control',
-    group: 'requests',
-    pages: [
-      {
-        id: 'rules',
-        fields: ['flowControlEnabled', 'flowControlRulesText'],
-      },
-      {
-        id: 'queue',
-        fields: [
-          'flowControlMaxWaiting',
-          'flowControlMaxWaitingPerKey',
-          'flowControlMaxWaitMs',
-          'flowControlMaxBytes',
-          'flowControlMaxBuckets',
-          'flowControlMaxHistory',
-        ],
-      },
-      {
-        id: 'monitoring',
-        fields: [
-          'flowControlRealtime',
-          'flowControlResources',
-          'flowControlIntervalMs',
-          'flowControlMaxObservers',
         ],
       },
     ],

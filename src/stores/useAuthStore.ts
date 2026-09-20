@@ -16,6 +16,8 @@ import {
 import { apiClient } from '@/services/api/client';
 import { versionApi } from '@/services/api/version';
 import { pluginsApi } from '@/services/api/plugins';
+import { flowControlApi } from '@/services/api/flowControl';
+import { parseFlowCapabilities } from '@/lts/flowControl/model';
 import { useConfigStore } from './useConfigStore';
 import { useUsageStatsStore } from './useUsageStatsStore';
 import { useModelsStore } from './useModelsStore';
@@ -32,6 +34,8 @@ type PluginSupportState = Pick<
   AuthState,
   'supportsPlugin' | 'pluginSupportKnown' | 'pluginSupportSource'
 >;
+
+type FlowSupportState = Pick<AuthState, 'supportsFlowControl' | 'flowSupportKnown'>;
 
 interface AuthStoreState extends AuthState {
   profileId: string;
@@ -62,6 +66,31 @@ const probePluginSupport = async (): Promise<boolean> => {
   } catch {
     return false;
   }
+};
+
+// Flow capability comes from the status payload itself, not a response header:
+// supported + schema 3 mirrors the sidecar's own editable condition. A missing
+// endpoint (404/501) or an unreadable payload means the surface stays hidden.
+const probeFlowControlSupport = async (): Promise<boolean> => {
+  try {
+    const data = parseFlowCapabilities(await flowControlApi.getStatus());
+    return data?.supported === true && data['schema-version'] >= 3;
+  } catch {
+    return false;
+  }
+};
+
+const resolveFlowSupport = async (
+  connectionGeneration: number
+): Promise<FlowSupportState | null> => {
+  const probeSupported = await probeFlowControlSupport();
+  if (!apiClient.isCurrentConnection(connectionGeneration)) {
+    return null;
+  }
+  return {
+    supportsFlowControl: probeSupported,
+    flowSupportKnown: true,
+  };
 };
 
 const resolvePluginSupport = async (
@@ -119,6 +148,8 @@ export const useAuthStore = create<AuthStoreState>()(
       supportsPlugin: false,
       pluginSupportKnown: false,
       pluginSupportSource: 'unknown',
+      supportsFlowControl: false,
+      flowSupportKnown: false,
       connectionStatus: 'disconnected',
       connectionError: null,
 
@@ -177,7 +208,9 @@ export const useAuthStore = create<AuthStoreState>()(
             serverRuntimeKind: 'unknown',
             supportsPlugin: false,
             pluginSupportKnown: false,
-            pluginSupportSource: 'unknown'
+            pluginSupportSource: 'unknown',
+            supportsFlowControl: false,
+            flowSupportKnown: false
           });
           useConfigStore.getState().clearCache();
           useModelsStore.getState().clearCache();
@@ -192,11 +225,20 @@ export const useAuthStore = create<AuthStoreState>()(
           if (!apiClient.isCurrentConnection(connectionGeneration)) {
             return false;
           }
-          const pluginSupport = await resolvePluginSupport(connectionGeneration, () => {
-            const { supportsPlugin, pluginSupportKnown, pluginSupportSource } = get();
-            return { supportsPlugin, pluginSupportKnown, pluginSupportSource };
-          });
-          if (!pluginSupport || !apiClient.isCurrentConnection(connectionGeneration)) {
+          // Plugin and Flow probes are independent read-only calls; run them in
+          // parallel so the extra capability check adds no serial login latency.
+          const [pluginSupport, flowSupport] = await Promise.all([
+            resolvePluginSupport(connectionGeneration, () => {
+              const { supportsPlugin, pluginSupportKnown, pluginSupportSource } = get();
+              return { supportsPlugin, pluginSupportKnown, pluginSupportSource };
+            }),
+            resolveFlowSupport(connectionGeneration),
+          ]);
+          if (
+            !pluginSupport ||
+            !flowSupport ||
+            !apiClient.isCurrentConnection(connectionGeneration)
+          ) {
             return false;
           }
 
@@ -217,6 +259,7 @@ export const useAuthStore = create<AuthStoreState>()(
             connectionStatus: 'connected',
             connectionError: null,
             ...pluginSupport,
+            ...flowSupport,
             ...(runtimeKind !== 'unknown' ? { serverRuntimeKind: runtimeKind } : {})
           });
           setSessionLoggedIn(rememberPassword);
@@ -268,6 +311,8 @@ export const useAuthStore = create<AuthStoreState>()(
           supportsPlugin: false,
           pluginSupportKnown: false,
           pluginSupportSource: 'unknown',
+          supportsFlowControl: false,
+          flowSupportKnown: false,
           connectionStatus: reason === 'unauthorized' ? 'error' : 'disconnected',
           connectionError: null
         });
@@ -290,7 +335,9 @@ export const useAuthStore = create<AuthStoreState>()(
           set({
             supportsPlugin: false,
             pluginSupportKnown: false,
-            pluginSupportSource: 'unknown'
+            pluginSupportSource: 'unknown',
+            supportsFlowControl: false,
+            flowSupportKnown: false
           });
 
           // 验证连接
@@ -302,11 +349,20 @@ export const useAuthStore = create<AuthStoreState>()(
           if (!apiClient.isCurrentConnection(connectionGeneration)) {
             return false;
           }
-          const pluginSupport = await resolvePluginSupport(connectionGeneration, () => {
-            const { supportsPlugin, pluginSupportKnown, pluginSupportSource } = get();
-            return { supportsPlugin, pluginSupportKnown, pluginSupportSource };
-          });
-          if (!pluginSupport || !apiClient.isCurrentConnection(connectionGeneration)) {
+          // Plugin and Flow probes are independent read-only calls; run them in
+          // parallel so the extra capability check adds no serial login latency.
+          const [pluginSupport, flowSupport] = await Promise.all([
+            resolvePluginSupport(connectionGeneration, () => {
+              const { supportsPlugin, pluginSupportKnown, pluginSupportSource } = get();
+              return { supportsPlugin, pluginSupportKnown, pluginSupportSource };
+            }),
+            resolveFlowSupport(connectionGeneration),
+          ]);
+          if (
+            !pluginSupport ||
+            !flowSupport ||
+            !apiClient.isCurrentConnection(connectionGeneration)
+          ) {
             return false;
           }
 
@@ -314,6 +370,7 @@ export const useAuthStore = create<AuthStoreState>()(
             isAuthenticated: true,
             connectionStatus: 'connected',
             ...pluginSupport,
+            ...flowSupport,
             ...(runtimeKind !== 'unknown' ? { serverRuntimeKind: runtimeKind } : {})
           });
 
@@ -327,7 +384,9 @@ export const useAuthStore = create<AuthStoreState>()(
             connectionStatus: 'error',
             supportsPlugin: false,
             pluginSupportKnown: false,
-            pluginSupportSource: 'unknown'
+            pluginSupportSource: 'unknown',
+            supportsFlowControl: false,
+            flowSupportKnown: false
           });
           return false;
         }
@@ -378,6 +437,8 @@ export const useAuthStore = create<AuthStoreState>()(
         delete nextState.supportsPlugin;
         delete nextState.pluginSupportKnown;
         delete nextState.pluginSupportSource;
+        delete nextState.supportsFlowControl;
+        delete nextState.flowSupportKnown;
         return nextState as unknown as AuthStoreState;
       }
     }

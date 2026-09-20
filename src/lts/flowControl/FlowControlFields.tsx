@@ -74,6 +74,11 @@ export function FlowControlFieldsView({
   const stateLabel = (value: boolean | undefined) => t(
     value === undefined ? 'flow_control.v3_unknown' : value ? 'flow_control.switch_on' : 'flow_control.switch_off',
   );
+  const statePill = (value: boolean | undefined) => (
+    <span className={styles.statePill} data-state={value === undefined ? 'unknown' : value ? 'on' : 'off'}>
+      {stateLabel(value)}
+    </span>
+  );
   const changeRules = (items: FlowRule[]) => onChange({ flowControlRulesText: JSON.stringify(items, null, 2) });
   const scalar = (field: keyof FlowControlValues, label: string, placeholder: string, allow = editable) => (
     <div id={`config-field-${field}`} data-config-field={field} tabIndex={-1}><Field label={t(`flow_control.${label}`)}>
@@ -114,7 +119,24 @@ export function FlowControlFieldsView({
   return (
     <section className={styles.card} aria-labelledby={`${id}-title`} data-testid="flow-control-settings">
       <div className={styles.heading} id="config-field-flowControlEnabled" data-config-field="flowControlEnabled" tabIndex={-1}>
-        <h3 id={`${id}-title`}>{t('flow_control.title')}</h3>
+        <div className={styles.titleRow}>
+          <h3 id={`${id}-title`}>{t('flow_control.title')}</h3>
+          {/* The chip reports the applied runtime policy, never the draft switch. */}
+          {data && (
+            <span
+              className={styles.statePill}
+              data-state={data['configuration-error'] ? 'error' : data.state.enabled ? 'on' : 'off'}
+            >
+              {t(
+                data['configuration-error']
+                  ? 'flow_control.applied_failed'
+                  : data.state.enabled
+                    ? 'flow_control.applied_on'
+                    : 'flow_control.applied_off'
+              )}
+            </span>
+          )}
+        </div>
         <ToggleSwitch
           checked={values.flowControlEnabled} disabled={!supported}
           label={t('flow_control.enabled')} ariaLabel={t('flow_control.enabled')}
@@ -143,7 +165,8 @@ export function FlowControlFieldsView({
             {switchRows.map(row => (
               <tr key={row.label}>
                 <th>{t(`flow_control.${row.label}`)}</th>
-                <td>{stateLabel(row.draft)}</td><td>{stateLabel(row.applied)}</td>
+                <td>{statePill(row.draft)}</td>
+                <td>{statePill(row.applied)}</td>
               </tr>
             ))}
           </tbody>
@@ -218,7 +241,7 @@ export function FlowControlFieldsView({
       {!legacy && (
         <>
           <div hidden={page !== 'all' && page !== 'queue'}>
-          <h4>{t('config_management.editor.pages.flow-control_queue')}</h4>
+          <h4>{t('flow_control.queue_section')}</h4>
           <div className={styles.grid}>
             {scalar('flowControlMaxWaiting', 'max_waiting', '0')}
             {scalar('flowControlMaxWaitingPerKey', 'max_waiting_key', t('flow_control.same_as_queue'))}

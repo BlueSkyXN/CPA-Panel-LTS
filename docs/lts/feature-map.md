@@ -10,6 +10,7 @@
 | `provider-stable-lts-page` | `protected` | `/ai-providers/legacy`、provider detail routes | 保留 usage-backed status 和 LTS provider；不能被 Workbench 替代 |
 | `ampcode` | `lts-maintained` | `/ai-providers/legacy/ampcode` | 上游 Panel 已删除，Core LTS 仍提供配置和 Management API |
 | `codex-abnormal-reasoning-retry-config` | `lts-maintained` | `/config` | Core LTS-owned runtime 策略的 visual config surface |
+| `local-flow-control-config` | `lts-maintained` | `/flow-control` | Core-owned Flow V3 编辑与只读观察；按 `supported` + `schema-version: 3` 能力门控 |
 | `provider-workbench` | `coexist` | `/ai-providers` | canonical provider 管理工作台；与 stable LTS provider 页面共存 |
 | `plugin-management` | `coexist` | `/plugins`、`/plugin-store` | 由 Core capability gate 控制的 plugin 管理和资源页面 |
 | `recent-requests` | `coexist` | provider health surfaces | 短窗口运行健康证据；不能替代完整 usage |
@@ -90,6 +91,17 @@ Panel 只编辑 Core 已有 schema，不自行发明运行时语义。未知现�
 - `src/i18n/*.lts.json`：LTS-only locale overlay。
 
 这些 sidecar 是本仓库的下游集成面。shared 页面应保持 thin integration，不应把 sidecar 逻辑散落回上游共享模块；上游 quota/auth-file 大改必须先比较 sidecar 行为再决定 port。
+
+### 本地 Flow V3 编辑与观察
+
+`local-flow-control-config` 对应 Core 侧可选的单进程准入控制。Panel 只编辑与观察，不在浏览器实现放行算法：
+
+- 入口是「观测」分组的一级页面 `/flow-control`，与 `plugin-management` 同样受 Core capability gate 控制：登录时读取 `GET /v0/management/flow-control`，只有 `supported: true` 且 `schema-version: 3` 才显示入口；旧 Core、旧 schema 或 Home 模式不显示，也不猜测版本字符串。
+- 规则、排队容量与观察开关由 `src/lts/flowControl/` sidecar 渲染；页面持有自己的可视化草稿，保存只把 flow-control 键经差异确认合并进 `config.yaml`，不回写其他字段或未托管 YAML。
+- 草稿、文件期望配置、实际已应用策略分开呈现；实时观察只在路由挂载期间订阅 SSE，离开页面即取消订阅。
+- 旧的 `#/config?section=flow-control` 深链重定向到新页面；可视化配置编辑器不再包含 flow-control 分区。
+
+完整语义见 [flow-control.md](./flow-control.md) 与 [sidecar README](../../src/lts/flowControl/README.md)。
 
 ## Coexist：可演进但不能替代 protected 能力
 

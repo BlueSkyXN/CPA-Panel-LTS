@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { createServer } from 'vite';
 
@@ -153,6 +154,25 @@ test('target URLs and route restoration exclude credentials and resource identit
   assert.equal(lifecycle.safeSessionPath('/ai-providers/legacy/openai/2'), '/ai-providers');
   assert.equal(lifecycle.safeSessionPath('/plugin-pages/a/1'), '/core');
   assert.equal(lifecycle.safeSessionPath('//external.example'), '/core');
+});
+
+test('top-level page routes survive session path restoration', async () => {
+  // A new first-class page must also be listed in safeSessionPath; otherwise a
+  // resident session or connection handoff silently drops the user back to /core.
+  const source = await readFile(new URL('../../router/MainRoutes.tsx', import.meta.url), 'utf8');
+  const pages = new Set(
+    source
+      .split(/\{\s*path:/)
+      .slice(1)
+      .map((entry) => entry.split('\n').slice(0, 12).join('\n'))
+      .filter((entry) => !entry.includes('<Navigate'))
+      .map((entry) => /^\s*'(\/[a-z-]+)'/.exec(entry)?.[1])
+      .filter((path) => path && path !== '/')
+  );
+  assert.ok(pages.has('/flow-control'), [...pages]);
+  for (const path of pages) {
+    assert.equal(lifecycle.safeSessionPath(path), path, `${path} is not restorable`);
+  }
 });
 
 test('session leave guards and pending writes have explicit lifetimes', () => {

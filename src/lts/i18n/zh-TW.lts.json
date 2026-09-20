@@ -474,7 +474,17 @@
     "unresolved_catalog": "目前 Core 未提供解析後的目標目錄，不會自動以公開別名替代。請手動填寫明確的上游目標，或更新 Core。",
     "catalog_truncated": "目標目錄已截斷。已儲存的選項繼續保留；請另行確認未顯示的目標。",
     "stage_capacity": "本階段餘量",
-    "empty_active_policy": "啟用但沒有規則時，只記錄已接入的呼叫，不限制並發或頻率。請新增規則後再確認實際生效結果。"
+    "empty_active_policy": "啟用但沒有規則時，只記錄已接入的呼叫，不限制並發或頻率。請新增規則後再確認實際生效結果。",
+    "page_description": "編輯 Core 端流控的規則、佇列容量與執行觀察。儲存時僅把 flow-control 相關鍵經差異確認合併進 config.yaml；草稿、檔案期望設定與實際已套用策略分開呈現。",
+    "admitted_total": "累計准入",
+    "rejected_total": "累計拒絕",
+    "timed_out_total": "逾時",
+    "canceled_total": "已取消",
+    "applied_failed": "未套用",
+    "applied_on": "已套用：開啟",
+    "applied_off": "已套用：關閉",
+    "queue_section": "佇列與容量",
+    "waiting_split": "{{requests}} 請求 · {{attempts}} 執行"
   },
   "config_management": {
     "visual": {
@@ -482,5 +492,11 @@
         "flow_control_config": "規則格式无法編輯，请在原始 YAML 中檢查；不會丢弃未知設定。"
       }
     }
+  },
+  "nav": {
+    "flow_control": "Flow 並行與頻率"
+  },
+  "nav_meta": {
+    "flow_control": "流控規則與即時觀察"
   }
 }

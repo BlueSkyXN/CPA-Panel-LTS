@@ -1659,11 +1659,6 @@
             "fallback": "設定配額不足時的替代路徑；切換專案或預覽模型可能改變實際使用的資源或模型。",
             "streaming": "設定一般串流與非串流保活。保活用於維持連線，不是模型生成進度，也不是 Codex 異常回應快取。"
           },
-          "flow-control": {
-            "rules": "依比對條件限制並行與頻率。先限定目標請求，再查看規則效果；開關開啟不代表執行端已接受目前草稿。",
-            "queue": "設定超限後的等待與記憶體容量。較長等待可減少立即拒絕，但會增加延遲和佇列資源用量。",
-            "monitoring": "對照草稿與執行狀態；觀察連線僅在本頁可見且開啟觀察時運作，離開本頁會暫停。"
-          },
           "headers": {
             "claude": "設定 Claude 請求標頭預設值與裝置指紋；此處不是回應標頭透傳，也不修改用戶端 API 金鑰。",
             "codex": "設定 Codex 請求身分資訊；異常偵測、重試與對沖在「Codex 降智對抗」中設定。"
@@ -1696,7 +1691,6 @@
         "service": "服務與存取",
         "operations": "執行與觀測",
         "routing": "網路與路由",
-        "flow-control": "並行與頻率",
         "headers": "請求標頭與身分",
         "codex-policy": "Codex 降智對抗",
         "compatibility": "模型與協定相容",
@@ -1715,9 +1709,6 @@
         "routing_retries": "失敗重試",
         "routing_fallback": "配額後援",
         "routing_streaming": "串流與保活",
-        "flow-control_rules": "限流規則",
-        "flow-control_queue": "佇列與容量",
-        "flow-control_monitoring": "執行觀察",
         "headers_claude": "Claude",
         "headers_codex": "Codex",
         "codex-policy_scope": "模式與範圍",
@@ -2467,6 +2458,7 @@
     "data_refreshed": "資料重新整理成功",
     "connection_required": "請先建立連線",
     "refresh_failed": "重新整理失敗",
+    "save_failed": "儲存失敗",
     "update_failed": "更新失敗",
     "add_failed": "新增失敗",
     "delete_failed": "刪除失敗",

@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useConfigFieldControls, type ConfigFieldsProps } from './ConfigFieldControls';
-import { ConfigDomainPanel, FlowControlPanel } from './ConfigDomainPanels';
+import { ConfigDomainPanel } from './ConfigDomainPanels';
 import { getConfigIssueFields } from './configIssues';
 import {
   CONFIG_DOMAINS,
@@ -223,7 +223,7 @@ export function VisualConfigEditor({
       {location.migrated && (
         <div className={styles.contextNotice}>
           {t('config_management.editor.legacy_notice')}
-          {['headers', 'codex-policy', 'flow-control', 'compatibility'].map((id) => (
+          {['headers', 'codex-policy', 'compatibility'].map((id) => (
             <button key={id} type="button" onClick={() => selectDomain(id)}>
               {t(domainLabelKey(id))}
             </button>
@@ -335,7 +335,7 @@ export function VisualConfigEditor({
               `config_management.editor.guidance.pages.${location.section}.${location.subsection}`
             )}
           </p>
-          {CONFIG_DOMAINS.filter((d) => d.id !== 'flow-control').flatMap((d) =>
+          {CONFIG_DOMAINS.flatMap((d) =>
             d.pages.map((page) => {
               if (!visited.has(`${d.id}/${page.id}`)) return null;
               return (
@@ -356,18 +356,6 @@ export function VisualConfigEditor({
                 </section>
               );
             })
-          )}
-          {[...visited].some((key) => key.startsWith('flow-control/')) && (
-            <section
-              hidden={location.section !== 'flow-control'}
-              data-config-page={`flow-control/${location.subsection}`}
-            >
-              <FlowControlPanel
-                {...props}
-                active={location.section === 'flow-control'}
-                page={location.section === 'flow-control' ? location.subsection : 'rules'}
-              />
-            </section>
           )}
         </div>
       </div>

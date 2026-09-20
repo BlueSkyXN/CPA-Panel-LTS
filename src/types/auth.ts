@@ -22,6 +22,8 @@ export interface AuthState {
   supportsPlugin: boolean;
   pluginSupportKnown: boolean;
   pluginSupportSource: PluginSupportSource;
+  supportsFlowControl: boolean;
+  flowSupportKnown: boolean;
 }
 
 // 连接状态

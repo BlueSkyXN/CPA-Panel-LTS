@@ -252,6 +252,7 @@ export interface FlowStatus {
     admitted: number;
     rejected: number;
     'timed-out': number;
+    canceled?: number;
     'blocked-by-rule': Record<string, number>;
     buckets: FlowBucket[];
     enabled: boolean;

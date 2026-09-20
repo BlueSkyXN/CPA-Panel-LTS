@@ -8,6 +8,7 @@ const vite = await createServer({ appType:'custom', logLevel:'silent', server:{m
 test.after(()=>vite.close());
 const nav = await vite.ssrLoadModule('/src/components/config/configNavigation.ts');
 const { DEFAULT_VISUAL_VALUES } = await vite.ssrLoadModule('/src/types/visualConfig.ts');
+const { FLOW_FIELDS } = await vite.ssrLoadModule('/src/lts/flowControl/model.ts');
 const resources = {};
 for (const locale of ['en','zh-CN','zh-TW','ru']) {
   const shared=JSON.parse(fs.readFileSync(new URL(`../../i18n/locales/${locale}.json`,import.meta.url)));
@@ -18,11 +19,13 @@ for (const locale of ['en','zh-CN','zh-TW','ru']) {
 }
 const i18n=i18next.createInstance(); await i18n.init({lng:'zh-CN',resources,fallbackLng:'en'});
 
-test('nine domains own every editable field once, excluding only internal compatibility fields',()=>{
-  const expected=Object.keys(DEFAULT_VISUAL_VALUES).filter(f=>!['streaming','flowControlVersion','codexAbnormalReasoningRetryEnabled'].includes(f));
+test('eight domains own every editable field once; flow fields live on the dedicated page',()=>{
+  // Flow-control fields are edited on /flow-control with their own draft, so the
+  // config editor owns every visual value that is not flow-only or internal.
+  const expected=Object.keys(DEFAULT_VISUAL_VALUES).filter(f=>!['streaming','codexAbnormalReasoningRetryEnabled',...FLOW_FIELDS].includes(f));
   expected.push(...Object.keys(DEFAULT_VISUAL_VALUES.streaming).map(f=>`streaming.${f}`));
   const owned=nav.CONFIG_DOMAINS.flatMap(d=>d.pages.flatMap(p=>p.fields));
-  assert.equal(nav.CONFIG_DOMAINS.length,9);
+  assert.equal(nav.CONFIG_DOMAINS.length,8);
   assert.equal(new Set(owned).size,owned.length);
   assert.deepEqual([...owned].sort(),expected.sort());
   assert.deepEqual(Object.keys(nav.CONFIG_FIELDS).sort(),expected.sort());
