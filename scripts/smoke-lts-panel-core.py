@@ -1832,6 +1832,42 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
         )
     seen.append("BROWSER visual reload parsed disable-image-generation passthrough")
 
+    # 验证真实浏览器选择、YAML 落盘及 Core 热更新使用同一策略。
+    locate_config_field(page, "codexCacheAffinityStrategy", "codex.cache-affinity.strategy")
+    cache_control = page.get_by_test_id("codex-cache-affinity-control")
+    for label, strategy in [
+        ("Session compatibility only", "stable-id"),
+        ("Disable enhanced optimization", "legacy"),
+        ("Automatic optimization (recommended)", "client-aware"),
+    ]:
+        cache_control.get_by_role("radio", name=label, exact=True).check()
+        page.locator('button[aria-label="Save"]').click()
+        with page.expect_response(
+            lambda response: response.request.method == "PUT"
+            and response.url.endswith("/v0/management/config.yaml")
+        ) as saved:
+            page.get_by_role("button", name="Confirm Save").click()
+        if saved.value.status != 200:
+            raise AssertionError(f"Core rejected cache affinity strategy {strategy}")
+        page.get_by_text("Configuration saved successfully", exact=False).first.wait_for()
+        saved_yaml = request_text(api_url, "/v0/management/config.yaml")
+        if not re.search(r"cache-affinity:\s*\n\s+strategy: " + strategy + r"\b", saved_yaml):
+            raise AssertionError(f"Core did not persist cache affinity strategy {strategy}")
+        deadline = time.monotonic() + 8
+        while True:
+            config = request_json(api_url, "/v0/management/config")
+            if config.get("codex", {}).get("cache-affinity", {}).get("strategy") == strategy:
+                break
+            if time.monotonic() >= deadline:
+                raise AssertionError(f"Core did not reload cache affinity strategy {strategy}")
+            time.sleep(0.25)
+        page.reload(wait_until="domcontentloaded")
+        page.get_by_role("button", name="Visual Editor").click()
+        locate_config_field(page, "codexCacheAffinityStrategy", "codex.cache-affinity.strategy")
+        if not cache_control.get_by_role("radio", name=label, exact=True).is_checked():
+            raise AssertionError(f"Panel did not reload cache affinity strategy {strategy}")
+        seen.append(f"BROWSER cache affinity {strategy}: save, Core reload, Panel readback")
+
     # The Core config watcher applies file writes asynchronously. Wait for the
     # visual-save value to reach the live config before the next smoke phase,
     # otherwise a delayed write can overwrite the log fixtures it is about to

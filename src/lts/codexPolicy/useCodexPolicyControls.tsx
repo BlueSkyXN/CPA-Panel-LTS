@@ -1,3 +1,4 @@
+import { CODEX_CACHE_AFFINITY_STRATEGIES, isCodexCacheAffinityStrategy } from './cacheAffinity';
 import { useId, useMemo, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/ui/Input';
@@ -78,7 +79,7 @@ const ABNORMAL_RETRY_HEDGED_MODE_HINT_KEYS = {
     'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_hedged_retry_mode_quality_desc',
 } satisfies Record<CodexAbnormalReasoningRetryHedgedRetryMode, ConfigHeaderI18nKey>;
 
-type CodexPolicyFieldId = Extract<ConfigFieldId, `codexAbnormalReasoningRetry${string}`>;
+type CodexPolicyFieldId = Extract<ConfigFieldId, `codexAbnormalReasoningRetry${string}` | 'codexCacheAffinityStrategy'>;
 export function useCodexPolicyControls({
   values,
   validationErrors,
@@ -258,6 +259,33 @@ export function useCodexPolicyControls({
   );
 
   return {
+    codexCacheAffinityStrategy: (
+      <div data-testid="codex-cache-affinity-control">
+        <ConfigChoiceGroup
+          label={t('codex_cache_affinity.title')}
+          value={values.codexCacheAffinityStrategy || 'client-aware'}
+          options={CODEX_CACHE_AFFINITY_STRATEGIES.map((strategy) => ({
+            value: strategy,
+            label: t(`codex_cache_affinity.options.${strategy}.label`),
+            description: t(`codex_cache_affinity.options.${strategy}.description`),
+          }))}
+          disabled={disabled}
+          onChange={(strategy) => {
+            if (isCodexCacheAffinityStrategy(strategy)) onChange({ codexCacheAffinityStrategy: strategy });
+          }}
+        />
+        {!values.codexCacheAffinityStrategy && (
+          <p role="status">{t('codex_cache_affinity.default_hint')}</p>
+        )}
+        {values.codexCacheAffinityStrategy && !isCodexCacheAffinityStrategy(values.codexCacheAffinityStrategy) && (
+          <p role="alert">{t('codex_cache_affinity.unknown_hint')}</p>
+        )}
+        {values.codexCacheAffinityStrategy === 'legacy' && (
+          <p>{t('codex_cache_affinity.troubleshooting_hint')}</p>
+        )}
+        <p>{t('codex_cache_affinity.availability_hint')}</p>
+      </div>
+    ),
     codexAbnormalReasoningRetryStreamBuffer: (
       <ToggleRow
         title={t(

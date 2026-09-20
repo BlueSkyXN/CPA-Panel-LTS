@@ -1,3 +1,4 @@
+import { readCodexCacheAffinity, isCodexCacheAffinityStrategy } from '@/lts/codexPolicy/cacheAffinity';
 import { FLOW_FIELDS, flowControlValidation, readFlowControlValues } from '@/lts/flowControl/model';
 import { writeFlowControlValues } from '@/lts/flowControl/yaml';
 import { useCallback, useMemo, useReducer } from 'react';
@@ -1320,6 +1321,7 @@ function getNextDirtyFields(
       'codexHeaderUserAgent',
       'codexHeaderBetaFeatures',
       'codexIdentityConfuse',
+      'codexCacheAffinityStrategy',
       'codexAbnormalReasoningRetryAction',
       'codexAbnormalReasoningRetryEnabled',
       'codexAbnormalReasoningRetryStreamBuffer',
@@ -1672,6 +1674,7 @@ export function useVisualConfig() {
             ? codexHeaderDefaults['beta-features']
             : '',
         codexIdentityConfuse: Boolean(codex?.['identity-confuse']),
+        codexCacheAffinityStrategy: readCodexCacheAffinity(codex?.['cache-affinity']),
         codexAbnormalReasoningRetryAction,
         codexAbnormalReasoningRetryEnabled: codexAbnormalReasoningRetryAction !== 'disabled',
         codexAbnormalReasoningRetryModelContains: parseStringListWithDefault(
@@ -2052,9 +2055,20 @@ export function useVisualConfig() {
 
         const abnormalReasoningRetryDirty =
           hasCodexAbnormalReasoningRetryDirtyFields(dirtyFields);
-        const codexDirty = dirtyFields.has('codexIdentityConfuse') || abnormalReasoningRetryDirty;
+        const codexDirty = dirtyFields.has('codexIdentityConfuse') || dirtyFields.has('codexCacheAffinityStrategy') || abnormalReasoningRetryDirty;
         if (codexDirty) {
+          if (dirtyFields.has('codexCacheAffinityStrategy') &&
+              (isAlias(doc.getIn(['codex'], true)) || isAlias(doc.getIn(['codex', 'cache-affinity'], true)))) {
+            throw new VisualConfigApplyError('visual_apply_failed');
+          }
           ensureMapInDoc(doc, ['codex']);
+          if (dirtyFields.has('codexCacheAffinityStrategy')) {
+            if (!isCodexCacheAffinityStrategy(values.codexCacheAffinityStrategy)) {
+              throw new VisualConfigApplyError('visual_apply_failed');
+            }
+            ensureMapInDoc(doc, ['codex', 'cache-affinity']);
+            doc.setIn(['codex', 'cache-affinity', 'strategy'], values.codexCacheAffinityStrategy);
+          }
           if (dirtyFields.has('codexIdentityConfuse')) {
             setBooleanInDoc(doc, ['codex', 'identity-confuse'], values.codexIdentityConfuse);
           }

@@ -105,7 +105,7 @@ function PluginsPanel(props: Props) {
 function CodexPolicyPanel(props: Props) {
   const { t } = useTranslation();
   const action = props.values.codexAbnormalReasoningRetryAction;
-  const isDecisionPage = props.page.id === 'scope' || props.page.id === 'hedging';
+  const isDecisionPage = props.page.id === 'scope' || props.page.id === 'hedging' || props.page.id === 'cache';
   const hedgingNote = (
     <div className={styles.fieldCondition}>
       <p data-testid="config-hedging-condition" role="status">
