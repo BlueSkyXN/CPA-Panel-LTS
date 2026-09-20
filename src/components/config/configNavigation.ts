@@ -203,6 +203,13 @@ export const CONFIG_FIELDS = {
     yamlKey: 'codex-header-defaults.beta-features',
     fullWidth: false,
   },
+  codexCacheAffinityStrategy: {
+    labelKey: 'codex_cache_affinity.title',
+    yamlKey: 'codex.cache-affinity.strategy',
+    fullWidth: true,
+    heading: false,
+    aliases: ['cache', '缓存', 'ZCode', 'ChatGPT'],
+  },
   codexIdentityConfuse: {
     labelKey: 'config_management.visual.sections.headers.codex_identity_confuse',
     yamlKey: 'codex.identity-confuse',
@@ -573,6 +580,7 @@ export const CONFIG_DOMAINS = [
     id: 'codex-policy',
     group: 'features',
     pages: [
+      { id: 'cache', fields: ['codexCacheAffinityStrategy'] },
       {
         id: 'scope',
         fields: [

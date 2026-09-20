@@ -10,6 +10,39 @@ status_definitions:
   experimental: Optional surface that may be gated or hidden when backend support is missing.
 
 features:
+  - id: codex-cache-affinity-config
+    status: lts-maintained
+    reason: ChatGPT OAuth cache affinity needs understandable controls while preserving absent defaults, unknown YAML and upstream cache semantics.
+    routes:
+      - /config
+    panel_files:
+      - src/services/api/configFile.ts
+      - src/lts/codexPolicy/cacheAffinity.ts
+      - src/lts/codexPolicy/cacheAffinity.test.mjs
+      - src/lts/codexPolicy/useCodexPolicyControls.tsx
+      - src/lts/i18n/
+      - src/hooks/useVisualConfig.ts
+      - src/types/visualConfig.ts
+      - src/components/config/configNavigation.ts
+      - src/components/config/ConfigDomainPanels.tsx
+      - scripts/smoke-config-editor.py
+      - scripts/smoke-lts-panel-core.py
+      - docs/lts/codex-cache-affinity.md
+    core_endpoints:
+      - /v0/management/config.yaml
+    required_markers:
+      - codexCacheAffinityStrategy
+      - cache-affinity
+      - codex_cache_affinity
+      - client-aware
+      - stable-id
+      - legacy
+    validation:
+      - npm run test:config
+      - npm run type-check
+      - npm run build
+      - npm run smoke:config
+
   - id: multi-instance-connections
     status: lts-maintained
     reason: Independent same-origin runtime documents preserve per-instance pages, drafts, and clients. Multi-instance management is opt-in and off by default, so the panel auto-enters the only or first remembered instance with a resident connection, and keeping several instances connected requires enabling the dedicated toggle.

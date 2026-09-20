@@ -25,7 +25,7 @@
     "test:usage-time-range": "node --test src/utils/usage/timeRangeFilter.test.mjs",
     "test:usage-query": "node --test src/utils/usage/queryView.test.mjs src/services/api/usageQuery.test.mjs",
     "test:dashboard": "node --test src/features/dashboard/dashboardMetrics.test.mjs",
-    "test:config": "node --test src/components/config/apiKeySecurity.test.mjs src/components/config/antigravitySensitiveWords.test.mjs src/components/config/configNavigation.test.mjs src/components/config/payloadAst.test.mjs && npm run test:flow-control",
+    "test:config": "node --test src/components/config/apiKeySecurity.test.mjs src/components/config/antigravitySensitiveWords.test.mjs src/components/config/configNavigation.test.mjs src/components/config/payloadAst.test.mjs src/lts/codexPolicy/cacheAffinity.test.mjs && npm run test:flow-control",
     "test:provider-xai": "node --test src/features/providers/xaiApiKeyProvider.test.mjs",
     "test:provider-integrity": "node --test src/features/providers/providerIntegrity.test.mjs",
     "test:provider-recent": "node --test src/components/providers/hooks/providerRecentRequests.test.mjs",

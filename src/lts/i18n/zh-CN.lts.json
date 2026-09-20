@@ -491,6 +491,24 @@
       "validation": {
         "flow_control_config": "规则格式无法编辑，请在原始 YAML 中检查；不会丢弃未知配置。"
       }
+    },
+    "editor": {
+      "domains": {
+        "codex-policy": "Codex 优化"
+      },
+      "pages": {
+        "codex-policy_cache": "缓存优化"
+      },
+      "guidance": {
+        "pages": {
+          "codex-policy": {
+            "cache": "帮助连续对话复用上游缓存，适配 ZCode 等客户端的请求方式。仅适用于通过 ChatGPT 账号登录接入的 Codex；使用 API Key 接入的模型不受影响。"
+          },
+          "headers": {
+            "codex": "设置 Codex 请求身份信息；缓存优化、异常检测、重试与对冲在「Codex 优化」中设置。"
+          }
+        }
+      }
     }
   },
   "nav": {
@@ -498,5 +516,26 @@
   },
   "nav_meta": {
     "flow_control": "流控规则与实时观察"
+  },
+  "codex_cache_affinity": {
+    "title": "Codex 缓存优化",
+    "default_hint": "当前使用默认设置：自动优化。",
+    "unknown_hint": "当前配置的策略无法识别。未修改此项时会保留原值；请选择下面一种模式，或在 YAML 中检查配置。",
+    "troubleshooting_hint": "如果怀疑缓存优化影响了请求，可以选择此项进行对比排查。",
+    "availability_hint": "此设置需要服务端支持。实际缓存命中由上游决定。",
+    "options": {
+      "client-aware": {
+        "label": "自动优化（推荐）",
+        "description": "修复客户端会话信息的兼容问题，并根据连续的对话内容帮助复用缓存。"
+      },
+      "stable-id": {
+        "label": "仅修复会话兼容",
+        "description": "修复客户端会话信息的兼容问题，不根据历史对话内容匹配缓存。"
+      },
+      "legacy": {
+        "label": "关闭增强优化",
+        "description": "关闭会话兼容修复和历史内容匹配，保留常规请求处理。上游自身的缓存仍可能生效。"
+      }
+    }
   }
 }

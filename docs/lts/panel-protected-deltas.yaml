@@ -6,6 +6,16 @@ maintenance_model:
   release_asset: management.html
 
 protected_deltas:
+  - id: codex-cache-affinity-config
+    reason: Core-owned cache optimization controls must explain user choices without changing private sessions or promising cache hits.
+    must_keep:
+      - codex.cache-affinity.strategy visual and YAML roundtrip
+      - three modes with descriptions in all four LTS locale overlays
+      - absent strategy stays absent until the user edits it
+      - unknown strategies and sibling YAML fields survive unrelated saves
+      - only ChatGPT sign-in Codex scope; API key connections unaffected
+      - disabling enhanced optimization does not disable upstream caching
+      - independent from abnormal reasoning retry activation
   - id: multi-instance-connections
     reason: Instance selection remains available without an authenticated business workspace.
     must_keep:

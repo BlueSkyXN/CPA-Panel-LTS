@@ -1409,6 +1409,21 @@ for lockfile in bun.lock yarn.lock pnpm-lock.yaml; do
   fi
 done
 
+# ChatGPT OAuth cache optimization uses the existing configuration document API.
+require_path src/lts/codexPolicy/cacheAffinity.ts
+require_path src/lts/codexPolicy/cacheAffinity.test.mjs
+require_path docs/lts/codex-cache-affinity.md
+require_file_contains src/types/visualConfig.ts "codexCacheAffinityStrategy"
+require_file_contains src/hooks/useVisualConfig.ts "['codex', 'cache-affinity', 'strategy']"
+require_file_contains src/components/config/configNavigation.ts "codex.cache-affinity.strategy"
+require_file_contains scripts/smoke-config-editor.py "run_cache_affinity_smoke"
+for locale in en zh-CN zh-TW ru; do
+  require_file_contains "src/lts/i18n/$locale.lts.json" '"codex_cache_affinity"'
+  require_file_contains "src/lts/i18n/$locale.lts.json" '"client-aware"'
+  require_file_contains "src/lts/i18n/$locale.lts.json" '"stable-id"'
+  require_file_contains "src/lts/i18n/$locale.lts.json" '"legacy"'
+done
+
 # Keep this optional Core-owned settings surface and its status reader together.
 require_path src/lts/flowControl
 require_file_contains src/pages/FlowControlPage.tsx "FlowControlFields"

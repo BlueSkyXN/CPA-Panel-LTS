@@ -491,6 +491,24 @@
       "validation": {
         "flow_control_config": "規則格式无法編輯，请在原始 YAML 中檢查；不會丢弃未知設定。"
       }
+    },
+    "editor": {
+      "domains": {
+        "codex-policy": "Codex 最佳化"
+      },
+      "pages": {
+        "codex-policy_cache": "快取最佳化"
+      },
+      "guidance": {
+        "pages": {
+          "codex-policy": {
+            "cache": "協助連續對話重用上游快取，適配 ZCode 等用戶端的請求方式。僅適用於透過 ChatGPT 帳號登入接入的 Codex；使用 API Key 接入的模型不受影響。"
+          },
+          "headers": {
+            "codex": "設定 Codex 請求身分資訊；快取最佳化、異常偵測、重試與對沖在「Codex 最佳化」中設定。"
+          }
+        }
+      }
     }
   },
   "nav": {
@@ -498,5 +516,26 @@
   },
   "nav_meta": {
     "flow_control": "流控規則與即時觀察"
+  },
+  "codex_cache_affinity": {
+    "title": "Codex 快取最佳化",
+    "default_hint": "目前使用預設設定：自動最佳化。",
+    "unknown_hint": "無法識別目前設定的策略。未修改此項時會保留原值；請選擇下列一種模式，或在 YAML 中檢查設定。",
+    "troubleshooting_hint": "若懷疑快取最佳化影響了請求，可選擇此項進行比較排查。",
+    "availability_hint": "此設定需要伺服器支援。實際快取命中由上游決定。",
+    "options": {
+      "client-aware": {
+        "label": "自動最佳化（建議）",
+        "description": "修復用戶端工作階段資訊的相容性問題，並根據連續的對話內容協助重用快取。"
+      },
+      "stable-id": {
+        "label": "僅修復工作階段相容性",
+        "description": "修復用戶端工作階段資訊的相容性問題，不根據歷史對話內容匹配快取。"
+      },
+      "legacy": {
+        "label": "關閉增強最佳化",
+        "description": "關閉工作階段相容性修復和歷史內容匹配，保留一般請求處理。上游本身的快取仍可能生效。"
+      }
+    }
   }
 }

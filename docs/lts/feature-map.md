@@ -68,6 +68,13 @@ Core 依赖至少包括：
 
 上游删除、导航重构或 provider 清单重写都不能作为删除 Ampcode 的依据。只有 Core contract 与 LTS 产品方向同时明确改变时，才可重新评估。
 
+### Codex 缓存优化
+
+- 现有 `/config` 的「Codex 优化 → 缓存优化」提供三档选择，分别映射 `client-aware`、`stable-id`、`legacy`。
+- 未配置时显示默认自动优化，不在无关保存中写入；未知策略保持原值并显示提示。
+- 与异常推理重试独立，只适用于支持该功能的 Core 的 ChatGPT 账号登录 Codex 请求。
+- 说明和验证边界见 [codex-cache-affinity.md](codex-cache-affinity.md)。
+
 ### Codex abnormal reasoning retry visual config
 
 `codex.abnormal-reasoning-retry` 由 `CPA-Core-LTS` 运行时拥有，Panel 维护 `/config` 中的可视化编辑面。当前 feature contract 覆盖：

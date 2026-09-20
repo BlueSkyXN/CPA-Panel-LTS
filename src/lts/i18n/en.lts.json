@@ -491,6 +491,24 @@
       "validation": {
         "flow_control_config": "Cannot edit this rule format. Inspect the original YAML; unknown settings are preserved."
       }
+    },
+    "editor": {
+      "domains": {
+        "codex-policy": "Codex optimization"
+      },
+      "pages": {
+        "codex-policy_cache": "Cache optimization"
+      },
+      "guidance": {
+        "pages": {
+          "codex-policy": {
+            "cache": "Help consecutive conversation turns reuse upstream cache with clients such as ZCode. Applies only to Codex connected through ChatGPT account sign-in; API key connections are unaffected."
+          },
+          "headers": {
+            "codex": "Configure Codex request identity; cache optimization, anomaly detection, retries and hedging are configured under Codex optimization."
+          }
+        }
+      }
     }
   },
   "nav": {
@@ -498,5 +516,26 @@
   },
   "nav_meta": {
     "flow_control": "Concurrency & rate-limit governance"
+  },
+  "codex_cache_affinity": {
+    "title": "Codex cache optimization",
+    "default_hint": "Using the default: Automatic optimization.",
+    "unknown_hint": "The configured strategy is not recognized. Its value is preserved unless you edit this setting. Choose a mode below or inspect the YAML configuration.",
+    "troubleshooting_hint": "Use this option to compare behavior if you suspect cache optimization is affecting requests.",
+    "availability_hint": "Requires server support. Actual cache hits are determined by the upstream service.",
+    "options": {
+      "client-aware": {
+        "label": "Automatic optimization (recommended)",
+        "description": "Fix client session compatibility issues and use consecutive conversation content to help reuse cache."
+      },
+      "stable-id": {
+        "label": "Session compatibility only",
+        "description": "Fix client session compatibility issues without matching cache against conversation history."
+      },
+      "legacy": {
+        "label": "Disable enhanced optimization",
+        "description": "Turn off session compatibility fixes and history matching while keeping regular request processing. The upstream service may still use its own cache."
+      }
+    }
   }
 }
