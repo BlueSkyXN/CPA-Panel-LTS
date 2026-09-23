@@ -28,11 +28,18 @@ export function buildPatAuth(
     throw new Error('invalid_pat');
   }
   if (previous && previous.type !== provider) throw new Error('provider_mismatch');
-  if (previous?.auth_mode === 'local_cli') throw new Error('local_cli_not_pat');
+  const previousMode = typeof previous?.auth_mode === 'string' ? previous.auth_mode : '';
+  if (previousMode && previousMode !== 'pat' && !(provider === 'codebuddy' && previousMode === 'api_key')) {
+    throw new Error('unsupported_auth_mode');
+  }
   const auth = { ...previous, type: provider, auth_mode: 'pat', pat, label: label.trim() };
-  // 更新长期凭据时不能留下与新 PAT 冲突的旧凭据；其余账号配置保持不变。
+  // 更新长期凭据时不能留下与新 PAT 冲突的旧凭据或已被移除的 runner/transport 字段；
+  // 其余账号配置保持不变。
   delete (auth as Record<string, unknown>).access_token;
   delete (auth as Record<string, unknown>).api_key;
+  delete (auth as Record<string, unknown>).transport;
+  delete (auth as Record<string, unknown>).profile_id;
+  delete (auth as Record<string, unknown>).config_dir;
   return auth;
 }
 
