@@ -48,10 +48,16 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
       onClose={onClose}
       closeDisabled={editor?.saving === true}
       width={720}
+      className={styles.authFileEditorModal}
       title={
-        editor?.fileName
-          ? t('auth_files.auth_field_editor_title', { name: editor.fileName })
-          : t('auth_files.prefix_proxy_button')
+        <div className={styles.authFileModalTitle}>
+          <span>{t('auth_files.prefix_proxy_button')}</span>
+          {editor?.fileName && (
+            <span className={styles.authFileModalFileName} title={editor.fileName}>
+              {editor.fileName}
+            </span>
+          )}
+        </div>
       }
       footer={
         <>

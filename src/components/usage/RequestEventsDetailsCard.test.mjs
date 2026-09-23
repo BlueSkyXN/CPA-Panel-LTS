@@ -236,6 +236,12 @@ test('renders the upstream-reported model without changing the request model', a
                 tokens: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
                 failed: false,
               },
+              {
+                timestamp: '2026-09-16T00:02:00Z',
+                upstream_model: 'gpt-5.5-sol',
+                tokens: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+                failed: false,
+              },
             ],
           },
         },
@@ -261,7 +267,75 @@ test('renders the upstream-reported model without changing the request model', a
 
   assert.match(markup, />gpt-5\.5-sol</);
   assert.match(markup, /Upstream: gpt-5\.5-sol-2026-0815/);
+  // Identical upstream models are suppressed; only the mismatched row renders.
   assert.equal((markup.match(/data-upstream-model=/g) ?? []).length, 1);
+  assert.equal(markup.includes('Upstream: gpt-5.5-sol<'), false);
+});
+
+test('renders a dedicated upstream column with match/diff tones and no inline sub-label', async () => {
+  await i18n.changeLanguage('en');
+  localStorageValues.set(
+    'cli-proxy-usage-request-event-columns-v3',
+    JSON.stringify({ upstreamModel: true })
+  );
+  const usage = {
+    apis: {
+      'POST /v1/responses': {
+        models: {
+          'gpt-5.5-sol': {
+            details: [
+              {
+                timestamp: '2026-09-16T00:00:00Z',
+                upstream_model: 'gpt-5.5-sol-2026-0815',
+                tokens: { input_tokens: 1, output_tokens: 2, total_tokens: 3 },
+                failed: false,
+              },
+              {
+                timestamp: '2026-09-16T00:01:00Z',
+                upstream_model: 'gpt-5.5-sol',
+                tokens: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+                failed: false,
+              },
+              {
+                timestamp: '2026-09-16T00:02:00Z',
+                tokens: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+                failed: false,
+              },
+            ],
+          },
+        },
+      },
+    },
+  };
+
+  try {
+    const markup = renderToStaticMarkup(
+      createElement(RequestEventsDetailsCard, {
+        usage,
+        loading: false,
+        pageTimeRange: 'all',
+        referenceNowMs: Date.parse('2026-09-16T00:00:00Z'),
+        priceProfile: pricingModule.createDefaultPriceProfileV3(),
+        requestApiKeys: [],
+        geminiKeys: [],
+        claudeConfigs: [],
+        codexConfigs: [],
+        vertexConfigs: [],
+        openaiProviders: [],
+      })
+    );
+
+    // Column mode shows both matching and differing upstream models with tones.
+    assert.match(markup, /data-upstream-match="diff"/);
+    assert.match(markup, /data-upstream-match="match"/);
+    assert.match(markup, /data-upstream-match="missing"/);
+    assert.match(markup, /Upstream Model/);
+    // Inline "Upstream: xxx" sub-label is suppressed once the column is visible.
+    assert.equal(markup.includes('Upstream: gpt-5.5-sol'), false);
+    assert.equal((markup.match(/data-upstream-model=/g) ?? []).length, 2);
+  } finally {
+    localStorageValues.delete('cli-proxy-usage-request-event-columns-v3');
+  }
 });
 
 test('renders first content from assistant timing when reasoning timing is absent', async () => {

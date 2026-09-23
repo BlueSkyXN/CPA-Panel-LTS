@@ -626,9 +626,38 @@
 
 .upstreamModel {
   margin-top: 2px;
-  color: var(--text-secondary);
+  color: var(--amber-text);
   font-size: 11px;
-  font-weight: 400;
+  font-weight: 600;
+}
+
+.upstreamModelCell {
+  max-width: 240px;
+  font-size: 12px;
+}
+
+.upstreamModelMatch {
+  display: block;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--success-badge-text, #065f46);
+  font-weight: 500;
+}
+
+.upstreamModelDiff {
+  display: block;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--amber-text);
+  font-weight: 700;
+}
+
+.upstreamModelMissing {
+  color: var(--text-secondary);
 }
 
 .credentialType {

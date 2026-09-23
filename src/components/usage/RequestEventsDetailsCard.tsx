@@ -143,6 +143,7 @@ const CACHE_RATE_HIGH_THRESHOLD = 0.6;
 const REQUEST_EVENT_COLUMN_IDS = [
   'timestamp',
   'model',
+  'upstreamModel',
   'requestKey',
   'source',
   'authIndex',
@@ -250,6 +251,7 @@ type RequestEventNumericMetricId = (typeof REQUEST_EVENT_NUMERIC_METRIC_IDS)[num
 const DEFAULT_COLUMN_VISIBILITY: RequestEventColumnVisibility = {
   timestamp: true,
   model: true,
+  upstreamModel: false,
   requestKey: true,
   source: false,
   authIndex: false,
@@ -1637,6 +1639,7 @@ export function RequestEventsDetailsCard({
         label: t('usage_stats.request_events_timestamp'),
       },
       { id: 'model' as const, label: t('usage_stats.model_name') },
+      { id: 'upstreamModel' as const, label: t('usage_stats.request_events_upstream_model_column') },
       { id: 'requestKey' as const, label: t('usage_stats.request_events_request_key') },
       { id: 'source' as const, label: t('usage_stats.request_events_source') },
       { id: 'authIndex' as const, label: t('usage_stats.request_events_auth_index') },
@@ -2726,6 +2729,11 @@ export function RequestEventsDetailsCard({
                     <th>{t('usage_stats.request_events_timestamp')}</th>
                   )}
                   {columnVisibility.model && <th>{t('usage_stats.model_name')}</th>}
+                  {columnVisibility.upstreamModel && (
+                    <th title={t('usage_stats.request_events_upstream_model_hint')}>
+                      {t('usage_stats.request_events_upstream_model_column')}
+                    </th>
+                  )}
                   {columnVisibility.requestKey && (
                     <th title={requestKeyColumnHint}>
                       {t('usage_stats.request_events_request_key')}
@@ -2877,16 +2885,46 @@ export function RequestEventsDetailsCard({
                       {columnVisibility.model && (
                         <td className={styles.modelCell}>
                           <span className={styles.requestModel}>{row.model}</span>
-                          {row.upstreamModel && (
+                          {/* Inline sub-label only when the dedicated column is hidden. */}
+                          {!columnVisibility.upstreamModel &&
+                            row.upstreamModel &&
+                            row.upstreamModel !== row.model && (
+                              <span
+                                className={styles.upstreamModel}
+                                title={t('usage_stats.request_events_upstream_model_hint')}
+                                data-upstream-model={row.upstreamModel}
+                              >
+                                {t('usage_stats.request_events_upstream_model', {
+                                  model: row.upstreamModel,
+                                })}
+                              </span>
+                            )}
+                        </td>
+                      )}
+                      {columnVisibility.upstreamModel && (
+                        <td
+                          className={styles.upstreamModelCell}
+                          data-upstream-match={
+                            row.upstreamModel
+                              ? row.upstreamModel === row.model
+                                ? 'match'
+                                : 'diff'
+                              : 'missing'
+                          }
+                        >
+                          {row.upstreamModel ? (
                             <span
-                              className={styles.upstreamModel}
-                              title={t('usage_stats.request_events_upstream_model_hint')}
+                              className={
+                                row.upstreamModel === row.model
+                                  ? styles.upstreamModelMatch
+                                  : styles.upstreamModelDiff
+                              }
                               data-upstream-model={row.upstreamModel}
                             >
-                              {t('usage_stats.request_events_upstream_model', {
-                                model: row.upstreamModel,
-                              })}
+                              {row.upstreamModel}
                             </span>
+                          ) : (
+                            <span className={styles.upstreamModelMissing}>-</span>
                           )}
                         </td>
                       )}

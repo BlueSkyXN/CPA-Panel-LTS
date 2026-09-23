@@ -58,6 +58,23 @@ def main():
             result = {"files": [{"name": name, "type": value["type"], "label": value.get("label", ""),
                                  "auth_index": name, "status": "active", "size": 200, "disabled": False}
                                 for name, value in auths.items()]}
+        elif path == "/auth-files/models":
+            result = {"models": [
+                {"id": "auto", "display_name": "Auto", "type": "agent"},
+                {"id": "qmodel_38max", "display_name": "Qwen3.8-Max", "type": "agent"},
+                {"id": "qfmodel", "display_name": "Qwen3.8-Flash", "type": "agent"},
+                {"id": "qmodel_latest", "display_name": "Qwen3.7-Max", "type": "agent"},
+                {"id": "qmodel", "display_name": "Qwen3.7-Plus", "type": "agent"},
+                {"id": "q37fmodel", "display_name": "Qwen3.7-Flash", "type": "agent"},
+                {"id": "dmodel", "display_name": "DeepSeek-V4-Pro", "type": "agent"},
+                {"id": "dfmodel", "display_name": "DeepSeek-Flash", "type": "agent"},
+                {"id": "gmodel", "display_name": "GLM-5.3", "type": "agent"},
+                {"id": "gfmodel", "display_name": "GLM-5.3-Flash", "type": "agent"},
+                {"id": "gm51model", "display_name": "GLM-5.2", "type": "agent"},
+                {"id": "kmodel_latest", "display_name": "Kimi-K3", "type": "agent"},
+                {"id": "kmodel", "display_name": "Kimi-K2.8-Preview", "type": "agent"},
+                {"id": "mmodel", "display_name": "MiniMax-M2.7", "type": "agent"},
+            ]}
         elif path == "/auth-files/download":
             result = auths[query["name"][0]]
         if result is None:
@@ -73,6 +90,8 @@ def main():
             context.add_init_script("localStorage.setItem('cli-proxy-language', JSON.stringify({state:{language:'en'},version:0}));")
             page = context.new_page()
             page.set_default_timeout(15000)
+            output = ROOT / "output/playwright"
+            output.mkdir(parents=True, exist_ok=True)
             errors = []
             page.on("pageerror", lambda error: errors.append(str(error)))
             page.route("**/v0/management/**", api)
@@ -124,14 +143,52 @@ def main():
             qoder = next(value for value in auths.values() if value["type"] == "qoder")
             assert "transport" not in qoder and "region" not in qoder
 
+            page.get_by_role("button", name="Models", exact=True).last.click()
+            models_dialog = page.get_by_role("dialog").filter(has_text="Supported models")
+            models_dialog.get_by_test_id("auth-file-model-item").last.wait_for()
+            assert models_dialog.get_by_test_id("auth-file-model-item").count() == 14
+            desktop_layout = models_dialog.evaluate("""dialog => {
+                const rows = [...dialog.querySelectorAll('[data-testid="auth-file-model-item"]')];
+                const typeRightEdges = rows.map(row => row.lastElementChild?.getBoundingClientRect().right ?? 0);
+                const fileName = dialog.querySelector('[data-testid="auth-file-modal-file-name"]');
+                return {
+                    dialogWidth: dialog.getBoundingClientRect().width,
+                    viewportWidth: document.documentElement.clientWidth,
+                    gridDisplays: rows.map(row => getComputedStyle(row).display),
+                    typeRightEdges,
+                    fileNameWidth: fileName?.getBoundingClientRect().width ?? 0,
+                    fileNameScrollWidth: fileName?.scrollWidth ?? 0,
+                };
+            }""")
+            assert desktop_layout["dialogWidth"] <= desktop_layout["viewportWidth"]
+            assert set(desktop_layout["gridDisplays"]) == {"grid"}
+            assert max(desktop_layout["typeRightEdges"]) - min(desktop_layout["typeRightEdges"]) <= 1
+            assert desktop_layout["fileNameScrollWidth"] <= desktop_layout["fileNameWidth"] + 1
+            page.screenshot(path=str(output / "auth-file-models-desktop.png"), animations="disabled")
+            models_dialog.get_by_role("button", name="Close", exact=True).last.click()
+            models_dialog.wait_for(state="detached")
+
             storage = page.evaluate("JSON.stringify([Object.entries(localStorage),Object.entries(sessionStorage)])")
             assert all(value not in storage for value in [*secrets_used, "pt-qoder-fixture"])
-            output = ROOT / "output/playwright"
-            output.mkdir(parents=True, exist_ok=True)
             page.wait_for_function("document.querySelectorAll('.notification-container .notification').length === 0")
             page.screenshot(path=str(output / "pat-accounts-desktop.png"), full_page=True, animations="disabled")
             plugin_enabled = False
             page.set_viewport_size({"width": 390, "height": 844})
+            page.get_by_role("button", name="Models", exact=True).last.click()
+            models_dialog = page.get_by_role("dialog").filter(has_text="Supported models")
+            models_dialog.get_by_test_id("auth-file-model-item").last.wait_for()
+            assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1")
+            mobile_layout = models_dialog.evaluate("""dialog => ({
+                dialogWidth: dialog.getBoundingClientRect().width,
+                viewportWidth: document.documentElement.clientWidth,
+                rowDisplays: [...dialog.querySelectorAll('[data-testid="auth-file-model-item"]')]
+                    .map(row => getComputedStyle(row).display),
+            })""")
+            assert mobile_layout["dialogWidth"] <= mobile_layout["viewportWidth"]
+            assert set(mobile_layout["rowDisplays"]) == {"grid"}
+            page.screenshot(path=str(output / "auth-file-models-mobile.png"), animations="disabled")
+            models_dialog.get_by_role("button", name="Close", exact=True).last.click()
+            models_dialog.wait_for(state="detached")
             page.get_by_role("button", name="Add PAT account", exact=True).click()
             dialog = page.get_by_role("dialog", name="Add PAT account")
             dialog.get_by_text(re.compile("Core plugin support is unconfirmed")).wait_for()

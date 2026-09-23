@@ -26,7 +26,20 @@ export function AuthFileModelsModal(props: AuthFileModelsModalProps) {
     <Modal
       open={open}
       onClose={onClose}
-      title={t('auth_files.models_title', { defaultValue: '支持的模型' }) + ` - ${fileName}`}
+      width={640}
+      className={styles.authFileModelsModal}
+      title={
+        <div className={styles.authFileModalTitle}>
+          <span>{t('auth_files.models_title', { defaultValue: '支持的模型' })}</span>
+          <span
+            className={styles.authFileModalFileName}
+            title={fileName}
+            data-testid="auth-file-modal-file-name"
+          >
+            {fileName}
+          </span>
+        </div>
+      }
       footer={
         <Button variant="secondary" onClick={onClose}>
           {t('common.close')}
@@ -41,7 +54,7 @@ export function AuthFileModelsModal(props: AuthFileModelsModalProps) {
         <EmptyState
           title={t('auth_files.models_unsupported', { defaultValue: '当前版本不支持此功能' })}
           description={t('auth_files.models_unsupported_desc', {
-            defaultValue: '请更新 CLI Proxy API 到最新版本后重试'
+            defaultValue: '请更新 CPA 到最新版本后重试'
           })}
         />
       ) : models.length === 0 ? (
@@ -59,6 +72,8 @@ export function AuthFileModelsModal(props: AuthFileModelsModalProps) {
               <div
                 key={model.id}
                 className={`${styles.modelItem} ${excludedModel ? styles.modelItemExcluded : ''}`}
+                data-testid="auth-file-model-item"
+                data-model-id={model.id}
                 onClick={() => {
                   onCopyText(model.id);
                 }}
@@ -88,4 +103,3 @@ export function AuthFileModelsModal(props: AuthFileModelsModalProps) {
     </Modal>
   );
 }
-
