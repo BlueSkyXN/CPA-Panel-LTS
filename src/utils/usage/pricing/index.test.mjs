@@ -18,7 +18,7 @@ const approx = (actual, expected) =>
 
 test('catalog is versioned, self-describing, exact, and keeps provider rate boundaries explicit', () => {
   const sol = pricing.findCatalogEntry('gpt-5.6-sol');
-  assert.equal(pricing.PRICE_CATALOG_AS_OF, '2026-09-07');
+  assert.equal(pricing.PRICE_CATALOG_AS_OF, '2026-09-23');
   assert.equal(sol.currency, 'USD');
   assert.deepEqual(sol.aliases, ['gpt-5.6']);
   assert.equal(sol.sourceUrl, 'https://developers.openai.com/api/docs/pricing');
@@ -40,7 +40,7 @@ test('catalog is versioned, self-describing, exact, and keeps provider rate boun
     cacheWrite: 5,
     output: 18,
   });
-  assert.equal(terra.asOf, '2026-09-07');
+  assert.equal(terra.asOf, '2026-09-23');
   const luna = pricing.findCatalogEntry('gpt-5.6-luna');
   assert.deepEqual(luna.standard.short, {
     input: 0.2,
@@ -54,7 +54,7 @@ test('catalog is versioned, self-describing, exact, and keeps provider rate boun
     cacheWrite: 0.5,
     output: 1.8,
   });
-  assert.equal(luna.asOf, '2026-09-07');
+  assert.equal(luna.asOf, '2026-09-23');
   const gpt55 = pricing.findCatalogEntry('gpt-5.5');
   assert.equal(gpt55.standard.long.basis, 'inputTokens');
   assert.equal(gpt55.standard.long.appliesTo, 'entireRequest');
@@ -480,7 +480,7 @@ test('Fast preset and custom profiles derive rates from the selected Standard co
 test('the full input_tokens count switches GPT-5.5 at 271999, 272000, and 272001', () => {
   for (const [inputTokens, expectedBand, expectedInputRate] of [
     [271_999, 'short', 5],
-    [272_000, 'long', 10],
+    [272_000, 'short', 5],
     [272_001, 'long', 10],
   ]) {
     const estimate = pricing.estimateUsageCost(
@@ -545,7 +545,7 @@ test('the GPT short-only assumption suppresses the long band without touching ot
 
   const auto = pricing.estimateUsageCost(
     'gpt-5.5',
-    { input_tokens: 272_000, output_tokens: 1 },
+    { input_tokens: 272_001, output_tokens: 1 },
     undefined,
     tier()
   );
@@ -806,7 +806,7 @@ test('Grok 4.6 switches the entire request to long-context rates at 200K prompt 
 test('Fast long context is estimated by default and only restricted under the official policy', () => {
   const allowed = pricing.estimateUsageCost(
     'gpt-5.5',
-    { input_tokens: 272_000 },
+    { input_tokens: 272_001 },
     undefined,
     tier('fast', 'request')
   );
@@ -819,7 +819,7 @@ test('Fast long context is estimated by default and only restricted under the of
   official.assumptions.fastLongContext = 'official';
   const unsupported = pricing.estimateUsageCost(
     'gpt-5.5',
-    { input_tokens: 272_000 },
+    { input_tokens: 272_001 },
     official,
     tier('fast', 'request')
   );
@@ -964,7 +964,7 @@ test('coverage reports request, token, model, amount, and assumed-tier completen
   official.assumptions.fastLongContext = 'official';
   const unsupported = pricing.estimateUsageCost(
     'gpt-5.5',
-    { input_tokens: 272_000 },
+    { input_tokens: 272_001 },
     official,
     tier('fast')
   );
@@ -972,21 +972,21 @@ test('coverage reports request, token, model, amount, and assumed-tier completen
     pricing.aggregateCostEstimateCoverage([
       { modelName: 'gpt-5.4-mini', tokenCount: 1_000_000, estimate: priced },
       { modelName: 'unknown', tokenCount: 20, estimate: unmatched },
-      { modelName: 'gpt-5.5', tokenCount: 272_000, estimate: unsupported },
+      { modelName: 'gpt-5.5', tokenCount: 272_001, estimate: unsupported },
     ]),
     {
       totalRequests: 3,
       pricedRequests: 1,
       unmatchedRequests: 1,
       unsupportedRequests: 1,
-      totalTokens: 1_272_020,
+      totalTokens: 1_272_021,
       pricedTokens: 1_000_000,
       totalModels: 3,
       pricedModels: 1,
       estimatedAmount: 0.75,
       assumedTierRequests: 0,
       pricedRequestRatio: 1 / 3,
-      pricedTokenRatio: 1_000_000 / 1_272_020,
+      pricedTokenRatio: 1_000_000 / 1_272_021,
       pricedModelRatio: 1 / 3,
     }
   );
@@ -998,13 +998,13 @@ test('a model is covered only when every request for that model is priced', () =
   official.assumptions.fastLongContext = 'official';
   const unsupported = pricing.estimateUsageCost(
     'gpt-5.4',
-    { input_tokens: 272_000 },
+    { input_tokens: 272_001 },
     official,
     tier('fast')
   );
   const coverage = pricing.aggregateCostEstimateCoverage([
     { modelName: 'gpt-5.4', tokenCount: 1_000, estimate: priced },
-    { modelName: 'gpt-5.4', tokenCount: 272_000, estimate: unsupported },
+    { modelName: 'gpt-5.4', tokenCount: 272_001, estimate: unsupported },
   ]);
   assert.equal(coverage.totalModels, 1);
   assert.equal(coverage.pricedModels, 0);
@@ -1073,7 +1073,7 @@ test('Fast policy display distinguishes official and custom multipliers from exp
 
 test('Astra pricing is exact and does not redate older provider prices', () => {
   const astra = pricing.findCatalogEntry('gpt-6-astra');
-  assert.equal(astra.asOf, '2026-09-05');
+  assert.equal(astra.asOf, '2026-09-23');
   assert.deepEqual(astra.standard.short, { input: 10, cachedInput: 1, cacheWrite: 12.5, output: 50 });
   assert.deepEqual(astra.standard.long.rates, { input: 20, cachedInput: 2, cacheWrite: 25, output: 75 });
   assert.equal(astra.standard.long.thresholdTokens, 272_001);
@@ -1081,7 +1081,7 @@ test('Astra pricing is exact and does not redate older provider prices', () => {
   assert.equal(pricing.findCatalogEntry('gpt-6-astra-preview'), null);
   assert.equal(pricing.findCatalogEntry('tenant/gpt-6-astra'), null);
   assert.equal(pricing.findCatalogEntry('gpt-6–astra'), null);
-  assert.equal(pricing.findCatalogEntry('gpt-5.6-sol').asOf, '2026-09-07');
+  assert.equal(pricing.findCatalogEntry('gpt-5.6-sol').asOf, '2026-09-23');
 });
 
 test('Astra long pricing starts above 272K and uses total input including cache', () => {
@@ -1126,4 +1126,47 @@ test('Astra preset never replaces explicit user pricing', () => {
   assert.equal(cost.modelMatch, 'custom');
   assert.equal(cost.amount, 0);
   assert.equal(JSON.stringify(profile), before);
+});
+
+test('GPT-6 Sol and Luna preset cards match the official rate card exactly', () => {
+  const sol = pricing.findCatalogEntry('gpt-6-sol');
+  assert.deepEqual(sol.standard.short, { input: 2, cachedInput: 0.2, cacheWrite: 2.5, output: 10 });
+  assert.deepEqual(sol.standard.long.rates, { input: 4, cachedInput: 0.4, cacheWrite: 5, output: 15 });
+  assert.equal(sol.standard.long.thresholdTokens, 272_001);
+  assert.equal(sol.fast.multiplier, 2);
+  assert.equal(sol.fast.longSupported, true);
+  const luna = pricing.findCatalogEntry('gpt-6-luna');
+  assert.deepEqual(luna.standard.short, { input: 0.1, cachedInput: 0.01, cacheWrite: 0.125, output: 0.5 });
+  assert.deepEqual(luna.standard.long.rates, { input: 0.2, cachedInput: 0.02, cacheWrite: 0.25, output: 0.75 });
+  assert.equal(luna.standard.long.thresholdTokens, 272_001);
+  assert.equal(luna.fast.multiplier, 2);
+  assert.equal(luna.fast.longSupported, true);
+});
+
+test('GPT-6 Sol and Luna long pricing starts above 272K and Fast doubles both bands', () => {
+  for (const [model, shortRate, longRate] of [
+    ['gpt-6-sol', 2, 4],
+    ['gpt-6-luna', 0.1, 0.2],
+  ]) {
+    for (const [input, band, rate] of [
+      [271_999, 'short', shortRate], [272_000, 'short', shortRate], [272_001, 'long', longRate],
+    ]) {
+      const cost = pricing.estimateUsageCost(
+        model,
+        { input_tokens: input, output_tokens: 1 },
+        undefined,
+        tier()
+      );
+      assert.equal(cost.status, 'priced');
+      assert.equal(cost.contextBand, band);
+      assert.equal(cost.rates.input, rate);
+    }
+    for (const input of [200_000, 300_000]) {
+      const tokens = { input_tokens: input, output_tokens: 100_000 };
+      const standard = pricing.estimateUsageCost(model, tokens, undefined, tier());
+      const fast = pricing.estimateUsageCost(model, tokens, undefined, tier('fast'));
+      assert.equal(fast.status, 'priced');
+      approx(fast.amount, standard.amount * 2);
+    }
+  }
 });

@@ -1,7 +1,7 @@
 /** Official provider catalog data is kept separate from the pricing engine and UI. */
 export const PRICE_CURRENCY = 'USD' as const;
-export const OPENAI_CATALOG_AS_OF = '2026-09-07';
-export const GPT6_ASTRA_CATALOG_AS_OF = '2026-09-05';
+export const OPENAI_CATALOG_AS_OF = '2026-09-23';
+export const GPT6_ASTRA_CATALOG_AS_OF = '2026-09-23';
 export const ZAI_CATALOG_AS_OF = '2026-07-22';
 export const KIMI_CATALOG_AS_OF = '2026-07-28';
 export const XAI_CATALOG_AS_OF = '2026-07-23';
@@ -72,7 +72,10 @@ const rateCard = (
 
 const longCard = (
   rates: TokenRates,
-  thresholdTokens = LONG_CONTEXT_INPUT_TOKEN_THRESHOLD
+  // The engine threshold is inclusive, while every official OpenAI model page
+  // words the uplift as strictly above 272K input tokens, so 272001 is the
+  // first long-context request.
+  thresholdTokens = LONG_CONTEXT_INPUT_TOKEN_THRESHOLD + 1
 ): LongContextPricing => ({
   thresholdTokens,
   basis: 'inputTokens',
@@ -100,14 +103,38 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
     currency: 'USD',
     standard: {
       short: rateCard(10, 1, 12.5, 50),
-      // The engine's threshold is inclusive; the official uplift is strictly
-      // above 272K input tokens, so 272001 is the first long-context request.
-      long: longCard(rateCard(20, 2, 25, 75), LONG_CONTEXT_INPUT_TOKEN_THRESHOLD + 1),
+      long: longCard(rateCard(20, 2, 25, 75)),
     },
     fast: { multiplier: 2, longSupported: true },
     sourceUrl: OPENAI_PRICING_SOURCE_URL,
     pricingNotesUrl: modelPricingNotesUrl('gpt-6-astra'),
     asOf: GPT6_ASTRA_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'gpt-6-sol',
+    aliases: [],
+    currency: 'USD',
+    standard: {
+      short: rateCard(2, 0.2, 2.5, 10),
+      long: longCard(rateCard(4, 0.4, 5, 15)),
+    },
+    fast: { multiplier: 2, longSupported: true },
+    sourceUrl: OPENAI_PRICING_SOURCE_URL,
+    pricingNotesUrl: modelPricingNotesUrl('gpt-6-sol'),
+    asOf: OPENAI_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'gpt-6-luna',
+    aliases: [],
+    currency: 'USD',
+    standard: {
+      short: rateCard(0.1, 0.01, 0.125, 0.5),
+      long: longCard(rateCard(0.2, 0.02, 0.25, 0.75)),
+    },
+    fast: { multiplier: 2, longSupported: true },
+    sourceUrl: OPENAI_PRICING_SOURCE_URL,
+    pricingNotesUrl: modelPricingNotesUrl('gpt-6-luna'),
+    asOf: OPENAI_CATALOG_AS_OF,
   },
   {
     canonicalModel: 'gpt-5.6-sol',
