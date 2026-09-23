@@ -12,9 +12,10 @@ const vite = await createServer({
   server: { middlewareMode: true },
 });
 
-const [{ apiClient }, { parseApiErrorResponse }] = await Promise.all([
+const [{ apiClient }, { parseApiErrorResponse }, versionUtils] = await Promise.all([
   vite.ssrLoadModule('/src/services/api/client.ts'),
   vite.ssrLoadModule('/src/services/api/apiError.ts'),
+  vite.ssrLoadModule('/src/utils/version.ts'),
 ]);
 
 const unauthorizedError = (config, data) =>
@@ -149,6 +150,47 @@ test('prefers a human-readable Management API message and preserves the stable c
     message: 'Network Error',
     apiCode: undefined,
   });
+});
+
+test('rejects placeholder versions and compares real CPA release versions', () => {
+  for (const placeholder of ['', ' unknown ', 'DEV', 'none', 'null', 'N/A', 'not set', 'unset']) {
+    assert.equal(versionUtils.normalizeReportedVersion(placeholder), null, placeholder);
+  }
+  assert.equal(versionUtils.normalizeReportedVersion(' v1-lts-0.0.29 '), 'v1-lts-0.0.29');
+  assert.equal(versionUtils.compareVersions('v1-lts-0.0.30', 'v1-lts-0.0.29'), 1);
+  assert.equal(versionUtils.compareVersions('v1-lts-0.0.29', 'v1-lts-0.0.29'), 0);
+  assert.equal(versionUtils.compareVersions('unknown', 'v1-lts-0.0.29'), null);
+});
+
+test('does not publish an unknown response header as the current CPA version', async () => {
+  let versionEvent;
+  const onVersion = (event) => {
+    versionEvent = event.detail;
+  };
+  window.addEventListener('server-version-update', onVersion);
+
+  try {
+    apiClient.setConfig({ apiBase: 'https://test.example.test', managementKey: 'synthetic' });
+    await apiClient.get('/version-placeholder', {
+      adapter: async (config) => ({
+        data: {},
+        status: 200,
+        statusText: 'OK',
+        headers: {
+          'x-cpa-version': 'unknown',
+          'x-cpa-build-date': '2026-09-20T09:08:24Z',
+        },
+        config,
+      }),
+    });
+    assert.deepEqual(versionEvent, {
+      version: null,
+      buildDate: '2026-09-20T09:08:24Z',
+      runtimeKind: 'cpa',
+    });
+  } finally {
+    window.removeEventListener('server-version-update', onVersion);
+  }
 });
 
 test('a stale 401 keeps its parsed error but cannot log out the current connection', async () => {

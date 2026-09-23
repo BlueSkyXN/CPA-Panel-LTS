@@ -100,12 +100,12 @@
     "unsaved_changes_message": "You have unsaved changes. Leaving now will discard them. Do you want to leave?"
   },
   "title": {
-    "main": "CLI Proxy API Management Center",
-    "login": "CLI Proxy API Management Center",
+    "main": "CPA Management Center",
+    "login": "CPA Management Center",
     "abbr": "CPAMC"
   },
   "splash": {
-    "title": "CLI Proxy API",
+    "title": "CPA",
     "subtitle": "Management Center"
   },
   "auto_login": {
@@ -692,7 +692,7 @@
     "models_empty": "No available models for this credential",
     "models_empty_desc": "This credential may not be loaded by the server yet, or no models are bound to it.",
     "models_unsupported": "This feature is not supported in the current version",
-    "models_unsupported_desc": "Please update CLI Proxy API to the latest version and try again",
+    "models_unsupported_desc": "Please update CPA to the latest version and try again",
     "models_excluded_badge": "Disabled",
     "models_excluded_hint": "This OAuth model is disabled",
     "status_toggle_label": "Enabled",
@@ -957,8 +957,8 @@
     "scope_all": "Scope: All providers",
     "scope_provider": "Scope: {{provider}}",
     "upgrade_required": "Current CPA version does not support OAuth model disablement. Please upgrade.",
-    "upgrade_required_title": "Please upgrade CLI Proxy API",
-    "upgrade_required_desc": "The current server version does not support fetching OAuth model disablement. Please upgrade to the latest CPA (CLI Proxy API) version and try again."
+    "upgrade_required_title": "Please upgrade CPA",
+    "upgrade_required_desc": "The current server version does not support fetching OAuth model disablement. Please upgrade to the latest CPA version and try again."
   },
   "oauth_model_alias": {
     "title": "OAuth Model Aliases",
@@ -1020,9 +1020,9 @@
     "view_mode_diagram": "Diagram",
     "view_mode_list": "List",
     "provider_required": "Please enter a provider first",
-    "upgrade_required": "This feature requires a newer CLI Proxy API (CPA) version. Please upgrade.",
-    "upgrade_required_title": "Please upgrade CLI Proxy API",
-    "upgrade_required_desc": "The current server does not support the OAuth model aliases API. Please upgrade to the latest CLI Proxy API (CPA) version."
+    "upgrade_required": "This feature requires a newer CPA version. Please upgrade.",
+    "upgrade_required_title": "Please upgrade CPA",
+    "upgrade_required_desc": "The current server does not support the OAuth model aliases API. Please upgrade to the latest CPA version."
   },
   "auth_login": {
     "codex_oauth_title": "Codex OAuth",
@@ -1107,7 +1107,7 @@
     "oauth_callback_required": "Please paste the full redirect URL first.",
     "oauth_callback_success": "Callback URL submitted. Continue waiting for authentication.",
     "oauth_callback_error": "Failed to submit callback URL:",
-    "oauth_callback_upgrade_hint": "Please update CLI Proxy API or check the connection.",
+    "oauth_callback_upgrade_hint": "Please update CPA or check the connection.",
     "oauth_callback_status_success": "Callback URL submitted, waiting for authentication...",
     "oauth_callback_status_error": "Callback URL submission failed:",
     "missing_state": "Unable to retrieve authentication state parameter",
@@ -1392,7 +1392,8 @@
     "request_events_title": "Request Events",
     "request_events_filter_model": "Model",
     "request_events_upstream_model": "Upstream: {{model}}",
-    "request_events_upstream_model_hint": "Model ID reported by the upstream response. It may be missing for legacy records or unsupported providers.",
+    "request_events_upstream_model_column": "Upstream Model",
+    "request_events_upstream_model_hint": "Model ID reported by the upstream response. Green matches the requested model; amber means it differs.",
     "request_events_filter_request_key": "Caller Key",
     "request_events_filter_source": "Source",
     "request_events_filter_auth_index": "Auth Index",
@@ -1594,8 +1595,8 @@
     "copy_failed": "Copy failed",
     "lines": "lines",
     "removed": "Filtered",
-    "upgrade_required_title": "Please Upgrade CLI Proxy API",
-    "upgrade_required_desc": "The current server version does not support the logs viewing feature. Please upgrade to the latest version of CLI Proxy API to use this feature."
+    "upgrade_required_title": "Please Upgrade CPA",
+    "upgrade_required_desc": "The current server version does not support the logs viewing feature. Please upgrade to the latest version of CPA to use this feature."
   },
   "config_management": {
     "save_target": "Target instance: {{name}}",
@@ -2344,7 +2345,7 @@
   },
   "system_info": {
     "title": "Management Center Info",
-    "about_title": "CLI Proxy API Management Center",
+    "about_title": "CPA Management Center",
     "connection_status_title": "Connection Status",
     "api_status_label": "API Status:",
     "config_status_label": "Config Status:",
@@ -2371,10 +2372,11 @@
     "version_check_error": "Update check failed",
     "version_current_missing": "Server version is unavailable; cannot compare",
     "version_unknown": "Unknown",
+    "version_not_reported": "Not reported",
     "quick_links_title": "Quick Links",
     "quick_links_desc": "Access project repositories and documentation for help and updates.",
     "link_main_repo": "Main Repository",
-    "link_main_repo_desc": "CLI Proxy API core program source code",
+    "link_main_repo_desc": "CPA Core LTS source code",
     "link_webui_repo": "WebUI Repository",
     "link_webui_repo_desc": "Management Center frontend source code",
     "link_docs": "Documentation",
@@ -2509,12 +2511,12 @@
     "primary_navigation": "Primary navigation",
     "toggle_expand": "Expand sidebar",
     "toggle_collapse": "Collapse sidebar",
-    "subtitle": "CLI Proxy API Console",
+    "subtitle": "CPA Console",
     "switch_to_classic": "Switch to classic sidebar",
     "switch_to_compact": "Switch to compact sidebar"
   },
   "footer": {
-    "api_version": "CLI Proxy API Version",
+    "api_version": "CPA Version",
     "build_date": "Build Time",
     "version": "Management UI Version",
     "author": "Author"

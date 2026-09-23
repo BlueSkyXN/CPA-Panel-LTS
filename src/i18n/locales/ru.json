@@ -100,12 +100,12 @@
     "unsaved_changes_message": "У вас есть несохранённые изменения. Если вы уйдёте, они будут потеряны. Выйти?"
   },
   "title": {
-    "main": "Центр управления CLI Proxy API",
-    "login": "Центр управления CLI Proxy API",
+    "main": "Центр управления CPA",
+    "login": "Центр управления CPA",
     "abbr": "CPAMC"
   },
   "splash": {
-    "title": "CLI Proxy API",
+    "title": "CPA",
     "subtitle": "Центр управления"
   },
   "auto_login": {
@@ -692,7 +692,7 @@
     "models_empty": "Для этих учётных данных нет доступных моделей",
     "models_empty_desc": "Возможно, учётные данные ещё не загружены сервером или к ним не привязаны модели.",
     "models_unsupported": "Функция не поддерживается в текущей версии",
-    "models_unsupported_desc": "Обновите CLI Proxy API до последней версии и повторите попытку",
+    "models_unsupported_desc": "Обновите CPA до последней версии и повторите попытку",
     "models_excluded_badge": "Отключена",
     "models_excluded_hint": "Эта OAuth-модель отключена",
     "status_toggle_label": "Включено",
@@ -958,8 +958,8 @@
     "scope_all": "Область: все провайдеры",
     "scope_provider": "Область: {{provider}}",
     "upgrade_required": "Текущая версия CPA не поддерживает отключение OAuth-моделей. Пожалуйста, обновите систему.",
-    "upgrade_required_title": "Пожалуйста, обновите CLI Proxy API",
-    "upgrade_required_desc": "Текущая версия сервера не поддерживает получение отключения OAuth-моделей. Обновите CPA (CLI Proxy API) до последней версии и повторите попытку."
+    "upgrade_required_title": "Пожалуйста, обновите CPA",
+    "upgrade_required_desc": "Текущая версия сервера не поддерживает получение отключения OAuth-моделей. Обновите CPA до последней версии и повторите попытку."
   },
   "oauth_model_alias": {
     "title": "Псевдонимы моделей OAuth",
@@ -1021,9 +1021,9 @@
     "view_mode_diagram": "Диаграмма",
     "view_mode_list": "Список",
     "provider_required": "Сначала укажите провайдера",
-    "upgrade_required": "Эта функция требует более новой версии CLI Proxy API (CPA). Обновите систему.",
-    "upgrade_required_title": "Пожалуйста, обновите CLI Proxy API",
-    "upgrade_required_desc": "Текущая версия сервера не поддерживает API псевдонимов моделей OAuth. Обновите CLI Proxy API (CPA) до последней версии."
+    "upgrade_required": "Эта функция требует более новой версии CPA. Обновите систему.",
+    "upgrade_required_title": "Пожалуйста, обновите CPA",
+    "upgrade_required_desc": "Текущая версия сервера не поддерживает API псевдонимов моделей OAuth. Обновите CPA до последней версии."
   },
   "auth_login": {
     "codex_oauth_title": "Codex OAuth",
@@ -1108,7 +1108,7 @@
     "oauth_callback_required": "Сначала вставьте полный URL перенаправления.",
     "oauth_callback_success": "Callback URL отправлен. Продолжайте ожидать аутентификацию.",
     "oauth_callback_error": "Не удалось отправить Callback URL:",
-    "oauth_callback_upgrade_hint": "Обновите CLI Proxy API или проверьте подключение.",
+    "oauth_callback_upgrade_hint": "Обновите CPA или проверьте подключение.",
     "oauth_callback_status_success": "Callback URL отправлен, ожидаем аутентификацию...",
     "oauth_callback_status_error": "Не удалось отправить Callback URL:",
     "missing_state": "Не удалось получить параметр состояния аутентификации",
@@ -1393,7 +1393,8 @@
     "request_events_title": "События запросов",
     "request_events_filter_model": "Модель",
     "request_events_upstream_model": "Модель upstream: {{model}}",
-    "request_events_upstream_model_hint": "Идентификатор модели, указанный в ответе upstream. Для старых записей и неподдерживаемых провайдеров он может отсутствовать.",
+    "request_events_upstream_model_column": "Модель upstream",
+    "request_events_upstream_model_hint": "Идентификатор модели в ответе upstream. Зелёный цвет означает совпадение с запрошенной моделью; янтарный — расхождение.",
     "request_events_filter_request_key": "Ключ вызова",
     "request_events_filter_source": "Источник",
     "request_events_filter_auth_index": "Auth Index",
@@ -1595,8 +1596,8 @@
     "copy_failed": "Не удалось скопировать",
     "lines": "строк",
     "removed": "Отфильтровано",
-    "upgrade_required_title": "Обновите CLI Proxy API",
-    "upgrade_required_desc": "Текущая версия сервера не поддерживает просмотр журналов. Обновите CLI Proxy API до последней версии, чтобы использовать эту функцию."
+    "upgrade_required_title": "Обновите CPA",
+    "upgrade_required_desc": "Текущая версия сервера не поддерживает просмотр журналов. Обновите CPA до последней версии, чтобы использовать эту функцию."
   },
   "config_management": {
     "save_target": "Целевой экземпляр: {{name}}",
@@ -2338,7 +2339,7 @@
   },
   "system_info": {
     "title": "Информация о центре управления",
-    "about_title": "CLI Proxy API Management Center",
+    "about_title": "CPA Management Center",
     "connection_status_title": "Статус подключения",
     "api_status_label": "Статус API:",
     "config_status_label": "Статус конфигурации:",
@@ -2365,10 +2366,11 @@
     "version_check_error": "Не удалось проверить обновление",
     "version_current_missing": "Версия сервера недоступна; сравнение невозможно",
     "version_unknown": "Неизвестно",
+    "version_not_reported": "Не сообщается",
     "quick_links_title": "Быстрые ссылки",
     "quick_links_desc": "Доступ к репозиториям проекта и документации для помощи и обновлений.",
     "link_main_repo": "Основной репозиторий",
-    "link_main_repo_desc": "Исходный код основной программы CLI Proxy API",
+    "link_main_repo_desc": "Исходный код CPA Core LTS",
     "link_webui_repo": "Репозиторий WebUI",
     "link_webui_repo_desc": "Исходный код фронтенда центра управления",
     "link_docs": "Документация",
@@ -2503,12 +2505,12 @@
     "primary_navigation": "Основная навигация",
     "toggle_expand": "Развернуть боковую панель",
     "toggle_collapse": "Свернуть боковую панель",
-    "subtitle": "Консоль управления CLI Proxy API",
+    "subtitle": "Консоль управления CPA",
     "switch_to_classic": "Переключить на классическую боковую панель",
     "switch_to_compact": "Переключить на компактную боковую панель"
   },
   "footer": {
-    "api_version": "Версия CLI Proxy API",
+    "api_version": "Версия CPA",
     "build_date": "Время сборки",
     "version": "Версия интерфейса управления",
     "author": "Автор"

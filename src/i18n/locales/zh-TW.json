@@ -100,12 +100,12 @@
     "unsaved_changes_message": "你有未儲存的變更，離開後將遺失這些變更。確定要離開嗎？"
   },
   "title": {
-    "main": "CLI Proxy API Management Center",
-    "login": "CLI Proxy API Management Center",
+    "main": "CPA Management Center",
+    "login": "CPA Management Center",
     "abbr": "CPAMC"
   },
   "splash": {
-    "title": "CLI Proxy API",
+    "title": "CPA",
     "subtitle": "管理中心"
   },
   "auto_login": {
@@ -692,7 +692,7 @@
     "models_empty": "該憑證暫無可用模型",
     "models_empty_desc": "該驗證憑證可能尚未被伺服器載入或沒有綁定任何模型",
     "models_unsupported": "目前版本不支援此功能",
-    "models_unsupported_desc": "請更新 CLI Proxy API 到最新版本後重試",
+    "models_unsupported_desc": "請更新 CPA 到最新版本後重試",
     "models_excluded_badge": "已停用",
     "models_excluded_hint": "此 OAuth 模型已被停用",
     "status_toggle_label": "啟用",
@@ -958,7 +958,7 @@
     "scope_provider": "目前範圍：{{provider}}",
     "upgrade_required": "目前 CPA 版本不支援 OAuth 模型停用，請升級 CPA 版本",
     "upgrade_required_title": "需要升級 CPA 版本",
-    "upgrade_required_desc": "目前伺服器版本不支援取得 OAuth 模型停用功能，請升級到最新版本的 CPA（CLI Proxy API）後重試。"
+    "upgrade_required_desc": "目前伺服器版本不支援取得 OAuth 模型停用功能，請升級到最新版本的 CPA 後重試。"
   },
   "oauth_model_alias": {
     "title": "OAuth 模型別名",
@@ -1022,7 +1022,7 @@
     "provider_required": "請先填寫供應商名稱",
     "upgrade_required": "目前 CPA 版本不支援模型別名功能，請升級 CPA 版本",
     "upgrade_required_title": "需要升級 CPA 版本",
-    "upgrade_required_desc": "目前伺服器版本不支援 OAuth 模型別名功能，請升級到最新版本的 CPA（CLI Proxy API）後重試。"
+    "upgrade_required_desc": "目前伺服器版本不支援 OAuth 模型別名功能，請升級到最新版本的 CPA 後重試。"
   },
   "auth_login": {
     "codex_oauth_title": "Codex OAuth",
@@ -1118,7 +1118,7 @@
     "oauth_callback_required": "請先貼上完整的回調 URL。",
     "oauth_callback_success": "回調 URL 已提交，請繼續等待驗證。",
     "oauth_callback_error": "提交回調 URL 失敗:",
-    "oauth_callback_upgrade_hint": "請更新 CLI Proxy API 或檢查連線",
+    "oauth_callback_upgrade_hint": "請更新 CPA 或檢查連線",
     "oauth_callback_status_success": "回調 URL 已提交，等待驗證中...",
     "oauth_callback_status_error": "回調 URL 提交失敗:",
     "missing_state": "無法取得驗證狀態參數",
@@ -1418,7 +1418,8 @@
     "request_events_title": "請求事件明細",
     "request_events_filter_model": "模型",
     "request_events_upstream_model": "上游：{{model}}",
-    "request_events_upstream_model_hint": "上游回應所報告的模型 ID。歷史記錄或不支援此欄位的 Provider 可能沒有此值。",
+    "request_events_upstream_model_column": "上游模型",
+    "request_events_upstream_model_hint": "上游回應所報告的模型 ID。綠色表示與請求模型一致；琥珀色表示不一致。",
     "request_events_filter_request_key": "呼叫 Key",
     "request_events_filter_source": "來源",
     "request_events_filter_auth_index": "驗證索引",
@@ -1620,8 +1621,8 @@
     "copy_failed": "複製失敗",
     "lines": "行",
     "removed": "已篩選",
-    "upgrade_required_title": "需要升級 CLI Proxy API",
-    "upgrade_required_desc": "目前伺服器版本不支援記錄檢視功能，請升級到最新版本的 CLI Proxy API 以使用此功能。"
+    "upgrade_required_title": "需要升級 CPA",
+    "upgrade_required_desc": "目前伺服器版本不支援記錄檢視功能，請升級到最新版本的 CPA 以使用此功能。"
   },
   "config_management": {
     "save_target": "目標實例：{{name}}",
@@ -2370,7 +2371,7 @@
   },
   "system_info": {
     "title": "管理中心資訊",
-    "about_title": "CLI Proxy API Management Center",
+    "about_title": "CPA Management Center",
     "connection_status_title": "連線狀態",
     "api_status_label": "API 狀態:",
     "config_status_label": "設定狀態:",
@@ -2397,10 +2398,11 @@
     "version_check_error": "檢查更新失敗",
     "version_current_missing": "未取得到伺服器版本號，暫無法比對",
     "version_unknown": "未知",
+    "version_not_reported": "未上報",
     "quick_links_title": "快速連結",
     "quick_links_desc": "存取專案儲存庫和文件，取得協助和更新。",
     "link_main_repo": "主程式儲存庫",
-    "link_main_repo_desc": "CLI Proxy API 核心程式原始碼",
+    "link_main_repo_desc": "CPA Core LTS 核心程式原始碼",
     "link_webui_repo": "WebUI 儲存庫",
     "link_webui_repo_desc": "管理中心前端介面原始碼",
     "link_docs": "使用教學",
@@ -2535,12 +2537,12 @@
     "primary_navigation": "主導覽",
     "toggle_expand": "展開側邊欄",
     "toggle_collapse": "收起側邊欄",
-    "subtitle": "CLI Proxy API 管理控制台",
+    "subtitle": "CPA 管理控制台",
     "switch_to_classic": "切換為經典側邊欄",
     "switch_to_compact": "切換為緊湊側邊欄"
   },
   "footer": {
-    "api_version": "CLI Proxy API 版本",
+    "api_version": "CPA 版本",
     "build_date": "建置時間",
     "version": "管理中心版本",
     "author": "作者"

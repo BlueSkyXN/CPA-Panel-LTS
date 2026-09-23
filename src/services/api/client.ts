@@ -16,6 +16,7 @@ import {
   VERSION_HEADER_KEYS
 } from '@/utils/constants';
 import { computeApiUrl } from '@/utils/connection';
+import { normalizeReportedVersion } from '@/utils/version';
 import type { ServerRuntimeKind } from '@/types';
 import { parseApiErrorResponse } from './apiError';
 import { beginSessionWrite, isSessionFrozen } from '@/services/connectionSession';
@@ -182,11 +183,18 @@ class ApiClient {
         }
 
         const headers = response.headers as Record<string, string | undefined>;
-        const homeVersion = this.readHeader(headers, HOME_VERSION_HEADER_KEYS);
+        const homeVersion = normalizeReportedVersion(
+          this.readHeader(headers, HOME_VERSION_HEADER_KEYS)
+        );
         const homeBuildDate = this.readHeader(headers, HOME_BUILD_DATE_HEADER_KEYS);
-        const cpaVersion = this.readHeader(headers, CPA_VERSION_HEADER_KEYS);
+        const cpaVersion = normalizeReportedVersion(
+          this.readHeader(headers, CPA_VERSION_HEADER_KEYS)
+        );
         const cpaBuildDate = this.readHeader(headers, CPA_BUILD_DATE_HEADER_KEYS);
-        const version = homeVersion || cpaVersion || this.readHeader(headers, VERSION_HEADER_KEYS);
+        const version =
+          homeVersion ||
+          cpaVersion ||
+          normalizeReportedVersion(this.readHeader(headers, VERSION_HEADER_KEYS));
         const buildDate =
           homeBuildDate || cpaBuildDate || this.readHeader(headers, BUILD_DATE_HEADER_KEYS);
         const supportsPlugin = this.readBooleanHeader(headers, CPA_SUPPORT_PLUGIN_HEADER_KEYS);
