@@ -33,13 +33,12 @@ export function buildPatAuth(
     throw new Error('unsupported_auth_mode');
   }
   const auth = { ...previous, type: provider, auth_mode: 'pat', pat, label: label.trim() };
-  // 更新长期凭据时不能留下与新 PAT 冲突的旧凭据或已被移除的 runner/transport 字段；
-  // 其余账号配置保持不变。
+  // 更新长期凭据时不能留下与新 PAT 冲突的旧凭据；其余账号配置保持不变。
+  // transport/profile_id/config_dir 是旧 Qoder 插件的运行字段：旧 Core 上账号级
+  // transport 优先于插件默认（sdk_cli），删除会把 direct_openai 账号切回 runner；
+  // 新 Core 0.3.0 则把它们当作兼容输入。Panel 无法感知 Core 版本，因此一律保留。
   delete (auth as Record<string, unknown>).access_token;
   delete (auth as Record<string, unknown>).api_key;
-  delete (auth as Record<string, unknown>).transport;
-  delete (auth as Record<string, unknown>).profile_id;
-  delete (auth as Record<string, unknown>).config_dir;
   return auth;
 }
 
