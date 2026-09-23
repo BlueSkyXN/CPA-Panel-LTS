@@ -16,28 +16,38 @@ test('new accounts receive unique path-safe filenames without using the label', 
   for (const name of names) assert.match(name, /^qoder-[0-9a-f]{32}\.json$/);
 });
 
-test('PAT update preserves non-credential account configuration without mutating the source', () => {
+test('PAT update preserves account configuration and legacy transport fields without mutating the source', () => {
   const before = { type: 'qoder', auth_mode: 'pat', access_token: 'pt-fixture-old', prefix: 'team', disabled: true, transport: 'direct_openai', priority: 3 };
   const after = buildPatAuth('qoder', 'Main', ' pt-fixture-new ', before);
   assert.equal(after.pat, 'pt-fixture-new');
   assert.equal(after.access_token, undefined);
-  assert.equal(after.transport, before.transport);
+  assert.equal(after.transport, 'direct_openai');
   assert.equal(after.prefix, before.prefix);
   assert.equal(after.disabled, true);
   assert.equal(after.priority, 3);
   assert.equal(before.access_token, 'pt-fixture-old');
 });
 
-test('new PAT files follow instance transport and do not invent account region', () => {
+test('PAT update on legacy plugin keeps the account-level direct transport alive', () => {
+  // 旧 Qoder 插件（<0.3.0）默认 sdk_cli，账号靠 transport: direct_openai 覆盖运行；
+  // 更新 PAT 绝不能删除该字段，否则账号会退回 runner 路径。
+  const before = { type: 'qoder', auth_mode: 'pat', pat: 'pt-fixture-old', transport: 'direct_openai', label: 'Old' };
+  const after = buildPatAuth('qoder', 'Main', 'pt-fixture-new', before);
+  assert.equal(after.transport, 'direct_openai');
+  assert.equal(after.pat, 'pt-fixture-new');
+});
+
+test('new PAT files contain only provider, mode, credential and label', () => {
   assert.deepEqual(buildPatAuth('qoder', 'Main', 'pt-fixture'), { type: 'qoder', auth_mode: 'pat', pat: 'pt-fixture', label: 'Main' });
 });
 
-test('reject invalid PAT and avoid silent local-cli migration or provider changes', () => {
+test('reject invalid PAT, removed auth modes, and provider changes', () => {
   for (const value of ['', ' ', 'opaque-token', 'pt-a\nb']) {
     assert.throws(() => buildPatAuth('qoder', '', value));
   }
   assert.throws(() => buildPatAuth('codebuddy', '', 'fixture', { type: 'qoder' }));
   assert.throws(() => buildPatAuth('qoder', '', 'pt-fixture', { type: 'qoder', auth_mode: 'local_cli' }));
+  assert.throws(() => buildPatAuth('qoder', '', 'pt-fixture', { type: 'qoder', auth_mode: 'sdk_profile' }));
 });
 
 test('CodeBuddy API key migration removes only the superseded credential', () => {
