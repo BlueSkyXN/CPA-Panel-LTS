@@ -548,6 +548,20 @@ export const authFilesApi = {
       : [];
   },
 
+  // 重新发现单个凭证的模型，并让 Core 同步更新 registry 与 scheduler。
+  async refreshModelsForAuthFile(
+    name: string
+  ): Promise<{ id: string; display_name?: string; type?: string; owned_by?: string }[]> {
+    const data = await apiClient.post<{ models?: unknown }>(
+      `/auth-files/models/refresh?name=${encodeURIComponent(name)}`,
+      undefined,
+      { timeout: 45_000 }
+    );
+    return Array.isArray(data.models)
+      ? (data.models as { id: string; display_name?: string; type?: string; owned_by?: string }[])
+      : [];
+  },
+
   // 获取指定 channel 的模型定义
   async getModelDefinitions(
     channel: string
