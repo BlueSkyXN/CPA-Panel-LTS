@@ -103,10 +103,11 @@ def run(file_mode=False, flow_only=False):
         def open_connections(target=page):
             scope = active(target)
             # Multi-instance mode uses the sidebar switcher; single-instance mode keeps
-            # the header entry. Wait for either to survive early-render races.
+            # the header entry. The login page keeps a secondary "saved connections"
+            # entry. Wait for either to survive early-render races.
             trigger = scope.get_by_role('button', name='Switch instance', exact=True).or_(
                 scope.get_by_role('button', name='Instances', exact=True)
-            )
+            ).or_(scope.get_by_role('button', name='Saved instance connections', exact=True))
             if scope != target and target.viewport_size['width'] <= 768 and not scope.locator('.sidebar.open').count():
                 scope.locator('button.mobile-menu-btn').click()
             trigger.first.click()
@@ -398,22 +399,27 @@ def run(file_mode=False, flow_only=False):
         expect(sp.locator('iframe')).to_have_count(1)
         solo = frame('Solo', sp)
         assert not solo.get_by_role('button', name='Switch instance', exact=True).count(), 'single-instance mode must hide the sidebar switcher'
-        # A rejected stored key must leave the escape hatch visible in the failed frame.
+        # A rejected stored key must fall back to the login page inside the failed
+        # frame, with the failure surfaced and a working retry instead of a dead end.
         a.reject_config = True
         sp.reload()
         failed = frame('Solo', sp)
-        expect(failed.get_by_role('button', name='Switch instance', exact=True)).to_be_visible(timeout=25000)
+        expect(failed.get_by_role('button', name='Login', exact=True)).to_be_visible(timeout=25000)
+        expect(failed.get_by_text('Automatic connection failed', exact=False)).to_be_visible()
         a.reject_config = False
+        failed.get_by_role('button', name='Login', exact=True).click()
+        current('Solo', sp)
         sp.reload()
         current('Solo', sp)
 
-        # Logout is the inverse of login: new tabs stay on the login page until the
-        # user logs in or reconnects an instance, which clears the resident lock.
+        # Logout is the inverse of login: the signing-out tab and new tabs both land
+        # on the login page until the user logs in or reconnects an instance, which
+        # clears the resident lock.
         solo_sp = frame('Solo', sp)
         solo_sp.locator('.toolbar-toggle').click()
         solo_sp.get_by_role('button', name='Logout', exact=True).click()
         expect(sp.locator('iframe')).to_have_count(0)
-        expect(sp.get_by_text('This instance is disconnected.', exact=False)).to_be_visible()
+        expect(sp.get_by_role('button', name='Login', exact=True)).to_be_visible()
         locked = fresh.new_page()
         locked.set_default_timeout(15000)
         locked.goto(app + '#/login')

@@ -20,6 +20,8 @@ export const computeApiUrl = (base: string): string => {
 export const detectApiBaseFromLocation = (): string => {
   try {
     const { protocol, hostname, port } = window.location;
+    // file:/about: 文档推断不出实例地址；返回空串让登录页要求手工填写。
+    if (protocol !== 'http:' && protocol !== 'https:') return '';
     const normalizedPort = port ? `:${port}` : '';
     return normalizeApiBase(`${protocol}//${hostname}${normalizedPort}`);
   } catch (error) {

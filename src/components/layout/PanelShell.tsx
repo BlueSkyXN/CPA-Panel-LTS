@@ -83,6 +83,8 @@ function restoreWorkspace() {
               : safeSessionPath(typeof item.path === 'string' ? item.path : '/');
           return [makeSession(profile, profile.managementKey, route)];
         });
+        // 空的 workspace 记录不等于已启动；继续按登录页优先的回退链处理。
+        if (!sessions.length) return restoreWithoutWorkspace(profiles, path);
         return {
           sessions,
           activeId: typeof stored.activeId === 'string' ? stored.activeId : '',
@@ -93,6 +95,10 @@ function restoreWorkspace() {
       /* 损坏的布局记录不影响旧连接档案。 */
     }
   }
+  return restoreWithoutWorkspace(profiles, path);
+}
+
+function restoreWithoutWorkspace(profiles: ConnectionProfile[], path: string) {
   const auth = useAuthStore.getState();
   const profile = profiles.find(
     (item) => item.id === auth.profileId && item.apiBase === auth.apiBase
@@ -260,6 +266,11 @@ export function PanelShell({ children }: PropsWithChildren) {
       return false;
     controls.current.delete(session.id);
     commit(sessionsRef.current.filter((item) => item.id !== session.id));
+    if (!sessionsRef.current.length) {
+      // 最后一个会话断开后回到登录页；清掉 workspace 记录，刷新后仍按登录页优先处理。
+      sessionStorage.removeItem(WORKSPACE_KEY);
+      setStarted(false);
+    }
     setError('');
     return true;
   };
@@ -526,8 +537,9 @@ export function PanelShell({ children }: PropsWithChildren) {
           </Button>
         </div>
       )}
-      {(!current || unavailable) && (
+      {started && (!current || unavailable) && (
         <div className={styles.fallbackSwitcher}>
+          {/* 未启动时登录页是唯一主界面；胶囊只在会话框架异常后作为逃生门出现。 */}
           <button
             className={styles.selector}
             aria-label={t('connections.switch')}

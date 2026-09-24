@@ -100,7 +100,7 @@ def main():
             page.locator('input[type="checkbox"]').first.check(force=True)
             page.locator("input.input").first.fill(f"http://127.0.0.1:{api_port}")
             page.locator('input[name="cpa-management-key"]').fill("smoke-management-key")
-            page.get_by_role("button", name=re.compile("Login|Connect", re.I)).click()
+            page.get_by_role("button", name=re.compile(r"^(Login|Connect)$", re.I)).click()
             page.wait_for_function("window.location.hash === '#/'")
             page.goto(base + "#/auth-files")
             page.get_by_role("button", name="Add PAT account", exact=True).click()

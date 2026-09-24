@@ -72,7 +72,7 @@ def browser_check(api, app_url, count):
             page.get_by_placeholder("Eg: https://example.com:8317").fill(api)
             page.locator('input[name="cpa-management-key"]').fill(core.MANAGEMENT_KEY)
             page.get_by_label("Remember password").check(force=True)
-            page.get_by_role("button", name=re.compile("Login|Connect", re.I)).click()
+            page.get_by_role("button", name=re.compile(r"^(Login|Connect)$", re.I)).click()
             page.wait_for_url(lambda url: "#/login" not in url)
             for route, query_path in [("/usage", "/usage/query/summary"), ("/usage/pricing", "/usage/query/pricing")]:
                 with page.expect_response(lambda response: response.url.endswith(query_path) and response.status == 200):
@@ -136,7 +136,7 @@ def legacy_panel_check(api, directory, ref):
                 page.get_by_label("Custom Connection URL:").check(force=True)
                 page.get_by_placeholder("Eg: https://example.com:8317").fill(api)
                 page.locator('input[name="cpa-management-key"]').fill(core.MANAGEMENT_KEY)
-                page.get_by_role("button", name=re.compile("Login|Connect", re.I)).click()
+                page.get_by_role("button", name=re.compile(r"^(Login|Connect)$", re.I)).click()
                 page.wait_for_url(lambda url: "#/login" not in url)
                 page.goto(app + "/#/usage/events?range=all")
                 page.locator('[data-testid="usage-events-workspace"] tbody tr').first.wait_for()

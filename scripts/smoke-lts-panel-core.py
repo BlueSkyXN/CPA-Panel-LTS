@@ -2723,7 +2723,7 @@ def run_browser_smoke(
             page.get_by_placeholder("Eg: https://example.com:8317").fill(api_url)
             page.locator('input[name="cpa-management-key"]').fill(MANAGEMENT_KEY)
             page.get_by_label("Remember password").check(force=True)
-            page.get_by_role("button", name=re.compile("Login|Connect", re.I)).click()
+            page.get_by_role("button", name=re.compile(r"^(Login|Connect)$", re.I)).click()
             page.wait_for_url(re.compile(r".*/#/$"), timeout=30_000)
             seen.extend(run_browser_config_save_smoke(page, api_url))
             seen.extend(run_browser_flow_control_smoke(page, app_url, api_url))

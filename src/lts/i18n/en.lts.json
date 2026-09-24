@@ -1,4 +1,9 @@
 {
+  "login": {
+    "saved_connections": "Saved instance connections",
+    "auto_connect_failed": "Automatic connection failed. Check the address and management key, then try again.",
+    "file_mode_hint": "The Panel is opened as a local file, so the instance address cannot be detected. Enter the instance HTTP(S) address."
+  },
   "connections": {
     "title": "Instances",
     "switch": "Switch instance",
