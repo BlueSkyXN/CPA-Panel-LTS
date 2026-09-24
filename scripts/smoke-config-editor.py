@@ -311,7 +311,7 @@ def run():
         page.locator('input.input').first.fill(f'http://127.0.0.1:{api_port}')
         page.locator('input[name="cpa-management-key"]').fill('smoke-management-key')
         page.get_by_label('Remember password').check(force=True)
-        page.get_by_role('button', name=re.compile('Login|Connect', re.I)).click()
+        page.get_by_role('button', name=re.compile(r'^(Login|Connect)$', re.I)).click()
         page.wait_for_url(re.compile(r'#/$'))
         page.goto(app_url + '#/config')
         page = ConfigSurface(page)

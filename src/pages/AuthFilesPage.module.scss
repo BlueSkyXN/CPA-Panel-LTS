@@ -1521,6 +1521,11 @@
   padding-inline: 10px;
 }
 
+.updatePatButton:global(.btn.btn-sm) {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .modelsActionButton:global(.btn.btn-sm) {
   background: color-mix(in srgb, var(--primary-color) 10%, var(--bg-secondary));
   border-color: color-mix(in srgb, var(--primary-color) 20%, var(--border-color));

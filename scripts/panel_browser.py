@@ -45,7 +45,13 @@ class PanelBrowser:
         return result
 
     def reconnect(self):
-        self.raw.get_by_role('button', name='Switch instance', exact=True).click()
+        # After an in-app logout the host returns to the login page, whose manager
+        # entry is the secondary saved-connections link; a running-but-idle shell
+        # still exposes the bottom-left switcher pill. Both open the same dialog.
+        trigger = self.raw.get_by_role('button', name='Switch instance', exact=True).or_(
+            self.raw.get_by_role('button', name='Saved instance connections', exact=True)
+        )
+        trigger.first.click()
         self.raw.get_by_role('dialog').locator('button[aria-current=true]').click()
         self.raw.wait_for_selector('iframe[data-active=true]', state='attached')
         self._ready()

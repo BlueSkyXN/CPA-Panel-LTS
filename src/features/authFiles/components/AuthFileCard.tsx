@@ -53,6 +53,7 @@ export type AuthFileCardProps = {
   deleting: string | null;
   statusUpdating: Record<string, boolean>;
   quotaFilterType: QuotaProviderType | null;
+  patDetailActive: boolean;
   statusBarCache: Map<string, AuthFileStatusBarData>;
   codexRemoteCloudConnectSummary?: CodexRemoteCloudConnectEnvironmentSummary;
   onShowModels: (file: AuthFileItem) => void;
@@ -81,6 +82,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
     deleting,
     statusUpdating,
     quotaFilterType,
+    patDetailActive,
     statusBarCache,
     codexRemoteCloudConnectSummary,
     onShowModels,
@@ -275,22 +277,26 @@ export function AuthFileCard(props: AuthFileCardProps) {
             )}
           </div>
 
-          {!isRuntimeOnly && !compact && (
+          {!isRuntimeOnly && !compact && patDetailActive && (
             <PatAccountSummary file={file} disabled={disableControls} />
           )}
 
           <div className={styles.cardActions}>
             <div className={styles.cardActionsMain}>
-              {!isRuntimeOnly && isPatProvider(providerKey) && onUpdatePat && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={disableControls}
-                  onClick={() => onUpdatePat(file)}
-                >
-                  {t('pat_accounts.update')}
-                </Button>
-              )}
+              {!isRuntimeOnly &&
+                patDetailActive &&
+                isPatProvider(providerKey) &&
+                onUpdatePat && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className={styles.updatePatButton}
+                    disabled={disableControls}
+                    onClick={() => onUpdatePat(file)}
+                  >
+                    {t('pat_accounts.update')}
+                  </Button>
+                )}
               {showModelsButton && (
                 <Button
                   variant="secondary"

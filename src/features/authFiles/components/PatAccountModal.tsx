@@ -10,6 +10,12 @@ import { useAuthStore } from '@/stores';
 import { registerSessionBusyCheck, registerSessionLeaveCheck } from '@/services/connectionSession';
 import type { AuthFileItem } from '@/types';
 import { buildPatAuth, isPatProvider, newPatAuthFileName, type PatProvider } from '../patProviders';
+import { parsePriorityValue } from '@/features/authFiles/constants';
+import {
+  MAX_CREDENTIAL_WEIGHT,
+  parseCredentialWeightText,
+  validateCredentialWeightText,
+} from '@/utils/credentialWeight';
 
 interface Props {
   file?: AuthFileItem;
@@ -25,6 +31,11 @@ export function PatAccountModal({ file, onClose, onSaved }: Props) {
   );
   const [label, setLabel] = useState(String(file?.label || file?.name || ''));
   const [pat, setPat] = useState('');
+  const [prefix, setPrefix] = useState('');
+  const [priority, setPriority] = useState('');
+  const [weight, setWeight] = useState('');
+  const [note, setNote] = useState('');
+  const [weightError, setWeightError] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [config, setConfig] = useState<Awaited<ReturnType<typeof patProvidersApi.configuration>>>();
@@ -72,12 +83,39 @@ export function PatAccountModal({ file, onClose, onSaved }: Props) {
     if (saving || !enabled || !config) return;
     const current = generation.current;
     setError('');
+    setWeightError('');
     let auth: Record<string, unknown>;
     try {
       auth = buildPatAuth(provider, label, pat);
     } catch {
       setError(t('pat_accounts.invalid_pat'));
       return;
+    }
+    if (!file) {
+      const trimmedPrefix = prefix.trim();
+      const trimmedPriority = priority.trim();
+      const trimmedNote = note.trim();
+      const priorityValue = parsePriorityValue(trimmedPriority);
+      if (trimmedPriority && priorityValue === undefined) {
+        setError(t('pat_accounts.priority_invalid'));
+        return;
+      }
+      const weightProblem = validateCredentialWeightText(weight);
+      if (weightProblem) {
+        setWeightError(
+          t(
+            weightProblem === 'max'
+              ? 'auth_files.weight_invalid_max'
+              : 'auth_files.weight_invalid_integer'
+          )
+        );
+        return;
+      }
+      const weightValue = parseCredentialWeightText(weight);
+      if (trimmedPrefix) auth.prefix = trimmedPrefix;
+      if (priorityValue !== undefined) auth.priority = priorityValue;
+      if (weightValue !== undefined) auth.weight = weightValue;
+      if (trimmedNote) auth.note = trimmedNote;
     }
     setSaving(true);
     try {
@@ -156,6 +194,56 @@ export function PatAccountModal({ file, onClose, onSaved }: Props) {
         onChange={(e) => setPat(e.target.value)}
         hint={t(`pat_accounts.hint_${provider}`)}
       />
+      {!file && (
+        <details style={{ margin: '12px 0' }}>
+          <summary style={{ cursor: 'pointer', fontWeight: 600 }}>
+            {t('pat_accounts.advanced_options')}
+          </summary>
+          <div style={{ display: 'grid', gap: 4, marginTop: 8 }}>
+            <Input
+              label={t('auth_files.prefix_label')}
+              value={prefix}
+              placeholder={t('auth_files.prefix_placeholder')}
+              hint={t('auth_files.prefix_hint')}
+              disabled={saving}
+              onChange={(e) => setPrefix(e.target.value)}
+            />
+            <Input
+              label={t('auth_files.priority_label')}
+              value={priority}
+              type="number"
+              step="1"
+              placeholder={t('auth_files.priority_placeholder')}
+              hint={t('auth_files.priority_hint')}
+              disabled={saving}
+              onChange={(e) => setPriority(e.target.value)}
+            />
+            <Input
+              label={t('auth_files.weight_label')}
+              value={weight}
+              type="number"
+              min={0}
+              max={MAX_CREDENTIAL_WEIGHT}
+              placeholder="1"
+              hint={t('auth_files.weight_hint')}
+              error={weightError || undefined}
+              disabled={saving}
+              onChange={(e) => {
+                setWeight(e.target.value);
+                setWeightError('');
+              }}
+            />
+            <Input
+              label={t('auth_files.note_label')}
+              value={note}
+              placeholder={t('auth_files.note_placeholder')}
+              hint={t('auth_files.note_hint')}
+              disabled={saving}
+              onChange={(e) => setNote(e.target.value)}
+            />
+          </div>
+        </details>
+      )}
       <p className="hint">{t('pat_accounts.storage_hint')}</p>
       {file && <p className="hint">{t('pat_accounts.replace_hint', { name: file.name })}</p>}
       {config && (

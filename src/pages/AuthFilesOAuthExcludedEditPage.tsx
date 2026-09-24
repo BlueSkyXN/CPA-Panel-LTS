@@ -60,7 +60,7 @@ export function AuthFilesOAuthExcludedEditPage() {
   const [selectedModels, setSelectedModels] = useState<Set<string>>(new Set());
   const [modelsList, setModelsList] = useState<AuthFileModelItem[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
-  const [modelsError, setModelsError] = useState<'unsupported' | null>(null);
+  const [modelsError, setModelsError] = useState<string | null>(null);
   const [customRule, setCustomRule] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -240,8 +240,60 @@ export function AuthFilesOAuthExcludedEditPage() {
     setModelsLoading(true);
     setModelsError(null);
 
-    authFilesApi
-      .getModelDefinitions(resolvedProviderKey)
+    const loadModels = async () => {
+      try {
+        return await authFilesApi.getModelDefinitions(resolvedProviderKey);
+      } catch (err: unknown) {
+        const status =
+          typeof err === 'object' && err !== null && 'status' in err
+            ? (err as { status?: unknown }).status
+            : undefined;
+        if (status !== 400 && status !== 404) throw err;
+
+        // 插件提供商按凭证发现模型，不在内置 channel 的静态目录中。
+        const providerFiles = files.filter(
+          (file) =>
+            !file.disabled &&
+            (normalizeProviderKey(file.type ?? '') === resolvedProviderKey ||
+              normalizeProviderKey(file.provider ?? '') === resolvedProviderKey)
+        );
+        if (providerFiles.length === 0) return [];
+
+        const results = await Promise.allSettled(
+          providerFiles.map(async (file) => {
+            const models = await authFilesApi.getModelsForAuthFile(file.name);
+            if (models.length > 0) return models;
+            try {
+              return await authFilesApi.refreshModelsForAuthFile(file.name);
+            } catch (refreshErr: unknown) {
+              const refreshStatus =
+                typeof refreshErr === 'object' && refreshErr !== null && 'status' in refreshErr
+                  ? (refreshErr as { status?: unknown }).status
+                  : undefined;
+              if (refreshStatus === 404 || refreshStatus === 405) return models;
+              throw refreshErr;
+            }
+          })
+        );
+        const models = new Map<string, AuthFileModelItem>();
+        let firstError: unknown;
+        let succeeded = false;
+        results.forEach((result) => {
+          if (result.status === 'rejected') {
+            firstError ??= result.reason;
+            return;
+          }
+          succeeded = true;
+          result.value.forEach((model) => {
+            if (model.id && !models.has(model.id)) models.set(model.id, model);
+          });
+        });
+        if ((!succeeded || models.size === 0) && firstError) throw firstError;
+        return Array.from(models.values());
+      }
+    };
+
+    void loadModels()
       .then((models) => {
         if (cancelled) return;
         setModelsList(models);
@@ -259,8 +311,13 @@ export function AuthFilesOAuthExcludedEditPage() {
           return;
         }
 
-        const errorMessage = err instanceof Error ? err.message : '';
-        showNotification(`${t('notification.load_failed')}: ${errorMessage}`, 'error');
+        const apiCode =
+          typeof err === 'object' && err !== null && 'apiCode' in err
+            ? (err as { apiCode?: unknown }).apiCode
+            : undefined;
+        const errorCode = typeof apiCode === 'string' ? apiCode : 'model_discovery_failed';
+        setModelsError(errorCode);
+        showNotification(`${t('notification.load_failed')}: ${errorCode}`, 'error');
       })
       .finally(() => {
         if (cancelled) return;
@@ -270,7 +327,7 @@ export function AuthFilesOAuthExcludedEditPage() {
     return () => {
       cancelled = true;
     };
-  }, [excludedUnsupported, resolvedProviderKey, showNotification, t]);
+  }, [excludedUnsupported, files, resolvedProviderKey, showNotification, t]);
 
   const applyProviderChange = useCallback(
     (value: string) => {
@@ -472,8 +529,12 @@ export function AuthFilesOAuthExcludedEditPage() {
                       <LoadingSpinner size={14} />
                       <span>{t('oauth_excluded.models_loading')}</span>
                     </>
-                  ) : modelsError === 'unsupported' ? (
-                    <span>{t('oauth_excluded.models_unsupported')}</span>
+                  ) : modelsError ? (
+                    <span>
+                      {modelsError === 'unsupported'
+                        ? t('oauth_excluded.models_unsupported')
+                        : `${t('notification.load_failed')}: ${modelsError}`}
+                    </span>
                   ) : modelsList.length > 0 ? (
                     <span>{t('oauth_excluded.models_loaded', { count: modelsList.length })}</span>
                   ) : (
@@ -572,8 +633,10 @@ export function AuthFilesOAuthExcludedEditPage() {
               </div>
             ) : resolvedProviderKey ? (
               <div className={styles.emptyModels}>
-                {modelsError === 'unsupported'
-                  ? t('oauth_excluded.models_unsupported')
+                {modelsError
+                  ? modelsError === 'unsupported'
+                    ? t('oauth_excluded.models_unsupported')
+                    : `${t('notification.load_failed')}: ${modelsError}`
                   : t('oauth_excluded.no_models_available')}
               </div>
             ) : (

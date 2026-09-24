@@ -83,19 +83,22 @@ export function ConnectionRuntime({ children }: PropsWithChildren) {
   }, [authenticated, connection]);
 
   if (!connection) return <div className={styles.empty}>{t('connections.frame_unavailable')}</div>;
-  if (started && authenticated) return children;
-  return (
-    <div className={styles.empty}>
-      <h2>{connection.bootstrap.profile.name}</h2>
-      <p role={status === 'error' ? 'alert' : 'status'}>
-        {t(status === 'error' ? 'connections.failed' : 'connections.switching', {
-          name: connection.bootstrap.profile.name,
-        })}
-      </p>
-      <div className={styles.fallbackSwitcher}>
-        {/* 未认证视图只出现在连接中/失败态；此切换器是密钥失效时的唯一逃生门，与模式无关。 */}
-        <ConnectionSwitcher />
+  // 恢复期间保留切换视图；尝试结束后交给路由——未认证时即登录页（含预填地址与失败提示），
+  // 而不是把用户困在"无法连接"的死胡同。
+  if (!started)
+    return (
+      <div className={styles.empty}>
+        <h2>{connection.bootstrap.profile.name}</h2>
+        <p role={status === 'error' ? 'alert' : 'status'}>
+          {t(status === 'error' ? 'connections.failed' : 'connections.switching', {
+            name: connection.bootstrap.profile.name,
+          })}
+        </p>
+        <div className={styles.fallbackSwitcher}>
+          {/* 恢复卡住时的逃生门；登录页自身也提供实例管理入口。 */}
+          <ConnectionSwitcher />
+        </div>
       </div>
-    </div>
-  );
+    );
+  return children;
 }

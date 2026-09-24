@@ -1,4 +1,9 @@
 {
+  "login": {
+    "saved_connections": "已儲存的實例連線",
+    "auto_connect_failed": "自動連線失敗，請檢查位址與管理密鑰後重試。",
+    "file_mode_hint": "目前以本機檔案方式開啟 Panel，無法自動推斷實例位址，請填寫實例的 HTTP(S) 位址。"
+  },
   "connections": {
     "title": "實例連線",
     "switch": "切換實例",

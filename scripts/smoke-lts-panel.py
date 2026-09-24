@@ -2326,6 +2326,69 @@ def run_oauth_editor_smoke(page: Any, app_url: str) -> None:
     page.get_by_text("Model disablement updated", exact=False).first.wait_for()
 
 
+def run_oauth_plugin_model_refresh_smoke(page: Any, app_url: str) -> None:
+    """An empty registry list retries the credential catalog instead of claiming no support."""
+    refreshes: list[str] = []
+    intercepted: list[str] = []
+    model_responses: list[str] = []
+
+    def observe_model_response(response: Any) -> None:
+        path = urlparse(response.url).path
+        if "model-definitions" in path or "/auth-files/models" in path or "oauth-excluded" in path:
+            model_responses.append(f"{response.status} {path}")
+
+    def auth_files_route(route: Any) -> None:
+        parsed = urlparse(route.request.url)
+        intercepted.append(f"{route.request.method} {parsed.path}?{parsed.query}")
+        if parsed.path == "/v0/management/auth-files":
+            payload = build_auth_files_payload()
+            payload["files"].append(
+                {"name": "qoder-smoke.json", "type": "qoder", "provider": "qoder", "disabled": False}
+            )
+        elif parsed.path == "/v0/management/auth-files/models":
+            payload = {"models": []}
+        elif parsed.path == "/v0/management/auth-files/models/refresh":
+            refreshes.append(parse_qs(parsed.query).get("name", [""])[0])
+            payload = {"status": "ready", "models": [{"id": "qmodel_38max", "display_name": "Qwen3.8-Max"}]}
+        else:
+            route.continue_()
+            return
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(payload))
+
+    pattern = "**/v0/management/auth-files**"
+    definitions_pattern = "**/v0/management/model-definitions/qoder"
+    page.raw.context.route(pattern, auth_files_route)
+    page.raw.context.on("response", observe_model_response)
+    page.raw.context.route(
+        definitions_pattern,
+        lambda route: route.fulfill(
+            status=400,
+            content_type="application/json",
+            body=json.dumps({"error": "unknown channel"}),
+        ),
+    )
+    try:
+        page.goto(
+            f"{app_url}?route=oauth-plugin-refresh#/auth-files/oauth-excluded?provider=qoder",
+            wait_until="domcontentloaded",
+        )
+        page.get_by_role("button", name="Qoder", exact=True).click()
+        try:
+            page.get_by_text("qmodel_38max", exact=True).wait_for()
+        except Exception as exc:
+            raise AssertionError(
+                f"Qoder provider={page.get_by_label('Provider', exact=True).input_value()!r}, "
+                f"intercepted={intercepted!r}, responses={model_responses!r}, "
+                f"refreshes={refreshes!r}"
+            ) from exc
+        if refreshes != ["qoder-smoke.json"]:
+            raise AssertionError(f"Qoder model refresh requests = {refreshes!r}")
+    finally:
+        page.raw.context.unroute(pattern, auth_files_route)
+        page.raw.context.unroute(definitions_pattern)
+        page.raw.context.remove_listener("response", observe_model_response)
+
+
 def run_oauth_load_failure_smoke(
     page: Any, app_url: str, state: MockCoreState
 ) -> None:
@@ -2396,8 +2459,8 @@ def run_auth_file_using_api_smoke(page: Any, app_url: str) -> None:
         and "codex-smoke.json" in response.url
     ):
         codex_card.locator('button[title="Auth File Details / Edit"]').click()
-    codex_dialog = page.get_by_role(
-        "dialog", name="Auth File Details / Edit - codex-smoke.json"
+    codex_dialog = page.get_by_role("dialog").filter(has_text="codex-smoke.json").filter(
+        has_text="Auth File Details / Edit"
     )
     codex_dialog.wait_for()
     if codex_dialog.get_by_label("Use official API (using_api)").count() != 0:
@@ -2416,7 +2479,9 @@ def run_auth_file_using_api_smoke(page: Any, app_url: str) -> None:
         and "xai-smoke.json" in response.url
     ):
         xai_card.locator('button[title="Auth File Details / Edit"]').click()
-    xai_dialog = page.get_by_role("dialog", name="Auth File Details / Edit - xai-smoke.json")
+    xai_dialog = page.get_by_role("dialog").filter(has_text="xai-smoke.json").filter(
+        has_text="Auth File Details / Edit"
+    )
     xai_dialog.wait_for()
     using_api_toggle = xai_dialog.get_by_label("Use official API (using_api)")
     if using_api_toggle.is_checked():
@@ -3914,6 +3979,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     expected_column_defaults = {
         "timestamp": True,
         "model": True,
+        "upstreamModel": False,
         "requestKey": True,
         "source": False,
         "authIndex": False,
@@ -6045,7 +6111,9 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             page.get_by_label("Remember password").check(force=True)
             if not page.get_by_label("Remember password").is_checked():
                 raise AssertionError("Remember password checkbox did not become checked")
-            page.get_by_role("button", name=re.compile("Login|Connect", re.I)).click()
+            # Anchored: the login page also has a "Saved instance connections" entry,
+            # and an unanchored "Connect" would match inside it.
+            page.get_by_role("button", name=re.compile(r"^(Login|Connect)$", re.I)).click()
             page.wait_for_url(re.compile(r".*/#/$"), timeout=20_000)
             for shortcut in ('Control+b', 'Meta+b'):
                 before = page.locator('.app-shell').evaluate("node => node.classList.contains('sidebar-is-collapsed')")
@@ -6131,6 +6199,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             run_plugin_config_patch_smoke(page, app_url)
             run_oauth_attempt_smoke(page, app_url)
             run_oauth_editor_smoke(page, app_url)
+            run_oauth_plugin_model_refresh_smoke(page, app_url)
             run_oauth_load_failure_smoke(page, app_url, state)
             run_auth_file_using_api_smoke(page, app_url)
 

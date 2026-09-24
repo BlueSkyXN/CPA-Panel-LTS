@@ -1,6 +1,8 @@
 {
   "pat_accounts": {
     "retry": "Retry",
+    "advanced_options": "Advanced options",
+    "priority_invalid": "Priority must be an integer.",
     "add": "Add PAT account",
     "update": "Update PAT",
     "provider": "Provider",
@@ -2500,12 +2502,15 @@
     "provider_dock": "Provider quick dock",
     "provider_dock_hint": "Open scoped OAuth and API-key workspaces.",
     "runtime_status": "Core runtime status",
-    "runtime_routing": "Routing",
-    "runtime_retry": "Retries",
-    "runtime_fallback": "Quota fallback",
     "runtime_connection": "Connection",
-    "runtime_enabled": "Enabled",
-    "runtime_disabled": "Disabled"
+    "pulse_traffic": "Recent",
+    "pulse_traffic_hint": "Success · failed requests across credentials over the last ~3h. Open the provider workbench for details.",
+    "pulse_fail": "fail",
+    "pulse_quota": "Min quota",
+    "pulse_quota_hint": "Lowest remaining quota from the local cache; open the quota page to load or refresh.",
+    "pulse_quota_empty": "uncached",
+    "pulse_version": "Version",
+    "pulse_version_hint": "Panel and Core build versions; open system info."
   },
   "sidebar": {
     "primary_navigation": "Primary navigation",

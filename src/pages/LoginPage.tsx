@@ -91,9 +91,6 @@ export function LoginPage() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const login = useAuthStore((state) => state.login);
   const restoreSession = useAuthStore((state) => state.restoreSession);
-  const storedBase = useAuthStore((state) => state.apiBase);
-  const storedKey = useAuthStore((state) => state.managementKey);
-  const storedRememberPassword = useAuthStore((state) => state.rememberPassword);
 
   const [apiBase, setApiBase] = useState('');
   const [managementKey, setManagementKey] = useState('');
@@ -105,6 +102,8 @@ export function LoginPage() {
   const [autoLoginSuccess, setAutoLoginSuccess] = useState(false);
   const [error, setError] = useState('');
 
+  // file:// 打开（或 srcdoc 实例帧）无法从地址推断实例；只有宿主 file 文档需要手工填写提示。
+  const isFileDocument = useMemo(() => window.location.protocol === 'file:', []);
   const detectedBase = useMemo(() => detectApiBaseFromLocation(), []);
   const languageOptions = useMemo(
     () =>
@@ -136,9 +135,16 @@ export function LoginPage() {
             navigate(redirect, { replace: true });
           }, 1500);
         } else {
-          setApiBase(storedBase || detectedBase);
-          setManagementKey(storedKey || '');
-          setRememberPassword(storedRememberPassword || Boolean(storedKey));
+          // 持久化水合可能晚于首帧渲染；恢复流程结束后读取最新 store 状态回填表单。
+          const auth = useAuthStore.getState();
+          setApiBase(auth.apiBase || (isFileDocument ? '' : detectedBase));
+          setShowCustomBase(isFileDocument && !auth.apiBase);
+          setManagementKey(auth.managementKey || '');
+          setRememberPassword(auth.rememberPassword || Boolean(auth.managementKey));
+          // 常驻/迁移自动连接失败时，登录页要给出可行动的失败反馈，而不是静默重置。
+          if (auth.connectionStatus === 'error') {
+            setError(t('login.auto_connect_failed'));
+          }
         }
       } finally {
         // 自动登录成功时 showSplash 仍由 autoLoginSuccess 维持，可无条件结束 loading
@@ -156,7 +162,16 @@ export function LoginPage() {
       return;
     }
 
-    const baseToUse = apiBase ? normalizeApiBase(apiBase) : detectedBase;
+    // file 文档没有可自动推断的实例地址；留空时直接要求补全，而不是拿无意义的首选地址去撞。
+    const baseToUse = apiBase.trim()
+      ? normalizeApiBase(apiBase)
+      : isFileDocument
+        ? ''
+        : detectedBase;
+    if (!baseToUse) {
+      setError(t('login.error_required'));
+      return;
+    }
     setLoading(true);
     setError('');
     try {
@@ -175,7 +190,7 @@ export function LoginPage() {
     } finally {
       setLoading(false);
     }
-  }, [apiBase, detectedBase, login, managementKey, navigate, rememberPassword, showNotification, t]);
+  }, [apiBase, detectedBase, isFileDocument, login, managementKey, navigate, rememberPassword, showNotification, t]);
 
   const handleSubmitKeyDown = useCallback(
     (event: React.KeyboardEvent) => {
@@ -241,11 +256,17 @@ export function LoginPage() {
                 <div className={styles.subtitle}>{t('login.subtitle')}</div>
               </div>
 
-              <div className={styles.connectionBox}>
-                <div className={styles.label}>{t('login.connection_current')}</div>
-                <div className={styles.value}>{apiBase || detectedBase}</div>
-                <div className={styles.hint}>{t('login.connection_auto_hint')}</div>
-              </div>
+              {isFileDocument && !apiBase ? (
+                <div className={styles.connectionBox}>
+                  <div className={styles.hint}>{t('login.file_mode_hint')}</div>
+                </div>
+              ) : (
+                <div className={styles.connectionBox}>
+                  <div className={styles.label}>{t('login.connection_current')}</div>
+                  <div className={styles.value}>{apiBase || detectedBase}</div>
+                  <div className={styles.hint}>{t('login.connection_auto_hint')}</div>
+                </div>
+              )}
 
               <div className={styles.toggleAdvanced}>
                 <SelectionCheckbox
@@ -313,6 +334,15 @@ export function LoginPage() {
               </Button>
 
               {error && <div className={styles.errorBox}>{error}</div>}
+
+              {/* 先登录一个实例，再从这里管理多个实例；入口保持次要，不抢占登录主流程。 */}
+              <button
+                type="button"
+                className={styles.connectionsLink}
+                onClick={() => window.dispatchEvent(new Event('cpa-open-connections'))}
+              >
+                {t('login.saved_connections')}
+              </button>
             </div>
           </div>
         )}

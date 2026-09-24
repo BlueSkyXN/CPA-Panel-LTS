@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button } from '@/components/ui/Button';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { useAuthStore } from '@/stores';
 import { useQuotaStore } from '@/stores/useQuotaStore';
 import { patProvidersApi } from '@/services/api/patProviders';
@@ -11,6 +11,7 @@ import {
   type PatQuotaValues,
   type PatSummary,
 } from '../patProviders';
+import pageStyles from '@/pages/AuthFilesPage.module.scss';
 import styles from './PatAccountSummary.module.scss';
 
 function QuotaValues({ quota }: { quota: PatQuotaValues }) {
@@ -123,23 +124,26 @@ function SummaryLoader({
     }
   };
   return (
-    <section className={styles.summary} aria-label={t('pat_accounts.quota')}>
-      <Button
-        variant="secondary"
-        size="sm"
+    <div className={pageStyles.quotaSection} aria-label={t('pat_accounts.quota')}>
+      <button
+        type="button"
+        className={`${pageStyles.quotaMessage} ${pageStyles.quotaMessageAction}`}
         onClick={() => void refresh()}
-        loading={loading}
-        disabled={disabled}
+        disabled={disabled || loading}
       >
-        {t(summary ? 'pat_accounts.refresh' : 'pat_accounts.view_quota')}
-      </Button>
+        {loading ? (
+          <LoadingSpinner size={12} />
+        ) : (
+          t(summary ? 'pat_accounts.refresh' : 'pat_accounts.view_quota')
+        )}
+      </button>
       {error && (
-        <p className="error-box" role="alert">
+        <div className={pageStyles.quotaError} role="alert">
           {error}
-        </p>
+        </div>
       )}
       {summary && <PatSummaryDetails summary={summary} />}
-    </section>
+    </div>
   );
 }
 

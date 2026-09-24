@@ -28,6 +28,7 @@ import { copyToClipboard } from '@/utils/clipboard';
 import {
   MAX_CARD_PAGE_SIZE,
   MIN_CARD_PAGE_SIZE,
+  OAUTH_PROVIDER_PRESETS,
   QUOTA_PROVIDER_TYPES,
   clampCardPageSize,
   getTypeColor,
@@ -39,6 +40,7 @@ import {
   type QuotaProviderType,
 } from '@/features/authFiles/constants';
 import { AuthFileCard } from '@/features/authFiles/components/AuthFileCard';
+import { isPatProvider } from '@/features/authFiles/patProviders';
 import { PatAccountModal } from '@/features/authFiles/components/PatAccountModal';
 import type { AuthFileItem } from '@/types';
 import { ProviderIcon } from '@/features/authFiles/components/ProviderIcon';
@@ -68,6 +70,15 @@ import {
 } from '@/features/authFiles/uiState';
 import { useAuthStore, useNotificationStore } from '@/stores';
 import styles from './AuthFilesPage.module.scss';
+
+// 默认排序沿用过滤标签页的固定 provider 顺序：预设按索引排，
+// 非预设（如 qoder/codebuddy）统一按字母追加到末尾，组内再按文件名排。
+const AUTH_FILE_PROVIDER_RANK = new Map(
+  OAUTH_PROVIDER_PRESETS.map((provider, index) => [normalizeProviderKey(provider), index])
+);
+const AUTH_FILE_PROVIDER_TAIL_RANK = OAUTH_PROVIDER_PRESETS.length;
+const authFileProviderRank = (providerKey: string): number =>
+  AUTH_FILE_PROVIDER_RANK.get(providerKey) ?? AUTH_FILE_PROVIDER_TAIL_RANK;
 
 const easePower3Out = (progress: number) => 1 - (1 - progress) ** 4;
 const easePower2In = (progress: number) => progress ** 3;
@@ -223,6 +234,7 @@ export function AuthFilesPage() {
 
   const disableControls = connectionStatus !== 'connected';
   const normalizedFilter = normalizeProviderKey(String(filter));
+  const patDetailActive = isPatProvider(normalizedFilter);
   const quotaFilterType: QuotaProviderType | null = QUOTA_PROVIDER_TYPES.has(
     normalizedFilter as QuotaProviderType
   )
@@ -470,8 +482,10 @@ export function AuthFilesPage() {
     const copy = [...filtered];
     if (sortMode === 'default') {
       copy.sort((a, b) => {
-        const providerA = normalizeProviderKey(String(a.provider ?? a.type ?? 'unknown'));
-        const providerB = normalizeProviderKey(String(b.provider ?? b.type ?? 'unknown'));
+        const providerA = normalizeProviderKey(String(a.type ?? a.provider ?? 'unknown'));
+        const providerB = normalizeProviderKey(String(b.type ?? b.provider ?? 'unknown'));
+        const rankCompare = authFileProviderRank(providerA) - authFileProviderRank(providerB);
+        if (rankCompare !== 0) return rankCompare;
         const providerCompare = providerA.localeCompare(providerB);
         if (providerCompare !== 0) return providerCompare;
         return a.name.localeCompare(b.name);
@@ -873,6 +887,7 @@ export function AuthFilesPage() {
                     deleting={deleting}
                     statusUpdating={statusUpdating}
                     quotaFilterType={quotaFilterType}
+                    patDetailActive={patDetailActive}
                     statusBarCache={statusBarCache}
                     codexRemoteCloudConnectSummary={codexRemoteCloudConnectSummaryCache.get(
                       file.name

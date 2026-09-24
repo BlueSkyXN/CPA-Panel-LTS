@@ -1,4 +1,9 @@
 {
+  "login": {
+    "saved_connections": "已保存的实例连接",
+    "auto_connect_failed": "自动连接失败，请检查地址与管理密钥后重试。",
+    "file_mode_hint": "当前以本地文件方式打开 Panel，无法自动推断实例地址，请填写实例的 HTTP(S) 地址。"
+  },
   "connections": {
     "title": "实例连接",
     "switch": "切换实例",
