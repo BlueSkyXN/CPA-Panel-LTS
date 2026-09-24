@@ -881,6 +881,7 @@ features:
       - /v0/management/auth-files/status
       - /v0/management/auth-files/fields
       - /v0/management/auth-files/models
+      - /v0/management/auth-files/models/refresh
       - /v0/management/oauth-excluded-models
       - /v0/management/oauth-model-alias
     required_markers:
@@ -915,6 +916,7 @@ features:
       - OAuthConfigLoadError
       - canWriteOAuthConfig
       - run_oauth_load_failure_smoke
+      - run_oauth_plugin_model_refresh_smoke
       - 'weight?: number | null'
       - validateCredentialWeightText
       - weight_invalid_max
