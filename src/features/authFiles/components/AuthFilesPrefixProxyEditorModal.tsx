@@ -51,7 +51,10 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
       className={styles.authFileEditorModal}
       title={
         <div className={styles.authFileModalTitle}>
+          {/* 空白文本节点只为可访问名服务：grid 布局不渲染纯空白匿名项，视觉不受影响，
+              缺了它屏幕阅读器会把标题与文件名黏成一个词。 */}
           <span>{t('auth_files.prefix_proxy_button')}</span>
+          {editor?.fileName ? ' ' : null}
           {editor?.fileName && (
             <span className={styles.authFileModalFileName} title={editor.fileName}>
               {editor.fileName}

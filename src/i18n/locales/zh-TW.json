@@ -1,6 +1,8 @@
 {
   "pat_accounts": {
     "retry": "重試",
+    "advanced_options": "高級選項",
+    "priority_invalid": "優先級必須是整數。",
     "add": "新增 PAT 帳號",
     "update": "更新 PAT",
     "provider": "供應商",

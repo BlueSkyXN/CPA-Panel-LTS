@@ -1,6 +1,8 @@
 {
   "pat_accounts": {
     "retry": "Retry",
+    "advanced_options": "Advanced options",
+    "priority_invalid": "Priority must be an integer.",
     "add": "Add PAT account",
     "update": "Update PAT",
     "provider": "Provider",

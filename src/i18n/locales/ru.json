@@ -1,6 +1,8 @@
 {
   "pat_accounts": {
     "retry": "Повторить",
+    "advanced_options": "Дополнительные параметры",
+    "priority_invalid": "Приоритет должен быть целым числом.",
     "add": "Добавить аккаунт PAT",
     "update": "Обновить PAT",
     "provider": "Провайдер",

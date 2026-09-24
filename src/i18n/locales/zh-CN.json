@@ -1,6 +1,8 @@
 {
   "pat_accounts": {
     "retry": "重试",
+    "advanced_options": "高级选项",
+    "priority_invalid": "优先级必须是整数。",
     "add": "添加 PAT 账号",
     "update": "更新 PAT",
     "provider": "供应商",
