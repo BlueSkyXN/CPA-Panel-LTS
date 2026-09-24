@@ -630,6 +630,20 @@
   &:hover strong {
     color: var(--primary-active);
   }
+
+  strong em {
+    font-style: normal;
+  }
+
+  strong[data-tone='warn'],
+  strong em[data-tone='warn'] {
+    color: var(--warning-color, #bd871b);
+  }
+
+  strong[data-tone='critical'],
+  strong em[data-tone='critical'] {
+    color: var(--error-color, #c65746);
+  }
 }
 
 @media (max-width: $breakpoint-mobile) {

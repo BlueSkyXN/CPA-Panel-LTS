@@ -2528,12 +2528,15 @@
     "provider_dock": "提供商快速列",
     "provider_dock_hint": "直達指定 OAuth 與 API Key 工作區。",
     "runtime_status": "Core 執行狀態",
-    "runtime_routing": "路由",
-    "runtime_retry": "重試",
-    "runtime_fallback": "配額回退",
     "runtime_connection": "連線",
-    "runtime_enabled": "已啟用",
-    "runtime_disabled": "未啟用"
+    "pulse_traffic": "近期請求",
+    "pulse_traffic_hint": "近約 3 小時各憑證成功 · 失敗請求合計，點擊開啟提供方工作台。",
+    "pulse_fail": "失敗",
+    "pulse_quota": "最低配額",
+    "pulse_quota_hint": "本地快取中的最低配額餘量；開啟配額頁可載入或重新整理。",
+    "pulse_quota_empty": "未快取",
+    "pulse_version": "版本",
+    "pulse_version_hint": "Panel 與 Core 建構版本，點擊開啟系統資訊。"
   },
   "sidebar": {
     "primary_navigation": "主導覽",

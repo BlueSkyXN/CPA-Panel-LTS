@@ -2496,12 +2496,15 @@
     "provider_dock": "Быстрый доступ к провайдерам",
     "provider_dock_hint": "Переход к нужным OAuth и пулам API-ключей.",
     "runtime_status": "Состояние Core",
-    "runtime_routing": "Маршрутизация",
-    "runtime_retry": "Повторы",
-    "runtime_fallback": "Резерв квоты",
     "runtime_connection": "Соединение",
-    "runtime_enabled": "Включено",
-    "runtime_disabled": "Выключено"
+    "pulse_traffic": "Недавние",
+    "pulse_traffic_hint": "Успешные и ошибочные запросы по всем учётным данным за ~3 ч. Откройте верстак провайдеров.",
+    "pulse_fail": "сбои",
+    "pulse_quota": "Мин. квота",
+    "pulse_quota_hint": "Минимальный остаток квоты из локального кэша; откройте страницу квот для загрузки или обновления.",
+    "pulse_quota_empty": "нет кэша",
+    "pulse_version": "Версия",
+    "pulse_version_hint": "Версии сборки Panel и Core; открыть сведения о системе."
   },
   "sidebar": {
     "primary_navigation": "Основная навигация",

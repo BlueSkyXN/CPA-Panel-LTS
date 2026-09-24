@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { PageTransition } from '@/components/common/PageTransition';
@@ -15,6 +15,7 @@ import { SidebarNavigation } from '@/components/layout/SidebarNavigation';
 import { CommandPalette } from '@/components/layout/CommandPalette';
 import { readProfiles } from '@/services/storage/connectionProfiles';
 import { ConnectionSwitcher } from './ConnectionSwitcher';
+import { TowerPulse } from './TowerPulse';
 import {
   flattenSidebarNavPaths,
   type SidebarNavGroup,
@@ -848,13 +849,6 @@ export function MainLayout() {
   const mobileSidebarToggleLabel = sidebarOpen
     ? t('sidebar.toggle_collapse', { defaultValue: 'Close navigation' })
     : t('sidebar.toggle_expand', { defaultValue: 'Open navigation' });
-  const routingStatusText = config?.routingStrategy?.trim() || 'round-robin';
-  const requestRetryText = String(config?.requestRetry ?? 0);
-  const quotaFallbackEnabled = Boolean(
-    config?.quotaExceeded?.switchProject ||
-    config?.quotaExceeded?.switchPreviewModel ||
-    config?.quotaExceeded?.antigravityCredits
-  );
   const toggleSidebarMode = () => {
     setSidebarMode((current) => (current === 'compact' ? 'classic' : 'compact'));
   };
@@ -1198,40 +1192,7 @@ export function MainLayout() {
             onRequestExpand={() => setSidebarCollapsed(false)}
           />
 
-          {layout === 'tower' && (
-            <div className="tower-runtime-bar" aria-label={t('workspace.runtime_status')}>
-              <span className="tower-runtime-label">CPA-Core-LTS</span>
-              <div className="tower-runtime-grid">
-                <Link to="/config" className="tower-runtime-item">
-                  <span>{t('workspace.runtime_routing')}</span>
-                  <strong>{routingStatusText}</strong>
-                </Link>
-                <Link to="/config" className="tower-runtime-item">
-                  <span>{t('workspace.runtime_retry')}</span>
-                  <strong>{requestRetryText}</strong>
-                </Link>
-                <Link to="/config" className="tower-runtime-item">
-                  <span>{t('workspace.runtime_fallback')}</span>
-                  <strong>
-                    {quotaFallbackEnabled
-                      ? t('workspace.runtime_enabled')
-                      : t('workspace.runtime_disabled')}
-                  </strong>
-                </Link>
-                <Link to="/system" className="tower-runtime-item" data-status={connectionStatus}>
-                  <span>{t('workspace.runtime_connection')}</span>
-                  <strong>
-                    <i aria-hidden="true" />
-                    {connectionStatus === 'connected'
-                      ? t('common.connected')
-                      : connectionStatus === 'connecting'
-                        ? t('common.connecting_status')
-                        : t('common.disconnected')}
-                  </strong>
-                </Link>
-              </div>
-            </div>
-          )}
+          {layout === 'tower' && <TowerPulse />}
           {multiInstance && (
             <div className="sidebar-connection-switcher">
               <ConnectionSwitcher collapsed={!showSidebarLabels} />

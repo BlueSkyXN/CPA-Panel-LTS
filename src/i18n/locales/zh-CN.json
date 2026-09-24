@@ -2502,12 +2502,15 @@
     "provider_dock": "提供商快捷坞",
     "provider_dock_hint": "直达指定 OAuth 与 API Key 工作区。",
     "runtime_status": "Core 运行状态",
-    "runtime_routing": "路由",
-    "runtime_retry": "重试",
-    "runtime_fallback": "配额回退",
     "runtime_connection": "连接",
-    "runtime_enabled": "已启用",
-    "runtime_disabled": "未启用"
+    "pulse_traffic": "近期请求",
+    "pulse_traffic_hint": "近约 3 小时各凭据成功 · 失败请求合计，点击打开提供方工作台。",
+    "pulse_fail": "失败",
+    "pulse_quota": "最低配额",
+    "pulse_quota_hint": "本地缓存中的最低配额余量；打开配额页可加载或刷新。",
+    "pulse_quota_empty": "未缓存",
+    "pulse_version": "版本",
+    "pulse_version_hint": "Panel 与 Core 构建版本，点击打开系统信息。"
   },
   "sidebar": {
     "primary_navigation": "主导航",
