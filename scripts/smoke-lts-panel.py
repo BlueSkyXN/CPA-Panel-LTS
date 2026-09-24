@@ -2459,8 +2459,8 @@ def run_auth_file_using_api_smoke(page: Any, app_url: str) -> None:
         and "codex-smoke.json" in response.url
     ):
         codex_card.locator('button[title="Auth File Details / Edit"]').click()
-    codex_dialog = page.get_by_role(
-        "dialog", name="Auth File Details / Edit - codex-smoke.json"
+    codex_dialog = page.get_by_role("dialog").filter(has_text="codex-smoke.json").filter(
+        has_text="Auth File Details / Edit"
     )
     codex_dialog.wait_for()
     if codex_dialog.get_by_label("Use official API (using_api)").count() != 0:
@@ -2479,7 +2479,9 @@ def run_auth_file_using_api_smoke(page: Any, app_url: str) -> None:
         and "xai-smoke.json" in response.url
     ):
         xai_card.locator('button[title="Auth File Details / Edit"]').click()
-    xai_dialog = page.get_by_role("dialog", name="Auth File Details / Edit - xai-smoke.json")
+    xai_dialog = page.get_by_role("dialog").filter(has_text="xai-smoke.json").filter(
+        has_text="Auth File Details / Edit"
+    )
     xai_dialog.wait_for()
     using_api_toggle = xai_dialog.get_by_label("Use official API (using_api)")
     if using_api_toggle.is_checked():
@@ -3977,6 +3979,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     expected_column_defaults = {
         "timestamp": True,
         "model": True,
+        "upstreamModel": False,
         "requestKey": True,
         "source": False,
         "authIndex": False,
@@ -6108,7 +6111,9 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             page.get_by_label("Remember password").check(force=True)
             if not page.get_by_label("Remember password").is_checked():
                 raise AssertionError("Remember password checkbox did not become checked")
-            page.get_by_role("button", name=re.compile("Login|Connect", re.I)).click()
+            # Anchored: the login page also has a "Saved instance connections" entry,
+            # and an unanchored "Connect" would match inside it.
+            page.get_by_role("button", name=re.compile(r"^(Login|Connect)$", re.I)).click()
             page.wait_for_url(re.compile(r".*/#/$"), timeout=20_000)
             for shortcut in ('Control+b', 'Meta+b'):
                 before = page.locator('.app-shell').evaluate("node => node.classList.contains('sidebar-is-collapsed')")
