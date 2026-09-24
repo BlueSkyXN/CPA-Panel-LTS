@@ -35,6 +35,15 @@ type AuthFileModelItem = { id: string; display_name?: string; type?: string; own
 
 type LocationState = { fromAuthFiles?: boolean } | null;
 
+type ModelsErrorKind = 'load_failed' | 'credential_disabled' | 'discovery_timeout';
+
+// Core 只回传安全错误码，插件透传码不可枚举；按粗粒度归为三类本地化提示。
+const MODELS_ERROR_MESSAGE_KEYS: Record<ModelsErrorKind, string> = {
+  load_failed: 'oauth_excluded.models_load_failed',
+  credential_disabled: 'oauth_excluded.models_credential_disabled',
+  discovery_timeout: 'oauth_excluded.models_discovery_timeout',
+};
+
 export function AuthFilesOAuthExcludedEditPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -60,7 +69,7 @@ export function AuthFilesOAuthExcludedEditPage() {
   const [selectedModels, setSelectedModels] = useState<Set<string>>(new Set());
   const [modelsList, setModelsList] = useState<AuthFileModelItem[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
-  const [modelsError, setModelsError] = useState<string | null>(null);
+  const [modelsError, setModelsError] = useState<ModelsErrorKind | null>(null);
   const [customRule, setCustomRule] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -300,24 +309,20 @@ export function AuthFilesOAuthExcludedEditPage() {
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        const status =
-          typeof err === 'object' && err !== null && 'status' in err
-            ? (err as { status?: unknown }).status
-            : undefined;
-
-        if (status === 400 || status === 404) {
-          setModelsList([]);
-          setModelsError('unsupported');
-          return;
-        }
-
         const apiCode =
           typeof err === 'object' && err !== null && 'apiCode' in err
             ? (err as { apiCode?: unknown }).apiCode
             : undefined;
-        const errorCode = typeof apiCode === 'string' ? apiCode : 'model_discovery_failed';
-        setModelsError(errorCode);
-        showNotification(`${t('notification.load_failed')}: ${errorCode}`, 'error');
+        const errorCode = typeof apiCode === 'string' ? apiCode : '';
+        // 凭证明细/刷新请求的 400/404 只说明该凭证暂无目录，不映射为“版本不支持”。
+        const kind: ModelsErrorKind =
+          errorCode === 'auth_disabled'
+            ? 'credential_disabled'
+            : errorCode === 'model_discovery_timeout'
+              ? 'discovery_timeout'
+              : 'load_failed';
+        setModelsError(kind);
+        showNotification(t(MODELS_ERROR_MESSAGE_KEYS[kind]), 'error');
       })
       .finally(() => {
         if (cancelled) return;
@@ -530,11 +535,7 @@ export function AuthFilesOAuthExcludedEditPage() {
                       <span>{t('oauth_excluded.models_loading')}</span>
                     </>
                   ) : modelsError ? (
-                    <span>
-                      {modelsError === 'unsupported'
-                        ? t('oauth_excluded.models_unsupported')
-                        : `${t('notification.load_failed')}: ${modelsError}`}
-                    </span>
+                    <span>{t(MODELS_ERROR_MESSAGE_KEYS[modelsError])}</span>
                   ) : modelsList.length > 0 ? (
                     <span>{t('oauth_excluded.models_loaded', { count: modelsList.length })}</span>
                   ) : (
@@ -634,9 +635,7 @@ export function AuthFilesOAuthExcludedEditPage() {
             ) : resolvedProviderKey ? (
               <div className={styles.emptyModels}>
                 {modelsError
-                  ? modelsError === 'unsupported'
-                    ? t('oauth_excluded.models_unsupported')
-                    : `${t('notification.load_failed')}: ${modelsError}`
+                  ? t(MODELS_ERROR_MESSAGE_KEYS[modelsError])
                   : t('oauth_excluded.no_models_available')}
               </div>
             ) : (
