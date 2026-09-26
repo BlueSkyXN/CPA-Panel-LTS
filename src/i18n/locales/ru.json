@@ -1129,7 +1129,20 @@
     "iflow_oauth_status_error": "Ошибка аутентификации:",
     "iflow_oauth_start_error": "Не удалось запустить iFlow OAuth:",
     "iflow_oauth_polling_error": "Не удалось проверить статус аутентификации:",
-    "remote_access_disabled": "Этот способ входа недоступен при удалённом доступе. Подключитесь с localhost."
+    "remote_access_disabled": "Этот способ входа недоступен при удалённом доступе. Подключитесь с localhost.",
+    "copilot_oauth_title": "GitHub Copilot",
+    "copilot_oauth_button": "Войти",
+    "copilot_oauth_hint": "Вход в GitHub Copilot по коду устройства: нажмите «Войти», откройте ссылку подтверждения и введите код устройства для авторизации GitHub. Учетные данные сохраняются автоматически.",
+    "copilot_oauth_url_label": "Ссылка подтверждения",
+    "copilot_oauth_start_error": "Не удалось начать вход Copilot",
+    "copilot_oauth_polling_error": "Не удалось проверить статус входа Copilot",
+    "copilot_oauth_status_waiting": "Ожидание авторизации GitHub…",
+    "copilot_oauth_status_success": "Аккаунт Copilot авторизован",
+    "copilot_oauth_status_error": "Ошибка авторизации Copilot",
+    "copilot_copy_link": "Копировать ссылку",
+    "copilot_open_link": "Открыть ссылку",
+    "copilot_user_code_label": "Код устройства",
+    "copilot_user_code_copy": "Копировать код"
   },
   "stats": {
     "success": "Успех",

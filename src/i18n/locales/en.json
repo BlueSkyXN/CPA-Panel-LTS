@@ -1128,7 +1128,20 @@
     "iflow_oauth_status_error": "Authentication failed:",
     "iflow_oauth_start_error": "Failed to start iFlow OAuth:",
     "iflow_oauth_polling_error": "Failed to check authentication status:",
-    "remote_access_disabled": "This login method is not available for remote access. Please access from localhost."
+    "remote_access_disabled": "This login method is not available for remote access. Please access from localhost.",
+    "copilot_oauth_title": "GitHub Copilot",
+    "copilot_oauth_button": "Login",
+    "copilot_oauth_hint": "GitHub Copilot device login: click \"Login\", open the verification URL and enter the device code to authorize GitHub access. Credentials are saved automatically once authorized.",
+    "copilot_oauth_url_label": "Verification URL",
+    "copilot_oauth_start_error": "Failed to start Copilot login",
+    "copilot_oauth_polling_error": "Failed to check Copilot login status",
+    "copilot_oauth_status_waiting": "Waiting for GitHub authorization…",
+    "copilot_oauth_status_success": "Copilot account authorized",
+    "copilot_oauth_status_error": "Copilot authorization failed",
+    "copilot_copy_link": "Copy link",
+    "copilot_open_link": "Open link",
+    "copilot_user_code_label": "Device code",
+    "copilot_user_code_copy": "Copy device code"
   },
   "stats": {
     "success": "Success",
