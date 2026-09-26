@@ -1128,7 +1128,20 @@
     "iflow_oauth_status_error": "认证失败:",
     "iflow_oauth_start_error": "启动 iFlow OAuth 失败:",
     "iflow_oauth_polling_error": "检查认证状态失败:",
-    "remote_access_disabled": "远程访问不支持此登录方式，请从本地 (localhost) 访问"
+    "remote_access_disabled": "远程访问不支持此登录方式，请从本地 (localhost) 访问",
+    "copilot_oauth_title": "GitHub Copilot",
+    "copilot_oauth_button": "登录",
+    "copilot_oauth_hint": "GitHub Copilot 设备码登录：点击“登录”后打开授权链接，输入设备码完成 GitHub 授权，授权成功后自动保存凭据。",
+    "copilot_oauth_url_label": "授权链接",
+    "copilot_oauth_start_error": "发起 Copilot 登录失败",
+    "copilot_oauth_polling_error": "Copilot 登录状态查询失败",
+    "copilot_oauth_status_waiting": "等待 GitHub 授权…",
+    "copilot_oauth_status_success": "Copilot 账号授权成功",
+    "copilot_oauth_status_error": "Copilot 授权失败",
+    "copilot_copy_link": "复制链接",
+    "copilot_open_link": "打开链接",
+    "copilot_user_code_label": "设备码",
+    "copilot_user_code_copy": "复制设备码"
   },
   "stats": {
     "success": "成功",

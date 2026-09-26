@@ -1154,7 +1154,20 @@
     "iflow_cookie_result_expired": "到期時間",
     "iflow_cookie_result_path": "儲存路徑",
     "iflow_cookie_result_type": "類型",
-    "remote_access_disabled": "遠端存取不支援此登入方式，請從本地（localhost）存取"
+    "remote_access_disabled": "遠端存取不支援此登入方式，請從本地（localhost）存取",
+    "copilot_oauth_title": "GitHub Copilot",
+    "copilot_oauth_button": "登入",
+    "copilot_oauth_hint": "GitHub Copilot 裝置碼登入：點擊「登入」後開啟授權連結，輸入裝置碼完成 GitHub 授權，授權成功後自動保存憑證。",
+    "copilot_oauth_url_label": "授權連結",
+    "copilot_oauth_start_error": "發起 Copilot 登入失敗",
+    "copilot_oauth_polling_error": "Copilot 登入狀態查詢失敗",
+    "copilot_oauth_status_waiting": "等待 GitHub 授權…",
+    "copilot_oauth_status_success": "Copilot 帳號授權成功",
+    "copilot_oauth_status_error": "Copilot 授權失敗",
+    "copilot_copy_link": "複製連結",
+    "copilot_open_link": "開啟連結",
+    "copilot_user_code_label": "裝置碼",
+    "copilot_user_code_copy": "複製裝置碼"
   },
   "stats": {
     "success": "成功",

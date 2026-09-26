@@ -10,7 +10,8 @@ export type OAuthProvider =
   | 'antigravity'
   | 'gemini-cli'
   | 'kimi'
-  | 'xai';
+  | 'xai'
+  | 'copilot';
 
 export interface OAuthStartResponse {
   url: string;
@@ -19,6 +20,14 @@ export interface OAuthStartResponse {
 
 export interface OAuthCallbackResponse {
   status: 'ok';
+}
+
+export interface CopilotLoginInfo {
+  provider?: string;
+  verification_uri?: string;
+  user_code?: string;
+  expires_at?: string;
+  interval_seconds?: number;
 }
 
 const WEBUI_SUPPORTED: OAuthProvider[] = [
@@ -48,6 +57,13 @@ export const oauthApi = {
 
   getAuthStatus: (state: string) =>
     apiClient.get<{ status: 'ok' | 'wait' | 'error'; error?: string }>(`/get-auth-status`, {
+      params: { state }
+    }),
+
+  // Copilot 设备码登录的 user_code 展示通道：Core 插件 management 路由，
+  // state 是 copilot-auth-url 返回的登录流 ID；device_code 不外发。
+  copilotLoginInfo: (state: string) =>
+    apiClient.get<CopilotLoginInfo>(`/plugins/copilot/login-info`, {
       params: { state }
     }),
 

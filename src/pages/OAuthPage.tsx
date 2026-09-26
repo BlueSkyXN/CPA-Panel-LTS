@@ -19,6 +19,7 @@ import iconGemini from '@/assets/icons/gemini.svg';
 import iconKimiLight from '@/assets/icons/kimi-light.svg';
 import iconVertex from '@/assets/icons/vertex.svg';
 import iconGrok from '@/assets/icons/grok.svg';
+import iconCopilot from '@/assets/icons/copilot.svg';
 
 interface ProviderState {
   url?: string;
@@ -32,6 +33,7 @@ interface ProviderState {
   callbackSubmitting?: boolean;
   callbackStatus?: 'success' | 'error';
   callbackError?: string;
+  userCode?: string;
 }
 
 interface VertexImportResult {
@@ -61,7 +63,8 @@ const PROVIDERS: { id: OAuthProvider; titleKey: string; hintKey: string; urlLabe
   { id: 'antigravity', titleKey: 'auth_login.antigravity_oauth_title', hintKey: 'auth_login.antigravity_oauth_hint', urlLabelKey: 'auth_login.antigravity_oauth_url_label', icon: iconAntigravity },
   { id: 'gemini-cli', titleKey: 'auth_login.gemini_cli_oauth_title', hintKey: 'auth_login.gemini_cli_oauth_hint', urlLabelKey: 'auth_login.gemini_cli_oauth_url_label', icon: iconGemini },
   { id: 'kimi', titleKey: 'auth_login.kimi_oauth_title', hintKey: 'auth_login.kimi_oauth_hint', urlLabelKey: 'auth_login.kimi_oauth_url_label', icon: iconKimiLight },
-  { id: 'xai', titleKey: 'auth_login.xai_oauth_title', hintKey: 'auth_login.xai_oauth_hint', urlLabelKey: 'auth_login.xai_oauth_url_label', icon: iconGrok }
+  { id: 'xai', titleKey: 'auth_login.xai_oauth_title', hintKey: 'auth_login.xai_oauth_hint', urlLabelKey: 'auth_login.xai_oauth_url_label', icon: iconGrok },
+  { id: 'copilot', titleKey: 'auth_login.copilot_oauth_title', hintKey: 'auth_login.copilot_oauth_hint', urlLabelKey: 'auth_login.copilot_oauth_url_label', icon: iconCopilot }
 ];
 
 const CALLBACK_SUPPORTED: OAuthProvider[] = [
@@ -289,7 +292,8 @@ export function OAuthPage() {
       callbackStatus: undefined,
       callbackError: undefined,
       callbackUrl: '',
-      callbackSubmitting: false
+      callbackSubmitting: false,
+      userCode: undefined
     });
     try {
       const res = await oauthApi.startAuth(
@@ -310,6 +314,18 @@ export function OAuthPage() {
         return;
       }
       updateProviderState(provider, { url: res.url, state: res.state, status: 'waiting', polling: true });
+      if (provider === 'copilot') {
+        // 设备码由插件 login-info 管理路由下发；拉取失败不阻塞状态轮询，
+        // 用户可按提示直接打开授权链接重新获取。
+        try {
+          const info = await oauthApi.copilotLoginInfo(res.state);
+          if (attempt.isCurrent()) {
+            updateProviderState(provider, { userCode: info.user_code || undefined });
+          }
+        } catch {
+          if (attempt.isCurrent()) updateProviderState(provider, { userCode: undefined });
+        }
+      }
       startPolling(provider, res.state, attempt);
     } catch (err: unknown) {
       if (!attempt.isCurrent()) return;
@@ -516,6 +532,29 @@ export function OAuthPage() {
                           onClick={() => window.open(state.url, '_blank', 'noopener,noreferrer')}
                         >
                           {t(getAuthKey(provider.id, 'open_link'))}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  {provider.id === 'copilot' && state.userCode && (
+                    <div className={styles.authUrlBox}>
+                      <div className={styles.authUrlLabel}>
+                        {t('auth_login.copilot_user_code_label')}
+                      </div>
+                      <div className={styles.authUrlValue}>{state.userCode}</div>
+                      <div className={styles.authUrlActions}>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={async () => {
+                            const copied = await copyToClipboard(state.userCode!);
+                            showNotification(
+                              t(copied ? 'notification.link_copied' : 'notification.copy_failed'),
+                              copied ? 'success' : 'error'
+                            );
+                          }}
+                        >
+                          {t('auth_login.copilot_user_code_copy')}
                         </Button>
                       </div>
                     </div>
