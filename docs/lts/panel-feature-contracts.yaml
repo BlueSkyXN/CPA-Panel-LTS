@@ -533,6 +533,10 @@ features:
       - src/features/plugins/pluginReleaseVersions.ts
       - src/features/plugins/pluginResources.ts
       - src/features/plugins/pluginConfigDraft.ts
+      - src/features/plugins/PluginReadinessSheet.tsx
+      - src/features/plugins/pluginReadiness.ts
+      - src/features/plugins/pluginReadiness.test.mjs
+      - docs/lts/plugin-readiness-management.md
       - src/features/plugins/pluginResources.test.mjs
       - src/features/plugins/components/PluginInstallGateModal.tsx
       - src/features/plugins/components/PluginInstallGateModal.module.scss
@@ -560,6 +564,7 @@ features:
       - /v0/management/plugins
       - /v0/management/plugins/:id/config
       - /v0/management/plugins/:id/enabled
+      - /v0/management/plugins/:id/readiness
       - /v0/management/plugin-store
       - /v0/management/plugin-store/:id/install
     capability_gates:

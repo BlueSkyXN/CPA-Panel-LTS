@@ -20,11 +20,7 @@ import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { pluginsApi } from '@/services/api';
 import { useAuthStore, useConfigStore, useNotificationStore } from '@/stores';
 import { getErrorMessage, isRecord } from '@/utils/helpers';
-import type {
-  PluginConfigField,
-  PluginListEntry,
-  PluginListResponse,
-} from '@/types';
+import type { PluginConfigField, PluginListEntry, PluginListResponse } from '@/types';
 import {
   buildPluginConfigDraft,
   buildPluginConfigPatch,
@@ -37,6 +33,7 @@ import {
   resolvePluginAssetURL,
 } from './pluginResources';
 import { waitForPluginState } from './pluginPolling';
+import { PluginReadinessSheet } from './PluginReadinessSheet';
 import styles from './PluginsPage.module.scss';
 
 type PluginRuntimeWaitStatus = 'ready' | 'globalDisabled' | 'timeout';
@@ -52,11 +49,9 @@ function PluginCardLogo({ src }: { src: string }) {
   );
 }
 
-const hasStatus = (error: unknown, status: number) =>
-  isRecord(error) && error.status === status;
+const hasStatus = (error: unknown, status: number) => isRecord(error) && error.status === status;
 
-const hasRestartRequired = (value: unknown) =>
-  isRecord(value) && value.restart_required === true;
+const hasRestartRequired = (value: unknown) => isRecord(value) && value.restart_required === true;
 
 const hasRestartRequiredError = (error: unknown) =>
   isRecord(error) && (hasRestartRequired(error.details) || hasRestartRequired(error.data));
@@ -66,6 +61,12 @@ export function PluginsPage() {
   const navigate = useNavigate();
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
   const apiBase = useAuthStore((state) => state.apiBase);
+  const profileId = useAuthStore((state) => state.profileId);
+  const connectionKey = `${profileId}:${apiBase}`;
+  const [readinessPlugin, setReadinessPlugin] = useState<{
+    plugin: PluginListEntry;
+    connectionKey: string;
+  } | null>(null);
   const clearConfigCache = useConfigStore((state) => state.clearCache);
   const showNotification = useNotificationStore((state) => state.showNotification);
   const showConfirmation = useNotificationStore((state) => state.showConfirmation);
@@ -361,7 +362,7 @@ export function PluginsPage() {
       }));
     };
 
-  const handleFieldBooleanChange = (fieldName: string, value: boolean) => {
+  const handleFieldBooleanChange = (fieldName: string, value: boolean | '') => {
     updateDraft((current) => ({
       ...current,
       values: { ...current.values, [fieldName]: value },
@@ -396,9 +397,16 @@ export function PluginsPage() {
               <div className={styles.fieldDescription}>{field.description}</div>
             ) : null}
           </div>
-          <ToggleSwitch
-            checked={value === true}
-            onChange={(nextValue) => handleFieldBooleanChange(field.name, nextValue)}
+          <Select
+            value={typeof value === 'boolean' ? String(value) : ''}
+            options={[
+              { value: '', label: t('plugin_management.inherit_config') },
+              { value: 'true', label: 'true' },
+              { value: 'false', label: 'false' },
+            ]}
+            onChange={(nextValue) =>
+              handleFieldBooleanChange(field.name, nextValue === '' ? '' : nextValue === 'true')
+            }
             ariaLabel={field.name}
           />
         </div>
@@ -412,7 +420,10 @@ export function PluginsPage() {
           <Select
             id={`plugin-field-${field.name}`}
             value={textValue}
-            options={field.enumValues.map((item) => ({ value: item, label: item }))}
+            options={[
+              { value: '', label: t('plugin_management.inherit_config') },
+              ...field.enumValues.map((item) => ({ value: item, label: item })),
+            ]}
             onChange={(nextValue) =>
               updateDraft((current) => ({
                 ...current,
@@ -423,9 +434,7 @@ export function PluginsPage() {
             }
             placeholder={t('plugin_management.select_placeholder')}
           />
-          {field.description ? (
-            <div className={styles.fieldHint}>{field.description}</div>
-          ) : null}
+          {field.description ? <div className={styles.fieldHint}>{field.description}</div> : null}
           {errorText ? <div className={styles.fieldError}>{errorText}</div> : null}
         </div>
       );
@@ -443,9 +452,7 @@ export function PluginsPage() {
             placeholder={fieldType === 'array' ? '[]' : '{}'}
             spellCheck={false}
           />
-          {field.description ? (
-            <div className={styles.fieldHint}>{field.description}</div>
-          ) : null}
+          {field.description ? <div className={styles.fieldHint}>{field.description}</div> : null}
           {errorText ? <div className={styles.fieldError}>{errorText}</div> : null}
         </div>
       );
@@ -623,6 +630,8 @@ export function PluginsPage() {
                       </span>
                       {plugin.supportsOAuth ? (
                         <span className={styles.badge}>{t('plugin_management.oauth')}</span>
+                      ) : plugin.supportsAuth ? (
+                        <span className={styles.badge}>{t('plugin_management.manual_auth')}</span>
                       ) : null}
                     </div>
                   </div>
@@ -657,6 +666,26 @@ export function PluginsPage() {
 
                 {/* Actions */}
                 <div className={styles.rowActions}>
+                  {plugin.supportsReadiness ? (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={!connected || !plugin.effectiveEnabled || actionBusy}
+                      onClick={() => setReadinessPlugin({ plugin, connectionKey })}
+                    >
+                      {t('plugin_management.check_readiness')}
+                    </Button>
+                  ) : null}
+                  {plugin.supportsAuth && !plugin.supportsOAuth ? (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={!connected || actionBusy}
+                      onClick={() => navigate('/auth-files')}
+                    >
+                      {t('plugin_management.manage_accounts')}
+                    </Button>
+                  ) : null}
                   <ToggleSwitch
                     checked={plugin.enabled}
                     onChange={(enabled) => handleTogglePlugin(plugin, enabled)}
@@ -703,6 +732,14 @@ export function PluginsPage() {
           })}
         </div>
       )}
+
+      {connected && readinessPlugin?.connectionKey === connectionKey ? (
+        <PluginReadinessSheet
+          key={`${connectionKey}:${readinessPlugin.plugin.id}`}
+          plugin={readinessPlugin.plugin}
+          onClose={() => setReadinessPlugin(null)}
+        />
+      ) : null}
 
       {/* ── Config Sheet ── */}
       <Sheet
