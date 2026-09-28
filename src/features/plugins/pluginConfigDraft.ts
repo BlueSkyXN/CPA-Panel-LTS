@@ -29,7 +29,7 @@ const stringifyJSONValue = (value: unknown): string => {
 
 const getFieldDraftValue = (field: PluginConfigField, value: unknown): PluginDraftValue => {
   const type = normalizePluginConfigFieldType(field);
-  if (type === 'boolean') return value === true;
+  if (type === 'boolean') return typeof value === 'boolean' ? value : '';
   if (type === 'array' || type === 'object') return stringifyJSONValue(value);
   if (value === undefined || value === null) return '';
   return String(value);
@@ -114,7 +114,7 @@ export function buildPluginConfigPatch(
     const value = draft.values[field.name];
 
     if (fieldType === 'boolean') {
-      patch[field.name] = value === true;
+      patch[field.name] = typeof value === 'boolean' ? value : null;
       return;
     }
 

@@ -40,7 +40,7 @@ const normalizeConfigField = (value: unknown): PluginConfigField | null => {
 
 const normalizeConfigFields = (value: unknown): PluginConfigField[] =>
   Array.isArray(value)
-    ? value.map((item) => normalizeConfigField(item)).filter(Boolean) as PluginConfigField[]
+    ? (value.map((item) => normalizeConfigField(item)).filter(Boolean) as PluginConfigField[])
     : [];
 
 const normalizeMetadata = (value: unknown): PluginMetadata | null => {
@@ -80,7 +80,7 @@ const normalizeMenu = (value: unknown): PluginMenu | null => {
 
 const normalizeMenus = (value: unknown): PluginMenu[] =>
   Array.isArray(value)
-    ? value.map((item) => normalizeMenu(item)).filter(Boolean) as PluginMenu[]
+    ? (value.map((item) => normalizeMenu(item)).filter(Boolean) as PluginMenu[])
     : [];
 
 const normalizePluginEntry = (value: unknown): PluginListEntry | null => {
@@ -99,8 +99,12 @@ const normalizePluginEntry = (value: unknown): PluginListEntry | null => {
     enabled: value.enabled !== false,
     effectiveEnabled: asBoolean(value.effective_enabled),
     supportsOAuth: asBoolean(value.supports_oauth),
+    supportsAuth: asBoolean(value.supports_auth),
+    authProvider: asString(value.auth_provider).trim(),
+    supportsReadiness: asBoolean(value.supports_readiness),
+    executorProvider: asString(value.executor_provider).trim(),
     logo: asString(value.logo || metadata?.logo).trim(),
-    configFields: configFields.length > 0 ? configFields : metadata?.configFields ?? [],
+    configFields: configFields.length > 0 ? configFields : (metadata?.configFields ?? []),
     menus: normalizeMenus(value.menus),
     metadata,
   };
@@ -109,7 +113,9 @@ const normalizePluginEntry = (value: unknown): PluginListEntry | null => {
 const normalizePluginList = (value: unknown): PluginListResponse => {
   const source = isRecord(value) ? value : {};
   const plugins = Array.isArray(source.plugins)
-    ? source.plugins.map((item) => normalizePluginEntry(item)).filter(Boolean) as PluginListEntry[]
+    ? (source.plugins
+        .map((item) => normalizePluginEntry(item))
+        .filter(Boolean) as PluginListEntry[])
     : [];
 
   return {
@@ -214,10 +220,14 @@ const normalizeStoreSource = (value: unknown): PluginStoreSource | null => {
 const normalizeStoreList = (value: unknown): PluginStoreResponse => {
   const source = isRecord(value) ? value : {};
   const plugins = Array.isArray(source.plugins)
-    ? source.plugins.map((item) => normalizeStoreEntry(item)).filter(Boolean) as PluginStoreEntry[]
+    ? (source.plugins
+        .map((item) => normalizeStoreEntry(item))
+        .filter(Boolean) as PluginStoreEntry[])
     : [];
   const sources = Array.isArray(source.sources)
-    ? source.sources.map((item) => normalizeStoreSource(item)).filter(Boolean) as PluginStoreSource[]
+    ? (source.sources
+        .map((item) => normalizeStoreSource(item))
+        .filter(Boolean) as PluginStoreSource[])
     : [];
   const sourceErrors = Array.isArray(source.source_errors)
     ? (source.source_errors
@@ -260,6 +270,11 @@ export const pluginsApi = {
     const data = await apiClient.get('/plugins');
     return normalizePluginList(data);
   },
+
+  readiness: (id: string, authIndex?: string) =>
+    apiClient.get<unknown>(`/plugins/${encodeURIComponent(id)}/readiness`, {
+      params: authIndex ? { auth_index: authIndex } : {},
+    }),
 
   updateEnabled: (id: string, enabled: boolean) =>
     apiClient.patch(`/plugins/${encodeURIComponent(id)}/enabled`, { enabled }),
