@@ -42,7 +42,12 @@
       "auth_rejected": "Credential rejected; update PAT",
       "upstream_error": "Provider query failed",
       "rate_limited": "Rate limited; retry later"
-    }
+    },
+    "invalid_api_key": "Enter a valid Coding Plan API key (two non-empty parts separated by a dot).",
+    "api_key_label": "API key",
+    "device_id_label": "Device ID",
+    "device_id_hint": "Optional. Leave blank to keep the existing value or auto-generate one.",
+    "hint_zcode-coding-plan": "Zhipu GLM Coding Plan API key. Stored inline in this account file, same as PAT credentials."
   },
   "common": {
     "login": "Login",

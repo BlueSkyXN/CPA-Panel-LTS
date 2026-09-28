@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createServer } from 'vite';
 
 const vite = await createServer({ appType: 'custom', logLevel: 'silent', server: { middlewareMode: true } });
-const { buildPatAuth, parsePatSummary, newPatAuthFileName } = await vite.ssrLoadModule('/src/features/authFiles/patProviders.ts');
+const { buildAccountAuth, buildPatAuth, generateDeviceId, isAccountFormProvider, parsePatSummary, newPatAuthFileName } = await vite.ssrLoadModule('/src/features/authFiles/patProviders.ts');
 const { PatSummaryDetails } = await vite.ssrLoadModule('/src/features/authFiles/components/PatAccountSummary.tsx');
 const { default: i18n } = await vite.ssrLoadModule('/src/i18n/index.ts');
 test.after(() => vite.close());
@@ -54,6 +54,31 @@ test('CodeBuddy API key migration removes only the superseded credential', () =>
   const auth = buildPatAuth('codebuddy', '', 'fixture-pat', { type: 'codebuddy', auth_mode: 'api_key', api_key: 'old-fixture', proxy_url: 'http://127.0.0.1:9' });
   assert.equal(auth.api_key, undefined);
   assert.equal(auth.proxy_url, 'http://127.0.0.1:9');
+});
+
+test('zcode inline accounts: single-file credentials, device identity, and validation', () => {
+  const created = buildAccountAuth('zcode-coding-plan', 'Coding Plan', ' key.part ', '');
+  assert.equal(created.type, 'zcode-coding-plan');
+  assert.equal(created.api_key, 'key.part');
+  assert.match(created.device_id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  assert.equal(created.pat, undefined);
+  assert.equal(created.auth_mode, undefined);
+  const existing = buildAccountAuth('zcode-coding-plan', 'Main', 'key.part', '', { type: 'zcode-coding-plan', device_id: 'stable-device', prefix: 'team' });
+  assert.equal(existing.device_id, 'stable-device');
+  assert.equal(existing.prefix, 'team');
+  const manual = buildAccountAuth('zcode-coding-plan', 'Main', 'key.part', ' manual-device ');
+  assert.equal(manual.device_id, 'manual-device');
+  for (const value of ['', 'nodot', 'a.', '.b', 'a.b.c', 'a b']) {
+    assert.throws(() => buildAccountAuth('zcode-coding-plan', '', value, ''), Error);
+  }
+  // 与插件端语义一致：首尾空白先归一再校验，尾部换行不会拒收
+  assert.equal(buildAccountAuth('zcode-coding-plan', '', ' key.part\n', '').api_key, 'key.part');
+  assert.throws(() => buildAccountAuth('zcode-coding-plan', '', 'key.part', '', { type: 'qoder' }));
+  // PAT 路径经同一入口分派，行为不变
+  assert.deepEqual(buildAccountAuth('qoder', 'Main', 'pt-fixture', ''), { type: 'qoder', auth_mode: 'pat', pat: 'pt-fixture', label: 'Main' });
+  assert.equal(isAccountFormProvider('zcode-coding-plan'), true);
+  assert.equal(isAccountFormProvider('unknown'), false);
+  assert.match(generateDeviceId(), /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
 });
 
 const response = (quota) => ({ provider: 'qoder', auth_index: 'fixture-index', label: 'Fixture', account: { status: 'fallback' }, plan: { status: 'unsupported' }, quota, updated_at: '2026-09-09T00:00:00Z', cached: true });

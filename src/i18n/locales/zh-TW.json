@@ -42,7 +42,12 @@
       "auth_rejected": "憑據遭拒，請更新 PAT",
       "upstream_error": "供應商查詢失敗",
       "rate_limited": "查詢受限，請稍後重試"
-    }
+    },
+    "invalid_api_key": "請輸入有效的 Coding Plan API key（兩段以點分隔且均非空）。",
+    "api_key_label": "API key",
+    "device_id_label": "裝置識別（device ID）",
+    "device_id_hint": "可選。留空時保留原有值，新增帳號時自動產生。",
+    "hint_zcode-coding-plan": "智譜 GLM Coding Plan 的 API key，隨本帳號檔案內聯儲存，與 PAT 憑證相同。"
   },
   "common": {
     "login": "登入",

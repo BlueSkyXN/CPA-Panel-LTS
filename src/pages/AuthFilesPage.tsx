@@ -40,7 +40,7 @@ import {
   type QuotaProviderType,
 } from '@/features/authFiles/constants';
 import { AuthFileCard } from '@/features/authFiles/components/AuthFileCard';
-import { isPatProvider } from '@/features/authFiles/patProviders';
+import { isAccountFormProvider } from '@/features/authFiles/patProviders';
 import { PatAccountModal } from '@/features/authFiles/components/PatAccountModal';
 import type { AuthFileItem } from '@/types';
 import { ProviderIcon } from '@/features/authFiles/components/ProviderIcon';
@@ -234,7 +234,7 @@ export function AuthFilesPage() {
 
   const disableControls = connectionStatus !== 'connected';
   const normalizedFilter = normalizeProviderKey(String(filter));
-  const patDetailActive = isPatProvider(normalizedFilter);
+  const patDetailActive = isAccountFormProvider(normalizedFilter);
   const quotaFilterType: QuotaProviderType | null = QUOTA_PROVIDER_TYPES.has(
     normalizedFilter as QuotaProviderType
   )

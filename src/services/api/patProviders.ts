@@ -1,6 +1,6 @@
 import { apiClient } from './client';
 import { pluginsApi } from './plugins';
-import { parsePatSummary, type PatProvider } from '@/features/authFiles/patProviders';
+import { parsePatSummary, type AccountFormProvider, type PatProvider } from '@/features/authFiles/patProviders';
 
 // Qoder 插件 0.3.0 起固定原生 direct_openai；旧插件（<0.3.0）未配置 transport 时实际仍是 sdk_cli。
 const pluginVersionAtLeast = (version: unknown, minimum: string): boolean => {
@@ -18,16 +18,25 @@ const pluginVersionAtLeast = (version: unknown, minimum: string): boolean => {
 const QODER_DEFAULT_OPENAPI_ENDPOINT = 'https://openapi.qoder.com.cn';
 
 export const patProvidersApi = {
-  async configuration(provider: PatProvider) {
+  async configuration(provider: AccountFormProvider) {
     const list = await pluginsApi.list();
+    // zcode-coding-plan 插件 ID 无 cpa-provider- 前缀，按插件 ID/名称直接匹配。
     const plugin = list.plugins.find(
       (entry) =>
         entry.registered &&
         entry.effectiveEnabled &&
         (entry.metadata?.name === `cpa-provider-${provider}` ||
-          entry.id === `cpa-provider-${provider}`)
+          entry.id === `cpa-provider-${provider}` ||
+          entry.metadata?.name === provider ||
+          entry.id === provider)
     );
     if (!list.pluginsEnabled || !plugin) throw new Error('plugin_unavailable');
+    if (provider === 'zcode-coding-plan') {
+      return {
+        transport: 'direct_anthropic',
+        endpoint: 'https://open.bigmodel.cn/api/anthropic/v1/messages',
+      };
+    }
     const config = await pluginsApi.getConfig(plugin.id);
     if (provider === 'codebuddy') {
       return {
