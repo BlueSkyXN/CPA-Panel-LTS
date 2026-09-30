@@ -46,7 +46,8 @@
     "smoke:config": "npm run build && python3 scripts/smoke-config-editor.py",
     "smoke:lts:core": "npm run build && python3 scripts/smoke-lts-panel-core.py",
     "test:flow-control": "node --test src/lts/flowControl/*.test.mjs",
-    "test:usage-pricing-fixtures": "node --test scripts/usage-pricing-smoke-fixtures.test.mjs"
+    "test:usage-pricing-fixtures": "node --test scripts/usage-pricing-smoke-fixtures.test.mjs",
+    "smoke:credentials-help": "python3 scripts/smoke-credentials-help-fixture.py"
   },
   "dependencies": {
     "@codemirror/lang-yaml": "^6.1.2",
