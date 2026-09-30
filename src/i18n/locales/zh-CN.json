@@ -47,7 +47,21 @@
     "api_key_label": "API key",
     "device_id_label": "设备标识（device ID）",
     "device_id_hint": "可选。留空时保留原有值，新建账号时自动生成。",
-    "hint_zcode-coding-plan": "智谱 GLM Coding Plan 的 API key，随本账号文件内联保存，与 PAT 凭据相同。"
+    "hint_zcode-coding-plan": "智谱 GLM Coding Plan 的 API key，随本账号文件内联保存，与 PAT 凭据相同。",
+    "local_credentials": {
+      "title": "从本机 ZCode 获取（macOS）",
+      "instructions": "在安装了 ZCode 的 Mac 终端执行。先复制并执行 API key 命令，粘贴结果到上方，再执行设备标识命令。Panel 只复制命令，不读取本机文件或自动执行。",
+      "region": "本机 ZCode 账号区域",
+      "bigmodel": "国内 · bigmodel",
+      "zai": "国际区 · z.ai",
+      "region_hint": "此选择只切换提取命令，不修改服务器配置；应与插件 upstream 的 bigmodel / zai 设置一致。",
+      "copy": "复制命令",
+      "copy_label": "复制 {{field}} 提取命令",
+      "copy_success": "命令已复制；请在 Mac 终端执行。",
+      "copy_failed": "复制失败，请手动选择并复制上方命令。",
+      "warning": "执行后会在终端显示完整凭据，并覆盖剪贴板。请勿录屏、截图外发或在共享终端执行。",
+      "troubleshooting": "命令只读默认 ~/.zcode/v2/ 路径，无需安装额外工具。文件缺失、字段为空或为 enc: 加密内容时不会复制；请核对客户端数据目录和账号区域，勿把错误信息当作 key。提取成功不代表凭据或套餐有效。"
+    }
   },
   "common": {
     "login": "登录",

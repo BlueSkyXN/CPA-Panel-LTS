@@ -47,7 +47,21 @@
     "api_key_label": "API key",
     "device_id_label": "Device ID",
     "device_id_hint": "Optional. Leave blank to keep the existing value or auto-generate one.",
-    "hint_zcode-coding-plan": "Zhipu GLM Coding Plan API key. Stored inline in this account file, same as PAT credentials."
+    "hint_zcode-coding-plan": "Zhipu GLM Coding Plan API key. Stored inline in this account file, same as PAT credentials.",
+    "local_credentials": {
+      "title": "Get credentials from local ZCode (macOS)",
+      "instructions": "Run these commands in Terminal on the Mac with ZCode installed. Copy and run the API key command, paste its result above, then run the device ID command. Panel only copies commands; it does not read local files or execute them.",
+      "region": "Local ZCode account region",
+      "bigmodel": "China · bigmodel",
+      "zai": "International · z.ai",
+      "region_hint": "This selection only changes the extraction command, not the server configuration. Match the plugin's bigmodel / zai upstream setting.",
+      "copy": "Copy command",
+      "copy_label": "Copy extraction command for {{field}}",
+      "copy_success": "Command copied. Run it in your Mac terminal.",
+      "copy_failed": "Copy failed. Select and copy the command above manually.",
+      "warning": "Running a command displays the full credential in Terminal and overwrites the clipboard. Do not record, share screenshots, or use a shared terminal.",
+      "troubleshooting": "Commands only read the default ~/.zcode/v2/ location and need no extra tools. Missing files, empty fields or enc: encrypted values are not copied. Check the client data directory and account region; never use error output as a key. Extraction does not verify the credential or subscription."
+    }
   },
   "common": {
     "login": "Login",
