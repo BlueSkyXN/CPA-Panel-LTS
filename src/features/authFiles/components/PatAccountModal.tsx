@@ -9,7 +9,12 @@ import { patProvidersApi } from '@/services/api/patProviders';
 import { useAuthStore } from '@/stores';
 import { registerSessionBusyCheck, registerSessionLeaveCheck } from '@/services/connectionSession';
 import type { AuthFileItem } from '@/types';
-import { buildPatAuth, isPatProvider, newPatAuthFileName, type PatProvider } from '../patProviders';
+import {
+  buildAccountAuth,
+  isAccountFormProvider,
+  newPatAuthFileName,
+  type AccountFormProvider,
+} from '../patProviders';
 import { parsePriorityValue } from '@/features/authFiles/constants';
 import {
   MAX_CREDENTIAL_WEIGHT,
@@ -26,11 +31,12 @@ interface Props {
 export function PatAccountModal({ file, onClose, onSaved }: Props) {
   const { t } = useTranslation();
   const initialProvider = file?.type ?? file?.provider;
-  const [provider, setProvider] = useState<PatProvider>(
-    isPatProvider(initialProvider) ? initialProvider : 'codebuddy'
+  const [provider, setProvider] = useState<AccountFormProvider>(
+    isAccountFormProvider(initialProvider) ? initialProvider : 'codebuddy'
   );
   const [label, setLabel] = useState(String(file?.label || file?.name || ''));
   const [pat, setPat] = useState('');
+  const [deviceId, setDeviceId] = useState('');
   const [prefix, setPrefix] = useState('');
   const [priority, setPriority] = useState('');
   const [weight, setWeight] = useState('');
@@ -51,8 +57,11 @@ export function PatAccountModal({ file, onClose, onSaved }: Props) {
 
   useEffect(() => registerSessionBusyCheck(() => saving), [saving]);
   useEffect(
-    () => registerSessionLeaveCheck(() => Boolean(pat || label !== String(file?.label || file?.name || ''))),
-    [pat, label, file]
+    () =>
+      registerSessionLeaveCheck(() =>
+        Boolean(pat || deviceId.trim() || label !== String(file?.label || file?.name || ''))
+      ),
+    [pat, deviceId, label, file]
   );
 
   useEffect(() => {
@@ -86,9 +95,11 @@ export function PatAccountModal({ file, onClose, onSaved }: Props) {
     setWeightError('');
     let auth: Record<string, unknown>;
     try {
-      auth = buildPatAuth(provider, label, pat);
+      auth = buildAccountAuth(provider, label, pat, deviceId);
     } catch {
-      setError(t('pat_accounts.invalid_pat'));
+      setError(
+        t(provider === 'zcode-coding-plan' ? 'pat_accounts.invalid_api_key' : 'pat_accounts.invalid_pat')
+      );
       return;
     }
     if (!file) {
@@ -122,7 +133,7 @@ export function PatAccountModal({ file, onClose, onSaved }: Props) {
       if (file) {
         const previous = await authFilesApi.downloadJsonObject(file.name);
         if (current !== generation.current) return;
-        auth = buildPatAuth(provider, label, pat, previous);
+        auth = buildAccountAuth(provider, label, pat, deviceId, previous);
       }
       const name = file?.name ?? newPatAuthFileName(provider);
       await authFilesApi.saveJsonObject(name, auth);
@@ -164,13 +175,15 @@ export function PatAccountModal({ file, onClose, onSaved }: Props) {
           options={[
             { value: 'codebuddy', label: 'CodeBuddy' },
             { value: 'qoder', label: 'Qoder' },
+            { value: 'zcode-coding-plan', label: 'Coding Plan' },
           ]}
           ariaLabel={t('pat_accounts.provider')}
           disabled={Boolean(file) || saving}
           onChange={(value) => {
-            if (isPatProvider(value)) {
+            if (isAccountFormProvider(value)) {
               setProvider(value);
               setPat('');
+              setDeviceId('');
               setError('');
             }
           }}
@@ -185,7 +198,7 @@ export function PatAccountModal({ file, onClose, onSaved }: Props) {
         onChange={(e) => setLabel(e.target.value)}
       />
       <Input
-        label="PAT"
+        label={provider === 'zcode-coding-plan' ? t('pat_accounts.api_key_label') : 'PAT'}
         type="password"
         value={pat}
         autoComplete="new-password"
@@ -194,6 +207,18 @@ export function PatAccountModal({ file, onClose, onSaved }: Props) {
         onChange={(e) => setPat(e.target.value)}
         hint={t(`pat_accounts.hint_${provider}`)}
       />
+      {provider === 'zcode-coding-plan' && (
+        <Input
+          label={t('pat_accounts.device_id_label')}
+          type="password"
+          value={deviceId}
+          autoComplete="new-password"
+          spellCheck={false}
+          disabled={saving}
+          onChange={(e) => setDeviceId(e.target.value)}
+          hint={t('pat_accounts.device_id_hint')}
+        />
+      )}
       {!file && (
         <details style={{ margin: '12px 0' }}>
           <summary style={{ cursor: 'pointer', fontWeight: 600 }}>

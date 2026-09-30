@@ -1,9 +1,15 @@
 export type PatProvider = 'codebuddy' | 'qoder';
 
+// 添加账号表单支持的 provider：两家 PAT + zcode-coding-plan（内联 API key）。
+export type AccountFormProvider = PatProvider | 'zcode-coding-plan';
+
 export const isPatProvider = (value: unknown): value is PatProvider =>
   value === 'codebuddy' || value === 'qoder';
 
-export function newPatAuthFileName(provider: PatProvider): string {
+export const isAccountFormProvider = (value: unknown): value is AccountFormProvider =>
+  isPatProvider(value) || value === 'zcode-coding-plan';
+
+export function newPatAuthFileName(provider: AccountFormProvider): string {
   // getRandomValues 在普通 HTTP 管理页面也可用；randomUUID 仅限安全上下文。
   const id = Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
     byte.toString(16).padStart(2, '0')
@@ -40,6 +46,47 @@ export function buildPatAuth(
   delete (auth as Record<string, unknown>).access_token;
   delete (auth as Record<string, unknown>).api_key;
   return auth;
+}
+
+export function generateDeviceId(): string {
+  // getRandomValues 在普通 HTTP 管理页面也可用；randomUUID 仅限安全上下文。
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)].join('-');
+}
+
+export function buildAccountAuth(
+  provider: AccountFormProvider,
+  label: string,
+  value: string,
+  deviceId: string,
+  previous?: Record<string, unknown>
+): Record<string, unknown> {
+  if (provider === 'zcode-coding-plan') {
+    const apiKey = value.trim();
+    const parts = apiKey.split('.');
+    if (
+      !apiKey ||
+        /[\r\n\0<]/.test(apiKey) ||
+        /\s/.test(apiKey) ||
+        parts.length !== 2 ||
+        !parts[0] ||
+        !parts[1]
+    ) {
+      throw new Error('invalid_api_key');
+    }
+    if (previous && previous.type !== provider) throw new Error('provider_mismatch');
+    const auth: Record<string, unknown> = { ...previous, type: provider, api_key: apiKey, label: label.trim() };
+    // 编辑既有账号且未改动设备标识时保留原值，避免静默轮换设备身份。
+    const previousDeviceId = typeof previous?.device_id === 'string' ? previous.device_id : '';
+    auth.device_id = deviceId.trim() || previousDeviceId || generateDeviceId();
+    delete auth.pat;
+    delete auth.access_token;
+    return auth;
+  }
+  return buildPatAuth(provider, label, value, previous);
 }
 
 export interface PatQuotaValues {

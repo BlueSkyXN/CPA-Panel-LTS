@@ -42,7 +42,7 @@ import type { AuthFileStatusBarData } from '@/features/authFiles/hooks/useAuthFi
 import { AuthFileQuotaSection } from '@/features/authFiles/components/AuthFileQuotaSection';
 import { ProviderIcon } from '@/features/authFiles/components/ProviderIcon';
 import { PatAccountSummary } from './PatAccountSummary';
-import { isPatProvider } from '../patProviders';
+import { isAccountFormProvider } from '../patProviders';
 import styles from '@/pages/AuthFilesPage.module.scss';
 
 export type AuthFileCardProps = {
@@ -285,7 +285,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
             <div className={styles.cardActionsMain}>
               {!isRuntimeOnly &&
                 patDetailActive &&
-                isPatProvider(providerKey) &&
+                isAccountFormProvider(providerKey) &&
                 onUpdatePat && (
                   <Button
                     variant="secondary"

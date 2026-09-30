@@ -42,7 +42,12 @@
       "auth_rejected": "凭据被拒绝，请更新 PAT",
       "upstream_error": "供应商查询失败",
       "rate_limited": "查询受限，请稍后重试"
-    }
+    },
+    "invalid_api_key": "请输入有效的 Coding Plan API key（两段以点分隔且均非空）。",
+    "api_key_label": "API key",
+    "device_id_label": "设备标识（device ID）",
+    "device_id_hint": "可选。留空时保留原有值，新建账号时自动生成。",
+    "hint_zcode-coding-plan": "智谱 GLM Coding Plan 的 API key，随本账号文件内联保存，与 PAT 凭据相同。"
   },
   "common": {
     "login": "登录",

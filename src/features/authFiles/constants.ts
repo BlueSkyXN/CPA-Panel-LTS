@@ -75,6 +75,7 @@ export const TYPE_COLORS: Record<string, ThemeColors> = {
   xai: { bg: '#f3f4f6', text: '#111827', border: '1px solid #d1d5db' },
   iflow: { bg: '#f5e3fc', text: '#9025c8' },
   vertex: { bg: '#e4edfd', text: '#2b5fbc' },
+  'zcode-coding-plan': { bg: '#e3f4ea', text: '#137a4d' },
   empty: { bg: '#f5f5f5', text: '#616161' },
   unknown: { bg: '#f0f0f0', text: '#666666', border: '1px dashed #999999' },
 };
