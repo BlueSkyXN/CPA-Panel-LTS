@@ -1,8 +1,9 @@
+import { projectConfigForVisual, applyVisualProjection } from '@/utils/configLayout';
 import { readCodexCacheAffinity, isCodexCacheAffinityStrategy } from '@/lts/codexPolicy/cacheAffinity';
 import { FLOW_FIELDS, flowControlValidation, readFlowControlValues } from '@/lts/flowControl/model';
 import { writeFlowControlValues } from '@/lts/flowControl/yaml';
 import { useCallback, useMemo, useReducer } from 'react';
-import { isAlias, isMap, isNode, isScalar, isSeq, parse as parseYaml, parseDocument } from 'yaml';
+import { isAlias, isMap, isNode, isScalar, isSeq, parseDocument } from 'yaml';
 import type { Node, Pair, YAMLMap, YAMLSeq } from 'yaml';
 import type {
   CodexAbnormalReasoningRetryAction,
@@ -1557,12 +1558,12 @@ export function useVisualConfig() {
 
   const loadVisualValuesFromYaml = useCallback((yamlContent: string) => {
     try {
-      const document = parseDocument(yamlContent);
+      const document = projectConfigForVisual(yamlContent);
       if (document.errors.length > 0) {
         throw new Error(document.errors[0]?.message ?? 'Invalid YAML');
       }
 
-      const parsedRaw: unknown = parseYaml(yamlContent) || {};
+      const parsedRaw: unknown = document.toJS();
       const parsed = asRecord(parsedRaw) ?? {};
       const tls = asRecord(parsed.tls);
       const remoteManagement = asRecord(parsed['remote-management']);
@@ -1778,7 +1779,8 @@ export function useVisualConfig() {
   const applyVisualChangesToYaml = useCallback(
     (currentYaml: string): string => {
       try {
-        const doc = parseDocument(currentYaml);
+        const doc = projectConfigForVisual(currentYaml);
+        const before = doc.clone();
         if (doc.errors.length > 0) throw new VisualConfigApplyError('visual_apply_failed');
         if (hasPayloadDirtyFields(dirtyFields)) {
           if (isAlias(doc.getIn(['payload'], true))) throw new VisualConfigApplyError('visual_apply_failed');
@@ -2324,7 +2326,7 @@ export function useVisualConfig() {
           deleteIfMapEmpty(doc, ['payload']);
         }
 
-        return doc.toString({ indent: 2, lineWidth: 120, minContentWidth: 0 });
+        return applyVisualProjection(currentYaml, before, doc);
       } catch (error: unknown) {
         if (error instanceof VisualConfigApplyError) throw error;
         // 不将包含配置值的底层 YAML 异常带入 UI，也不返回原文伪装成成功。

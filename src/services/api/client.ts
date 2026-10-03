@@ -23,6 +23,7 @@ import { beginSessionWrite, isSessionFrozen } from '@/services/connectionSession
 
 type ConnectionScopedRequestConfig = AxiosRequestConfig & {
   __cpaConnectionGeneration?: number;
+  managementApiVersion?: 'v0' | 'v8';
   __finishSessionWrite?: () => void;
 };
 
@@ -78,6 +79,10 @@ class ApiClient {
     this.apiBase = '';
     this.managementKey = '';
     this.instance.defaults.timeout = REQUEST_TIMEOUT_MS;
+  }
+
+  getConnectionGeneration(): number {
+    return this.connectionGeneration;
   }
 
   isCurrentConnection(generation: number): boolean {
@@ -155,7 +160,9 @@ class ApiClient {
         if (mutation) scopedConfig.__finishSessionWrite = beginSessionWrite();
 
         // 设置 baseURL
-        config.baseURL = this.apiBase;
+        config.baseURL = scopedConfig.managementApiVersion === 'v8'
+          ? this.apiBase.replace(/\/v0\/management$/, '/v8/management')
+          : this.apiBase;
         if (config.url) {
           // Normalize deprecated Gemini endpoint to the current path.
           config.url = config.url.replace(/\/generative-language-api-key\b/g, '/gemini-api-key');

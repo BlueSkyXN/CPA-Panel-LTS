@@ -1,9 +1,11 @@
+import { projectConfigForVisual } from '@/utils/configLayout';
+import { apiClient } from '@/services/api/client';
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import { Navigate, useSearchParams } from 'react-router-dom';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
-import { parse as parseYaml, parseDocument } from 'yaml';
+import { parseDocument } from 'yaml';
 import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -40,7 +42,7 @@ const LazyConfigSourceEditor = lazy(() => import('@/components/config/ConfigSour
 
 function readCommercialModeFromYaml(yamlContent: string): boolean {
   try {
-    const parsed = parseYaml(yamlContent);
+    const parsed: unknown = projectConfigForVisual(yamlContent).toJS();
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
     return Boolean((parsed as Record<string, unknown>)['commercial-mode']);
   } catch {
@@ -171,9 +173,11 @@ export function ConfigPage() {
   }, [effectiveTab, showNotification, t, visualParseError]);
 
   const handleConfirmSave = async () => {
+    const generation = apiClient.getConnectionGeneration();
     setSaving(true);
     try {
       const latestServerYaml = await configFileApi.fetchConfigYaml();
+      if (!apiClient.isCurrentConnection(generation)) return;
       if (latestServerYaml !== previewServerYaml) {
         const nextMergedYaml =
           previewTab === 'visual' && !dirty
@@ -200,8 +204,10 @@ export function ConfigPage() {
       const nextCommercialMode = readCommercialModeFromYaml(mergedYaml);
       const commercialModeChanged = previousCommercialMode !== nextCommercialMode;
 
+      if (!apiClient.isCurrentConnection(generation)) return;
       await configFileApi.saveConfigYaml(mergedYaml);
       const latestContent = await configFileApi.fetchConfigYaml();
+      if (!apiClient.isCurrentConnection(generation)) return;
       setSaved(true);
       setDirty(false);
       setDiffModalOpen(false);

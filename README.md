@@ -1,3 +1,5 @@
+> **v8 development candidate:** See [configuration compatibility](docs/lts/v8-config-compatibility.md). Supports the companion LTS Core v7/v8; this branch is not a released upgrade.
+
 # CPA Panel LTS
 
 CPA Panel LTS is the long-term-maintained management panel for `CPA-Core-LTS`.

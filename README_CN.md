@@ -1,3 +1,5 @@
+> **v8 开发候选：** 详见[配置兼容说明](docs/lts/v8-config-compatibility.md)。兼容配套 LTS Core v7/v8；本分支不代表已发布升级。
+
 # CPA Panel LTS
 
 CPA Panel LTS 是 `CPA-Core-LTS` 的长期维护版 Web 管理面板。
