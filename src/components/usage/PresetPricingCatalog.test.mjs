@@ -49,6 +49,16 @@ test('explicit Fast catalog cards expose every rate in each supported context ba
   );
 });
 
+test('explicit Fast long rates are independent of short rates and Standard multipliers', () => {
+  const long = { input: 23, cachedInput: 0.7, cacheWrite: 29, output: 91 };
+  const card = { ...entry(true), fast: { short: explicitRates, long, longSupported: true } };
+  assert.deepEqual(catalogUi.getCatalogExplicitFastRates(card, 'short'), explicitRates);
+  assert.deepEqual(catalogUi.getCatalogExplicitFastRates(card, 'long'), long);
+  card.fast.longSupported = false;
+  assert.equal(catalogUi.getCatalogExplicitFastRates(card, 'long'), null);
+  assert.deepEqual(catalogUi.getCatalogExplicitFastRates(card, 'long', true), long);
+});
+
 test('multiplier Fast catalog cards do not masquerade as explicit rates', () => {
   const multiplierEntry = {
     ...entry(false),
