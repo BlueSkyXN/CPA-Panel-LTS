@@ -210,3 +210,13 @@ test('auth status sends stable auth index only when provided', async () => {
   ]);
   assert.deepEqual(calls[1][1], { name: 'synthetic.json', disabled: true });
 });
+
+
+test('all LTS locale overlays use the current Codex Pro labels', async () => {
+  const { readFile } = await import('node:fs/promises');
+  for (const locale of ['en', 'zh-CN', 'zh-TW', 'ru']) {
+    const messages = JSON.parse(await readFile(new URL(`../../lts/i18n/${locale}.lts.json`, import.meta.url), 'utf8'));
+    assert.equal(messages.codex_quota.plan_pro, 'Pro 200');
+    assert.equal(messages.codex_quota.plan_prolite, 'Pro 100');
+  }
+});

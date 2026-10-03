@@ -4,13 +4,17 @@
 
 - Candidate starts at `4613af11dfe3b18ec2dae2ba9ccbaf7bed28a1b5`; PR #98 targets `v8-dev`, not `main`.
 - Last audited main: `ed5f1c48e11ba7335f1e8f676f228c280196af85`; previously audited dev: `7aa8618ad2ce1677260c08d9b597377d5661d160`.
-- Frozen official main: `752e0ee772220ce49aae1221a3f39f23236590d7`. This is selective-port coverage, not merge ancestry. No claim about a later upstream head or unreviewed dev.
-- 92 non-merge commits reviewed, including 5 previously reviewed dev commits (87 newly reviewed). `partial` and `defer` remain visible backlog, never counted as fully ported.
+- Frozen official main: `ee79a794526a30c03748a8864a9ac6589a31833b`. This is selective-port coverage, not merge ancestry. No claim about a later upstream head or unreviewed dev.
+- 94 non-merge commits reviewed, including 5 previously reviewed dev commits (89 newly reviewed). `partial` and `defer` remain visible backlog, never counted as fully ported.
 - Core companion PR #290 incorporates official main through `d7914afdedca7af95ee974a42453dc49fc1388ce` with protected full-sync.
 
 ## Decision totals
 
-`adapt`: 24, `defer`: 48, `equivalent`: 10, `partial`: 5, `reject`: 5.
+`adapt`: 25, `defer`: 49, `equivalent`: 10, `partial`: 5, `reject`: 5.
+
+## Concurrent LTS main integration
+
+Panel main advanced independently to `a864b38edb826acad527e567f613c0fc21fc7285` (PR #99). Candidate merge `56618939` retains its GPT-6.1 Sol catalog, explicit short/long Fast rates, saved pricing compatibility and usage/query regression tests. Main itself was not modified by this delivery.
 
 ## Protected delta review
 
@@ -119,4 +123,6 @@ Claude reset grants, clear-cooldown, bulk token refresh and advanced policy edit
 | `a7ec312fbbb0a13f3a580ee0c7e29228a07c8867` | reject | 不以官方 README 覆盖 LTS 产品/部署/usage 文档。 |
 | `d554bb0983c167beb5945528503839cdb2b0b316` | defer | Claude reset grants 涉及外部额度消耗，须显式确认/幂等/未知结果恢复专项。 |
 | `e5fb14c8763d1b92e2449e9440cd986fc0dba7cc` | defer | 同上，未引 demo 或自动消耗；不能用合成测试代替消费验收。 |
-| `752e0ee772220ce49aae1221a3f39f23236590d7` | equivalent | 未引入 demo 文件，无需执行删除。 |
+| `ee79a794526a30c03748a8864a9ac6589a31833b` | equivalent | 未引入 demo 文件，无需执行删除。 |
+| `673b8ee9f631e5fc0f6a7ca35994c4b606805cb0` | defer | Optional plugin-store logo lookup adds network fetches to plugin management; current runtime logos and capability gates work. Defer this cosmetic feature rather than broadening store access in this compatibility intake. |
+| `ee79a794526a30c03748a8864a9ac6589a31833b` | adapt | Pro 200 / Pro 100 display labels adapted in all four LTS overlays with regression coverage; no quota or billing inference. |

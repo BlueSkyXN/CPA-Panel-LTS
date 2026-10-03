@@ -35,4 +35,4 @@ Core 侧必须同时拒绝旧缓存 Panel 的危险 v0 raw 替换；仅发新版
 - `npm run validate:lts`：保留完整 usage、Flow、plugins、provider 合同和 single-file 构建。
 - 临时配套 Core 分别做 v7/v8 API 读写；实际浏览器确认 v8 可视化保存与独立 readback。未验证的平台/真实部署不能由以上测试推断。
 
-上游参考固定为 `752e0ee772220ce49aae1221a3f39f23236590d7` 的配置分域和写入语义；采用局部适配，不 full-sync 官方 Panel、不替换 LTS usage、quota 或插件页面。
+上游参考固定为 `ee79a794526a30c03748a8864a9ac6589a31833b` 的配置分域和写入语义；采用局部适配，不 full-sync 官方 Panel、不替换 LTS usage、quota 或插件页面。
