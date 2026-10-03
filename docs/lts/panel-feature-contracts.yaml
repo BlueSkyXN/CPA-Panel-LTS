@@ -173,6 +173,7 @@ features:
       - outbound_service_tier
       - response_service_tier
       - effective_service_tier
+      - response_cyber_program
       - resolveServiceTier
       - ServiceTierEvidence
       - request_events_filter_tier

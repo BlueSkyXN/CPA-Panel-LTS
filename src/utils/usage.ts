@@ -164,6 +164,8 @@ export type {
 } from './usage/serviceTier';
 export { classifyServiceTier, normalizeServiceTier, resolveServiceTier } from './usage/serviceTier';
 
+import { normalizeResponseCyberProgram } from './usage/cyberProgram';
+
 export interface UsageTokenStats extends UsageTokenFields {
   input_tokens?: number;
   output_tokens?: number;
@@ -185,6 +187,7 @@ export interface UsageDetail {
   outbound_service_tier?: string | null;
   response_service_tier?: string | null;
   effective_service_tier?: string | null;
+  response_cyber_program?: string | null;
   reasoning_effort?: string | null;
   latency_ms?: number;
   ttfb_ms?: number;
@@ -770,6 +773,7 @@ export function collectUsageDetails(usageData: unknown): UsageDetail[] {
           outbound_service_tier: extractOutboundServiceTier(detailRaw),
           response_service_tier: extractResponseServiceTier(detailRaw),
           effective_service_tier: extractEffectiveServiceTier(detailRaw),
+          response_cyber_program: normalizeResponseCyberProgram(detailRaw.response_cyber_program),
           reasoning_effort: extractReasoningEffort(detailRaw),
           latency_ms: latencyMs ?? undefined,
           ttfb_ms: ttfbMs ?? undefined,
@@ -862,6 +866,7 @@ export function collectUsageDetailsWithEndpoint(usageData: unknown): UsageDetail
           outbound_service_tier: extractOutboundServiceTier(detailRaw),
           response_service_tier: extractResponseServiceTier(detailRaw),
           effective_service_tier: extractEffectiveServiceTier(detailRaw),
+          response_cyber_program: normalizeResponseCyberProgram(detailRaw.response_cyber_program),
           reasoning_effort: extractReasoningEffort(detailRaw),
           latency_ms: latencyMs ?? undefined,
           ttfb_ms: ttfbMs ?? undefined,

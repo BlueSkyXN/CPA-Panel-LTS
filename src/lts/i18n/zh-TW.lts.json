@@ -1,4 +1,13 @@
 {
+  "usage_stats": {
+    "execution_blue_std": "BLUE",
+    "execution_blue_fast": "BLUE FAST",
+    "cyber_program_daybreak_blue": "Daybreak Blue（上游回應已確認）",
+    "cyber_program_standard": "Standard 標準防護（上游回應已確認）",
+    "cyber_program_missing": "未知：上游未回傳存取程序或屬於歷史記錄",
+    "cyber_program_unknown": "未知或暫不支援的存取程序，不推斷為 Standard",
+    "cyber_program_response": "網路安全存取程序：{{value}}。速度層級與計費獨立。"
+  },
   "login": {
     "saved_connections": "已儲存的實例連線",
     "auto_connect_failed": "自動連線失敗，請檢查位址與管理密鑰後重試。",

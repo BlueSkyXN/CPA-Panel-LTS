@@ -1,4 +1,13 @@
 {
+  "usage_stats": {
+    "execution_blue_std": "BLUE",
+    "execution_blue_fast": "BLUE FAST",
+    "cyber_program_daybreak_blue": "Daybreak Blue (confirmed by upstream response)",
+    "cyber_program_standard": "Standard safeguards (confirmed by upstream response)",
+    "cyber_program_missing": "Unknown: upstream did not report an access program / legacy record",
+    "cyber_program_unknown": "Unknown or unsupported access program (not assumed Standard)",
+    "cyber_program_response": "Cyber access program: {{value}}. Speed tier and pricing remain independent."
+  },
   "login": {
     "saved_connections": "Saved instance connections",
     "auto_connect_failed": "Automatic connection failed. Check the address and management key, then try again.",

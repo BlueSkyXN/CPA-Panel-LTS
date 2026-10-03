@@ -1616,6 +1616,12 @@
   border: 1px solid var(--amber-30);
 }
 
+.requestEventsTierBlue {
+  color: color-mix(in srgb, #0284c7 75%, var(--text-primary));
+  background: color-mix(in srgb, #0ea5e9 15%, transparent);
+  border: 1px solid color-mix(in srgb, #0ea5e9 50%, var(--border-color));
+}
+
 .requestEventsTierStd {
   color: color-mix(in srgb, #2563eb 58%, var(--text-primary));
   background: color-mix(in srgb, #2563eb 11%, transparent);

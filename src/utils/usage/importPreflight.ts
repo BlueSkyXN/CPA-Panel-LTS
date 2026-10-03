@@ -89,6 +89,7 @@ const DETAIL_STRING_FIELDS = [
   'outbound_service_tier',
   'response_service_tier',
   'effective_service_tier',
+  'response_cyber_program',
   'failure_reason',
 ] as const;
 

@@ -64,6 +64,7 @@ import {
   getUsageNonCacheReadInputTokenCount,
 } from '@/utils/usage/cacheTokens';
 import { normalizeReasoningEffort } from '@/utils/usage/reasoningEffort';
+import { normalizeResponseCyberProgram } from '@/utils/usage/cyberProgram';
 import { downloadBlob } from '@/utils/download';
 import styles from '@/pages/UsagePage.module.scss';
 import type { UsageQuerySession, UsageQueryFilter } from '@/types/usageQuery';
@@ -300,6 +301,8 @@ type RequestEventRow = {
   outboundServiceTier: string | null;
   responseServiceTier: string | null;
   effectiveServiceTier: string | null;
+  responseCyberProgram: string | null;
+  executionLabel: string;
   resolvedServiceTier: ResolvedServiceTier;
   requestDisplayServiceTier: DisplayServiceTier | null;
   serviceTierFilterValue: string;
@@ -1208,6 +1211,11 @@ export function RequestEventsDetailsCard({
         resolvedServiceTier.tier === 'fast' ? SERVICE_TIER_FAST_FILTER : SERVICE_TIER_STD_FILTER;
       const getServiceTierLabel = (tier: DisplayServiceTier) => tierLabels[tier];
       const serviceTierLabel = getServiceTierLabel(resolvedServiceTier.tier);
+      const responseCyberProgram = normalizeResponseCyberProgram(detail.response_cyber_program);
+      const cyberProgramLabel = t(`usage_stats.cyber_program_${responseCyberProgram ?? 'missing'}`);
+      const executionLabel = responseCyberProgram === 'daybreak_blue'
+        ? t(`usage_stats.execution_blue_${resolvedServiceTier.tier}`)
+        : serviceTierLabel + (responseCyberProgram === 'standard' ? '' : ' ?');
       const requestDisplayServiceTier = classifyServiceTier(resolvedServiceTier.rawRequest);
       const requestServiceTierLabel = requestDisplayServiceTier
         ? getServiceTierLabel(requestDisplayServiceTier)
@@ -1243,6 +1251,7 @@ export function RequestEventsDetailsCard({
           tier: serviceTierLabel,
           evidence: evidenceLabel(),
         }),
+        t('usage_stats.cyber_program_response', { value: cyberProgramLabel }),
       ].join('\n');
       const reasoningEffort = normalizeReasoningEffort(detail.reasoning_effort);
       const reasoningEffortFilterValue = getReasoningEffortFilterValue(reasoningEffort);
@@ -1296,6 +1305,8 @@ export function RequestEventsDetailsCard({
         outboundServiceTier,
         responseServiceTier,
         effectiveServiceTier,
+        responseCyberProgram,
+        executionLabel,
         resolvedServiceTier,
         requestDisplayServiceTier,
         serviceTierFilterValue,
@@ -2064,6 +2075,7 @@ export function RequestEventsDetailsCard({
       'outbound_service_tier',
       'response_service_tier',
       'effective_service_tier',
+      'response_cyber_program',
       'resolved_service_tier',
       'service_tier_evidence',
         'reasoning_effort',
@@ -2106,6 +2118,7 @@ export function RequestEventsDetailsCard({
         row.outboundServiceTier ?? '',
         row.responseServiceTier ?? '',
         row.effectiveServiceTier ?? '',
+        row.responseCyberProgram ?? '',
         row.resolvedServiceTier.tier,
         row.resolvedServiceTier.evidence,
         row.reasoningEffort ?? '',
@@ -2163,6 +2176,7 @@ export function RequestEventsDetailsCard({
       outbound_service_tier: row.outboundServiceTier,
       response_service_tier: row.responseServiceTier,
       effective_service_tier: row.effectiveServiceTier,
+      response_cyber_program: row.responseCyberProgram,
       resolved_service_tier: row.resolvedServiceTier.tier,
       service_tier_evidence: row.resolvedServiceTier.evidence,
       reasoning_effort: row.reasoningEffort,
@@ -2988,13 +3002,16 @@ export function RequestEventsDetailsCard({
                               )}
                             <span
                               className={`${styles.requestEventsTierBadge} ${
-                                row.resolvedServiceTier.tier === 'fast'
-                                  ? styles.requestEventsTierFast
-                                  : styles.requestEventsTierStd
+                                row.responseCyberProgram === 'daybreak_blue'
+                                  ? styles.requestEventsTierBlue
+                                  : row.resolvedServiceTier.tier === 'fast'
+                                    ? styles.requestEventsTierFast
+                                    : styles.requestEventsTierStd
                               }`}
+                              data-cyber-program={row.responseCyberProgram ?? 'missing'}
                               aria-hidden="true"
                             >
-                              {row.serviceTierLabel}
+                              {row.executionLabel}
                             </span>
                           </span>
                         </td>

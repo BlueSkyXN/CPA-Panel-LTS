@@ -581,3 +581,54 @@ test('restored request key filter shows the remembered label, not the raw token'
     sessionStorage.removeItem('cpa-request-event-filters-v1');
   }
 });
+
+
+test('combines response-confirmed Blue with speed without inferring legacy program', async () => {
+  await i18n.changeLanguage('en');
+  const cases = [
+    ['standard', 'standard', 'Std'],
+    ['priority', 'standard', 'Fast'],
+    ['standard', 'daybreak_blue', 'BLUE'],
+    ['priority', 'daybreak_blue', 'BLUE FAST'],
+    ['standard', undefined, 'Std ?'],
+    ['priority', 'daybreak_red', 'Fast ?'],
+  ];
+  const usage = { apis: { 'POST /v1/responses': { models: {
+    'gpt-5.6-sol': { details: cases.map(([speed, program], index) => ({
+      timestamp: `2026-10-03T00:00:0${index}Z`,
+      source: 'synthetic-source', auth_index: '0',
+      response_service_tier: speed, effective_service_tier: speed,
+      response_cyber_program: program,
+      tokens: { input_tokens: 100, output_tokens: 10, total_tokens: 110 }, failed: false,
+    })) },
+  } } } };
+  const markup = renderToStaticMarkup(createElement(RequestEventsDetailsCard, {
+    usage, loading: false, pageTimeRange: 'all',
+    referenceNowMs: Date.parse('2026-10-03T00:10:00Z'),
+    priceProfile: pricingModule.createDefaultPriceProfileV3(),
+    requestApiKeys: [], geminiKeys: [], claudeConfigs: [], codexConfigs: [], vertexConfigs: [], openaiProviders: [],
+  }));
+  for (const [, , label] of cases) assert.ok(markup.includes(`>${label}</span>`), label);
+  assert.equal((markup.match(/data-cyber-program="daybreak_blue"/g) ?? []).length, 2);
+  assert.match(markup, /Unknown: upstream did not report/);
+  assert.match(markup, /not assumed Standard/);
+});
+
+test('Blue metadata survives both snapshot transforms and does not change pricing', async () => {
+  const utils = await vite.ssrLoadModule('/src/utils/usage.ts');
+  const program = await vite.ssrLoadModule('/src/utils/usage/cyberProgram.ts');
+  const detail = { timestamp: '2026-10-03T00:00:00Z', source: '', auth_index: '0', failed: false,
+    response_cyber_program: 'daybreak_blue', effective_service_tier: 'priority',
+    tokens: { input_tokens: 100, output_tokens: 10, total_tokens: 110 } };
+  const usage = { apis: { 'POST /v1/responses': { models: { 'gpt-5.6-sol': { details: [detail] } } } } };
+  for (const collect of [utils.collectUsageDetails, utils.collectUsageDetailsWithEndpoint]) {
+    const rows = collect(usage);
+    assert.equal(rows[0].response_cyber_program, 'daybreak_blue');
+    const profile = pricingModule.createDefaultPriceProfileV3();
+    assert.deepEqual(utils.calculateCostEstimate(rows[0], profile),
+      utils.calculateCostEstimate({ ...rows[0], response_cyber_program: 'standard' }, profile));
+  }
+  assert.equal(program.normalizeResponseCyberProgram(undefined), null);
+  assert.equal(program.normalizeResponseCyberProgram('daybreak_red'), 'unknown');
+  assert.equal(program.normalizeResponseCyberProgram('standard'), 'standard');
+});
