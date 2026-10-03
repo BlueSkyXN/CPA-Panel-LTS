@@ -269,9 +269,12 @@ const parseFastOverride = (value: unknown): FastOverride | null => {
   if (hasShort === hasMultiplier) return null;
   if (hasShort) {
     const short = parseTokenRates(value.short);
-    return short === null ? null : { short, longSupported: value.longSupported };
+    const long = hasOwn(value, 'long') ? parseTokenRates(value.long) : undefined;
+    if (short === null || long === null) return null;
+    return { short, ...(long === undefined ? {} : { long }), longSupported: value.longSupported };
   }
   if (
+    hasOwn(value, 'long') ||
     typeof value.multiplier !== 'number' ||
     !Number.isFinite(value.multiplier) ||
     value.multiplier <= 0 ||
@@ -286,7 +289,13 @@ const parsePriceOverride = (value: unknown): PriceOverride | null => {
   if (!isRecord(value)) return null;
   const standard = parseStandardPricing(value.standard);
   const fast = hasOwn(value, 'fast') ? parseFastOverride(value.fast) : undefined;
-  if (standard === null || (hasOwn(value, 'fast') && fast === null)) return null;
+  if (
+    standard === null ||
+    (hasOwn(value, 'fast') && fast === null) ||
+    (fast?.long !== undefined && standard.long === undefined)
+  ) {
+    return null;
+  }
   return { standard, ...(fast === undefined || fast === null ? {} : { fast }) };
 };
 
@@ -647,11 +656,14 @@ const standardRatesForBand = (standard: StandardPricing, band: ContextBand): Tok
 
 const resolveFastRates = (
   fast: FastPricing | FastOverride,
-  standardRates: TokenRates
+  standardRates: TokenRates,
+  band: ContextBand
 ): TokenRates =>
   'multiplier' in fast && typeof fast.multiplier === 'number'
     ? multiplyRates(standardRates, fast.multiplier)
-    : fast.short;
+    : band === 'long'
+      ? (fast.long ?? fast.short)
+      : fast.short;
 
 /**
  * The tier is intentionally resolved by serviceTier.ts before this call. Fast
@@ -735,7 +747,7 @@ export function estimateUsageCost(
           tokenSplit: split,
         };
       }
-      rates = resolveFastRates(resolved.fast, standardRates);
+      rates = resolveFastRates(resolved.fast, standardRates, contextBand);
     }
   }
 
