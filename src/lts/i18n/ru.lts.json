@@ -1,4 +1,13 @@
 {
+  "usage_stats": {
+    "execution_blue_std": "BLUE",
+    "execution_blue_fast": "BLUE FAST",
+    "cyber_program_daybreak_blue": "Daybreak Blue (подтверждено ответом сервера)",
+    "cyber_program_standard": "Стандартные меры защиты (подтверждено ответом сервера)",
+    "cyber_program_missing": "Неизвестно: сервер не сообщил программу доступа или запись устарела",
+    "cyber_program_unknown": "Неизвестная или неподдерживаемая программа (не считается Standard)",
+    "cyber_program_response": "Программа кибербезопасности: {{value}}. Скорость и расчёт стоимости независимы."
+  },
   "login": {
     "saved_connections": "Сохранённые подключения",
     "auto_connect_failed": "Не удалось подключиться автоматически. Проверьте адрес и ключ управления и повторите попытку.",

@@ -779,3 +779,17 @@ test('stable Core error decoder recognizes all approved top-level codes', () => 
   assert.equal(getUsageImportErrorCode({ data: { code: 'future_usage_error' } }), null);
   assert.equal(getUsageImportErrorCode({ code: 'ERR_BAD_REQUEST' }), null);
 });
+
+
+test('accepts optional response cyber program without requiring it on legacy rows', () => {
+  for (const program of ['daybreak_blue', 'standard', 'unknown', undefined]) {
+    const result = analyzeUsageImport(clone(v3Payload(detail(v2Tokens(), {
+      response_cyber_program: program,
+      ttfb_ms: undefined,
+    }))));
+    assert.equal(result.valid, true, JSON.stringify({ program, issues: result.issues }));
+  }
+  assert.equal(analyzeUsageImport(v3Payload(detail(v2Tokens(), {
+    response_cyber_program: 42,
+  }))).valid, false);
+});

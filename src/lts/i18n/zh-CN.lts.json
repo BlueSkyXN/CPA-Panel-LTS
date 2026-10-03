@@ -1,4 +1,13 @@
 {
+  "usage_stats": {
+    "execution_blue_std": "BLUE",
+    "execution_blue_fast": "BLUE FAST",
+    "cyber_program_daybreak_blue": "Daybreak Blue（上游响应已确认）",
+    "cyber_program_standard": "Standard 标准防护（上游响应已确认）",
+    "cyber_program_missing": "未知：上游未回显访问程序或属于历史记录",
+    "cyber_program_unknown": "未知或暂不支持的访问程序，不按 Standard 推断",
+    "cyber_program_response": "网络安全访问程序：{{value}}。速度档位与计费独立。"
+  },
   "login": {
     "saved_connections": "已保存的实例连接",
     "auto_connect_failed": "自动连接失败，请检查地址与管理密钥后重试。",
