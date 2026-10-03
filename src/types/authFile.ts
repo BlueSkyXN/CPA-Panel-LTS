@@ -20,6 +20,25 @@ export type AuthFileType =
   | 'empty'
   | 'unknown';
 
+export interface AuthFileCooldown {
+  scope: 'model' | 'credential';
+  modelKey?: string;
+  reason: string;
+  retryAt: string;
+  remainingSeconds: number;
+  backoffLevel?: number;
+  httpStatus?: number;
+}
+
+export interface AuthFileCooldownSnapshot {
+  /** Server observation time, not the start of the cooldown. */
+  observedAt?: string;
+  /** Local receipt time anchors relative timers without relying on synchronized clocks. */
+  receivedAtMs: number;
+  /** null = runtime state unknown; [] = known, with no active timers. */
+  records: AuthFileCooldown[] | null;
+}
+
 export interface AuthFileItem {
   name: string;
   type?: AuthFileType | string;
@@ -43,10 +62,13 @@ export interface AuthFileItem {
   failureCount?: number;
   recent_requests?: RecentRequestBucket[];
   recentRequests?: RecentRequestBucket[];
+  cooldownSnapshot?: AuthFileCooldownSnapshot;
   [key: string]: unknown;
 }
 
 export interface AuthFilesResponse {
   files: AuthFileItem[];
   total?: number;
+  observed_at?: unknown;
+  observedAt?: string;
 }

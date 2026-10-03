@@ -144,6 +144,7 @@ export interface CodexRateLimitResetCredits {
 }
 
 export interface CodexUsagePayload {
+  credits?: { has_credits?: boolean; unlimited?: boolean; balance?: string | number | null } | null;
   user_id?: string;
   userId?: string;
   account_id?: string;
@@ -434,6 +435,8 @@ export interface CodexQuotaState {
   planType?: string | null;
   accountEmail?: string | null;
   subscriptionActiveUntil?: string | number | null;
+  creditBalance?: string | null;
+  creditsUnlimited?: boolean;
   rateLimitResetCreditsAvailableCount?: number | null;
   rateLimitResetCreditExpiresAt?: string | number | null;
   rateLimitResetCredits?: CodexRateLimitResetCredit[];
@@ -487,6 +490,9 @@ export interface KimiLimitItem {
 export interface KimiUsagePayload {
   usage?: KimiUsageDetail;
   limits?: KimiLimitItem[];
+  usages?: {
+    limit_month_total?: { used_ratio?: number | string; reset_time?: string };
+  };
 }
 
 export interface KimiQuotaRow {

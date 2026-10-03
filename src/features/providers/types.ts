@@ -130,6 +130,7 @@ export interface SponsorProviderRaw {
  * Gemini/Codex/Claude/Vertex/OpenAI 共用基础字段,各自启用 advanced 区。
  */
 export interface ModelEntryInput {
+  sourceIndex?: number | null;
   name: string;
   alias?: string;
   displayName?: string;

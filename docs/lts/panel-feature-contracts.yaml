@@ -346,6 +346,8 @@ features:
       - src/components/providers/hooks/useProviderStats.ts
       - src/components/providers/ProviderStatusBar.tsx
       - src/services/api/providers.ts
+      - src/services/api/providerGroups.ts
+      - src/services/api/providerGroups.test.mjs
       - src/services/api/usage.ts
       - src/utils/usage.ts
       - src/utils/usageIndex.ts
@@ -394,6 +396,8 @@ features:
       - src/components/ui/modelInputListUtils.ts
       - src/services/api/config.ts
       - src/services/api/providers.ts
+      - src/services/api/providerGroups.ts
+      - src/services/api/providerGroups.test.mjs
       - src/services/api/transformers.ts
       - src/stores/useConfigStore.ts
       - src/types/config.ts

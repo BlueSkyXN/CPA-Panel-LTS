@@ -5,7 +5,7 @@
 ## 适用 Core
 
 - v7 CPA-Core-LTS：继续使用 legacy YAML 与 `/v0/management`。
-- 配套 v8 CPA-Core-LTS：保留 v0 structured config/provider/usage/Flow/plugin APIs；配置文档可采用 legacy、canonical v8 或 mixed 布局。
+- 配套 v8 CPA-Core-LTS：保留 v0 structured config/usage/Flow/plugin APIs；配置文档可采用 legacy、canonical v8 或 mixed 布局。Provider 写入按当前布局分流：legacy 使用 v0；v8/mixed 使用 `/v8/management/config/api-keys/<family>`，不经 legacy 展平再保存。
 - 不承诺可管理已删除 v0 业务 API 的官方原版 Core v8。本改动不是全局切换 API prefix。
 
 ## 配置编辑
@@ -19,6 +19,14 @@ v8/mixed 的保存通过 v8 YAML API。canonical GET 不写盘；确认保存会
 Core 侧必须同时拒绝旧缓存 Panel 的危险 v0 raw 替换；仅发新版 Panel 不能保护尚未刷新的浏览器。失败写入不会自动切换 API 版本重放。
 
 连接 generation 用于拒绝旧配置响应及后续写入，仍复用既有 session write freeze。配置错误形状/读取失败不能当空配置。
+
+## Provider 分组编辑边界
+
+普通行编辑保留组名、共享策略、未编辑 key、显式 null 继承与隐藏模型元数据；删除 key 不拆分剩余组。模型重排/改名通过原始 sourceIndex 绑定元数据，发现同名不同 alias 不合并。
+
+重复 key/base URL 身份、共享组单行修改 base URL 等歧义操作明确拒绝，使用 YAML 编辑器处理。高级策略的显式继承意图、全量原生 group UI 未实现。保存前复读可检测已发生的并发变更，但不是服务端 CAS；最后读取到 PUT 之间仍有竞态，旧表单与独立刷新后的全局 store 也尚未获得完整快照隔离保证。不得把当前候选宣传为无条件多写者安全。
+
+本轮逐提交取舍见 [2026-10-03 intake](upstream-intake-20261003-v8.md)。延期项不属于已移植功能。
 
 ## 验证
 

@@ -1,3 +1,5 @@
+import { resolveKimiQuotaUrl } from '@/services/api/kimiQuota';
+import { apiClient } from '@/services/api/client';
 /**
  * Quota configuration definitions.
  */
@@ -46,7 +48,6 @@ import {
   GEMINI_CLI_QUOTA_URL,
   GEMINI_CLI_CODE_ASSIST_URL,
   GEMINI_CLI_REQUEST_HEADERS,
-  KIMI_USAGE_URL,
   KIMI_REQUEST_HEADERS,
   XAI_BILLING_MONTHLY_URL,
   XAI_BILLING_WEEKLY_URL,
@@ -134,7 +135,7 @@ export interface QuotaConfig<TState, TData> {
   resetQuota?: (file: AuthFileItem, t: TFunction) => Promise<TData>;
   canResetQuota?: (quota: TState) => boolean;
   storeSelector: (state: QuotaStore) => Record<string, TState>;
-  storeSetter: keyof QuotaStore;
+  storeSetter: Extract<keyof QuotaStore, `set${string}Quota`>;
   buildLoadingState: () => TState;
   buildSuccessState: (data: TData, previous?: TState) => TState;
   buildErrorState: (message: string, status?: number) => TState;
@@ -625,9 +626,7 @@ const getAntigravityPlanLabel = (
   const key = subscription.plan ? keyByPlan[subscription.plan] : undefined;
   return key
     ? t(`antigravity_subscription.${key}`)
-    : (subscription.tierName ??
-        subscription.tierId ??
-        t('antigravity_subscription.plan_unknown'));
+    : (subscription.tierName ?? subscription.tierId ?? t('antigravity_subscription.plan_unknown'));
 };
 
 const AntigravityQuotaItems = ({
@@ -680,17 +679,17 @@ const AntigravityQuotaItems = ({
 
   if (groups.length === 0) {
     nodes.push(
-      h('div', { key: 'empty', className: styleMap.quotaMessage }, t('antigravity_quota.empty_models'))
+      h(
+        'div',
+        { key: 'empty', className: styleMap.quotaMessage },
+        t('antigravity_quota.empty_models')
+      )
     );
     return h(Fragment, null, ...nodes);
   }
 
   groups.forEach((group) => {
-    const groupLabel = translateAntigravityQuotaLabel(
-      group.label,
-      ANTIGRAVITY_GROUP_LABEL_KEYS,
-      t
-    );
+    const groupLabel = translateAntigravityQuotaLabel(group.label, ANTIGRAVITY_GROUP_LABEL_KEYS, t);
     const groupDescription = translateAntigravityQuotaDescription(group.description, t);
     nodes.push(
       h(
@@ -701,11 +700,7 @@ const AntigravityQuotaItems = ({
           { className: styleMap.antigravityQuotaGroupHeader },
           h('span', { className: styleMap.antigravityQuotaGroupTitle }, groupLabel),
           groupDescription
-            ? h(
-                'span',
-                { className: styleMap.antigravityQuotaGroupDescription },
-                groupDescription
-              )
+            ? h('span', { className: styleMap.antigravityQuotaGroupDescription }, groupDescription)
             : null
         ),
         ...group.buckets.map((bucket) => {
@@ -726,11 +721,7 @@ const AntigravityQuotaItems = ({
             h(
               'div',
               { className: styleMap.quotaRowHeader },
-              h(
-                'span',
-                { className: styleMap.quotaModel, title: bucket.description },
-                bucketLabel
-              ),
+              h('span', { className: styleMap.quotaModel, title: bucket.description }, bucketLabel),
               h(
                 'div',
                 { className: styleMap.quotaMeta },
@@ -949,10 +940,7 @@ const resolveClaudePlanType = (profile: ClaudeProfileResponse | null): string | 
   if (!profile) return null;
 
   const hasClaudeMax = normalizeFlagValue(profile.account?.has_claude_max);
-  if (hasClaudeMax) return 'plan_max';
-
   const hasClaudePro = normalizeFlagValue(profile.account?.has_claude_pro);
-  if (hasClaudePro) return 'plan_pro';
 
   const organizationType = normalizeStringValue(
     profile.organization?.organization_type
@@ -965,6 +953,8 @@ const resolveClaudePlanType = (profile: ClaudeProfileResponse | null): string | 
     return 'plan_team';
   }
 
+  if (hasClaudeMax) return 'plan_max';
+  if (hasClaudePro) return 'plan_pro';
   if (hasClaudeMax === false && hasClaudePro === false) return 'plan_free';
 
   return null;
@@ -1231,13 +1221,17 @@ const fetchKimiQuota = async (file: AuthFileItem, t: TFunction): Promise<KimiQuo
     throw new Error(t('kimi_quota.missing_auth_index'));
   }
 
+  const generation = apiClient.getConnectionGeneration();
+  const quotaUrl = await resolveKimiQuotaUrl(file);
+  if (!apiClient.isCurrentConnection(generation)) throw new Error(t('notification.refresh_failed'));
   const result = await apiCallApi.request({
     authIndex,
     method: 'GET',
-    url: KIMI_USAGE_URL,
+    url: quotaUrl,
     header: { ...KIMI_REQUEST_HEADERS },
   });
 
+  if (!apiClient.isCurrentConnection(generation)) throw new Error(t('notification.refresh_failed'));
   if (result.statusCode < 200 || result.statusCode >= 300) {
     throw createStatusError(getApiCallErrorMessage(result), result.statusCode);
   }
@@ -1558,13 +1552,12 @@ const renderXaiItems = (
       : null;
   const weeklyRemaining = weeklyUsed === null ? null : Math.max(0, Math.min(100, 100 - weeklyUsed));
   const weeklyResetLabel = formatQuotaResetTime(billing.periodEnd);
-  const hasWeeklyData =
-    billing.periodType === 'weekly' &&
-    (weeklyUsed !== null || Boolean(billing.periodEnd) || billing.productUsage.length > 0);
+  const hasWeeklyData = billing.periodType === 'weekly';
   const hasMonthlyData =
-    billing.monthlyLimitCents !== null ||
-    billing.usedCents !== null ||
-    Boolean(billing.billingPeriodEnd);
+    !(hasWeeklyData && billing.monthlyLimitCents === 0 && billing.usedCents === 0) &&
+    (billing.monthlyLimitCents !== null ||
+      billing.usedCents !== null ||
+      Boolean(billing.billingPeriodEnd));
   const paygEnabled = billing.onDemandEnabled ?? onDemandCap > 0;
 
   return h(
@@ -1596,9 +1589,11 @@ const renderXaiItems = (
               h(
                 'span',
                 { className: styleMap.quotaPercent },
-                t('xai_quota.used_percent', {
-                  percent: formatXaiPercent(weeklyUsed),
-                })
+                weeklyUsed === null
+                  ? t('xai_quota.usage_unavailable')
+                  : t('xai_quota.used_percent', {
+                      percent: formatXaiPercent(weeklyUsed),
+                    })
               ),
               weeklyResetLabel !== '-'
                 ? h(
@@ -1611,11 +1606,13 @@ const renderXaiItems = (
                 : null
             )
           ),
-          h(QuotaProgressBar, {
-            percent: weeklyRemaining,
-            highThreshold: QUOTA_PROGRESS_HIGH_THRESHOLD,
-            mediumThreshold: QUOTA_PROGRESS_MEDIUM_THRESHOLD,
-          })
+          weeklyRemaining === null
+            ? null
+            : h(QuotaProgressBar, {
+                percent: weeklyRemaining,
+                highThreshold: QUOTA_PROGRESS_HIGH_THRESHOLD,
+                mediumThreshold: QUOTA_PROGRESS_MEDIUM_THRESHOLD,
+              })
         )
       : null,
     ...billing.productUsage.map((item) => {
@@ -1684,7 +1681,11 @@ const renderXaiItems = (
           'div',
           { key: 'prepaid-credits', className: styleMap.codexPlan },
           h('span', { className: styleMap.codexPlanLabel }, t('xai_quota.prepaid_balance_label')),
-          h('span', { className: styleMap.codexPlanValue }, formatUsdFromCents(Math.abs(billing.prepaidBalanceCents)))
+          h(
+            'span',
+            { className: styleMap.codexPlanValue },
+            formatUsdFromCents(Math.abs(billing.prepaidBalanceCents))
+          )
         )
       : null,
     billing.autoTopupEnabled !== null

@@ -1,3 +1,4 @@
+import { normalizeAuthFileCooldowns, normalizeCooldownTimestamp } from './authFileCooldowns';
 /**
  * 认证文件与 OAuth 排除模型相关 API
  */
@@ -210,6 +211,7 @@ const mergeAuthFileEntries = (entries: AuthFileEntry[]): AuthFileEntry => {
 
   rest.forEach((entry) => {
     Object.entries(entry).forEach(([key, value]) => {
+      if (key === 'cooldowns' && Object.prototype.hasOwnProperty.call(merged, key)) return;
       if (!hasMeaningfulValue(merged[key]) && hasMeaningfulValue(value)) {
         merged[key] = value;
       }
@@ -231,7 +233,11 @@ const readIntegerField = (value: unknown): number | undefined => {
 };
 
 /** Preserve raw provider fields while exposing stable camelCase fields to the UI. */
-const normalizeAuthFileEntry = (entry: AuthFileEntry): AuthFileEntry => {
+const normalizeAuthFileEntry = (
+  entry: AuthFileEntry,
+  observedAt: string | undefined,
+  receivedAtMs: number
+): AuthFileEntry => {
   const declaredStatusMessage =
     typeof entry.statusMessage === 'string' ? entry.statusMessage.trim() : '';
   const statusMessage = readTextField(entry, 'status_message') || declaredStatusMessage;
@@ -242,6 +248,7 @@ const normalizeAuthFileEntry = (entry: AuthFileEntry): AuthFileEntry => {
 
   return {
     ...entry,
+    cooldownSnapshot: normalizeAuthFileCooldowns(entry.cooldowns, observedAt, receivedAtMs),
     runtimeOnly: isRuntimeOnlyEntry(entry),
     authIndex: normalizeRecentRequestAuthIndex(entry['auth_index'] ?? entry.authIndex),
     recentRequests: normalizeRecentRequestBuckets(entry.recent_requests ?? entry.recentRequests),
@@ -255,7 +262,11 @@ const normalizeAuthFileEntry = (entry: AuthFileEntry): AuthFileEntry => {
   };
 };
 
-export const normalizeAuthFilesResponse = (payload: AuthFilesResponse): AuthFilesResponse => {
+export const normalizeAuthFilesResponse = (
+  payload: AuthFilesResponse,
+  receivedAtMs = Date.now()
+): AuthFilesResponse => {
+  const observedAt = normalizeCooldownTimestamp(payload?.observed_at);
   const files = Array.isArray(payload?.files) ? payload.files : [];
   const grouped = new Map<string, AuthFileEntry[]>();
 
@@ -271,7 +282,7 @@ export const normalizeAuthFilesResponse = (payload: AuthFilesResponse): AuthFile
   });
 
   const normalizedFiles = Array.from(grouped.values()).map((entries) =>
-    normalizeAuthFileEntry(mergeAuthFileEntries(entries))
+    normalizeAuthFileEntry(mergeAuthFileEntries(entries), observedAt, receivedAtMs)
   );
   normalizedFiles.sort((left, right) =>
     readTextField(left, 'name').localeCompare(readTextField(right, 'name'), undefined, {
@@ -281,6 +292,7 @@ export const normalizeAuthFilesResponse = (payload: AuthFilesResponse): AuthFile
 
   return {
     ...payload,
+    observedAt,
     files: normalizedFiles,
     total: normalizedFiles.length,
   };
@@ -419,8 +431,12 @@ export const authFilesApi = {
   list: async () =>
     normalizeAuthFilesResponse(await apiClient.get<AuthFilesResponse>('/auth-files')),
 
-  setStatus: (name: string, disabled: boolean) =>
-    apiClient.patch<AuthFileStatusResponse>('/auth-files/status', { name, disabled }),
+  setStatus: (name: string, disabled: boolean, authIndex?: string) =>
+    apiClient.patch<AuthFileStatusResponse>('/auth-files/status', {
+      name,
+      disabled,
+      ...(authIndex ? { auth_index: authIndex } : {}),
+    }),
 
   patchFields: (name: string, fields: AuthFileFieldsPatch) =>
     apiClient.patch('/auth-files/fields', { name, ...fields }),

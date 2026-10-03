@@ -53,6 +53,7 @@
     "hint_single": "Нажмите название, чтобы переключить подключение. По умолчанию подключён один экземпляр; режим нескольких экземпляров можно включить ниже."
   },
   "codex_quota": {
+    "plan_business_premium": "Business Premium",
     "title": "Квота Codex",
     "empty_title": "Файлы авторизации Codex отсутствуют",
     "empty_desc": "Загрузите учётные данные Codex, чтобы увидеть квоту.",
@@ -154,7 +155,9 @@
     "team_analytics_fallback_failed": "{{message}} Fallback на daily analytics также не удался: {{fallback}}",
     "analytics_user_credits": "Credits текущего пользователя",
     "analytics_workspace_credits": "Credits workspace",
-    "weekly_estimate_leaderboard_title": "Оценка по {{used}} Credit для {{email}} в Team leaderboard и 7-дневному used_percent; прогноз недельного лимита {{total}} Credit."
+    "weekly_estimate_leaderboard_title": "Оценка по {{used}} Credit для {{email}} в Team leaderboard и 7-дневному used_percent; прогноз недельного лимита {{total}} Credit.",
+    "credit_balance_label": "Остаток кредитов",
+    "credit_unlimited": "Без ограничений"
   },
   "auth_files": {
     "codex_remote_cloud_connect_environment_button": "Codex Remote Cloud Connect Environments",

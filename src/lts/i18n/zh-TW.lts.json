@@ -53,6 +53,7 @@
     "hint_single": "點擊名稱切換連線；預設僅保留一個實例連線，可在下方開啟多實例管理。"
   },
   "codex_quota": {
+    "plan_business_premium": "Business Premium",
     "title": "Codex 配額",
     "empty_title": "暫無 Codex 驗證",
     "empty_desc": "上傳 Codex 驗證檔案後即可查看配額。",
@@ -154,7 +155,9 @@
     "weekly_estimate_inline_title": "基於 UTC 日桶估算；不含重置日約 {{withoutResetDay}} 積分，含重置日約 {{withResetDay}} 積分。主卡片顯示含重置日口徑。",
     "monthly_window": "月度限額",
     "code_review_monthly_window": "程式碼審查月度限額",
-    "additional_monthly_window": "{{name}} 月度限額"
+    "additional_monthly_window": "{{name}} 月度限額",
+    "credit_balance_label": "Credit 餘額",
+    "credit_unlimited": "無限額"
   },
   "auth_files": {
     "codex_remote_cloud_connect_environment_button": "Codex遠端雲連線環境",

@@ -45,7 +45,11 @@ const [
   vite.ssrLoadModule('/src/components/providers/utils.ts'),
 ]);
 
+const originalGetRaw = client.apiClient.getRaw;
+client.apiClient.getRaw = async () => ({ data: 'port: 8317\n' });
+
 test.after(async () => {
+  client.apiClient.getRaw = originalGetRaw;
   await vite.close();
   if (originalWindow === undefined) {
     delete globalThis.window;
@@ -356,15 +360,11 @@ test('round-trips credential weights without dropping provider fields', async ()
   };
 
   try {
-    await providers.providersApi.updateGeminiKey(
-      'gemini-secret',
-      'https://gemini.example.test',
-      {
-        apiKey: 'gemini-secret',
-        baseUrl: 'https://gemini.example.test',
-        weight: 7,
-      }
-    );
+    await providers.providersApi.updateGeminiKey('gemini-secret', 'https://gemini.example.test', {
+      apiKey: 'gemini-secret',
+      baseUrl: 'https://gemini.example.test',
+      weight: 7,
+    });
     await providers.providersApi.updateOpenAIProvider('custom', 0, {
       name: 'custom',
       baseUrl: 'https://openai.example.test/v1',

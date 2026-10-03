@@ -9,11 +9,7 @@ import { parseDocument } from 'yaml';
 import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import {
-  IconChevronDown,
-  IconChevronUp,
-  IconSearch,
-} from '@/components/ui/icons';
+import { IconChevronDown, IconChevronUp, IconSearch } from '@/components/ui/icons';
 import { VisualConfigEditor } from '@/components/config/VisualConfigEditor';
 import {
   isConfigNavigationChange,
@@ -34,6 +30,8 @@ import { readProfiles } from '@/services/storage/connectionProfiles';
 import { useVisualConfig } from '@/hooks/useVisualConfig';
 import { useNotificationStore, useAuthStore, useConfigStore } from '@/stores';
 import { configFileApi } from '@/services/api/configFile';
+import { readConfigBoolean } from '@/utils/configBoolean';
+import { assertConfigListsUnchanged } from '@/utils/configListConflict';
 import styles from './ConfigPage.module.scss';
 
 type ConfigEditorTab = 'visual' | 'source';
@@ -44,7 +42,7 @@ function readCommercialModeFromYaml(yamlContent: string): boolean {
   try {
     const parsed: unknown = projectConfigForVisual(yamlContent).toJS();
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
-    return Boolean((parsed as Record<string, unknown>)['commercial-mode']);
+    return readConfigBoolean((parsed as Record<string, unknown>)['commercial-mode']);
   } catch {
     return false;
   }
@@ -89,6 +87,7 @@ export function ConfigPage() {
   const effectiveTab: ConfigEditorTab = requestedSection ? 'visual' : activeTab;
 
   const [content, setContent] = useState('');
+  const loadedYamlRef = useRef('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -143,6 +142,7 @@ export function ConfigPage() {
     try {
       const data = await configFileApi.fetchConfigYaml();
       setContent(data);
+      loadedYamlRef.current = data;
       setDirty(false);
       setDiffModalOpen(false);
       setServerYaml(data);
@@ -179,6 +179,7 @@ export function ConfigPage() {
       const latestServerYaml = await configFileApi.fetchConfigYaml();
       if (!apiClient.isCurrentConnection(generation)) return;
       if (latestServerYaml !== previewServerYaml) {
+        assertConfigListsUnchanged(previewServerYaml, mergedYaml, latestServerYaml);
         const nextMergedYaml =
           previewTab === 'visual' && !dirty
             ? applyVisualChangesToYaml(latestServerYaml)
@@ -212,6 +213,7 @@ export function ConfigPage() {
       setDirty(false);
       setDiffModalOpen(false);
       setContent(latestContent);
+      loadedYamlRef.current = latestContent;
       setServerYaml(latestContent);
       setMergedYaml(latestContent);
       setPreviewServerYaml(latestContent);
@@ -255,6 +257,8 @@ export function ConfigPage() {
     try {
       const latestServerYaml = await configFileApi.fetchConfigYaml();
 
+      const desired = dirty ? content : applyVisualChangesToYaml(loadedYamlRef.current);
+      assertConfigListsUnchanged(loadedYamlRef.current, desired, latestServerYaml);
       const visualBaseYaml = dirty ? content : latestServerYaml;
 
       if (effectiveTab === 'visual' || !dirty) {

@@ -13,7 +13,7 @@ import {
   HOME_BUILD_DATE_HEADER_KEYS,
   HOME_VERSION_HEADER_KEYS,
   REQUEST_TIMEOUT_MS,
-  VERSION_HEADER_KEYS
+  VERSION_HEADER_KEYS,
 } from '@/utils/constants';
 import { computeApiUrl } from '@/utils/connection';
 import { normalizeReportedVersion } from '@/utils/version';
@@ -36,8 +36,10 @@ const READ_ONLY_USAGE_POSTS = new Set([
 
 function isMutationRequest(config: AxiosRequestConfig): boolean {
   const method = (config.method || 'get').toLowerCase();
-  return !['get', 'head', 'options'].includes(method) &&
-    !(method === 'post' && READ_ONLY_USAGE_POSTS.has(config.url || ''));
+  return (
+    !['get', 'head', 'options'].includes(method) &&
+    !(method === 'post' && READ_ONLY_USAGE_POSTS.has(config.url || ''))
+  );
 }
 
 class ApiClient {
@@ -50,8 +52,8 @@ class ApiClient {
     this.instance = axios.create({
       timeout: REQUEST_TIMEOUT_MS,
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     });
 
     this.setupInterceptors();
@@ -94,16 +96,15 @@ class ApiClient {
     return scopedConfig?.__cpaConnectionGeneration === this.connectionGeneration;
   }
 
-  private readHeader(
-    headers: Record<string, unknown> | undefined,
-    keys: string[]
-  ): string | null {
+  private readHeader(headers: Record<string, unknown> | undefined, keys: string[]): string | null {
     if (!headers) return null;
 
     const normalizeValue = (value: unknown): string | null => {
       if (value === undefined || value === null) return null;
       if (Array.isArray(value)) {
-        const first = value.find((entry) => entry !== undefined && entry !== null && String(entry).trim());
+        const first = value.find(
+          (entry) => entry !== undefined && entry !== null && String(entry).trim()
+        );
         return first !== undefined ? String(first) : null;
       }
       const text = String(value);
@@ -160,9 +161,10 @@ class ApiClient {
         if (mutation) scopedConfig.__finishSessionWrite = beginSessionWrite();
 
         // 设置 baseURL
-        config.baseURL = scopedConfig.managementApiVersion === 'v8'
-          ? this.apiBase.replace(/\/v0\/management$/, '/v8/management')
-          : this.apiBase;
+        config.baseURL =
+          scopedConfig.managementApiVersion === 'v8'
+            ? this.apiBase.replace(/\/v0\/management$/, '/v8/management')
+            : this.apiBase;
         if (config.url) {
           // Normalize deprecated Gemini endpoint to the current path.
           config.url = config.url.replace(/\/generative-language-api-key\b/g, '/gemini-api-key');
@@ -212,14 +214,14 @@ class ApiClient {
         if (version || buildDate || runtimeKind) {
           window.dispatchEvent(
             new CustomEvent('server-version-update', {
-              detail: { version: version || null, buildDate: buildDate || null, runtimeKind }
+              detail: { version: version || null, buildDate: buildDate || null, runtimeKind },
             })
           );
         }
         if (supportsPlugin !== null) {
           window.dispatchEvent(
             new CustomEvent('server-plugin-support-update', {
-              detail: { supportsPlugin }
+              detail: { supportsPlugin },
             })
           );
         }
@@ -227,7 +229,8 @@ class ApiClient {
         return response;
       },
       (error) => {
-        if (axios.isAxiosError(error)) (error.config as ConnectionScopedRequestConfig | undefined)?.__finishSessionWrite?.();
+        if (axios.isAxiosError(error))
+          (error.config as ConnectionScopedRequestConfig | undefined)?.__finishSessionWrite?.();
         return Promise.reject(this.handleError(error));
       }
     );
@@ -257,7 +260,11 @@ class ApiClient {
     }
 
     const fallbackMessage =
-      error instanceof Error ? error.message : typeof error === 'string' ? error : 'Unknown error occurred';
+      error instanceof Error
+        ? error.message
+        : typeof error === 'string'
+          ? error
+          : 'Unknown error occurred';
     const fallback = new Error(fallbackMessage) as ApiError;
     fallback.name = 'ApiError';
     return fallback;
@@ -266,7 +273,7 @@ class ApiClient {
   /**
    * GET 请求
    */
-  async get<T = unknown>(url: string, config?: AxiosRequestConfig): Promise<T> {
+  async get<T = unknown>(url: string, config?: ConnectionScopedRequestConfig): Promise<T> {
     const response = await this.instance.get<T>(url, config);
     return response.data;
   }
@@ -274,7 +281,11 @@ class ApiClient {
   /**
    * POST 请求
    */
-  async post<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
+  async post<T = unknown>(
+    url: string,
+    data?: unknown,
+    config?: ConnectionScopedRequestConfig
+  ): Promise<T> {
     const response = await this.instance.post<T>(url, data, config);
     return response.data;
   }
@@ -282,7 +293,11 @@ class ApiClient {
   /**
    * PUT 请求
    */
-  async put<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
+  async put<T = unknown>(
+    url: string,
+    data?: unknown,
+    config?: ConnectionScopedRequestConfig
+  ): Promise<T> {
     const response = await this.instance.put<T>(url, data, config);
     return response.data;
   }
@@ -290,7 +305,11 @@ class ApiClient {
   /**
    * PATCH 请求
    */
-  async patch<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
+  async patch<T = unknown>(
+    url: string,
+    data?: unknown,
+    config?: ConnectionScopedRequestConfig
+  ): Promise<T> {
     const response = await this.instance.patch<T>(url, data, config);
     return response.data;
   }
@@ -298,7 +317,7 @@ class ApiClient {
   /**
    * DELETE 请求
    */
-  async delete<T = unknown>(url: string, config?: AxiosRequestConfig): Promise<T> {
+  async delete<T = unknown>(url: string, config?: ConnectionScopedRequestConfig): Promise<T> {
     const response = await this.instance.delete<T>(url, config);
     return response.data;
   }
@@ -306,7 +325,7 @@ class ApiClient {
   /**
    * 获取原始响应（用于下载等场景）
    */
-  async getRaw(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse> {
+  async getRaw(url: string, config?: ConnectionScopedRequestConfig): Promise<AxiosResponse> {
     return this.instance.get(url, config);
   }
 
@@ -316,14 +335,14 @@ class ApiClient {
   async postForm<T = unknown>(
     url: string,
     formData: FormData,
-    config?: AxiosRequestConfig
+    config?: ConnectionScopedRequestConfig
   ): Promise<T> {
     const response = await this.instance.post<T>(url, formData, {
       ...config,
       headers: {
         ...(config?.headers || {}),
-        'Content-Type': 'multipart/form-data'
-      }
+        'Content-Type': 'multipart/form-data',
+      },
     });
     return response.data;
   }

@@ -3,6 +3,8 @@
  */
 
 import { apiClient } from './client';
+import type { ApiError } from '@/types';
+import { parseApiErrorResponse } from './apiError';
 import { LOGS_TIMEOUT_MS } from '@/utils/constants';
 import { isRecord } from '@/utils/helpers';
 
@@ -112,7 +114,7 @@ const normalizeCPALogs = (data: Record<string, unknown>): LogsResponse => {
     lines,
     lineCount: Number.isFinite(lineCount) ? lineCount : lines.length,
     latestAfter: latestTimestamp > 0 ? latestTimestamp : undefined,
-    nextCursor: stringValue(data['next-cursor']) || undefined,
+    nextCursor: typeof data['next-cursor'] === 'string' ? data['next-cursor'] : undefined,
     cursorReset: booleanValue(data['cursor-reset']),
     replaceTrailingPartial: booleanValue(data['replace-trailing-partial']),
     logBackendKind: 'file',
@@ -170,7 +172,8 @@ const normalizeLogsResponse = (data: unknown): LogsResponse => {
 
 const fetchCompleteHomeLogs = async (
   firstPage: Record<string, unknown>,
-  params: LogsQuery
+  params: LogsQuery,
+  options: LogsRequestOptions
 ): Promise<Record<string, unknown>> => {
   const requestedLimit = positiveNumberValue(params.limit);
   const firstPageLimit = positiveNumberValue(firstPage.limit);
@@ -202,6 +205,7 @@ const fetchCompleteHomeLogs = async (
   const pages = await Promise.all(
     pageRequests.map(async ({ offset, limit }) => {
       const data = await apiClient.get('/logs', {
+        ...options,
         params: { ...params, limit, offset },
         timeout: LOGS_TIMEOUT_MS,
       });
@@ -215,30 +219,77 @@ const fetchCompleteHomeLogs = async (
   return { ...firstPage, logs: records, limit: records.length, offset: firstOffset };
 };
 
+export interface LogsRequestOptions {
+  signal?: AbortSignal;
+}
+
+const downloadLog = async (path: string, options: LogsRequestOptions, homeIp?: string) => {
+  try {
+    return await apiClient.getRaw(path, {
+      ...options,
+      params: homeIp ? { home_ip: homeIp } : undefined,
+      responseType: 'blob',
+      timeout: LOGS_TIMEOUT_MS,
+    });
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      const apiError = error as ApiError;
+      const body = apiError.data instanceof Blob ? apiError.data : apiError.details;
+      if (body instanceof Blob) {
+        try {
+          const parsed = parseApiErrorResponse(JSON.parse(await body.text()), apiError.message);
+          apiError.message = parsed.message;
+          if (parsed.apiCode !== undefined) apiError.apiCode = parsed.apiCode;
+        } catch {
+          // Non-JSON download errors retain the original transport failure.
+        }
+      }
+    }
+    throw error;
+  }
+};
+
 export const logsApi = {
-  async fetchLogs(params: LogsQuery = {}): Promise<LogsResponse> {
-    const data = await apiClient.get('/logs', { params, timeout: LOGS_TIMEOUT_MS });
+  async fetchLogs(params: LogsQuery = {}, options: LogsRequestOptions = {}): Promise<LogsResponse> {
+    const generation = apiClient.getConnectionGeneration();
+    const data = await apiClient.get('/logs', { ...options, params, timeout: LOGS_TIMEOUT_MS });
+    if (!apiClient.isCurrentConnection(generation)) throw new Error('Connection changed');
     if (isRecord(data) && Array.isArray(data.logs)) {
-      return normalizeLogsResponse(await fetchCompleteHomeLogs(data, params));
+      return normalizeLogsResponse(await fetchCompleteHomeLogs(data, params, options));
     }
     return normalizeLogsResponse(data);
   },
 
-  clearLogs: () => apiClient.delete('/logs'),
+  clearLogs: (options: LogsRequestOptions = {}) => apiClient.delete('/logs', options),
 
-  fetchErrorLogs: (): Promise<ErrorLogsResponse> =>
-    apiClient.get('/request-error-logs', { timeout: LOGS_TIMEOUT_MS }),
-
-  downloadErrorLog: (filename: string) =>
-    apiClient.getRaw(`/request-error-logs/${encodeURIComponent(filename)}`, {
-      responseType: 'blob',
+  async fetchErrorLogs(options: LogsRequestOptions = {}): Promise<ErrorLogsResponse> {
+    const data = await apiClient.get('/request-error-logs', {
+      ...options,
       timeout: LOGS_TIMEOUT_MS,
-    }),
+    });
+    return {
+      files:
+        isRecord(data) && Array.isArray(data.files)
+          ? data.files.flatMap((file) => {
+              if (!isRecord(file) || typeof file.name !== 'string' || !file.name.trim()) return [];
+              return [
+                {
+                  name: file.name,
+                  size:
+                    typeof file.size === 'number' && Number.isFinite(file.size) && file.size >= 0
+                      ? file.size
+                      : undefined,
+                  modified: unixSecondsFromValue(file.modified) || undefined,
+                },
+              ];
+            })
+          : [],
+    };
+  },
 
-  downloadRequestLogById: (id: string, homeIp?: string) =>
-    apiClient.getRaw(`/request-log-by-id/${encodeURIComponent(id)}`, {
-      params: homeIp ? { home_ip: homeIp } : undefined,
-      responseType: 'blob',
-      timeout: LOGS_TIMEOUT_MS,
-    }),
+  downloadErrorLog: (filename: string, options: LogsRequestOptions = {}) =>
+    downloadLog(`/request-error-logs/${encodeURIComponent(filename)}`, options),
+
+  downloadRequestLogById: (id: string, homeIp?: string, options: LogsRequestOptions = {}) =>
+    downloadLog(`/request-log-by-id/${encodeURIComponent(id)}`, options, homeIp),
 };

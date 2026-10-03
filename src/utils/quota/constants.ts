@@ -142,6 +142,7 @@ export const CODEX_REQUEST_HEADERS = {
 
 // Kimi API configuration
 export const KIMI_USAGE_URL = 'https://api.kimi.com/coding/v1/usages';
+export const KIMI_AI_USAGE_URL = 'https://api.kimi.ai/coding/v1/usages';
 
 export const KIMI_REQUEST_HEADERS = {
   Authorization: 'Bearer $TOKEN$',
@@ -180,11 +181,10 @@ const normalizeXaiArchitecture = (platform: string, userAgent: string): string =
 export const buildXaiGrokUserAgent = (
   platform = typeof navigator === 'undefined' ? '' : navigator.platform,
   userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent,
-  userAgentDataPlatform =
-    typeof navigator === 'undefined'
-      ? ''
-      : ((navigator as Navigator & { userAgentData?: NavigatorUADataLike }).userAgentData
-          ?.platform ?? '')
+  userAgentDataPlatform = typeof navigator === 'undefined'
+    ? ''
+    : ((navigator as Navigator & { userAgentData?: NavigatorUADataLike }).userAgentData?.platform ??
+      '')
 ): string => {
   const platformIdentity = `${userAgentDataPlatform} ${platform}`.trim();
   const osName = normalizeXaiPlatform(platformIdentity, userAgent);

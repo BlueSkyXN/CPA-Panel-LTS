@@ -1,3 +1,4 @@
+import { AuthFileCooldownSection } from './AuthFileCooldownSection';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
@@ -167,9 +168,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
                 checked={selected}
                 onChange={() => onToggleSelect(file.name)}
                 className={styles.cardSelection}
-                aria-label={
-                  selected ? t('auth_files.batch_deselect') : t('auth_files.batch_select_all')
-                }
+                ariaLabel={`${selected ? t('auth_files.batch_deselect') : t('auth_files.batch_select_all')}: ${file.name}`}
                 title={selected ? t('auth_files.batch_deselect') : t('auth_files.batch_select_all')}
               />
             )}
@@ -214,6 +213,8 @@ export function AuthFileCard(props: AuthFileCardProps) {
               onOpen={onShowCodexRemoteCloudConnectEnvironments}
             />
           </div>
+
+          <AuthFileCooldownSection snapshot={file.cooldownSnapshot} />
 
           <div className={`${styles.cardMeta} ${compact ? styles.cardMetaCompact : ''}`}>
             <div className={styles.metaItem}>

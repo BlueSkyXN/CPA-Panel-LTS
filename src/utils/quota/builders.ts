@@ -411,6 +411,18 @@ export function buildKimiQuotaRows(payload: KimiUsagePayload): KimiQuotaRow[] {
     }
   }
 
+  const monthly = payload.usages?.limit_month_total;
+  const value = monthly?.used_ratio;
+  const ratio =
+    typeof value === 'number' || (typeof value === 'string' && value.trim()) ? Number(value) : NaN;
+  if (Number.isFinite(ratio) && ratio >= 0 && ratio <= 1) {
+    const row = toKimiUsageRow(
+      { used: Math.round(ratio * 100), limit: 100, reset_time: monthly?.reset_time },
+      { labelKey: 'kimi_quota.monthly_limit' }
+    );
+    if (row) rows.push({ id: 'monthly', ...row });
+  }
+
   return rows;
 }
 
@@ -469,7 +481,10 @@ const emptyXaiBillingSummary = (): XaiBillingSummary => ({
 
 export function buildXaiBillingSummary(
   config: XaiBillingConfig | null | undefined,
-  payload?: Pick<XaiBillingPayload, 'onDemandEnabled' | 'on_demand_enabled' | 'subscriptionTier' | 'subscription_tier'>
+  payload?: Pick<
+    XaiBillingPayload,
+    'onDemandEnabled' | 'on_demand_enabled' | 'subscriptionTier' | 'subscription_tier'
+  >
 ): XaiBillingSummary | null {
   if (!config || typeof config !== 'object') return null;
 
@@ -612,7 +627,7 @@ export function mergeXaiBillingSummaries(
 
   return {
     periodType: periodSummary.periodType,
-    usagePercent: primary.usagePercent ?? fallback.usagePercent,
+    usagePercent: periodSummary.usagePercent,
     periodStart: periodSummary.periodStart,
     periodEnd: periodSummary.periodEnd,
     productUsage: primary.productUsage.length > 0 ? primary.productUsage : fallback.productUsage,
@@ -631,8 +646,7 @@ export function mergeXaiBillingSummaries(
     subscriptionTier: primary.subscriptionTier ?? fallback.subscriptionTier,
     historyCount: Math.max(primary.historyCount, fallback.historyCount),
     autoTopupEnabled: primary.autoTopupEnabled ?? fallback.autoTopupEnabled,
-    autoTopupMinBeforeCents:
-      primary.autoTopupMinBeforeCents ?? fallback.autoTopupMinBeforeCents,
+    autoTopupMinBeforeCents: primary.autoTopupMinBeforeCents ?? fallback.autoTopupMinBeforeCents,
     autoTopupAmountCents: primary.autoTopupAmountCents ?? fallback.autoTopupAmountCents,
     autoTopupMaxPerMonthCents:
       primary.autoTopupMaxPerMonthCents ?? fallback.autoTopupMaxPerMonthCents,

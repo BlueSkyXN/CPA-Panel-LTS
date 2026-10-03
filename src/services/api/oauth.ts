@@ -10,6 +10,7 @@ export type OAuthProvider =
   | 'antigravity'
   | 'gemini-cli'
   | 'kimi'
+  | 'kimi-ai'
   | 'xai'
   | 'copilot';
 
@@ -30,19 +31,13 @@ export interface CopilotLoginInfo {
   interval_seconds?: number;
 }
 
-const WEBUI_SUPPORTED: OAuthProvider[] = [
-  'codex',
-  'anthropic',
-  'antigravity',
-  'gemini-cli',
-  'xai'
-];
+const WEBUI_SUPPORTED: OAuthProvider[] = ['codex', 'anthropic', 'antigravity', 'gemini-cli', 'xai'];
 const CALLBACK_PROVIDER_MAP: Partial<Record<OAuthProvider, string>> = {
-  'gemini-cli': 'gemini'
+  'gemini-cli': 'gemini',
 };
 
 export const oauthApi = {
-  startAuth: (provider: OAuthProvider, options?: { projectId?: string }) => {
+  startAuth: (provider: OAuthProvider, options?: { projectId?: string; signal?: AbortSignal }) => {
     const params: Record<string, string | boolean> = {};
     if (WEBUI_SUPPORTED.includes(provider)) {
       params.is_webui = true;
@@ -51,27 +46,34 @@ export const oauthApi = {
       params.project_id = options.projectId;
     }
     return apiClient.get<OAuthStartResponse>(`/${provider}-auth-url`, {
-      params: Object.keys(params).length ? params : undefined
+      params: Object.keys(params).length ? params : undefined,
+      signal: options?.signal,
     });
   },
 
-  getAuthStatus: (state: string) =>
+  getAuthStatus: (state: string, signal?: AbortSignal) =>
     apiClient.get<{ status: 'ok' | 'wait' | 'error'; error?: string }>(`/get-auth-status`, {
-      params: { state }
+      params: { state },
+      signal,
     }),
 
   // Copilot 设备码登录的 user_code 展示通道：Core 插件 management 路由，
   // state 是 copilot-auth-url 返回的登录流 ID；device_code 不外发。
-  copilotLoginInfo: (state: string) =>
+  copilotLoginInfo: (state: string, signal?: AbortSignal) =>
     apiClient.get<CopilotLoginInfo>(`/plugins/copilot/login-info`, {
-      params: { state }
+      params: { state },
+      signal,
     }),
 
-  submitCallback: (provider: OAuthProvider, redirectUrl: string) => {
+  submitCallback: (provider: OAuthProvider, redirectUrl: string, signal?: AbortSignal) => {
     const callbackProvider = CALLBACK_PROVIDER_MAP[provider] ?? provider;
-    return apiClient.post<OAuthCallbackResponse>('/oauth-callback', {
-      provider: callbackProvider,
-      redirect_url: redirectUrl
-    });
-  }
+    return apiClient.post<OAuthCallbackResponse>(
+      '/oauth-callback',
+      {
+        provider: callbackProvider,
+        redirect_url: redirectUrl,
+      },
+      { signal }
+    );
+  },
 };
