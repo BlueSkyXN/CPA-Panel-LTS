@@ -18,14 +18,14 @@ const approx = (actual, expected) =>
 
 test('catalog is versioned, self-describing, exact, and keeps provider rate boundaries explicit', () => {
   const sol = pricing.findCatalogEntry('gpt-5.6-sol');
-  assert.equal(pricing.PRICE_CATALOG_AS_OF, '2026-09-23');
+  assert.equal(pricing.PRICE_CATALOG_AS_OF, '2026-10-03');
   assert.equal(sol.currency, 'USD');
   assert.deepEqual(sol.aliases, ['gpt-5.6']);
   assert.equal(sol.sourceUrl, 'https://developers.openai.com/api/docs/pricing');
   assert.equal(sol.pricingNotesUrl, 'https://developers.openai.com/api/docs/models/gpt-5.6-sol');
   assert.equal(sol.standard.long.basis, 'inputTokens');
   assert.equal(sol.standard.long.appliesTo, 'entireRequest');
-  assert.equal(sol.fast.multiplier, 2);
+  assert.deepEqual(sol.fast.short, { input: sol.standard.short.input * 2, cachedInput: sol.standard.short.cachedInput * 2, cacheWrite: sol.standard.short.cacheWrite * 2, output: sol.standard.short.output * 2 });
   assert.equal(sol.fast.longSupported, true);
   const terra = pricing.findCatalogEntry('gpt-5.6-terra');
   assert.deepEqual(terra.standard.short, {
@@ -40,7 +40,7 @@ test('catalog is versioned, self-describing, exact, and keeps provider rate boun
     cacheWrite: 5,
     output: 18,
   });
-  assert.equal(terra.asOf, '2026-09-23');
+  assert.equal(terra.asOf, '2026-10-03');
   const luna = pricing.findCatalogEntry('gpt-5.6-luna');
   assert.deepEqual(luna.standard.short, {
     input: 0.2,
@@ -54,7 +54,7 @@ test('catalog is versioned, self-describing, exact, and keeps provider rate boun
     cacheWrite: 0.5,
     output: 1.8,
   });
-  assert.equal(luna.asOf, '2026-09-23');
+  assert.equal(luna.asOf, '2026-10-03');
   const gpt55 = pricing.findCatalogEntry('gpt-5.5');
   assert.equal(gpt55.standard.long.basis, 'inputTokens');
   assert.equal(gpt55.standard.long.appliesTo, 'entireRequest');
@@ -380,7 +380,7 @@ test('v2 migration preserves matching rates until the user explicitly restores c
   const recovery = pricing.restorePresetEquivalentOverrides(profile);
   assert.deepEqual(recovery.restoredModels, ['gpt-5.6-sol', 'gpt-5.4']);
   assert.equal(pricing.resolvePriceProfile('gpt-5.6-sol', recovery.profile).modelMatch, 'preset');
-  assert.equal(pricing.resolvePriceProfile('gpt-5.6-sol', recovery.profile).fast.multiplier, 2);
+  assert.deepEqual(pricing.resolvePriceProfile('gpt-5.6-sol', recovery.profile).fast, pricing.findCatalogEntry('gpt-5.6-sol').fast);
   assert.equal(
     pricing.resolvePriceProfile('gpt-5.6-sol', recovery.profile).standard.long.rates.output,
     30
@@ -434,7 +434,7 @@ test('preset-equivalent v3 recovery is opt-in and preserves real custom override
   assert.ok(recovery.profile.overrides['grok-4.5']);
   assert.equal(recovery.profile.aliases['tenant/sol'], 'gpt-5.6-sol');
   assert.equal(pricing.resolvePriceProfile('tenant/sol', recovery.profile).modelMatch, 'alias');
-  assert.equal(pricing.resolvePriceProfile('tenant/sol', recovery.profile).fast.multiplier, 2);
+  assert.deepEqual(pricing.resolvePriceProfile('tenant/sol', recovery.profile).fast, pricing.findCatalogEntry('gpt-5.6-sol').fast);
   assert.ok(profile.overrides['gpt-5.6-sol']);
 });
 
@@ -1034,8 +1034,12 @@ test('local estimate completeness remains false when aggregate totals exceed pri
 test('Fast policy display distinguishes official and custom multipliers from explicit rates', () => {
   const defaults = pricing.createDefaultPriceProfileV3();
   assert.deepEqual(
+    pricing.getApiFastPolicyDisplay(pricing.resolvePriceProfile('gpt-5.5', defaults)),
+    { kind: 'official-multiplier', multiplier: 2.5 }
+  );
+  assert.deepEqual(
     pricing.getApiFastPolicyDisplay(pricing.resolvePriceProfile('gpt-5.6-sol', defaults)),
-    { kind: 'official-multiplier', multiplier: 2 }
+    { kind: 'explicit-rates', multiplier: null }
   );
 
   const customMultiplier = {
@@ -1071,9 +1075,9 @@ test('Fast policy display distinguishes official and custom multipliers from exp
 });
 
 
-test('Astra pricing is exact and does not redate older provider prices', () => {
+test('Astra pricing is exact and keeps other provider verification dates unchanged', () => {
   const astra = pricing.findCatalogEntry('gpt-6-astra');
-  assert.equal(astra.asOf, '2026-09-23');
+  assert.equal(astra.asOf, '2026-10-03');
   assert.deepEqual(astra.standard.short, { input: 10, cachedInput: 1, cacheWrite: 12.5, output: 50 });
   assert.deepEqual(astra.standard.long.rates, { input: 20, cachedInput: 2, cacheWrite: 25, output: 75 });
   assert.equal(astra.standard.long.thresholdTokens, 272_001);
@@ -1081,7 +1085,7 @@ test('Astra pricing is exact and does not redate older provider prices', () => {
   assert.equal(pricing.findCatalogEntry('gpt-6-astra-preview'), null);
   assert.equal(pricing.findCatalogEntry('tenant/gpt-6-astra'), null);
   assert.equal(pricing.findCatalogEntry('gpt-6–astra'), null);
-  assert.equal(pricing.findCatalogEntry('gpt-5.6-sol').asOf, '2026-09-23');
+  assert.equal(pricing.findCatalogEntry('gpt-5.6-sol').asOf, '2026-10-03');
 });
 
 test('Astra long pricing starts above 272K and uses total input including cache', () => {
@@ -1133,13 +1137,13 @@ test('GPT-6 Sol and Luna preset cards match the official rate card exactly', () 
   assert.deepEqual(sol.standard.short, { input: 2, cachedInput: 0.2, cacheWrite: 2.5, output: 10 });
   assert.deepEqual(sol.standard.long.rates, { input: 4, cachedInput: 0.4, cacheWrite: 5, output: 15 });
   assert.equal(sol.standard.long.thresholdTokens, 272_001);
-  assert.equal(sol.fast.multiplier, 2);
+  assert.deepEqual(sol.fast.short, { input: sol.standard.short.input * 2, cachedInput: sol.standard.short.cachedInput * 2, cacheWrite: sol.standard.short.cacheWrite * 2, output: sol.standard.short.output * 2 });
   assert.equal(sol.fast.longSupported, true);
   const luna = pricing.findCatalogEntry('gpt-6-luna');
   assert.deepEqual(luna.standard.short, { input: 0.1, cachedInput: 0.01, cacheWrite: 0.125, output: 0.5 });
   assert.deepEqual(luna.standard.long.rates, { input: 0.2, cachedInput: 0.02, cacheWrite: 0.25, output: 0.75 });
   assert.equal(luna.standard.long.thresholdTokens, 272_001);
-  assert.equal(luna.fast.multiplier, 2);
+  assert.deepEqual(luna.fast.short, { input: 0.2, cachedInput: 0.02, cacheWrite: 0.25, output: 1 });
   assert.equal(luna.fast.longSupported, true);
 });
 
@@ -1169,4 +1173,99 @@ test('GPT-6 Sol and Luna long pricing starts above 272K and Fast doubles both ba
       approx(fast.amount, standard.amount * 2);
     }
   }
+});
+
+
+test('GPT-6.1 Sol matches the October Standard and Fast tables without changing GPT-6 Sol', () => {
+  const card = pricing.findCatalogEntry('gpt-6.1-sol');
+  assert.equal(card.asOf, '2026-10-03');
+  assert.deepEqual(card.aliases, []);
+  assert.deepEqual(card.standard.short, { input: 2, cachedInput: 0.1, cacheWrite: 2.5, output: 10 });
+  assert.deepEqual(card.standard.long.rates, { input: 4, cachedInput: 0.2, cacheWrite: 5, output: 15 });
+  assert.equal(card.standard.long.thresholdTokens, 272_001);
+  assert.deepEqual(card.fast, {
+    short: { input: 4, cachedInput: 0.2, cacheWrite: 5, output: 20 },
+    long: { input: 8, cachedInput: 0.4, cacheWrite: 10, output: 30 },
+    longSupported: true,
+  });
+  assert.equal(card.fast.multiplier, undefined);
+  assert.equal(pricing.findCatalogEntry('gpt-6-sol').standard.short.cachedInput, 0.2);
+  assert.equal(pricing.findCatalogEntry('gpt-6.1-sol-preview'), null);
+  assert.equal(pricing.findCatalogEntry('tenant/gpt-6.1-sol'), null);
+  for (const [input, band, rates] of [
+    [272_000, 'short', card.fast.short], [272_001, 'long', card.fast.long],
+  ]) {
+    const estimate = pricing.estimateUsageCost('gpt-6.1-sol', {
+      input_tokens: input, cache_read_tokens: 30_000,
+      cache_creation_tokens: 40_000, output_tokens: 100_000,
+    }, undefined, tier('fast'));
+    assert.equal(estimate.status, 'priced');
+    assert.equal(estimate.contextBand, band);
+    assert.deepEqual(estimate.rates, rates);
+    approx(estimate.amount, ((input - 70_000) * rates.input + 30_000 * rates.cachedInput +
+      40_000 * rates.cacheWrite + 100_000 * rates.output) / 1_000_000);
+  }
+  const custom = pricing.createDefaultPriceProfileV3();
+  custom.overrides['gpt-6.1-sol'] = { standard: { short: { input: 7, cachedInput: 0, output: 3 } } };
+  const before = JSON.stringify(custom);
+  assert.equal(pricing.estimateUsageCost('gpt-6.1-sol', { input_tokens: 100_000 }, custom, tier()).modelMatch, 'custom');
+  assert.equal(JSON.stringify(custom), before);
+});
+
+test('explicit Fast long rates roundtrip and cannot be replaced by a uniform multiplier', () => {
+  const profile = pricing.createDefaultPriceProfileV3();
+  const card = pricing.findCatalogEntry('gpt-6.1-sol');
+  profile.overrides['gpt-6.1-sol'] = {
+    standard: card.standard,
+    fast: {
+      short: { input: 7, cachedInput: 0.03, cacheWrite: 0, output: 13 },
+      long: { input: 11, cachedInput: 0.07, cacheWrite: 17, output: 29 },
+      longSupported: true,
+    },
+  };
+  const imported = pricing.importPriceProfileV3(pricing.serializePriceProfileV3(profile));
+  assert.equal(imported.valid, true);
+  assert.deepEqual(imported.profile.overrides, profile.overrides);
+  for (const [input, band] of [[272_000, 'short'], [272_001, 'long']]) {
+    const estimate = pricing.estimateUsageCost('gpt-6.1-sol', {
+      input_tokens: input, cache_read_tokens: 20_000,
+      cache_creation_tokens: 30_000, output_tokens: 40_000,
+    }, imported.profile, tier('fast'));
+    const rates = profile.overrides['gpt-6.1-sol'].fast[band];
+    assert.deepEqual(estimate.rates, rates);
+    approx(estimate.amount, ((input - 50_000) * rates.input + 20_000 * rates.cachedInput +
+      30_000 * rates.cacheWrite + 40_000 * rates.output) / 1_000_000);
+  }
+  imported.profile.assumptions.gptLongContext = 'shortOnly';
+  const shortOnly = pricing.estimateUsageCost('gpt-6.1-sol', { input_tokens: 300_000 }, imported.profile, tier('fast'));
+  assert.equal(shortOnly.contextBand, 'short');
+  assert.deepEqual(shortOnly.rates, profile.overrides['gpt-6.1-sol'].fast.short);
+  profile.overrides['gpt-6.1-sol'].fast.longSupported = false;
+  profile.assumptions.fastLongContext = 'official';
+  assert.equal(pricing.estimateUsageCost('gpt-6.1-sol', { input_tokens: 300_000 }, profile, tier('fast')).status, 'unsupported');
+  profile.assumptions.fastLongContext = 'allow';
+  assert.deepEqual(pricing.estimateUsageCost('gpt-6.1-sol', { input_tokens: 300_000 }, profile, tier('fast')).rates,
+    profile.overrides['gpt-6.1-sol'].fast.long);
+  delete profile.overrides['gpt-6.1-sol'].fast.long;
+  const legacy = pricing.importPriceProfileV3(pricing.serializePriceProfileV3(profile));
+  assert.equal(legacy.valid, true);
+  assert.deepEqual(pricing.estimateUsageCost('gpt-6.1-sol', { input_tokens: 300_000 }, legacy.profile, tier('fast')).rates,
+    profile.overrides['gpt-6.1-sol'].fast.short);
+});
+
+test('Fast import rejects invalid or ambiguous long cards instead of silently dropping them', () => {
+  const profile = pricing.createDefaultPriceProfileV3();
+  const card = pricing.findCatalogEntry('gpt-6.1-sol');
+  for (const fast of [
+    { ...card.fast, long: { ...card.fast.long, input: -1 } },
+    { ...card.fast, long: null },
+    { ...card.fast, long: { input: 1, cachedInput: 1 } },
+    { multiplier: 2, long: card.fast.long, longSupported: true },
+    { ...card.fast, multiplier: 2 },
+  ]) {
+    profile.overrides.local = { standard: card.standard, fast };
+    assert.equal(pricing.preflightPriceProfileImportV3(profile).valid, false);
+  }
+  profile.overrides.local = { standard: { short: card.standard.short }, fast: card.fast };
+  assert.equal(pricing.preflightPriceProfileImportV3(profile).valid, false);
 });

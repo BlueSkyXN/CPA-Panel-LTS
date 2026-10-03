@@ -1,7 +1,7 @@
 /** Official provider catalog data is kept separate from the pricing engine and UI. */
 export const PRICE_CURRENCY = 'USD' as const;
-export const OPENAI_CATALOG_AS_OF = '2026-09-23';
-export const GPT6_ASTRA_CATALOG_AS_OF = '2026-09-23';
+export const OPENAI_CATALOG_AS_OF = '2026-10-03';
+export const GPT6_ASTRA_CATALOG_AS_OF = OPENAI_CATALOG_AS_OF;
 export const ZAI_CATALOG_AS_OF = '2026-07-22';
 export const KIMI_CATALOG_AS_OF = '2026-07-28';
 export const XAI_CATALOG_AS_OF = '2026-07-23';
@@ -42,10 +42,10 @@ export interface StandardPricing {
   long?: LongContextPricing;
 }
 
-/** Fast/Priority is derived from Standard when the official rate is a fixed multiplier. */
+/** Explicit Fast bands share Standard's context threshold; legacy flat cards omit long. */
 export type FastPricing =
-  | { short: TokenRates; multiplier?: never; longSupported: boolean }
-  | { short?: never; multiplier: number; longSupported: boolean };
+  | { short: TokenRates; long?: TokenRates; multiplier?: never; longSupported: boolean }
+  | { short?: never; long?: never; multiplier: number; longSupported: boolean };
 
 export interface PriceCatalogEntry {
   canonicalModel: string;
@@ -105,10 +105,30 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
       short: rateCard(10, 1, 12.5, 50),
       long: longCard(rateCard(20, 2, 25, 75)),
     },
-    fast: { multiplier: 2, longSupported: true },
+    fast: {
+      short: rateCard(20, 2, 25, 100),
+      long: rateCard(40, 4, 50, 150),
+      longSupported: true,
+    },
     sourceUrl: OPENAI_PRICING_SOURCE_URL,
     pricingNotesUrl: modelPricingNotesUrl('gpt-6-astra'),
     asOf: GPT6_ASTRA_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'gpt-6.1-sol',
+    aliases: [],
+    currency: 'USD',
+    standard: {
+      short: rateCard(2, 0.1, 2.5, 10),
+      long: longCard(rateCard(4, 0.2, 5, 15)),
+    },
+    fast: {
+      short: rateCard(4, 0.2, 5, 20),
+      long: rateCard(8, 0.4, 10, 30),
+      longSupported: true,
+    },
+    sourceUrl: OPENAI_PRICING_SOURCE_URL,
+    asOf: OPENAI_CATALOG_AS_OF,
   },
   {
     canonicalModel: 'gpt-6-sol',
@@ -118,7 +138,11 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
       short: rateCard(2, 0.2, 2.5, 10),
       long: longCard(rateCard(4, 0.4, 5, 15)),
     },
-    fast: { multiplier: 2, longSupported: true },
+    fast: {
+      short: rateCard(4, 0.4, 5, 20),
+      long: rateCard(8, 0.8, 10, 30),
+      longSupported: true,
+    },
     sourceUrl: OPENAI_PRICING_SOURCE_URL,
     pricingNotesUrl: modelPricingNotesUrl('gpt-6-sol'),
     asOf: OPENAI_CATALOG_AS_OF,
@@ -131,7 +155,11 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
       short: rateCard(0.1, 0.01, 0.125, 0.5),
       long: longCard(rateCard(0.2, 0.02, 0.25, 0.75)),
     },
-    fast: { multiplier: 2, longSupported: true },
+    fast: {
+      short: rateCard(0.2, 0.02, 0.25, 1),
+      long: rateCard(0.4, 0.04, 0.5, 1.5),
+      longSupported: true,
+    },
     sourceUrl: OPENAI_PRICING_SOURCE_URL,
     pricingNotesUrl: modelPricingNotesUrl('gpt-6-luna'),
     asOf: OPENAI_CATALOG_AS_OF,
@@ -142,7 +170,11 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
     currency: 'USD',
     // 用户提供的价格表：促销价至少持续至 2026-11-21，不推测到期后的价格。
     standard: { short: rateCard(4, 0.4, 5, 20), long: longCard(rateCard(8, 0.8, 10, 30)) },
-    fast: { multiplier: 2, longSupported: true },
+    fast: {
+      short: rateCard(8, 0.8, 10, 40),
+      long: rateCard(16, 1.6, 20, 60),
+      longSupported: true,
+    },
     sourceUrl: OPENAI_PRICING_SOURCE_URL,
     pricingNotesUrl: modelPricingNotesUrl('gpt-5.6-sol'),
     asOf: OPENAI_CATALOG_AS_OF,
@@ -155,7 +187,11 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
       short: rateCard(2, 0.2, 2.5, 12),
       long: longCard(rateCard(4, 0.4, 5, 18)),
     },
-    fast: { multiplier: 2, longSupported: true },
+    fast: {
+      short: rateCard(4, 0.4, 5, 24),
+      long: rateCard(8, 0.8, 10, 36),
+      longSupported: true,
+    },
     sourceUrl: OPENAI_PRICING_SOURCE_URL,
     pricingNotesUrl: modelPricingNotesUrl('gpt-5.6-terra'),
     asOf: OPENAI_CATALOG_AS_OF,
@@ -168,7 +204,11 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
       short: rateCard(0.2, 0.02, 0.25, 1.2),
       long: longCard(rateCard(0.4, 0.04, 0.5, 1.8)),
     },
-    fast: { multiplier: 2, longSupported: true },
+    fast: {
+      short: rateCard(0.4, 0.04, 0.5, 2.4),
+      long: rateCard(0.8, 0.08, 1, 3.6),
+      longSupported: true,
+    },
     sourceUrl: OPENAI_PRICING_SOURCE_URL,
     pricingNotesUrl: modelPricingNotesUrl('gpt-5.6-luna'),
     asOf: OPENAI_CATALOG_AS_OF,

@@ -64,6 +64,28 @@ test('v2 profile migrates once, verifies v3 persistence, and removes the legacy 
   assert.equal(loaded.profile.overrides.free.standard.short.cacheWrite, 0);
 });
 
+test('v3 storage preserves separate Fast long rates across save and load', () => {
+  const storage = createStorage();
+  const profile = pricingStorage.loadPriceProfileV3(storage).profile;
+  profile.overrides.local = {
+    standard: {
+      short: { input: 2, cachedInput: 0.1, output: 10 },
+      long: { thresholdTokens: 272_001, basis: 'inputTokens', appliesTo: 'entireRequest',
+        rates: { input: 4, cachedInput: 0.2, output: 15 } },
+    },
+    fast: {
+      short: { input: 3, cachedInput: 0.03, cacheWrite: 0, output: 17 },
+      long: { input: 9, cachedInput: 0.07, output: 37 },
+      longSupported: true,
+    },
+  };
+  assert.equal(pricingStorage.savePriceProfileV3(profile, storage), true);
+  const loaded = pricingStorage.loadPriceProfileV3(storage);
+  assert.equal(loaded.source, 'v3');
+  assert.deepEqual(loaded.warnings, []);
+  assert.deepEqual(loaded.profile.overrides, profile.overrides);
+});
+
 test('save and reset write only v3 and remove stale v2 data', () => {
   const legacy = JSON.stringify({ legacy: { prompt: 10, completion: 20, cache: 1 } });
   const storage = createStorage({ [pricingStorage.LEGACY_MODEL_PRICE_STORAGE_KEY]: legacy });
