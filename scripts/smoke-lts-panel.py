@@ -2890,6 +2890,7 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
             raise AssertionError("Empty usage unexpectedly produced usage-backed pricing rows")
 
         for model_name in [
+            "gpt-6.1-sol",
             "gpt-5.6-sol",
             "gpt-5.6-terra",
             "gpt-5.6-luna",
@@ -3241,8 +3242,26 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
                 if actual != expected_rate:
                     raise AssertionError(f"Sol {band} {label}: {actual!r}, expected {expected_rate!r}")
             fast_text = sol_row.locator('td[data-label="Fast policies"]').inner_text()
-            if "Official API ×2.00" not in fast_text or "unsupported" in fast_text.lower():
+            if "API explicit rates" not in fast_text or "unsupported" in fast_text.lower():
                 raise AssertionError(f"Sol {band} lost its supported Fast pricing: {fast_text!r}")
+
+        sol61_model = catalog.locator(
+            '[data-testid="preset-pricing-model"][data-model="gpt-6.1-sol"]'
+        )
+        for band, expected_rates, expected_fast in [
+            ("short", {"Input": "$2", "Cached input": "$0.1", "Cache write": "$2.5", "Output": "$10"},
+             "In $4 · Cached $0.2 · Write $5 · Out $20"),
+            ("long", {"Input": "$4", "Cached input": "$0.2", "Cache write": "$5", "Output": "$15"},
+             "In $8 · Cached $0.4 · Write $10 · Out $30"),
+        ]:
+            sol61_row = sol61_model.locator(f'tr[data-context-band="{band}"]')
+            for label, expected_rate in expected_rates.items():
+                actual = sol61_row.locator(f'td[data-label="{label}"] strong').inner_text()
+                if actual != expected_rate:
+                    raise AssertionError(f"GPT-6.1 Sol {band} {label}: {actual!r}")
+            fast_text = sol61_row.locator('td[data-label="Fast policies"]').inner_text()
+            if "API explicit rates" not in fast_text or expected_fast not in fast_text:
+                raise AssertionError(f"GPT-6.1 Sol {band} lost exact Fast prices: {fast_text!r}")
 
         long_context_cell_text = (
             catalog.locator(
@@ -3516,11 +3535,30 @@ def run_usage_pricing_smoke(page: Any) -> None:
     if storage_after_restore["v3"]["overrides"]:
         raise AssertionError("Restoring a preset did not clear the migrated override")
     restored_gpt56_text = gpt56_row.inner_text()
-    for expected in ["Official API ×2.00"]:
+    for expected in ["API explicit rates"]:
         if expected not in restored_gpt56_text:
             raise AssertionError(
                 f"Restored GPT-5.6 row lost separate Fast policies: {restored_gpt56_text!r}"
             )
+
+    fast_long_section = editor.get_by_role("group", name="Fast long-context rates · USD / 1M", exact=True)
+    fast_long_section.get_by_label("Cached input", exact=True).fill("0.07")
+    editor.get_by_role("button", name="Save", exact=True).click()
+    page.get_by_text("Pricing profile saved", exact=True).last.wait_for()
+    stored_fast = page.evaluate(
+        """() => JSON.parse(localStorage.getItem('cli-proxy-model-prices-v3'))
+          .overrides['gpt-5.6-sol'].fast"""
+    )
+    if stored_fast.get("long") != {"input": 16, "cachedInput": 0.07, "cacheWrite": 20, "output": 60}:
+        raise AssertionError(f"Editor lost independent Fast long prices: {stored_fast!r}")
+    if stored_fast.get("short") != {"input": 8, "cachedInput": 0.8, "cacheWrite": 10, "output": 40}:
+        raise AssertionError(f"Editing Fast long prices changed short rates: {stored_fast!r}")
+    with page.expect_download() as explicit_download:
+        page.get_by_role("button", name="Export profile", exact=True).click()
+    explicit_path = explicit_download.value.path()
+    explicit_profile = json.loads(Path(explicit_path).read_text(encoding="utf-8"))
+    if explicit_profile["overrides"]["gpt-5.6-sol"]["fast"] != stored_fast:
+        raise AssertionError("Export lost independent Fast long rates")
 
     fast_mode = editor.get_by_label("Fast rates · USD / 1M", exact=True)
     fast_mode.click()
@@ -3706,7 +3744,7 @@ def run_usage_pricing_smoke(page: Any) -> None:
             "Preset-equivalent v3 recovery removed real custom data or kept the matching override: "
             f"{recovered_profile!r}"
         )
-    if "Official API ×2.00" not in gpt56_row.inner_text():
+    if "API explicit rates" not in gpt56_row.inner_text():
         raise AssertionError("Recovered GPT-5.6 pricing did not inherit the official Fast policy")
 
     page.set_viewport_size({"width": 1024, "height": 768})

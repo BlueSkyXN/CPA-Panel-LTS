@@ -23,5 +23,5 @@ export const getCatalogExplicitFastRates = (
   const fast = entry.fast;
   if (!fast || typeof fast.multiplier === 'number') return null;
   if (band === 'long' && !fast.longSupported && !allowLong) return null;
-  return fast.short;
+  return band === 'long' ? (fast.long ?? fast.short) : fast.short;
 };
