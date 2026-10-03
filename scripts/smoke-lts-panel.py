@@ -4190,7 +4190,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
             "Non-cache Token value cells still expose disruptive hover explanations: "
             f"{unexpected_value_tooltips!r}"
         )
-    for expected_label in ["Fast", "Std", "none", "low", "high", "xhigh", "max"]:
+    for expected_label in ["Fast ?", "Std ?", "none", "low", "high", "xhigh", "max"]:
         card.get_by_text(expected_label, exact=True).first.wait_for()
     resolved_fast_flows = card.locator('[data-service-tier-flow="resolved"]').filter(
         has_text="Fast"
@@ -4206,9 +4206,9 @@ def run_usage_service_tier_smoke(page: Any) -> None:
             f"Expected three compact request-to-effective tier flows, found {combined_flows.count()}"
         )
     for index in range(combined_flows.count()):
-        if combined_flows.nth(index).inner_text().replace("\n", "").replace(" ", "") != "Fast→Std":
+        if combined_flows.nth(index).inner_text().replace("\n", "").replace(" ", "") != "Fast→Std?":
             raise AssertionError(
-                "Combined tier flow did not render Fast → Std with existing badges: "
+                "Combined tier flow must keep the unknown response-program marker: "
                 f"{combined_flows.nth(index).inner_text()!r}"
             )
     outbound_flow = card.locator(
