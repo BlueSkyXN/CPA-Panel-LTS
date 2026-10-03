@@ -3,6 +3,7 @@
  */
 
 import { apiClient } from './client';
+import { mutateProviderConfig, MODEL_SOURCE_INDEX, type ModelPayload } from './providerGroups';
 import { isRecord } from '@/utils/helpers';
 import {
   normalizeGeminiKeyConfig,
@@ -113,8 +114,6 @@ export const getOpenAIProviderMutationIndex = (
   fallbackIndex: number
 ) => provider.sourceIndex ?? fallbackIndex;
 
-const modelIdentity = (record: Record<string, unknown>) => getStringField(record, ['name']);
-
 const apiKeyEntryIdentity = (record: Record<string, unknown>) =>
   getStringField(record, ['api-key']);
 
@@ -218,12 +217,6 @@ const mergeKnownRecordList = (
   });
 };
 
-const getRawSectionList = (rawConfig: unknown, section: string): unknown[] => {
-  if (!isRecord(rawConfig)) return [];
-  const value = rawConfig[section];
-  return Array.isArray(value) ? value : [];
-};
-
 type ProviderRecordMerger = (
   raw: unknown,
   payload: Record<string, unknown>
@@ -259,29 +252,45 @@ const mutateLatestProviderList = async (
   section: string,
   mutate: (latestItems: unknown[]) => unknown[]
 ) => {
-  const rawConfig = await apiClient.get('/config');
-  const latestItems = getRawSectionList(rawConfig, section);
-  await apiClient.put(`/${section}`, stripResponseOnlyProviderFields(mutate(latestItems)));
+  await mutateProviderConfig(section, (items) => stripResponseOnlyProviderFields(mutate(items)));
 };
 
-const buildPreservedList = async <T>(
+const savePreservedList = async <T>(
   section: string,
   configs: T[],
   serialize: (item: T) => Record<string, unknown>,
   mergePayload: (raw: unknown, payload: Record<string, unknown>) => Record<string, unknown>,
   getIdentity: (record: Record<string, unknown>) => string
-) => {
-  const rawConfig = await apiClient.get('/config');
-  const rawItems = getRawSectionList(rawConfig, section);
-  const payloads = configs.map((item) => serialize(item));
-  const rawRecords = rawItems.map((item) => (isRecord(item) ? item : undefined));
-  const usedIndexes = new Set<number>();
-
-  return payloads.map((payload, index) => {
-    const raw = findRawRecord(rawRecords, usedIndexes, payload, index, getIdentity);
-    return mergePayload(raw, payload);
+) =>
+  mutateLatestProviderList(section, (rawItems) => {
+    const payloads = configs.map((item) => serialize(item));
+    const rawRecords = rawItems.map((item) => (isRecord(item) ? item : undefined));
+    const usedIndexes = new Set<number>();
+    return payloads.map((payload, index) => {
+      const raw = findRawRecord(rawRecords, usedIndexes, payload, index, getIdentity);
+      return mergePayload(raw, payload);
+    });
   });
-};
+
+const deleteProviderKey = (section: string, apiKey: string, baseUrl?: string) =>
+  mutateProviderConfig(
+    section,
+    (items) => {
+      const matches = items.filter(
+        (item) => isRecord(item) && matchesProviderKey(item, apiKey, baseUrl)
+      );
+      if (matches.length !== 1)
+        throw new Error('Provider configuration changed or is ambiguous; refresh and try again.');
+      return stripResponseOnlyProviderFields(items.filter((item) => item !== matches[0]));
+    },
+    () => {
+      const query = new URLSearchParams({
+        'api-key': apiKey.trim(),
+        'base-url': (baseUrl ?? '').trim(),
+      });
+      return apiClient.delete(`/${section}?${query}`);
+    }
+  );
 
 const matchesProviderKey = (record: Record<string, unknown>, apiKey: string, baseUrl?: string) =>
   getStringField(record, ['api-key']) === apiKey.trim() &&
@@ -294,16 +303,40 @@ const mergeModelPayloads = (
   raw: unknown,
   models: unknown,
   knownFields: readonly string[] = MODEL_ALIAS_FIELDS
-) =>
-  Array.isArray(models)
-    ? mergeKnownRecordList(
-        isRecord(raw) ? raw.models : undefined,
-        models.filter(isRecord),
-        knownFields,
-        modelIdentity,
-        false
-      )
-    : undefined;
+) => {
+  if (!Array.isArray(models)) return undefined;
+  const rawModels: unknown[] = isRecord(raw) && Array.isArray(raw.models) ? raw.models : [];
+  const used = new Set<number>();
+  return models.filter(isRecord).map((payload: ModelPayload) => {
+    const sourceIndex = payload[MODEL_SOURCE_INDEX];
+    let index = -1;
+    if (typeof sourceIndex === 'number') {
+      if (
+        !Number.isSafeInteger(sourceIndex) ||
+        used.has(sourceIndex) ||
+        !isRecord(rawModels[sourceIndex])
+      ) {
+        throw new Error('Provider models changed; refresh and try again.');
+      }
+      index = sourceIndex;
+    } else if (sourceIndex !== null) {
+      const candidates = rawModels.flatMap((item, i) =>
+        !used.has(i) && isRecord(item) && item.name === payload.name ? [i] : []
+      );
+      const exact = candidates.filter(
+        (i) => (rawModels[i] as Record<string, unknown>).alias === payload.alias
+      );
+      if (exact.length === 1) index = exact[0];
+      else if (candidates.length === 1) index = candidates[0];
+      else if (candidates.length)
+        throw new Error('Provider models are ambiguous; refresh and try again.');
+    }
+    if (index >= 0) used.add(index);
+    const merged = mergeKnownFields(rawModels[index], payload, knownFields) as ModelPayload;
+    merged[MODEL_SOURCE_INDEX] = index >= 0 ? index : null;
+    return merged;
+  });
+};
 
 const mergeProviderKeyPayload = (
   raw: unknown,
@@ -346,20 +379,16 @@ const extractArrayPayload = (data: unknown, key: string): unknown[] => {
   return Array.isArray(list) ? list : [];
 };
 
-const buildProviderDeleteQuery = (apiKey: string, baseUrl?: string) => {
-  const params = new URLSearchParams();
-  params.set('api-key', apiKey.trim());
-  params.set('base-url', (baseUrl ?? '').trim());
-  return `?${params.toString()}`;
-};
-
 const serializeModelAliases = (models?: ModelAlias[], includeImage = false) =>
   Array.isArray(models)
     ? models
         .map((model) => {
           if (!model?.name) return null;
-          const payload: Record<string, unknown> = { name: model.name };
-          if (model.alias && model.alias !== model.name) {
+          const payload: ModelPayload = {
+            name: model.name,
+            [MODEL_SOURCE_INDEX]: model.sourceIndex,
+          };
+          if (model.alias) {
             payload.alias = model.alias;
           }
           if (model.displayName?.trim()) {
@@ -399,7 +428,7 @@ const serializeProviderKey = (config: ProviderKeyConfig) => {
   if (config.baseUrl) payload['base-url'] = config.baseUrl;
   if (config.websockets !== undefined) payload.websockets = config.websockets;
   if (config.proxyUrl) payload['proxy-url'] = config.proxyUrl;
-  if (config.disableCooling) payload['disable-cooling'] = true;
+  if (config.disableCooling !== undefined) payload['disable-cooling'] = config.disableCooling;
   const headers = serializeHeaders(config.headers);
   if (headers) payload.headers = headers;
   const models = serializeModelAliases(config.models);
@@ -470,7 +499,7 @@ const serializeGeminiKey = (config: GeminiKeyConfig) => {
   if (config.prefix?.trim()) payload.prefix = config.prefix.trim();
   if (config.baseUrl) payload['base-url'] = config.baseUrl;
   if (config.proxyUrl) payload['proxy-url'] = config.proxyUrl;
-  if (config.disableCooling) payload['disable-cooling'] = true;
+  if (config.disableCooling !== undefined) payload['disable-cooling'] = config.disableCooling;
   const headers = serializeHeaders(config.headers);
   if (headers) payload.headers = headers;
   const models = serializeModelAliases(config.models);
@@ -497,7 +526,7 @@ const serializeOpenAIProvider = (provider: OpenAIProviderConfig) => {
   if (models && models.length) payload.models = models;
   if (provider.priority !== undefined) payload.priority = provider.priority;
   if (provider.testModel) payload['test-model'] = provider.testModel;
-  if (provider.disableCooling) payload['disable-cooling'] = true;
+  if (provider.disableCooling !== undefined) payload['disable-cooling'] = provider.disableCooling;
   return payload;
 };
 
@@ -509,15 +538,12 @@ export const providersApi = {
   },
 
   saveGeminiKeys: async (configs: GeminiKeyConfig[]) =>
-    apiClient.put(
-      '/gemini-api-key',
-      await buildPreservedList(
-        'gemini-api-key',
-        configs,
-        serializeGeminiKey,
-        (raw, payload) => mergeProviderKeyPayload(raw, payload, GEMINI_KEY_FIELDS),
-        providerKeyIdentity
-      )
+    savePreservedList(
+      'gemini-api-key',
+      configs,
+      serializeGeminiKey,
+      (raw, payload) => mergeProviderKeyPayload(raw, payload, GEMINI_KEY_FIELDS),
+      providerKeyIdentity
     ),
 
   createGeminiKey: (config: GeminiKeyConfig) =>
@@ -538,7 +564,7 @@ export const providersApi = {
     ),
 
   deleteGeminiKey: (apiKey: string, baseUrl?: string) =>
-    apiClient.delete(`/gemini-api-key${buildProviderDeleteQuery(apiKey, baseUrl)}`),
+    deleteProviderKey('gemini-api-key', apiKey, baseUrl),
 
   createInteractionsKey: (config: GeminiKeyConfig) =>
     mutateLatestProviderList('interactions-api-key', (latestItems) =>
@@ -558,7 +584,7 @@ export const providersApi = {
     ),
 
   deleteInteractionsKey: (apiKey: string, baseUrl?: string) =>
-    apiClient.delete(`/interactions-api-key${buildProviderDeleteQuery(apiKey, baseUrl)}`),
+    deleteProviderKey('interactions-api-key', apiKey, baseUrl),
 
   async getCodexConfigs(): Promise<ProviderKeyConfig[]> {
     const data = await apiClient.get('/codex-api-key');
@@ -569,15 +595,12 @@ export const providersApi = {
   },
 
   saveCodexConfigs: async (configs: ProviderKeyConfig[]) =>
-    apiClient.put(
-      '/codex-api-key',
-      await buildPreservedList(
-        'codex-api-key',
-        configs,
-        serializeProviderKey,
-        (raw, payload) => mergeProviderKeyPayload(raw, payload, CODEX_KEY_FIELDS),
-        providerKeyIdentity
-      )
+    savePreservedList(
+      'codex-api-key',
+      configs,
+      serializeProviderKey,
+      (raw, payload) => mergeProviderKeyPayload(raw, payload, CODEX_KEY_FIELDS),
+      providerKeyIdentity
     ),
 
   createCodexConfig: (config: ProviderKeyConfig) =>
@@ -598,7 +621,7 @@ export const providersApi = {
     ),
 
   deleteCodexConfig: (apiKey: string, baseUrl?: string) =>
-    apiClient.delete(`/codex-api-key${buildProviderDeleteQuery(apiKey, baseUrl)}`),
+    deleteProviderKey('codex-api-key', apiKey, baseUrl),
 
   async getXAIConfigs(): Promise<ProviderKeyConfig[]> {
     const data = await apiClient.get('/xai-api-key');
@@ -609,15 +632,12 @@ export const providersApi = {
   },
 
   saveXAIConfigs: async (configs: ProviderKeyConfig[]) =>
-    apiClient.put(
-      '/xai-api-key',
-      await buildPreservedList(
-        'xai-api-key',
-        configs,
-        serializeProviderKey,
-        (raw, payload) => mergeProviderKeyPayload(raw, payload, XAI_KEY_FIELDS),
-        providerKeyIdentity
-      )
+    savePreservedList(
+      'xai-api-key',
+      configs,
+      serializeProviderKey,
+      (raw, payload) => mergeProviderKeyPayload(raw, payload, XAI_KEY_FIELDS),
+      providerKeyIdentity
     ),
 
   createXAIConfig: (config: ProviderKeyConfig) =>
@@ -638,7 +658,7 @@ export const providersApi = {
     ),
 
   deleteXAIConfig: (apiKey: string, baseUrl?: string) =>
-    apiClient.delete(`/xai-api-key${buildProviderDeleteQuery(apiKey, baseUrl)}`),
+    deleteProviderKey('xai-api-key', apiKey, baseUrl),
 
   async getClaudeConfigs(): Promise<ProviderKeyConfig[]> {
     const data = await apiClient.get('/claude-api-key');
@@ -649,15 +669,12 @@ export const providersApi = {
   },
 
   saveClaudeConfigs: async (configs: ProviderKeyConfig[]) =>
-    apiClient.put(
-      '/claude-api-key',
-      await buildPreservedList(
-        'claude-api-key',
-        configs,
-        serializeProviderKey,
-        (raw, payload) => mergeProviderKeyPayload(raw, payload, CLAUDE_KEY_FIELDS),
-        providerKeyIdentity
-      )
+    savePreservedList(
+      'claude-api-key',
+      configs,
+      serializeProviderKey,
+      (raw, payload) => mergeProviderKeyPayload(raw, payload, CLAUDE_KEY_FIELDS),
+      providerKeyIdentity
     ),
 
   createClaudeConfig: (config: ProviderKeyConfig) =>
@@ -678,7 +695,7 @@ export const providersApi = {
     ),
 
   deleteClaudeConfig: (apiKey: string, baseUrl?: string) =>
-    apiClient.delete(`/claude-api-key${buildProviderDeleteQuery(apiKey, baseUrl)}`),
+    deleteProviderKey('claude-api-key', apiKey, baseUrl),
 
   async getVertexConfigs(): Promise<ProviderKeyConfig[]> {
     const data = await apiClient.get('/vertex-api-key');
@@ -689,15 +706,12 @@ export const providersApi = {
   },
 
   saveVertexConfigs: async (configs: ProviderKeyConfig[]) =>
-    apiClient.put(
-      '/vertex-api-key',
-      await buildPreservedList(
-        'vertex-api-key',
-        configs,
-        serializeVertexKey,
-        (raw, payload) => mergeProviderKeyPayload(raw, payload, VERTEX_KEY_FIELDS),
-        providerKeyIdentity
-      )
+    savePreservedList(
+      'vertex-api-key',
+      configs,
+      serializeVertexKey,
+      (raw, payload) => mergeProviderKeyPayload(raw, payload, VERTEX_KEY_FIELDS),
+      providerKeyIdentity
     ),
 
   createVertexConfig: (config: ProviderKeyConfig) =>
@@ -718,7 +732,7 @@ export const providersApi = {
     ),
 
   deleteVertexConfig: (apiKey: string, baseUrl?: string) =>
-    apiClient.delete(`/vertex-api-key${buildProviderDeleteQuery(apiKey, baseUrl)}`),
+    deleteProviderKey('vertex-api-key', apiKey, baseUrl),
 
   async getOpenAIProviders(): Promise<OpenAIProviderConfig[]> {
     const data = await apiClient.get('/openai-compatibility');
@@ -729,15 +743,12 @@ export const providersApi = {
   },
 
   saveOpenAIProviders: async (providers: OpenAIProviderConfig[]) =>
-    apiClient.put(
-      '/openai-compatibility',
-      await buildPreservedList(
-        'openai-compatibility',
-        providers,
-        serializeOpenAIProvider,
-        mergeOpenAIProviderPayload,
-        openAIProviderIdentity
-      )
+    savePreservedList(
+      'openai-compatibility',
+      providers,
+      serializeOpenAIProvider,
+      mergeOpenAIProviderPayload,
+      openAIProviderIdentity
     ),
 
   createOpenAIProvider: (provider: OpenAIProviderConfig) =>
@@ -760,8 +771,28 @@ export const providersApi = {
     ),
 
   updateOpenAIProviderDisabled: (index: number, disabled: boolean) =>
-    apiClient.patch('/openai-compatibility', { index, value: { disabled } }),
+    mutateProviderConfig(
+      'openai-compatibility',
+      (items) => {
+        if (!isRecord(items[index]))
+          throw new Error('Provider configuration changed; refresh and try again.');
+        return stripResponseOnlyProviderFields(
+          items.map((item, current) =>
+            current === index ? { ...(item as Record<string, unknown>), disabled } : item
+          )
+        );
+      },
+      () => apiClient.patch('/openai-compatibility', { index, value: { disabled } })
+    ),
 
   deleteOpenAIProvider: (index: number) =>
-    apiClient.delete(`/openai-compatibility?index=${encodeURIComponent(String(index))}`),
+    mutateProviderConfig(
+      'openai-compatibility',
+      (items) => {
+        if (!isRecord(items[index]))
+          throw new Error('Provider configuration changed; refresh and try again.');
+        return stripResponseOnlyProviderFields(items.filter((_, current) => current !== index));
+      },
+      () => apiClient.delete(`/openai-compatibility?index=${encodeURIComponent(String(index))}`)
+    ),
 };

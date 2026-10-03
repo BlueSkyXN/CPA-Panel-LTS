@@ -57,6 +57,7 @@ import {
   type CodexRateLimitResetCreditsInfo,
 } from './resetCredits';
 import codexQuotaStyles from './styles.module.scss';
+import { fetchCodexSubscriptionActiveUntil, normalizeCodexAccountCredits } from './account';
 
 const QUOTA_PROGRESS_HIGH_THRESHOLD = 70;
 const QUOTA_PROGRESS_MEDIUM_THRESHOLD = 30;
@@ -251,7 +252,7 @@ const buildCodexQuotaWindows = (payload: CodexUsagePayload, t: TFunction): Codex
   // known ones to their display label and keep the raw value for window IDs.
   const formatLimitDisplayName = (rawName: string) => {
     const knownNames: Record<string, string> = {
-      'gpt-reserve': 'GPT-Reserve'
+      'gpt-reserve': 'GPT-Reserve',
     };
     return knownNames[rawName.trim().toLowerCase()] ?? rawName;
   };
@@ -1210,6 +1211,8 @@ const fetchCodexQuota = async (
   planType: string | null;
   accountEmail: string | null;
   subscriptionActiveUntil: string | number | null;
+  creditBalance: string | null;
+  creditsUnlimited: boolean;
   rateLimitResetCreditsAvailableCount: number | null;
   rateLimitResetCreditExpiresAt: string | number | null;
   rateLimitResetCredits: CodexRateLimitResetCredit[];
@@ -1224,7 +1227,7 @@ const fetchCodexQuota = async (
   }
 
   const planTypeFromFile = resolveCodexPlanType(file);
-  const subscriptionActiveUntil = resolveCodexSubscriptionActiveUntil(file);
+  const subscriptionActiveUntilFromFile = resolveCodexSubscriptionActiveUntil(file);
   const accountId = resolveCodexChatgptAccountId(file);
 
   const requestHeader: Record<string, string> = {
@@ -1234,12 +1237,11 @@ const fetchCodexQuota = async (
     requestHeader['Chatgpt-Account-Id'] = accountId;
   }
 
-  const result = await apiCallApi.request({
-    authIndex,
-    method: 'GET',
-    url: CODEX_USAGE_URL,
-    header: requestHeader,
-  });
+  const [result, liveSubscriptionActiveUntil] = await Promise.all([
+    apiCallApi.request({ authIndex, method: 'GET', url: CODEX_USAGE_URL, header: requestHeader }),
+    fetchCodexSubscriptionActiveUntil(authIndex, accountId, requestHeader),
+  ]);
+  const subscriptionActiveUntil = liveSubscriptionActiveUntil ?? subscriptionActiveUntilFromFile;
 
   if (result.statusCode < 200 || result.statusCode >= 300) {
     const error = createStatusError(getApiCallErrorMessage(result), result.statusCode);
@@ -1252,6 +1254,7 @@ const fetchCodexQuota = async (
   }
 
   const planTypeFromUsage = normalizePlanType(payload.plan_type ?? payload.planType);
+  const accountCredits = normalizeCodexAccountCredits(payload.credits);
   const resetCredits = payload.rate_limit_reset_credits ?? payload.rateLimitResetCredits ?? null;
   const embeddedResetCreditInfo = getCodexRateLimitResetCreditsInfo(resetCredits);
   let rateLimitResetCreditsAvailableCount = embeddedResetCreditInfo.availableCount;
@@ -1304,6 +1307,8 @@ const fetchCodexQuota = async (
     planType: resolvedPlanType,
     accountEmail,
     subscriptionActiveUntil,
+    creditBalance: accountCredits.balance,
+    creditsUnlimited: accountCredits.unlimited,
     rateLimitResetCreditsAvailableCount,
     rateLimitResetCreditExpiresAt,
     rateLimitResetCredits,
@@ -1365,6 +1370,8 @@ const resetCodexQuota = async (
   planType: string | null;
   accountEmail: string | null;
   subscriptionActiveUntil: string | number | null;
+  creditBalance: string | null;
+  creditsUnlimited: boolean;
   rateLimitResetCreditsAvailableCount: number | null;
   rateLimitResetCreditExpiresAt: string | number | null;
   rateLimitResetCredits: CodexRateLimitResetCredit[];
@@ -1417,6 +1424,8 @@ const renderCodexItems = (
   const planType = quota.planType ?? null;
   const accountEmail = normalizeStringValue(quota.accountEmail);
   const subscriptionActiveUntil = quota.subscriptionActiveUntil ?? null;
+  const creditBalance = quota.creditBalance ?? null;
+  const creditsUnlimited = quota.creditsUnlimited === true;
   const rateLimitResetCreditsAvailableCount = quota.rateLimitResetCreditsAvailableCount ?? null;
   const rateLimitResetCreditExpiresAt = quota.rateLimitResetCreditExpiresAt ?? null;
   const rateLimitResetCredits = quota.rateLimitResetCredits ?? [];
@@ -1424,6 +1433,7 @@ const renderCodexItems = (
   const getPlanLabel = (pt?: string | null): string | null => {
     const normalized = normalizePlanType(pt);
     if (!normalized) return null;
+    if (normalized === 'self_serve_business_prolite') return t('codex_quota.plan_business_premium');
     if (normalized === 'pro') return t('codex_quota.plan_pro');
     if (PREMIUM_CODEX_PLAN_TYPES.has(normalized) && normalized !== 'pro') {
       return t('codex_quota.plan_prolite');
@@ -1497,6 +1507,8 @@ const renderCodexItems = (
   if (
     planLabel ||
     expiryLabel ||
+    creditBalance !== null ||
+    creditsUnlimited ||
     rateLimitResetCreditsAvailableCount !== null ||
     resetCreditExpiryLabel
   ) {
@@ -1521,6 +1533,20 @@ const renderCodexItems = (
           'subscription-expiry',
           h('span', { className: styleMap.codexPlanLabel }, t('codex_quota.expires_label')),
           h('span', { className: styleMap.codexPlanValue }, expiryLabel)
+        )
+      );
+    }
+
+    if (creditsUnlimited || creditBalance !== null) {
+      planNodes.push(
+        renderCodexPlanItem(
+          'credit-balance',
+          h('span', { className: styleMap.codexPlanLabel }, t('codex_quota.credit_balance_label')),
+          h(
+            'span',
+            { className: styleMap.codexPlanValue },
+            creditsUnlimited ? t('codex_quota.credit_unlimited') : creditBalance
+          )
         )
       );
     }
@@ -1805,6 +1831,8 @@ export const CODEX_CONFIG: QuotaConfig<
     planType: string | null;
     accountEmail: string | null;
     subscriptionActiveUntil: string | number | null;
+    creditBalance: string | null;
+    creditsUnlimited: boolean;
     rateLimitResetCreditsAvailableCount: number | null;
     rateLimitResetCreditExpiresAt: string | number | null;
     rateLimitResetCredits: CodexRateLimitResetCredit[];
@@ -1837,6 +1865,8 @@ export const CODEX_CONFIG: QuotaConfig<
     planType: data.planType,
     accountEmail: data.accountEmail,
     subscriptionActiveUntil: data.subscriptionActiveUntil,
+    creditBalance: data.creditBalance,
+    creditsUnlimited: data.creditsUnlimited,
     rateLimitResetCreditsAvailableCount: data.rateLimitResetCreditsAvailableCount,
     rateLimitResetCreditExpiresAt: data.rateLimitResetCreditExpiresAt,
     rateLimitResetCredits: data.rateLimitResetCredits,

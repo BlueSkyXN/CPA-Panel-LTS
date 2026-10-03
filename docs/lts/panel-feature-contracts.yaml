@@ -346,6 +346,8 @@ features:
       - src/components/providers/hooks/useProviderStats.ts
       - src/components/providers/ProviderStatusBar.tsx
       - src/services/api/providers.ts
+      - src/services/api/providerGroups.ts
+      - src/services/api/providerGroups.test.mjs
       - src/services/api/usage.ts
       - src/utils/usage.ts
       - src/utils/usageIndex.ts
@@ -394,6 +396,8 @@ features:
       - src/components/ui/modelInputListUtils.ts
       - src/services/api/config.ts
       - src/services/api/providers.ts
+      - src/services/api/providerGroups.ts
+      - src/services/api/providerGroups.test.mjs
       - src/services/api/transformers.ts
       - src/stores/useConfigStore.ts
       - src/types/config.ts
@@ -661,7 +665,7 @@ features:
 
   - id: config-management
     status: shared
-    reason: Source and visual config saves must preserve unmanaged YAML, plugin store sources, concurrent server-side changes, and the Core weighted-round-robin routing strategy.
+    reason: Source and visual saves preserve unmanaged YAML and concurrent changes across legacy and v8 layouts without confusing client access keys with provider groups or redirecting LTS usage APIs.
     routes:
       - /config
     panel_files:
@@ -672,6 +676,9 @@ features:
       - src/hooks/useVisualConfig.ts
       - src/services/api/config.ts
       - src/services/api/configFile.ts
+      - src/utils/configLayout.ts
+      - src/utils/configLayout.test.mjs
+      - src/services/api/configFile.test.mjs
       - src/types/visualConfig.ts
       - src/utils/credentialWeight.ts
       - src/utils/apiKey.ts

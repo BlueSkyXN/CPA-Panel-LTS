@@ -9,6 +9,7 @@ export function resolveAuthProvider(file: AuthFileItem): string {
   const raw = file.provider ?? file.type ?? '';
   const key = String(raw).trim().toLowerCase().replace(/_/g, '-');
   if (key === 'x-ai' || key === 'grok') return 'xai';
+  if (key === 'kimi-ai') return 'kimi';
   return key;
 }
 

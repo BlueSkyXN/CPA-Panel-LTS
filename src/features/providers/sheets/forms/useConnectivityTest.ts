@@ -1,3 +1,5 @@
+import { apiClient } from '@/services/api/client';
+import { createProbeRequestGuard } from '../../probeRequests';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiCallApi, getApiCallErrorMessage } from '@/services/api';
 import {
@@ -57,6 +59,7 @@ const resolveBearerToken = (headers: Record<string, string>): string => {
 export interface UseConnectivityTestArgs {
   brand: ProviderBrand;
   baseUrl: string;
+  proxyUrl?: string;
   testModel?: string;
   models: ModelEntryInput[];
   formHeaders: Array<{ key: string; value: string }>;
@@ -95,6 +98,7 @@ export function useConnectivityTest(
   const {
     brand,
     baseUrl,
+    proxyUrl,
     testModel,
     models,
     formHeaders,
@@ -153,6 +157,7 @@ export function useConnectivityTest(
     const m = models.map((it) => `${it.name}:${it.alias ?? ''}`).join('|');
     return [
       baseUrl,
+      proxyUrl ?? '',
       (testModel ?? '').trim(),
       apiKey ?? '',
       fallbackApiKey ?? '',
@@ -160,7 +165,14 @@ export function useConnectivityTest(
       h,
       m,
     ].join('||');
-  }, [apiKey, authIndex, baseUrl, fallbackApiKey, testModel, formHeaders, models]);
+  }, [apiKey, authIndex, baseUrl, proxyUrl, fallbackApiKey, testModel, formHeaders, models]);
+
+  const requests = useRef(createProbeRequestGuard());
+  useEffect(() => {
+    requests.current.invalidate();
+    setInFlight(0);
+    return () => requests.current.invalidate();
+  }, [signature, entrySignatures, brand]);
 
   const lastSignatureRef = useRef(signature);
   useEffect(() => {
@@ -232,12 +244,17 @@ export function useConnectivityTest(
         }
       }
 
+      const generation = apiClient.getConnectionGeneration();
+      const request = requests.current.start(`openai-${idx}`, () =>
+        apiClient.isCurrentConnection(generation)
+      );
       updateOpenaiStatus(idx, { state: 'loading', message: '' });
       setInFlight((n) => n + 1);
       try {
         const result = await apiCallApi.request(
           {
             authIndex: resolvedAuthIndex,
+            proxy_url: entry?.proxyUrl?.trim() || undefined,
             method: 'POST',
             url: endpoint,
             header: headerObj,
@@ -250,19 +267,21 @@ export function useConnectivityTest(
           },
           { timeout: DEFAULT_TIMEOUT_MS }
         );
+        if (!request.current()) return false;
         if (result.statusCode < 200 || result.statusCode >= 300) {
           throw new Error(getApiCallErrorMessage(result));
         }
         updateOpenaiStatus(idx, { state: 'success', message: '' });
         return true;
       } catch (err) {
+        if (!request.current()) return false;
         updateOpenaiStatus(idx, {
           state: 'error',
           message: requestFailureMessage(err, messages),
         });
         return false;
       } finally {
-        setInFlight((n) => n - 1);
+        if (request.ownsSession()) setInFlight((n) => Math.max(0, n - 1));
       }
     },
     [
@@ -330,12 +349,17 @@ export function useConnectivityTest(
       }
     }
 
+    const generation = apiClient.getConnectionGeneration();
+    const request = requests.current.start('codex', () =>
+      apiClient.isCurrentConnection(generation)
+    );
     setCodexStatus({ state: 'loading', message: '' });
     setInFlight((n) => n + 1);
     try {
       const result = await apiCallApi.request(
         {
           authIndex: resolvedAuthIndex,
+          proxy_url: proxyUrl?.trim() || undefined,
           method: 'POST',
           url: endpoint,
           header: headerObj,
@@ -347,19 +371,32 @@ export function useConnectivityTest(
         },
         { timeout: DEFAULT_TIMEOUT_MS }
       );
+      if (!request.current()) return;
       if (result.statusCode < 200 || result.statusCode >= 300) {
         throw new Error(getApiCallErrorMessage(result));
       }
       setCodexStatus({ state: 'success', message: '' });
     } catch (err) {
+      if (!request.current()) return;
       setCodexStatus({
         state: 'error',
         message: requestFailureMessage(err, messages),
       });
     } finally {
-      setInFlight((n) => n - 1);
+      if (request.ownsSession()) setInFlight((n) => Math.max(0, n - 1));
     }
-  }, [apiKey, authIndex, baseUrl, brand, fallbackApiKey, formHeaders, messages, models, testModel]);
+  }, [
+    apiKey,
+    authIndex,
+    baseUrl,
+    brand,
+    fallbackApiKey,
+    formHeaders,
+    messages,
+    models,
+    testModel,
+    proxyUrl,
+  ]);
 
   const runGemini = useCallback(async (): Promise<void> => {
     if (brand !== 'gemini' && brand !== 'interactions') return;
@@ -406,12 +443,17 @@ export function useConnectivityTest(
       headerObj['Api-Revision'] = INTERACTIONS_API_REVISION;
     }
 
+    const generation = apiClient.getConnectionGeneration();
+    const request = requests.current.start('gemini', () =>
+      apiClient.isCurrentConnection(generation)
+    );
     setGeminiStatus({ state: 'loading', message: '' });
     setInFlight((n) => n + 1);
     try {
       const result = await apiCallApi.request(
         {
           authIndex: resolvedAuthIndex,
+          proxy_url: proxyUrl?.trim() || undefined,
           method: 'POST',
           url: endpoint,
           header: headerObj,
@@ -426,19 +468,32 @@ export function useConnectivityTest(
         },
         { timeout: DEFAULT_TIMEOUT_MS }
       );
+      if (!request.current()) return;
       if (result.statusCode < 200 || result.statusCode >= 300) {
         throw new Error(getApiCallErrorMessage(result));
       }
       setGeminiStatus({ state: 'success', message: '' });
     } catch (err) {
+      if (!request.current()) return;
       setGeminiStatus({
         state: 'error',
         message: requestFailureMessage(err, messages),
       });
     } finally {
-      setInFlight((n) => n - 1);
+      if (request.ownsSession()) setInFlight((n) => Math.max(0, n - 1));
     }
-  }, [apiKey, authIndex, baseUrl, brand, fallbackApiKey, formHeaders, messages, models, testModel]);
+  }, [
+    apiKey,
+    authIndex,
+    baseUrl,
+    brand,
+    fallbackApiKey,
+    formHeaders,
+    messages,
+    models,
+    testModel,
+    proxyUrl,
+  ]);
 
   const runClaude = useCallback(async (): Promise<void> => {
     if (brand !== 'claude' && brand !== 'claudeApi') return;
@@ -480,12 +535,17 @@ export function useConnectivityTest(
       headerObj['x-api-key'] = '$TOKEN$';
     }
 
+    const generation = apiClient.getConnectionGeneration();
+    const request = requests.current.start('claude', () =>
+      apiClient.isCurrentConnection(generation)
+    );
     setClaudeStatus({ state: 'loading', message: '' });
     setInFlight((n) => n + 1);
     try {
       const result = await apiCallApi.request(
         {
           authIndex: resolvedAuthIndex,
+          proxy_url: proxyUrl?.trim() || undefined,
           method: 'POST',
           url: endpoint,
           header: headerObj,
@@ -497,19 +557,32 @@ export function useConnectivityTest(
         },
         { timeout: DEFAULT_TIMEOUT_MS }
       );
+      if (!request.current()) return;
       if (result.statusCode < 200 || result.statusCode >= 300) {
         throw new Error(getApiCallErrorMessage(result));
       }
       setClaudeStatus({ state: 'success', message: '' });
     } catch (err) {
+      if (!request.current()) return;
       setClaudeStatus({
         state: 'error',
         message: requestFailureMessage(err, messages),
       });
     } finally {
-      setInFlight((n) => n - 1);
+      if (request.ownsSession()) setInFlight((n) => Math.max(0, n - 1));
     }
-  }, [apiKey, authIndex, baseUrl, brand, fallbackApiKey, formHeaders, messages, models, testModel]);
+  }, [
+    apiKey,
+    authIndex,
+    baseUrl,
+    brand,
+    fallbackApiKey,
+    formHeaders,
+    messages,
+    models,
+    testModel,
+    proxyUrl,
+  ]);
 
   return {
     openaiStatuses,

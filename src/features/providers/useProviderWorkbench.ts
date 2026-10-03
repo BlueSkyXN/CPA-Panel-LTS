@@ -134,6 +134,7 @@ const buildModelAliases = (
   (models ?? [])
     .map((m) => {
       const entry: ModelAlias = {
+        sourceIndex: m.sourceIndex,
         name: m.name.trim(),
         alias: m.alias?.trim() || undefined,
         displayName: m.displayName?.trim() || undefined,
@@ -167,7 +168,7 @@ const buildProviderKeyConfig = (
     models: models.length ? models : undefined,
     headers: Object.keys(headers).length ? headers : undefined,
     excludedModels: excluded,
-    disableCooling: input.disableCooling === true,
+    disableCooling: input.disableCooling,
     authIndex: existing?.authIndex,
   };
   if ((brand === 'codex' || brand === 'xai') && input.websockets !== undefined) {
@@ -227,7 +228,7 @@ const buildOpenAIConfig = (
     prefix: input.prefix.trim() || undefined,
     apiKeyEntries,
     disabled: input.disabled,
-    disableCooling: input.disableCooling === true,
+    disableCooling: input.disableCooling,
     headers: Object.keys(headers).length ? headers : undefined,
     models: models.length ? models : undefined,
     priority: input.priority,
@@ -265,7 +266,7 @@ const buildSponsorOpenAIConfig = (
     baseUrl: urls.openai,
     prefix: entry.prefix.trim() || undefined,
     disabled: entry.disabled,
-    disableCooling: entry.disableCooling === true,
+    disableCooling: entry.disableCooling,
     priority: entry.priority,
     apiKeyEntries,
     models: models.length ? models : undefined,
@@ -293,7 +294,7 @@ const buildSponsorProviderKeyConfig = (
     prefix: entry.prefix.trim() || undefined,
     priority: entry.priority,
     weight: entry.weight,
-    disableCooling: entry.disableCooling === true,
+    disableCooling: entry.disableCooling,
     excludedModels: excluded,
     models: models.length ? models : undefined,
   };
@@ -319,7 +320,7 @@ const buildSponsorGeminiConfig = (
     prefix: entry.prefix.trim() || undefined,
     priority: entry.priority,
     weight: entry.weight,
-    disableCooling: entry.disableCooling === true,
+    disableCooling: entry.disableCooling,
     excludedModels: excluded,
     models: models.length ? models : undefined,
   };
@@ -784,7 +785,9 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           await providersApi.deleteGeminiKey(sel.apiKey, sel.baseUrl);
         } else if (sel.brand === 'interactions') {
           await providersApi.deleteInteractionsKey(sel.apiKey, sel.baseUrl);
-          const next = (config?.interactionsApiKeys ?? []).filter((_, index) => index !== sel.index);
+          const next = (config?.interactionsApiKeys ?? []).filter(
+            (_, index) => index !== sel.index
+          );
           updateConfigValue('interactions-api-key', next);
         } else if (sel.brand === 'codex') {
           await providersApi.deleteCodexConfig(sel.apiKey, sel.baseUrl);

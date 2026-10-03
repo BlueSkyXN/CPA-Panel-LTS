@@ -53,6 +53,7 @@
     "hint_single": "Click a name to switch connections. Only one instance stays connected unless you enable multi-instance below."
   },
   "codex_quota": {
+    "plan_business_premium": "Business Premium",
     "title": "Codex Quota",
     "empty_title": "No Codex Auth Files",
     "empty_desc": "Upload a Codex credential to view quota.",
@@ -108,8 +109,8 @@
     "plan_plus": "Plus",
     "plan_team": "Team",
     "plan_free": "Free",
-    "plan_pro": "Pro 20x",
-    "plan_prolite": "Pro 5x",
+    "plan_pro": "Pro 200",
+    "plan_prolite": "Pro 100",
     "auth_required": "The ChatGPT session expired or the credential is invalid. Re-authenticate before querying.",
     "quota_team_permission_hint": "This Team credential cannot query Codex quota. Team plans may require a workspace owner/admin account.",
     "quota_permission_hint": "This credential cannot query Codex quota. Check the account permission and Codex access state.",
@@ -154,7 +155,9 @@
     "weekly_estimate_inline_title": "Estimated from UTC day buckets; about {{withoutResetDay}} Credit excluding reset day, {{withResetDay}} Credit including reset day. The card shows the reset-day-included basis.",
     "monthly_window": "Monthly limit",
     "code_review_monthly_window": "Code review monthly limit",
-    "additional_monthly_window": "{{name}} monthly limit"
+    "additional_monthly_window": "{{name}} monthly limit",
+    "credit_balance_label": "Credit balance",
+    "credit_unlimited": "Unlimited"
   },
   "auth_files": {
     "codex_remote_cloud_connect_environment_button": "Codex Remote Cloud Connect Environments",

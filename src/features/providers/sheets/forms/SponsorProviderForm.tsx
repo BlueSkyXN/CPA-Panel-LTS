@@ -1,3 +1,4 @@
+import { mergeDiscoveredModels } from '../../modelEntries';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Collapsible } from '@/components/ui/Collapsible';
@@ -14,7 +15,6 @@ import { hasDisableAllModelsRule } from '@/components/providers/utils';
 import { maskApiKey } from '@/utils/format';
 import { MAX_CREDENTIAL_WEIGHT } from '@/utils/credentialWeight';
 import type { ModelAlias } from '@/types';
-import type { ModelInfo } from '@/utils/models';
 import { isSponsorPartialMutationError } from '../../sponsorMutationRecovery';
 import {
   discoveryBrandForSponsorProtocol,
@@ -77,7 +77,12 @@ interface SponsorKeyEntryCardProps {
   onRemove: () => void;
 }
 
-const emptyModel = (): ModelEntryInput => ({ name: '', alias: '', displayName: '' });
+const emptyModel = (): ModelEntryInput => ({
+  sourceIndex: null,
+  name: '',
+  alias: '',
+  displayName: '',
+});
 
 const emptySponsorKeyEntry = (
   definition: SponsorProviderDefinition,
@@ -90,7 +95,7 @@ const emptySponsorKeyEntry = (
   proxyUrl: '',
   prefix: '',
   disabled: false,
-  disableCooling: false,
+  disableCooling: undefined,
   priority: undefined,
   weight: undefined,
   models: [emptyModel()],
@@ -103,7 +108,7 @@ const emptySponsorForm = (definition: SponsorProviderDefinition): ProviderEntryF
   proxyUrl: '',
   prefix: '',
   disabled: false,
-  disableCooling: false,
+  disableCooling: undefined,
   priority: undefined,
   weight: undefined,
   models: [],
@@ -128,6 +133,7 @@ const protocolUrlForEntry = (
 const modelsFromConfig = (models: ModelAlias[] | undefined): ModelEntryInput[] =>
   models?.length
     ? models.map((model) => ({
+        sourceIndex: model.sourceIndex,
         name: model.name ?? '',
         alias: model.alias ?? '',
         displayName: model.displayName ?? '',
@@ -152,7 +158,7 @@ const sponsorEntryFromProviderKey = (
   proxyUrl: config.proxyUrl ?? '',
   prefix: config.prefix ?? '',
   disabled: hasDisableAllModelsRule(config.excludedModels),
-  disableCooling: config.disableCooling === true,
+  disableCooling: config.disableCooling,
   priority: config.priority,
   weight: config.weight,
   models: modelsFromConfig(config.models),
@@ -170,7 +176,7 @@ const sponsorEntryFromOpenAI = (
     proxyUrl: firstEntry?.proxyUrl ?? '',
     prefix: config.prefix ?? '',
     disabled: config.disabled === true,
-    disableCooling: config.disableCooling === true,
+    disableCooling: config.disableCooling,
     priority: config.priority,
     weight: firstEntry?.weight,
     models: modelsFromConfig(config.models),
@@ -191,40 +197,6 @@ const sponsorKeyEntriesFromRaw = (
     return config ? [sponsorEntryFromProviderKey(definition, protocol, config)] : [];
   });
   return entries.length ? entries : [emptySponsorKeyEntry(definition)];
-};
-
-const applyDiscoveredModels = (
-  currentModels: ModelEntryInput[],
-  incoming: ModelInfo[]
-): ModelEntryInput[] => {
-  if (!incoming.length) return currentModels;
-  const seen = new Set<string>();
-  const next: ModelEntryInput[] = [];
-  currentModels.forEach((entry) => {
-    const trimmed = (entry.name ?? '').trim();
-    if (trimmed) {
-      if (seen.has(trimmed)) return;
-      seen.add(trimmed);
-    }
-    next.push(entry);
-  });
-  const placeholderIdx = next.findIndex(
-    (entry) =>
-      !(entry.name ?? '').trim() && !(entry.alias ?? '').trim() && !(entry.displayName ?? '').trim()
-  );
-  if (placeholderIdx !== -1) {
-    next.splice(placeholderIdx, 1);
-  }
-  incoming.forEach((info) => {
-    const trimmed = info.name.trim();
-    if (!trimmed || seen.has(trimmed)) return;
-    seen.add(trimmed);
-    next.push({
-      name: trimmed,
-      alias: (info.alias ?? '').trim(),
-    });
-  });
-  return next.length ? next : [emptyModel()];
 };
 
 function SponsorModelSection({
@@ -289,7 +261,7 @@ function SponsorModelSection({
             hasFetched={discovery.hasFetched}
             existingNames={existingModelNames}
             mutating={mutating}
-            onApply={(picked) => onChange(applyDiscoveredModels(modelsList, picked))}
+            onApply={(picked) => onChange(mergeDiscoveredModels(modelsList, picked))}
             onReload={() => void discovery.fetch()}
             onClose={() => setDiscoveryOpen(false)}
           />
@@ -350,6 +322,7 @@ function SponsorKeyEntryCard({
   const discovery = useModelDiscovery({
     brand: discoveryBrandForSponsorProtocol(entry.protocol),
     baseUrl: endpointUrl,
+    proxyUrl: entry.proxyUrl,
     formHeaders: discoveryHeaders,
     apiKey: entry.apiKey,
     fallbackApiKey: entry.existingApiKey,

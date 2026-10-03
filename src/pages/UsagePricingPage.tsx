@@ -68,6 +68,11 @@ interface PricingEditorDraft {
   fastCachedInput: string;
   fastCacheWrite: string;
   fastOutput: string;
+  fastLongEnabled: boolean;
+  fastLongInput: string;
+  fastLongCachedInput: string;
+  fastLongCacheWrite: string;
+  fastLongOutput: string;
   fastLongSupported: boolean;
 }
 
@@ -119,6 +124,11 @@ const draftFromSummary = (
     fastCachedInput: rateToInput(fastRates?.cachedInput),
     fastCacheWrite: rateToInput(fastRates?.cacheWrite),
     fastOutput: rateToInput(fastRates?.output),
+    fastLongEnabled: fast?.long !== undefined,
+    fastLongInput: rateToInput(fast?.long?.input),
+    fastLongCachedInput: rateToInput(fast?.long?.cachedInput),
+    fastLongCacheWrite: rateToInput(fast?.long?.cacheWrite),
+    fastLongOutput: rateToInput(fast?.long?.output),
     fastLongSupported: fast?.longSupported ?? false,
   };
 };
@@ -220,7 +230,22 @@ const buildDraftProfile = (
       draft.fastOutput
     );
     if (!fastRates) return { profile: null, error: 'rates' };
-    fast = { short: fastRates, longSupported: draft.fastLongSupported };
+    const long = draft.fastLongEnabled
+      ? parseRates(
+          draft.fastLongInput,
+          draft.fastLongCachedInput,
+          draft.fastLongCacheWrite,
+          draft.fastLongOutput
+        )
+      : undefined;
+    if (long === null || (draft.fastLongEnabled && !standard.long)) {
+      return { profile: null, error: 'rates' };
+    }
+    fast = {
+      short: fastRates,
+      ...(long === undefined ? {} : { long }),
+      longSupported: draft.fastLongSupported,
+    };
   } else if (draft.fastMode === 'multiplier') {
     const multiplier = Number(draft.fastMultiplier);
     if (!Number.isFinite(multiplier) || multiplier <= 0) {
@@ -671,6 +696,61 @@ export function UsagePricingPage() {
                 onChange={(event) => updateDraft('fastOutput', event.target.value)}
               />
             </div>
+          )}
+          {draft.fastMode === 'rates' && (
+            <>
+              <ToggleSwitch
+                checked={draft.fastLongEnabled}
+                onChange={(value) => updateDraft('fastLongEnabled', value)}
+                disabled={!draft.longEnabled && !draft.fastLongEnabled}
+                label={t('usage_stats.pricing_fast_long_rates_enable')}
+              />
+              <span className={styles.editorDomainNotice}>
+                {t('usage_stats.pricing_fast_long_rates_hint')}
+              </span>
+              {draft.fastLongEnabled && (
+                <fieldset className={styles.editorSection}>
+                  <legend className={styles.editorSectionTitle}>
+                    {t('usage_stats.pricing_fast_long_rates')}
+                  </legend>
+                  <div className={styles.rateGrid}>
+                    <Input
+                      label={t('usage_stats.pricing_rate_input')}
+                      type="number"
+                      min="0"
+                      step="0.0001"
+                      value={draft.fastLongInput}
+                      onChange={(event) => updateDraft('fastLongInput', event.target.value)}
+                    />
+                    <Input
+                      label={t('usage_stats.pricing_rate_cached_input')}
+                      type="number"
+                      min="0"
+                      step="0.0001"
+                      value={draft.fastLongCachedInput}
+                      onChange={(event) => updateDraft('fastLongCachedInput', event.target.value)}
+                    />
+                    <Input
+                      label={t('usage_stats.pricing_rate_cache_write')}
+                      type="number"
+                      min="0"
+                      step="0.0001"
+                      value={draft.fastLongCacheWrite}
+                      placeholder={t('usage_stats.pricing_auto')}
+                      onChange={(event) => updateDraft('fastLongCacheWrite', event.target.value)}
+                    />
+                    <Input
+                      label={t('usage_stats.pricing_rate_output')}
+                      type="number"
+                      min="0"
+                      step="0.0001"
+                      value={draft.fastLongOutput}
+                      onChange={(event) => updateDraft('fastLongOutput', event.target.value)}
+                    />
+                  </div>
+                </fieldset>
+              )}
+            </>
           )}
           {draft.fastMode !== 'none' && (
             <ToggleSwitch

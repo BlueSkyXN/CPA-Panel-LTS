@@ -21,11 +21,14 @@ const [{ xaiToResource }, { PROVIDER_DESCRIPTORS }, { apiClient }, { providersAp
   ]);
 
 const { normalizeConfigResponse } = transformers;
+const originalGetRaw = apiClient.getRaw;
+apiClient.getRaw = async () => ({ data: 'port: 8317\n' });
 const originalGet = apiClient.get;
 const originalPut = apiClient.put;
 const originalDelete = apiClient.delete;
 
 test.after(async () => {
+  apiClient.getRaw = originalGetRaw;
   apiClient.get = originalGet;
   apiClient.put = originalPut;
   apiClient.delete = originalDelete;
@@ -65,7 +68,7 @@ test('normalizes the Core xai-api-key contract into a workbench resource', () =>
       websockets: true,
       proxyUrl: 'http://proxy.local',
       headers: { 'X-Custom': 'value' },
-      models: [{ name: 'grok-4.5', alias: 'grok-latest' }],
+      models: [{ name: 'grok-4.5', alias: 'grok-latest', sourceIndex: 0 }],
       excludedModels: ['grok-3-*'],
       disableCooling: true,
       authIndex: 'xai:apikey:1',

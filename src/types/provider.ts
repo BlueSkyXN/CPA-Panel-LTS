@@ -4,6 +4,7 @@
  */
 
 export interface ModelAlias {
+  sourceIndex?: number | null;
   name: string;
   alias?: string;
   displayName?: string;

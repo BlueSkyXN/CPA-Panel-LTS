@@ -84,7 +84,7 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
       buildErrorState: (message: string, status?: number) => unknown;
       renderQuotaItems: (quota: unknown, t: TFunction, helpers: unknown) => unknown;
     };
-    const cacheGeneration = captureQuotaCacheGeneration();
+    const cacheGeneration = captureQuotaCacheGeneration(file.name);
     const previousQuota = quota;
 
     updateQuotaState((prev: Record<string, unknown>) => ({
@@ -136,7 +136,7 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
       t,
       showConfirmation,
       onConfirm: async () => {
-        const cacheGeneration = captureQuotaCacheGeneration();
+        const cacheGeneration = captureQuotaCacheGeneration(file.name);
         setResettingQuota(true);
         try {
           const data = await resetQuota(file, t);
@@ -180,13 +180,14 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
   const canRefreshQuota = !disableControls && !file.disabled && !resettingQuota;
   const canUseResetQuota = canRefreshQuota && quotaStatus !== 'loading';
   const showResetQuotaAction = quota !== undefined && Boolean(config.canResetQuota?.(quota));
-  const resetQuotaAction = config.resetQuota && showResetQuotaAction ? (
-    {
-      disabled: !canUseResetQuota,
-      loading: resettingQuota,
-      onClick: () => resetQuotaForFile(),
-    }
-  ) : undefined;
+  const resetQuotaAction =
+    config.resetQuota && showResetQuotaAction
+      ? {
+          disabled: !canUseResetQuota,
+          loading: resettingQuota,
+          onClick: () => resetQuotaForFile(),
+        }
+      : undefined;
   const quotaErrorMessage = resolveQuotaErrorMessage(
     t,
     quota?.errorStatus,
