@@ -249,7 +249,8 @@ export function reconcileProviderGroups(
 export async function mutateProviderConfig(
   section: string,
   mutate: (items: unknown[]) => unknown[],
-  legacyMutation?: () => Promise<unknown>
+  legacyMutation?: () => Promise<unknown>,
+  validateSnapshot?: (items: unknown[]) => void
 ): Promise<void> {
   const generation = apiClient.getConnectionGeneration();
   const baseline = useConfigStore.getState().config?.raw;
@@ -263,7 +264,7 @@ export async function mutateProviderConfig(
   parseConfigDocument(response.data);
   const v8 = usesV8ConfigLayout(response.data);
   const revision = configRevision(response, v8);
-  if (!v8 && legacyMutation) {
+  if (!v8 && legacyMutation && !validateSnapshot) {
     await legacyMutation();
     guard();
     return;
@@ -273,7 +274,15 @@ export async function mutateProviderConfig(
   if (!isRecord(raw) || (raw[section] !== undefined && !Array.isArray(raw[section])))
     throw conflict();
   const before = (raw[section] ?? []) as unknown[];
-  if (v8 && expected !== undefined && !equal(expected, before)) throw conflict();
+  validateSnapshot?.(before);
+  if (!v8 && legacyMutation) {
+    await legacyMutation();
+    guard();
+    return;
+  }
+  // A target snapshot replaces the mutable store baseline, not the final document checks.
+  if (v8 && !validateSnapshot && expected !== undefined && !equal(expected, before))
+    throw conflict();
   const after = mutate(before);
   if (!v8) {
     const path = section === 'interactions-api-key' ? '/interactions-api-key' : `/${section}`;

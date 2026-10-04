@@ -23,7 +23,7 @@ const { mergeDiscoveredModels } = await vite.ssrLoadModule(
 const adapter = apiClient.instance.defaults.adapter;
 const { useConfigStore } = await vite.ssrLoadModule('/src/stores/useConfigStore.ts');
 const { useProviderWorkbench } = await vite.ssrLoadModule('/src/features/providers/useProviderWorkbench.ts');
-const { codexToResource, code0ToResource } = await vite.ssrLoadModule('/src/features/providers/adapters.ts');
+const { codexToResource, code0ToResource, openaiToResource } = await vite.ssrLoadModule('/src/features/providers/adapters.ts');
 const { buildCode0Raw } = await vite.ssrLoadModule('/src/features/providers/code0.ts');
 function workbench() {
   let result;
@@ -415,6 +415,178 @@ test('unchanged provider snapshot saves once with its original document revision
   await providersApi.updateCodexConfig(current.apiKey, current.baseUrl, { ...current, proxyUrl: 'http://localhost:7890' }, current);
   assert.equal(writes, 1);
 });
+
+const openaiA = { name: 'synthetic-a', 'base-url': 'https://a.invalid', priority: 7, 'api-key-entries': [{ 'api-key': 'synthetic-a' }] };
+const openaiB = { name: 'synthetic-b', 'base-url': 'https://b.invalid', 'api-key-entries': [] };
+const openaiC = { name: 'synthetic-c', 'base-url': 'https://c.invalid', 'api-key-entries': [] };
+const openaiSnapshot = (items, index) => normalizeConfigResponse({ 'openai-compatibility': items }).openaiCompatibility.find(item => item.sourceIndex === index);
+const openaiGroups = items => items.map(({ 'api-key-entries': keys = [], ...item }) => ({ ...item, keys }));
+function mockOpenAI(items, { v8 = true, writeError } = {}) {
+  apiClient.setConfig({ apiBase: 'https://example.invalid', managementKey: 'synthetic' });
+  useConfigStore.setState({ config: normalizeConfigResponse({ 'openai-compatibility': items }) });
+  const writes = [];
+  apiClient.instance.defaults.adapter = async config => {
+    if (config.method !== 'get') {
+      writes.push(config);
+      if (writeError) throw writeError;
+      return response(config, {});
+    }
+    if (config.url === '/config.yaml') return response(config, v8 ? 'server: {port: 8317}\n' : 'port: 8317\n');
+    if (config.url === '/config') return response(config, { 'openai-compatibility': items });
+    if (config.url === '/config/api-keys/openai-compatibility') return response(config, openaiGroups(items));
+    if (config.url === '/openai-compatibility') return response(config, { 'openai-compatibility': items });
+    if (config.url === '/vertex-api-key') return response(config, []);
+    throw new Error(`Unexpected request: ${config.url}`);
+  };
+  return writes;
+}
+const openaiActions = {
+  delete: (index, snapshot) => providersApi.deleteOpenAIProvider(index, snapshot),
+  disable: (index, snapshot) => providersApi.updateOpenAIProviderDisabled(index, true, snapshot),
+  enable: (index, snapshot) => providersApi.updateOpenAIProviderDisabled(index, false, snapshot),
+};
+for (const v8 of [true, false]) {
+  for (const [action, mutate] of Object.entries(openaiActions)) {
+    for (const [scenario, latest] of Object.entries({
+      reorder: [openaiB, openaiA],
+      insertion: [openaiC, openaiA, openaiB],
+      deletion: [openaiB],
+      absent: [],
+      renamed: [{ ...openaiA, name: 'renamed' }, openaiB],
+      changed: [{ ...openaiA, priority: 9 }, openaiB],
+      credentials: [{ ...openaiA, 'api-key-entries': [{ 'api-key': 'synthetic-new' }] }, openaiB],
+      ambiguous: [openaiA, { ...openaiB, name: openaiA.name }],
+    })) {
+      test(`OpenAI ${v8 ? 'v8' : 'legacy'} ${action} rejects ${scenario} with an old target and refreshed store`, async () => {
+        const snapshot = openaiSnapshot([openaiA, openaiB], 0);
+        const writes = mockOpenAI(latest, { v8 });
+        await assert.rejects(mutate(0, snapshot), /changed|ambiguous/);
+        assert.equal(writes.length, 0);
+      });
+    }
+    test(`OpenAI ${v8 ? 'v8' : 'legacy'} ${action} accepts an unchanged target`, async () => {
+      const snapshot = openaiSnapshot([openaiA, openaiB], 0);
+      const writes = mockOpenAI([openaiA, openaiB], { v8 });
+      await mutate(0, snapshot);
+      assert.equal(writes.length, 1);
+      const write = writes[0];
+      if (v8) {
+        assert.equal(write.method, 'put');
+        assert.equal(write.url, '/config/api-keys/openai-compatibility');
+        assert.equal(write.headers.get('If-Match'), revision);
+        const saved = JSON.parse(write.data);
+        assert.deepEqual(saved.map(item => item.name), action === 'delete' ? [openaiB.name] : [openaiA.name, openaiB.name]);
+        assert.deepEqual(saved.at(-1), openaiGroups([openaiB])[0]);
+        if (action !== 'delete') assert.equal(saved[0].disabled, action === 'disable');
+      } else {
+        assert.equal(write.method, action === 'delete' ? 'delete' : 'patch');
+        if (action === 'delete') assert.equal(write.url, `/openai-compatibility?name=${openaiA.name}`);
+        else assert.deepEqual(JSON.parse(write.data), { name: openaiA.name, value: { disabled: action === 'disable' } });
+      }
+    });
+  }
+}
+for (const [action, mutate] of Object.entries(openaiActions)) {
+  test(`OpenAI ${action} does not retry or downgrade a final 412`, async () => {
+    const error = Object.assign(new Error('Configuration changed after final read'), { isAxiosError: true, response: { status: 412, data: { error: 'Configuration changed after final read' } } });
+    const writes = mockOpenAI([openaiA, openaiB], { writeError: error });
+    await assert.rejects(mutate(0, openaiSnapshot([openaiA, openaiB], 0)), actual => actual.status === 412 && actual.message === error.message);
+    assert.equal(writes.length, 1);
+    assert.equal(writes[0].headers.get('If-Match'), revision);
+  });
+  test(`workbench ${action} retains the original OpenAI resource after store refresh`, async () => {
+    const opened = openaiToResource(openaiSnapshot([openaiA, openaiB], 0), 0);
+    const wb = workbench();
+    const writes = mockOpenAI([openaiB, openaiA]);
+    await assert.rejects(action === 'delete' ? wb.deleteProvider(opened) : wb.toggleDisabled(opened, action === 'disable'), /changed/);
+    assert.equal(writes.length, 0);
+  });
+  test(`sponsor ${action} checks the original OpenAI target`, async () => {
+    const sponsor = { ...openaiA, 'base-url': 'https://code0.ai/v1' };
+    const opened = code0ToResource(buildCode0Raw(normalizeConfigResponse({ 'openai-compatibility': [sponsor, openaiB] })));
+    assert.ok(opened);
+    const wb = workbench();
+    const writes = mockOpenAI([openaiB, sponsor]);
+    await assert.rejects(action === 'delete' ? wb.deleteProvider(opened) : wb.toggleDisabled(opened, action === 'disable'), /changed/);
+    assert.equal(writes.length, 0);
+  });
+}
+
+for (const [action, mutate] of Object.entries(openaiActions)) {
+  test(`OpenAI ${action} uses backend source index rather than a filtered row position`, async () => {
+    const items = [{ name: 'invalid-without-base-url' }, openaiA, openaiB];
+    const snapshot = openaiSnapshot(items, 1);
+    const writes = mockOpenAI(items);
+    await mutate(1, snapshot);
+    assert.equal(writes.length, 1);
+    const saved = JSON.parse(writes[0].data);
+    assert.equal(saved[0].name, 'invalid-without-base-url');
+    assert.equal(saved.at(-1).name, openaiB.name);
+  });
+  test(`OpenAI ${action} rejects a mismatched source index`, async () => {
+    const writes = mockOpenAI([openaiA, openaiB]);
+    const snapshot = { ...openaiSnapshot([openaiA, openaiB], 0), sourceIndex: 1 };
+    await assert.rejects(mutate(0, snapshot), /changed/);
+    assert.equal(writes.length, 0);
+  });
+  test(`OpenAI ${action} preserves a concurrent change to a different provider`, async () => {
+    const snapshot = openaiSnapshot([openaiA, openaiB], 0);
+    const changedSibling = { ...openaiB, priority: 42 };
+    const writes = mockOpenAI([openaiA, changedSibling]);
+    useConfigStore.setState({ config: normalizeConfigResponse({ 'openai-compatibility': [openaiA, openaiB] }) });
+    await mutate(0, snapshot);
+    assert.equal(writes.length, 1);
+    assert.deepEqual(JSON.parse(writes[0].data).at(-1), openaiGroups([changedSibling])[0]);
+  });
+  test(`sponsor ${action} succeeds for multiple unchanged OpenAI targets`, async () => {
+    const first = { ...openaiA, 'base-url': 'https://code0.ai/v1', disabled: action === 'enable' };
+    const second = { ...openaiC, 'base-url': 'https://code0.ai/v1', disabled: action === 'enable' };
+    let items = [first, openaiB, second];
+    const original = normalizeConfigResponse({ 'openai-compatibility': items });
+    const opened = code0ToResource(buildCode0Raw(original));
+    assert.ok(opened);
+    apiClient.setConfig({ apiBase: 'https://example.invalid', managementKey: 'synthetic' });
+    useConfigStore.setState({ config: original });
+    let writes = 0;
+    apiClient.instance.defaults.adapter = async config => {
+      if (config.method !== 'get') {
+        assert.equal(config.method, 'put');
+        assert.equal(config.headers.get('If-Match'), `"${String(writes).repeat(64)}"`);
+        writes++;
+        items = JSON.parse(config.data).map(({ keys, ...item }) => ({ ...item, 'api-key-entries': keys }));
+        return response(config, {});
+      }
+      if (config.url === '/config.yaml') return { ...response(config, 'server: {port: 8317}\n'), headers: { etag: `"${String(writes).repeat(64)}"` } };
+      if (config.url === '/config') return response(config, { 'openai-compatibility': items });
+      if (config.url === '/config/api-keys/openai-compatibility') return response(config, openaiGroups(items));
+      if (config.url === '/openai-compatibility') return response(config, { 'openai-compatibility': items });
+      if (config.url === '/vertex-api-key') return response(config, []);
+      throw new Error(`Unexpected request: ${config.url}`);
+    };
+    const wb = workbench();
+    await (action === 'delete' ? wb.deleteProvider(opened) : wb.toggleDisabled(opened, action === 'disable'));
+    assert.equal(writes, 2);
+    assert.deepEqual(items.find(item => item.name === openaiB.name), openaiB);
+    if (action === 'delete') assert.deepEqual(items, [openaiB]);
+    else assert.deepEqual(items.filter(item => item.name !== openaiB.name).map(item => item.disabled), [action === 'disable', action === 'disable']);
+  });
+  test(`sponsor ${action} rejects changed OpenAI data before touching other protocols`, async () => {
+    const sponsor = { ...openaiA, 'base-url': 'https://code0.ai/v1' };
+    const before = { 'openai-compatibility': [sponsor, openaiB], 'codex-api-key': [{ 'api-key': 'synthetic', 'base-url': 'https://code0.ai/v1' }] };
+    const opened = code0ToResource(buildCode0Raw(normalizeConfigResponse(before)));
+    const latest = { ...before, 'openai-compatibility': [openaiB, sponsor] };
+    apiClient.setConfig({ apiBase: 'https://example.invalid', managementKey: 'synthetic' });
+    useConfigStore.setState({ config: normalizeConfigResponse(latest) });
+    let writes = 0;
+    apiClient.instance.defaults.adapter = async config => {
+      if (config.method !== 'get') writes++;
+      return response(config, latest);
+    };
+    const wb = workbench();
+    await assert.rejects(action === 'delete' ? wb.deleteProvider(opened) : wb.toggleDisabled(opened, action === 'disable'), /changed/);
+    assert.equal(writes, 0);
+  });
+}
 
 test('server conflict after final reads is surfaced without retry or legacy fallback', async () => {
   apiClient.setConfig({ apiBase: 'https://example.invalid', managementKey: 'synthetic' });

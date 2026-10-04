@@ -308,11 +308,11 @@ export function AiProvidersPage() {
     const nextList = previousList.map((item, idx) => (idx === index ? nextItem : item));
 
     setOpenaiProviders(nextList);
-    updateConfigValue('openai-compatibility', nextList);
-    clearCache('openai-compatibility');
 
     try {
-      await providersApi.updateOpenAIProviderDisabled(mutationIndex, !enabled);
+      await providersApi.updateOpenAIProviderDisabled(mutationIndex, !enabled, current);
+      updateConfigValue('openai-compatibility', nextList);
+      clearCache('openai-compatibility');
       showNotification(
         enabled ? t('notification.config_enabled') : t('notification.config_disabled'),
         'success'
@@ -397,7 +397,7 @@ export function AiProvidersPage() {
       confirmText: t('common.confirm'),
       onConfirm: async () => {
         try {
-          await providersApi.deleteOpenAIProvider(mutationIndex);
+          await providersApi.deleteOpenAIProvider(mutationIndex, entry);
           const next = openaiProviders.filter((_, idx) => idx !== index);
           setOpenaiProviders(next);
           updateConfigValue('openai-compatibility', next);

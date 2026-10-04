@@ -539,6 +539,27 @@ const serializeOpenAIProvider = (provider: OpenAIProviderConfig) => {
   return payload;
 };
 
+const openAIProviderSnapshotGuard = (index: number, snapshot: OpenAIProviderConfig) => {
+  const expected = structuredClone(serializeOpenAIProvider(snapshot));
+  const name = snapshot.name.trim();
+  const sourceIndex = snapshot.sourceIndex;
+  return (items: unknown[]) => {
+    const current = normalizeOpenAIProvider(items[index], index);
+    if (
+      !Number.isInteger(index) ||
+      index < 0 ||
+      (sourceIndex !== undefined && sourceIndex !== index) ||
+      !name ||
+      items.filter((item) => isRecord(item) && matchesOpenAIProvider(item, name)).length !== 1 ||
+      !current ||
+      current.name.trim() !== name ||
+      !providerValuesEqual(serializeOpenAIProvider(current), expected)
+    ) {
+      throw new Error('Provider configuration changed or is ambiguous; refresh and try again.');
+    }
+  };
+};
+
 export const providersApi = {
   async getGeminiKeys(): Promise<GeminiKeyConfig[]> {
     const data = await apiClient.get('/gemini-api-key');
@@ -880,29 +901,34 @@ export const providersApi = {
       )
     ),
 
-  updateOpenAIProviderDisabled: (index: number, disabled: boolean) =>
-    mutateProviderConfig(
+  updateOpenAIProviderDisabled: (
+    index: number,
+    disabled: boolean,
+    snapshot: OpenAIProviderConfig
+  ) => {
+    const validateSnapshot = openAIProviderSnapshotGuard(index, snapshot);
+    const name = snapshot.name;
+    return mutateProviderConfig(
       'openai-compatibility',
-      (items) => {
-        if (!isRecord(items[index]))
-          throw new Error('Provider configuration changed; refresh and try again.');
-        return stripResponseOnlyProviderFields(
+      (items) =>
+        stripResponseOnlyProviderFields(
           items.map((item, current) =>
             current === index ? { ...(item as Record<string, unknown>), disabled } : item
           )
-        );
-      },
-      () => apiClient.patch('/openai-compatibility', { index, value: { disabled } })
-    ),
+        ),
+      () => apiClient.patch('/openai-compatibility', { name, value: { disabled } }),
+      validateSnapshot
+    );
+  },
 
-  deleteOpenAIProvider: (index: number) =>
-    mutateProviderConfig(
+  deleteOpenAIProvider: (index: number, snapshot: OpenAIProviderConfig) => {
+    const validateSnapshot = openAIProviderSnapshotGuard(index, snapshot);
+    const name = snapshot.name;
+    return mutateProviderConfig(
       'openai-compatibility',
-      (items) => {
-        if (!isRecord(items[index]))
-          throw new Error('Provider configuration changed; refresh and try again.');
-        return stripResponseOnlyProviderFields(items.filter((_, current) => current !== index));
-      },
-      () => apiClient.delete(`/openai-compatibility?index=${encodeURIComponent(String(index))}`)
-    ),
+      (items) => stripResponseOnlyProviderFields(items.filter((_, current) => current !== index)),
+      () => apiClient.delete(`/openai-compatibility?name=${encodeURIComponent(name)}`),
+      validateSnapshot
+    );
+  },
 };

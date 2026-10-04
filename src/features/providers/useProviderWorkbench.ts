@@ -333,6 +333,28 @@ const normalizeSponsorKeyEntries = (
   entries: SponsorKeyEntryInput[] | undefined
 ): SponsorKeyEntryInput[] => (entries ?? []).filter((entry) => sponsorEntryApiKey(entry));
 
+const readSponsorSnapshot = async (
+  brand: SponsorProviderBrand,
+  snapshot?: SponsorProviderRaw
+): Promise<SponsorProviderRaw> => {
+  const generation = apiClient.getConnectionGeneration();
+  const latest = normalizeConfigResponse(await apiClient.get('/config'));
+  if (!apiClient.isCurrentConnection(generation))
+    throw new Error('Configuration connection changed');
+  const raw =
+    brand === 'code0'
+      ? buildCode0Raw(latest)
+      : brand === 'fennoAI'
+        ? buildFennoAIRaw(latest)
+        : brand === 'qiniuCloud'
+          ? buildQiniuCloudRaw(latest)
+          : buildInfistarRaw(latest);
+  if (snapshot && !providerValuesEqual(snapshot, raw)) {
+    throw new Error('Provider configuration changed; refresh and try again.');
+  }
+  return raw;
+};
+
 const toggleSponsorConfig = async (raw: SponsorProviderRaw, disabled: boolean) => {
   for (const item of raw.gemini) {
     const excludedModels = disabled
@@ -377,7 +399,7 @@ const toggleSponsorConfig = async (raw: SponsorProviderRaw, disabled: boolean) =
     );
   }
   for (const item of raw.openai) {
-    await providersApi.updateOpenAIProviderDisabled(item.index, disabled);
+    await providersApi.updateOpenAIProviderDisabled(item.index, disabled, item.config);
   }
 };
 
@@ -570,21 +592,7 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
       snapshot?: SponsorProviderRaw
     ) => {
       const definition = getSponsorProviderDefinition(brand);
-      const generation = apiClient.getConnectionGeneration();
-      const latest = normalizeConfigResponse(await apiClient.get('/config'));
-      if (!apiClient.isCurrentConnection(generation))
-        throw new Error('Configuration connection changed');
-      const raw =
-        brand === 'code0'
-          ? buildCode0Raw(latest)
-          : brand === 'fennoAI'
-            ? buildFennoAIRaw(latest)
-            : brand === 'qiniuCloud'
-              ? buildQiniuCloudRaw(latest)
-              : buildInfistarRaw(latest);
-      if (snapshot && !providerValuesEqual(snapshot, raw)) {
-        throw new Error('Provider configuration changed; refresh and try again.');
-      }
+      const raw = await readSponsorSnapshot(brand, snapshot);
       const entries = normalizeSponsorKeyEntries(input.sponsorKeyEntries);
       const openaiEntry = entries.find((entry) => entry.protocol === 'openai');
       const claudeEntry = entries.find((entry) => entry.protocol === 'claude');
@@ -683,7 +691,7 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           await providersApi.createOpenAIProvider(next);
         }
       } else if (currentOpenAI) {
-        await providersApi.deleteOpenAIProvider(currentOpenAI.index);
+        await providersApi.deleteOpenAIProvider(currentOpenAI.index, currentOpenAI.config);
       }
     },
     []
@@ -848,15 +856,15 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
         } else if (sel.brand === 'vertex') {
           await providersApi.deleteVertexConfig(sel.apiKey, sel.baseUrl);
         } else if (sel.brand === 'openaiCompatibility') {
-          await providersApi.deleteOpenAIProvider(sel.index);
+          await providersApi.deleteOpenAIProvider(sel.index, resource.raw as OpenAIProviderConfig);
         } else if (
           sel.brand === 'code0' ||
           sel.brand === 'fennoAI' ||
           sel.brand === 'qiniuCloud' ||
           sel.brand === 'infistar'
         ) {
+          const raw = await readSponsorSnapshot(sel.brand, resource.raw as SponsorProviderRaw);
           await runSponsorMutationWithRecovery(async () => {
-            const raw = resource.raw as SponsorProviderRaw;
             for (const item of raw.gemini) {
               await providersApi.deleteGeminiKey(item.config.apiKey, item.config.baseUrl);
             }
@@ -867,7 +875,10 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
               await providersApi.deleteClaudeConfig(item.config.apiKey, item.config.baseUrl);
             }
             for (const index of getSponsorOpenAIDeleteIndices(raw)) {
-              await providersApi.deleteOpenAIProvider(index);
+              const target = raw.openai.find((item) => item.index === index);
+              if (!target)
+                throw new Error('Provider configuration changed; refresh and try again.');
+              await providersApi.deleteOpenAIProvider(index, target.config);
             }
           }, refetch);
         }
@@ -935,17 +946,19 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
             await providersApi.updateVertexConfig(selector.apiKey, selector.baseUrl, next, current);
           }
         } else if (brand === 'openaiCompatibility' && selector.brand === 'openaiCompatibility') {
-          await providersApi.updateOpenAIProviderDisabled(selector.index, disabled);
+          await providersApi.updateOpenAIProviderDisabled(
+            selector.index,
+            disabled,
+            resource.raw as OpenAIProviderConfig
+          );
         } else if (
           brand === 'code0' ||
           brand === 'fennoAI' ||
           brand === 'qiniuCloud' ||
           brand === 'infistar'
         ) {
-          await runSponsorMutationWithRecovery(
-            () => toggleSponsorConfig(resource.raw as SponsorProviderRaw, disabled),
-            refetch
-          );
+          const raw = await readSponsorSnapshot(brand, resource.raw as SponsorProviderRaw);
+          await runSponsorMutationWithRecovery(() => toggleSponsorConfig(raw, disabled), refetch);
         }
         await refetch();
       } finally {
