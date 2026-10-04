@@ -93,7 +93,7 @@ export function FlowControlPage() {
     setSaved(false);
     setError('');
     try {
-      const data = await configFileApi.fetchConfigYaml();
+      const { content: data } = await configFileApi.fetchConfigYaml();
       setServerYaml(data);
       setMergedYaml(data);
       setPreviewServerYaml(data);
@@ -134,7 +134,8 @@ export function FlowControlPage() {
     }
     setSaving(true);
     try {
-      const latestServerYaml = await configFileApi.fetchConfigYaml();
+      const snapshot = await configFileApi.fetchConfigYaml();
+      const latestServerYaml = snapshot.content;
       if (!apiClient.isCurrentConnection(generation)) return;
       const latestDocument = parseDocument(latestServerYaml);
       if (latestDocument.errors.length > 0) {
@@ -172,7 +173,8 @@ export function FlowControlPage() {
     const generation = apiClient.getConnectionGeneration();
     setSaving(true);
     try {
-      const latestServerYaml = await configFileApi.fetchConfigYaml();
+      const snapshot = await configFileApi.fetchConfigYaml();
+      const latestServerYaml = snapshot.content;
       if (!apiClient.isCurrentConnection(generation)) return;
       if (latestServerYaml !== previewServerYaml) {
         // Server config changed since the preview: re-merge the flow draft and
@@ -191,8 +193,8 @@ export function FlowControlPage() {
       }
 
       if (!apiClient.isCurrentConnection(generation)) return;
-      await configFileApi.saveConfigYaml(mergedYaml);
-      const latestContent = await configFileApi.fetchConfigYaml();
+      await configFileApi.saveConfigYaml(mergedYaml, snapshot);
+      const { content: latestContent } = await configFileApi.fetchConfigYaml();
       if (!apiClient.isCurrentConnection(generation)) return;
       setSaved(true);
       setDiffModalOpen(false);

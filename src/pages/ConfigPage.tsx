@@ -140,7 +140,7 @@ export function ConfigPage() {
     setSaved(false);
     setError('');
     try {
-      const data = await configFileApi.fetchConfigYaml();
+      const { content: data } = await configFileApi.fetchConfigYaml();
       setContent(data);
       loadedYamlRef.current = data;
       setDirty(false);
@@ -176,7 +176,8 @@ export function ConfigPage() {
     const generation = apiClient.getConnectionGeneration();
     setSaving(true);
     try {
-      const latestServerYaml = await configFileApi.fetchConfigYaml();
+      const snapshot = await configFileApi.fetchConfigYaml();
+      const latestServerYaml = snapshot.content;
       if (!apiClient.isCurrentConnection(generation)) return;
       if (latestServerYaml !== previewServerYaml) {
         assertConfigListsUnchanged(previewServerYaml, mergedYaml, latestServerYaml);
@@ -206,8 +207,8 @@ export function ConfigPage() {
       const commercialModeChanged = previousCommercialMode !== nextCommercialMode;
 
       if (!apiClient.isCurrentConnection(generation)) return;
-      await configFileApi.saveConfigYaml(mergedYaml);
-      const latestContent = await configFileApi.fetchConfigYaml();
+      await configFileApi.saveConfigYaml(mergedYaml, snapshot);
+      const { content: latestContent } = await configFileApi.fetchConfigYaml();
       if (!apiClient.isCurrentConnection(generation)) return;
       setSaved(true);
       setDirty(false);
@@ -255,7 +256,8 @@ export function ConfigPage() {
 
     setSaving(true);
     try {
-      const latestServerYaml = await configFileApi.fetchConfigYaml();
+      const snapshot = await configFileApi.fetchConfigYaml();
+      const latestServerYaml = snapshot.content;
 
       const desired = dirty ? content : applyVisualChangesToYaml(loadedYamlRef.current);
       assertConfigListsUnchanged(loadedYamlRef.current, desired, latestServerYaml);

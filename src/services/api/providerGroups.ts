@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import { configRevision } from './configRevision';
 import { useConfigStore } from '@/stores/useConfigStore';
 import { isRecord } from '@/utils/helpers';
 import { parseConfigDocument, usesV8ConfigLayout } from '@/utils/configLayout';
@@ -17,7 +18,7 @@ const families: Record<string, string> = {
 };
 const conflict = () =>
   new Error('Provider configuration changed or is ambiguous; refresh and try again.');
-const equal = (a: unknown, b: unknown): boolean => {
+export const providerValuesEqual = (a: unknown, b: unknown): boolean => {
   if (a === b) return true;
   if (Array.isArray(a) && Array.isArray(b))
     return a.length === b.length && a.every((item, index) => equal(item, b[index]));
@@ -28,6 +29,7 @@ const equal = (a: unknown, b: unknown): boolean => {
     keys.every((key) => Object.prototype.hasOwnProperty.call(b, key) && equal(a[key], b[key]))
   );
 };
+const equal = providerValuesEqual;
 const identity = (record: Record<string, unknown>, openai: boolean): string =>
   openai
     ? String(record.name ?? '')
@@ -260,6 +262,7 @@ export async function mutateProviderConfig(
   if (typeof response.data !== 'string') throw new Error('Invalid configuration response');
   parseConfigDocument(response.data);
   const v8 = usesV8ConfigLayout(response.data);
+  const revision = configRevision(response, v8);
   if (!v8 && legacyMutation) {
     await legacyMutation();
     guard();
@@ -302,6 +305,6 @@ export async function mutateProviderConfig(
   if (!isRecord(current) || !equal(current[section] ?? [], before)) throw conflict();
   const currentGroups = await readGroups();
   if (!equal(currentGroups, groups)) throw conflict();
-  await apiClient.put(path, next, options);
+  await apiClient.put(path, next, { ...options, headers: { 'If-Match': revision } });
   guard();
 }

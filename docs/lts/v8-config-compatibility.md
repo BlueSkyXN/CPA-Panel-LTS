@@ -24,15 +24,20 @@ Core 侧必须同时拒绝旧缓存 Panel 的危险 v0 raw 替换；仅发新版
 
 普通行编辑保留组名、共享策略、未编辑 key、显式 null 继承与隐藏模型元数据；删除 key 不拆分剩余组。模型重排/改名通过原始 sourceIndex 绑定元数据，发现同名不同 alias 不合并。
 
-重复 key/base URL 身份、共享组单行修改 base URL 等歧义操作明确拒绝，使用 YAML 编辑器处理。高级策略的显式继承意图、全量原生 group UI 未实现。保存前复读可检测已发生的并发变更，但不是服务端 CAS；最后读取到 PUT 之间仍有竞态，旧表单与独立刷新后的全局 store 也尚未获得完整快照隔离保证。不得把当前候选宣传为无条件多写者安全。
+重复 key/base URL 身份、共享组单行修改 base URL 等歧义操作明确拒绝，使用 YAML 编辑器处理。高级策略的显式继承意图、全量原生 group UI 未实现。
+
+YAML 每次读取返回不可变的 content/generation/layout/revision 快照；其他编辑器的读取不能替换本草稿使用的版本。确认保存仍复读并重建差异，最后 PUT 携带该次读取的 `If-Match`。Provider 分组写入同样携带文档版本，由 Core 在锁内做条件写入（CAS），堵住最后读取到 PUT 的竞态。普通表单保存同时比较打开时的 provider 快照；全局 store 刷新不能使旧表单覆盖新字段。Sponsor 表单在首笔写入前校验最新聚合快照，各现有协议更新继续校验对应记录。
+
+v8 必须有配套 Core 的 `ETag` 支持，否则拒绝保存并提示升级；缺失版本 428、过期版本 412 均不重试、不降级重放。legacy/v7 无版本头仍按旧接口工作，不能获得服务端 CAS 保证。多协议 sponsor 操作不是整体事务，部分成功仍走既有恢复流程；无条件 v0 客户端和同时写文件的外部进程也不在保护范围内。不得宣传为无条件多写者安全。
 
 本轮逐提交取舍见 [2026-10-03 intake](upstream-intake-20261003-v8.md)。延期项不属于已移植功能。
 
 ## 验证
 
 - `npm run test:config`：包含真实 visual hook 的 legacy/v8/mixed、client-key/provider隔离、false/0优先级、payload AST与注释测试。
-- `npm run test:api-client`：包含配置域版本分流、旧连接延迟返回和禁止写入 fallback。
+- `npm run test:api-client`：38 项测试，包含配置域版本分流、旧连接延迟返回、独立 YAML 快照、七类 provider 旧表单、真实 workbench hook 快照传递与启停保护、sponsor 首写校验、正常保存，以及最终读取后的 412 不重试/不 fallback。
 - `npm run validate:lts`：保留完整 usage、Flow、plugins、provider 合同和 single-file 构建。
-- 临时配套 Core 分别做 v7/v8 API 读写；实际浏览器确认 v8 可视化保存与独立 readback。未验证的平台/真实部署不能由以上测试推断。
+- 前次 intake 做过临时 v7/v8 API 读写与浏览器可视化保存。本次修复另外使用实际 Panel API modules 对接隔离 Core 的 legacy/v8 配置实例，验证 group 保存、旧表单拒绝、旧 YAML 412、fresh YAML 保存和 legacy 不隐式迁移。
+- 本次浏览器回归停在登录页：页面可打开、测试口令可填写，但登录点击连续超时，未完成 authenticated GUI 验收。前次 GUI 结果不替代本次回归，API 联调通过也不等于 GUI 通过；保留 Draft，未验证的平台和真实部署不可由本地测试推断。
 
 上游参考固定为 `ee79a794526a30c03748a8864a9ac6589a31833b` 的配置分域和写入语义；采用局部适配，不 full-sync 官方 Panel、不替换 LTS usage、quota 或插件页面。

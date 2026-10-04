@@ -1806,6 +1806,7 @@
     "status_saved": "Конфигурация сохранена",
     "status_save_failed": "Не удалось сохранить",
     "save_success": "Конфигурация успешно сохранена",
+    "revision_unavailable": "Версия конфигурации недоступна. Обновите Core и перезагрузите конфигурацию перед сохранением.",
     "error_yaml_not_supported": "Сервер не вернул YAML. Убедитесь, что доступна конечная точка /config.yaml.",
     "visual_mode_unavailable": "Визуальный редактор недоступен, пока не исправлен синтаксис YAML",
     "visual_mode_unavailable_short": "Ошибка YAML",

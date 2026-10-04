@@ -1825,6 +1825,7 @@
     "status_saved": "設定儲存完成",
     "status_save_failed": "儲存失敗",
     "save_success": "設定已儲存",
+    "revision_unavailable": "無法取得設定版本，請升級 Core 並重新載入後再儲存。",
     "error_yaml_not_supported": "伺服器未回傳 YAML 格式，請確認 /config.yaml 介面可用",
     "visual_mode_unavailable": "YAML 語法修復前無法使用視覺化編輯",
     "visual_mode_unavailable_short": "YAML 錯誤",

@@ -1801,6 +1801,7 @@
     "status_saved": "Configuration saved",
     "status_save_failed": "Save failed",
     "save_success": "Configuration saved successfully",
+    "revision_unavailable": "Configuration revision unavailable; upgrade Core and reload before saving.",
     "error_yaml_not_supported": "Server did not return YAML. Verify the /config.yaml endpoint is available.",
     "visual_mode_unavailable": "Visual editor unavailable until YAML syntax is fixed",
     "visual_mode_unavailable_short": "YAML issue",

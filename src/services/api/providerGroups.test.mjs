@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createServer } from 'vite';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 
 const oldWindow = globalThis.window;
 globalThis.window = new EventTarget();
@@ -19,6 +21,17 @@ const { mergeDiscoveredModels } = await vite.ssrLoadModule(
   '/src/features/providers/modelEntries.ts'
 );
 const adapter = apiClient.instance.defaults.adapter;
+const { useConfigStore } = await vite.ssrLoadModule('/src/stores/useConfigStore.ts');
+const { useProviderWorkbench } = await vite.ssrLoadModule('/src/features/providers/useProviderWorkbench.ts');
+const { codexToResource, code0ToResource } = await vite.ssrLoadModule('/src/features/providers/adapters.ts');
+const { buildCode0Raw } = await vite.ssrLoadModule('/src/features/providers/code0.ts');
+function workbench() {
+  let result;
+  function Harness() { result = useProviderWorkbench(); return null; }
+  renderToStaticMarkup(createElement(Harness));
+  return result;
+}
+test.afterEach(() => useConfigStore.setState({ config: null }));
 
 test('discovery never drops existing same-name aliases or a configured placeholder', () => {
   const original = [
@@ -123,7 +136,8 @@ test('ambiguous identities and shared base URL edits fail before writing', () =>
   );
 });
 
-const response = (config, data) => ({ config, data, status: 200, statusText: 'OK', headers: {} });
+const revision = `"${'a'.repeat(64)}"`;
+const response = (config, data) => ({ config, data, status: 200, statusText: 'OK', headers: { etag: revision } });
 for (const v8 of [false, true]) {
   test(`provider mutation writes ${v8 ? 'only native grouped v8' : 'legacy v0'} and preserves attribution`, async () => {
     apiClient.setConfig({ apiBase: 'https://example.invalid', managementKey: 'synthetic' });
@@ -149,6 +163,7 @@ for (const v8 of [false, true]) {
     assert.equal(writes[0].url, v8 ? '/config/api-keys/codex' : '/codex-api-key');
     const payload = JSON.parse(writes[0].data);
     if (v8) {
+      assert.equal(writes[0].headers.get('If-Match'), revision);
       assert.equal(payload[0].name, 'shared');
       assert.equal(payload[0].keys[0].priority, null);
     }
@@ -303,4 +318,117 @@ test('concurrent creation in an initially empty family is detected', async () =>
     /changed/
   );
   assert.equal(writes, 0);
+});
+
+for (const family of [
+  { section: 'gemini-api-key', normalized: 'geminiApiKeys', update: 'updateGeminiKey' },
+  { section: 'interactions-api-key', normalized: 'interactionsApiKeys', update: 'updateInteractionsKey' },
+  { section: 'codex-api-key', normalized: 'codexApiKeys', update: 'updateCodexConfig' },
+  { section: 'xai-api-key', normalized: 'xaiApiKeys', update: 'updateXAIConfig' },
+  { section: 'claude-api-key', normalized: 'claudeApiKeys', update: 'updateClaudeConfig' },
+  { section: 'vertex-api-key', normalized: 'vertexApiKeys', update: 'updateVertexConfig' },
+]) {
+  test(`${family.section} rejects an old form after the global store refreshes`, async () => {
+    apiClient.setConfig({ apiBase: 'https://example.invalid', managementKey: 'synthetic' });
+    const before = [{ 'api-key': 'synthetic-one', 'base-url': 'https://example.invalid', priority: 7 }];
+    const latest = [{ ...before[0], priority: 9 }];
+    const snapshot = normalizeConfigResponse({ [family.section]: before })[family.normalized][0];
+    useConfigStore.setState({ config: normalizeConfigResponse({ [family.section]: latest }) });
+    let writes = 0;
+    apiClient.instance.defaults.adapter = async (config) => {
+      if (config.method === 'put') { writes++; return response(config, {}); }
+      if (config.url === '/config.yaml') return response(config, 'server: {port: 8317}\n');
+      if (config.url === '/config') return response(config, { [family.section]: latest });
+      throw new Error('stale form must fail before native group lookup');
+    };
+    await assert.rejects(providersApi[family.update]('synthetic-one', 'https://example.invalid', {
+      ...snapshot, proxyUrl: 'http://localhost:7890',
+    }, snapshot), /changed/);
+    assert.equal(writes, 0);
+  });
+}
+
+test('OpenAI form snapshot detects changed provider fields after global refresh', async () => {
+  apiClient.setConfig({ apiBase: 'https://example.invalid', managementKey: 'synthetic' });
+  const before = [{ name: 'synthetic', 'base-url': 'https://example.invalid', priority: 7, 'api-key-entries': [] }];
+  const latest = [{ ...before[0], priority: 9 }];
+  const snapshot = normalizeConfigResponse({ 'openai-compatibility': before }).openaiCompatibility[0];
+  useConfigStore.setState({ config: normalizeConfigResponse({ 'openai-compatibility': latest }) });
+  let writes = 0;
+  apiClient.instance.defaults.adapter = async (config) => {
+    if (config.method === 'put') { writes++; return response(config, {}); }
+    if (config.url === '/config.yaml') return response(config, 'server: {port: 8317}\n');
+    return response(config, { 'openai-compatibility': latest });
+  };
+  await assert.rejects(providersApi.updateOpenAIProvider('synthetic', 0, { ...snapshot, prefix: 'new' }, snapshot), /changed/);
+  assert.equal(writes, 0);
+});
+
+test('workbench passes the opened form snapshot rather than refreshed global data', async () => {
+  apiClient.setConfig({ apiBase: 'https://example.invalid', managementKey: 'synthetic' });
+  const before = { 'codex-api-key': [{ 'api-key': 'synthetic', priority: 7 }] };
+  const opened = codexToResource(normalizeConfigResponse(before).codexApiKeys[0], 0);
+  const latest = { 'codex-api-key': [{ 'api-key': 'synthetic', priority: 9 }] };
+  useConfigStore.setState({ config: normalizeConfigResponse(latest) });
+  let writes = 0;
+  apiClient.instance.defaults.adapter = async config => {
+    if (config.method !== 'get') { writes++; return response(config, {}); }
+    return response(config, config.url === '/config.yaml' ? 'server: {port: 8317}\n' : latest);
+  };
+  await assert.rejects(workbench().updateProvider(opened, { apiKey: 'synthetic', priority: 7, headers: [], excludedModelsText: '', prefix: '', baseUrl: '', proxyUrl: '', models: [], disabled: false }), /changed/);
+  await assert.rejects(workbench().toggleDisabled(opened, true), /changed/);
+  assert.equal(writes, 0);
+});
+
+test('sponsor form rejects a changed aggregate before its first protocol write', async () => {
+  apiClient.setConfig({ apiBase: 'https://example.invalid', managementKey: 'synthetic' });
+  const before = { 'codex-api-key': [{ 'api-key': 'synthetic', 'base-url': 'https://code0.ai/v1', priority: 7 }] };
+  const opened = code0ToResource(buildCode0Raw(normalizeConfigResponse(before)));
+  assert.ok(opened);
+  const latest = { 'codex-api-key': [{ ...before['codex-api-key'][0], priority: 9 }] };
+  useConfigStore.setState({ config: normalizeConfigResponse(latest) });
+  let writes = 0;
+  apiClient.instance.defaults.adapter = async config => {
+    if (config.method !== 'get') { writes++; return response(config, {}); }
+    return response(config, latest);
+  };
+  await assert.rejects(workbench().updateProvider(opened, { sponsorKeyEntries: [] }), /changed/);
+  assert.equal(writes, 0);
+});
+
+test('unchanged provider snapshot saves once with its original document revision', async () => {
+  apiClient.setConfig({ apiBase: 'https://example.invalid', managementKey: 'synthetic' });
+  const current = normalizeConfigResponse({ 'codex-api-key': effective }).codexApiKeys[0];
+  let writes = 0;
+  apiClient.instance.defaults.adapter = async config => {
+    if (config.method === 'put') {
+      writes++;
+      assert.equal(config.headers.get('If-Match'), revision);
+      const body = JSON.parse(config.data);
+      assert.equal(body[0].keys[0]['proxy-url'], 'http://localhost:7890');
+      assert.equal(body[0].keys[0].priority, null);
+      return response(config, {});
+    }
+    if (config.url === '/config.yaml') return response(config, 'server: {port: 8317}\n');
+    return response(config, config.url === '/config' ? { 'codex-api-key': effective } : groups);
+  };
+  await providersApi.updateCodexConfig(current.apiKey, current.baseUrl, { ...current, proxyUrl: 'http://localhost:7890' }, current);
+  assert.equal(writes, 1);
+});
+
+test('server conflict after final reads is surfaced without retry or legacy fallback', async () => {
+  apiClient.setConfig({ apiBase: 'https://example.invalid', managementKey: 'synthetic' });
+  let writes = 0;
+  apiClient.instance.defaults.adapter = async (config) => {
+    if (config.method === 'put') {
+      writes++;
+      assert.equal(config.headers.get('If-Match'), revision);
+      throw Object.assign(new Error('Configuration changed after final read'), { status: 412 });
+    }
+    if (config.url === '/config.yaml') return response(config, 'server: {port: 8317}\n');
+    if (config.url === '/config') return response(config, { 'codex-api-key': effective });
+    return response(config, groups);
+  };
+  await assert.rejects(mutateProviderConfig('codex-api-key', (items) => items), /changed after final read/);
+  assert.equal(writes, 1);
 });

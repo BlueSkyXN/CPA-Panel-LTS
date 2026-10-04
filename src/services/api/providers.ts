@@ -3,7 +3,12 @@
  */
 
 import { apiClient } from './client';
-import { mutateProviderConfig, MODEL_SOURCE_INDEX, type ModelPayload } from './providerGroups';
+import {
+  mutateProviderConfig,
+  MODEL_SOURCE_INDEX,
+  providerValuesEqual,
+  type ModelPayload,
+} from './providerGroups';
 import { isRecord } from '@/utils/helpers';
 import {
   normalizeGeminiKeyConfig,
@@ -234,12 +239,16 @@ export function replaceLatestProviderRecord(
   latestItems: unknown[],
   isTarget: (record: Record<string, unknown>, index: number) => boolean,
   payload: Record<string, unknown>,
-  mergePayload: ProviderRecordMerger
+  mergePayload: ProviderRecordMerger,
+  matchesSnapshot?: (record: Record<string, unknown>) => boolean
 ): unknown[] {
   const targetIndex = latestItems.findIndex(
     (item, index) => isRecord(item) && isTarget(item, index)
   );
-  if (targetIndex < 0) {
+  if (
+    targetIndex < 0 ||
+    (matchesSnapshot && !matchesSnapshot(latestItems[targetIndex] as Record<string, unknown>))
+  ) {
     throw new Error('Provider configuration changed; refresh and try again.');
   }
 
@@ -553,13 +562,27 @@ export const providersApi = {
       )
     ),
 
-  updateGeminiKey: (apiKey: string, baseUrl: string | undefined, config: GeminiKeyConfig) =>
+  updateGeminiKey: (
+    apiKey: string,
+    baseUrl: string | undefined,
+    config: GeminiKeyConfig,
+    snapshot?: GeminiKeyConfig
+  ) =>
     mutateLatestProviderList('gemini-api-key', (latestItems) =>
       replaceLatestProviderRecord(
         latestItems,
         (record) => matchesProviderKey(record, apiKey, baseUrl),
         serializeGeminiKey(config),
-        (raw, payload) => mergeProviderKeyPayload(raw, payload, GEMINI_KEY_FIELDS)
+        (raw, payload) => mergeProviderKeyPayload(raw, payload, GEMINI_KEY_FIELDS),
+        snapshot
+          ? (record) => {
+              const current = normalizeGeminiKeyConfig(record);
+              return (
+                !!current &&
+                providerValuesEqual(serializeGeminiKey(current), serializeGeminiKey(snapshot))
+              );
+            }
+          : undefined
       )
     ),
 
@@ -573,13 +596,27 @@ export const providersApi = {
       )
     ),
 
-  updateInteractionsKey: (apiKey: string, baseUrl: string | undefined, config: GeminiKeyConfig) =>
+  updateInteractionsKey: (
+    apiKey: string,
+    baseUrl: string | undefined,
+    config: GeminiKeyConfig,
+    snapshot?: GeminiKeyConfig
+  ) =>
     mutateLatestProviderList('interactions-api-key', (latestItems) =>
       replaceLatestProviderRecord(
         latestItems,
         (record) => matchesProviderKey(record, apiKey, baseUrl),
         serializeGeminiKey(config),
-        (raw, payload) => mergeProviderKeyPayload(raw, payload, INTERACTIONS_KEY_FIELDS)
+        (raw, payload) => mergeProviderKeyPayload(raw, payload, INTERACTIONS_KEY_FIELDS),
+        snapshot
+          ? (record) => {
+              const current = normalizeGeminiKeyConfig(record);
+              return (
+                !!current &&
+                providerValuesEqual(serializeGeminiKey(current), serializeGeminiKey(snapshot))
+              );
+            }
+          : undefined
       )
     ),
 
@@ -610,13 +647,27 @@ export const providersApi = {
       )
     ),
 
-  updateCodexConfig: (apiKey: string, baseUrl: string | undefined, config: ProviderKeyConfig) =>
+  updateCodexConfig: (
+    apiKey: string,
+    baseUrl: string | undefined,
+    config: ProviderKeyConfig,
+    snapshot?: ProviderKeyConfig
+  ) =>
     mutateLatestProviderList('codex-api-key', (latestItems) =>
       replaceLatestProviderRecord(
         latestItems,
         (record) => matchesProviderKey(record, apiKey, baseUrl),
         serializeProviderKey(config),
-        (raw, payload) => mergeProviderKeyPayload(raw, payload, CODEX_KEY_FIELDS)
+        (raw, payload) => mergeProviderKeyPayload(raw, payload, CODEX_KEY_FIELDS),
+        snapshot
+          ? (record) => {
+              const current = normalizeProviderKeyConfig(record);
+              return (
+                !!current &&
+                providerValuesEqual(serializeProviderKey(current), serializeProviderKey(snapshot))
+              );
+            }
+          : undefined
       )
     ),
 
@@ -647,13 +698,27 @@ export const providersApi = {
       )
     ),
 
-  updateXAIConfig: (apiKey: string, baseUrl: string | undefined, config: ProviderKeyConfig) =>
+  updateXAIConfig: (
+    apiKey: string,
+    baseUrl: string | undefined,
+    config: ProviderKeyConfig,
+    snapshot?: ProviderKeyConfig
+  ) =>
     mutateLatestProviderList('xai-api-key', (latestItems) =>
       replaceLatestProviderRecord(
         latestItems,
         (record) => matchesProviderKey(record, apiKey, baseUrl),
         serializeProviderKey(config),
-        (raw, payload) => mergeProviderKeyPayload(raw, payload, XAI_KEY_FIELDS)
+        (raw, payload) => mergeProviderKeyPayload(raw, payload, XAI_KEY_FIELDS),
+        snapshot
+          ? (record) => {
+              const current = normalizeProviderKeyConfig(record);
+              return (
+                !!current &&
+                providerValuesEqual(serializeProviderKey(current), serializeProviderKey(snapshot))
+              );
+            }
+          : undefined
       )
     ),
 
@@ -684,13 +749,27 @@ export const providersApi = {
       )
     ),
 
-  updateClaudeConfig: (apiKey: string, baseUrl: string | undefined, config: ProviderKeyConfig) =>
+  updateClaudeConfig: (
+    apiKey: string,
+    baseUrl: string | undefined,
+    config: ProviderKeyConfig,
+    snapshot?: ProviderKeyConfig
+  ) =>
     mutateLatestProviderList('claude-api-key', (latestItems) =>
       replaceLatestProviderRecord(
         latestItems,
         (record) => matchesProviderKey(record, apiKey, baseUrl),
         serializeProviderKey(config),
-        (raw, payload) => mergeProviderKeyPayload(raw, payload, CLAUDE_KEY_FIELDS)
+        (raw, payload) => mergeProviderKeyPayload(raw, payload, CLAUDE_KEY_FIELDS),
+        snapshot
+          ? (record) => {
+              const current = normalizeProviderKeyConfig(record);
+              return (
+                !!current &&
+                providerValuesEqual(serializeProviderKey(current), serializeProviderKey(snapshot))
+              );
+            }
+          : undefined
       )
     ),
 
@@ -721,13 +800,27 @@ export const providersApi = {
       )
     ),
 
-  updateVertexConfig: (apiKey: string, baseUrl: string | undefined, config: ProviderKeyConfig) =>
+  updateVertexConfig: (
+    apiKey: string,
+    baseUrl: string | undefined,
+    config: ProviderKeyConfig,
+    snapshot?: ProviderKeyConfig
+  ) =>
     mutateLatestProviderList('vertex-api-key', (latestItems) =>
       replaceLatestProviderRecord(
         latestItems,
         (record) => matchesProviderKey(record, apiKey, baseUrl),
         serializeVertexKey(config),
-        (raw, payload) => mergeProviderKeyPayload(raw, payload, VERTEX_KEY_FIELDS)
+        (raw, payload) => mergeProviderKeyPayload(raw, payload, VERTEX_KEY_FIELDS),
+        snapshot
+          ? (record) => {
+              const current = normalizeProviderKeyConfig(record);
+              return (
+                !!current &&
+                providerValuesEqual(serializeVertexKey(current), serializeVertexKey(snapshot))
+              );
+            }
+          : undefined
       )
     ),
 
@@ -760,13 +853,30 @@ export const providersApi = {
       )
     ),
 
-  updateOpenAIProvider: (name: string, index: number, provider: OpenAIProviderConfig) =>
+  updateOpenAIProvider: (
+    name: string,
+    index: number,
+    provider: OpenAIProviderConfig,
+    snapshot?: OpenAIProviderConfig
+  ) =>
     mutateLatestProviderList('openai-compatibility', (latestItems) =>
       replaceLatestProviderRecord(
         latestItems,
         (record, currentIndex) => currentIndex === index && matchesOpenAIProvider(record, name),
         serializeOpenAIProvider(provider),
-        mergeOpenAIProviderPayload
+        mergeOpenAIProviderPayload,
+        snapshot
+          ? (record) => {
+              const current = normalizeOpenAIProvider(record, index);
+              return (
+                !!current &&
+                providerValuesEqual(
+                  serializeOpenAIProvider(current),
+                  serializeOpenAIProvider(snapshot)
+                )
+              );
+            }
+          : undefined
       )
     ),
 
