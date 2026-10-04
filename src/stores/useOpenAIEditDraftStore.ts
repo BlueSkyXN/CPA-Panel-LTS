@@ -10,6 +10,7 @@
 
 import type { SetStateAction } from 'react';
 import { create } from 'zustand';
+import type { OpenAIProviderConfig } from '@/types';
 import type { OpenAIFormState } from '@/components/providers/types';
 import { buildApiKeyEntry } from '@/components/providers/utils';
 
@@ -37,6 +38,7 @@ export type OpenAIEditBaseline = {
 
 export type OpenAIEditDraft = {
   initialized: boolean;
+  source: OpenAIProviderConfig[];
   baseline: OpenAIEditBaseline | null;
   form: OpenAIFormState;
   testModel: string;
@@ -62,7 +64,7 @@ interface OpenAIEditDraftState {
   clearDraft: (key: string) => void;
 }
 
-const resolveAction = <T,>(action: SetStateAction<T>, prev: T): T =>
+const resolveAction = <T>(action: SetStateAction<T>, prev: T): T =>
   typeof action === 'function' ? (action as (previous: T) => T)(prev) : action;
 
 const buildEmptyForm = (): OpenAIFormState => ({
@@ -77,6 +79,7 @@ const buildEmptyForm = (): OpenAIFormState => ({
 
 const buildEmptyDraft = (): OpenAIEditDraft => ({
   initialized: false,
+  source: [],
   baseline: null,
   form: buildEmptyForm(),
   testModel: '',

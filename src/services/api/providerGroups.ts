@@ -1,6 +1,5 @@
 import { apiClient } from './client';
 import { configRevision } from './configRevision';
-import { useConfigStore } from '@/stores/useConfigStore';
 import { isRecord } from '@/utils/helpers';
 import { parseConfigDocument, usesV8ConfigLayout } from '@/utils/configLayout';
 
@@ -253,8 +252,6 @@ export async function mutateProviderConfig(
   validateSnapshot?: (items: unknown[]) => void
 ): Promise<void> {
   const generation = apiClient.getConnectionGeneration();
-  const baseline = useConfigStore.getState().config?.raw;
-  const expected = isRecord(baseline) ? structuredClone(baseline[section] ?? []) : undefined;
   const guard = () => {
     if (!apiClient.isCurrentConnection(generation)) throw conflict();
   };
@@ -280,9 +277,6 @@ export async function mutateProviderConfig(
     guard();
     return;
   }
-  // A target snapshot replaces the mutable store baseline, not the final document checks.
-  if (v8 && !validateSnapshot && expected !== undefined && !equal(expected, before))
-    throw conflict();
   const after = mutate(before);
   if (!v8) {
     const path = section === 'interactions-api-key' ? '/interactions-api-key' : `/${section}`;

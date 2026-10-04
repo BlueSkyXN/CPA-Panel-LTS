@@ -10,6 +10,7 @@
 
 import type { SetStateAction } from 'react';
 import { create } from 'zustand';
+import type { ProviderKeyConfig } from '@/types';
 import type { ProviderFormState } from '@/components/providers/types';
 
 export type ClaudeTestStatus = 'idle' | 'loading' | 'success' | 'error';
@@ -34,6 +35,7 @@ export type ClaudeEditBaseline = {
 
 type ClaudeEditDraft = {
   initialized: boolean;
+  source: ProviderKeyConfig[];
   baseline: ClaudeEditBaseline | null;
   form: ProviderFormState;
   testModel: string;
@@ -47,25 +49,16 @@ interface ClaudeEditDraftState {
   acquireDraft: (key: string) => void;
   releaseDraft: (key: string) => void;
   ensureDraft: (key: string) => void;
-  initDraft: (
-    key: string,
-    draft: Omit<ClaudeEditDraft, 'initialized'>
-  ) => void;
+  initDraft: (key: string, draft: Omit<ClaudeEditDraft, 'initialized'>) => void;
   setDraftBaseline: (key: string, baseline: ClaudeEditBaseline) => void;
-  setDraftForm: (
-    key: string,
-    action: SetStateAction<ProviderFormState>
-  ) => void;
+  setDraftForm: (key: string, action: SetStateAction<ProviderFormState>) => void;
   setDraftTestModel: (key: string, action: SetStateAction<string>) => void;
-  setDraftTestStatus: (
-    key: string,
-    action: SetStateAction<ClaudeTestStatus>
-  ) => void;
+  setDraftTestStatus: (key: string, action: SetStateAction<ClaudeTestStatus>) => void;
   setDraftTestMessage: (key: string, action: SetStateAction<string>) => void;
   clearDraft: (key: string) => void;
 }
 
-const resolveAction = <T,>(action: SetStateAction<T>, prev: T): T =>
+const resolveAction = <T>(action: SetStateAction<T>, prev: T): T =>
   typeof action === 'function' ? (action as (previous: T) => T)(prev) : action;
 
 const buildEmptyForm = (): ProviderFormState => ({
@@ -82,6 +75,7 @@ const buildEmptyForm = (): ProviderFormState => ({
 
 const buildEmptyDraft = (): ClaudeEditDraft => ({
   initialized: false,
+  source: [],
   baseline: null,
   form: buildEmptyForm(),
   testModel: '',

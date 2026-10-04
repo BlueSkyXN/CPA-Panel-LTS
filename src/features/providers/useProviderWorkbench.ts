@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { providersApi } from '@/services/api';
+import { providerConfigSnapshot } from '@/services/api/providers';
 import { apiClient } from '@/services/api/client';
 import { normalizeConfigResponse } from '@/services/api/transformers';
 import { providerValuesEqual } from '@/services/api/providerGroups';
@@ -65,7 +66,10 @@ import {
   getSponsorProviderDefinition,
   type SponsorProtocolUrls,
 } from './sponsorDefinitions';
-import { runSponsorMutationWithRecovery } from './sponsorMutationRecovery';
+import {
+  runSponsorMutationWithRecovery,
+  isSponsorPartialMutationError,
+} from './sponsorMutationRecovery';
 
 const CONFIG_DETECTED_BRANDS: ReadonlySet<ProviderBrand> = new Set([
   'claudeApi',
@@ -338,6 +342,7 @@ const readSponsorSnapshot = async (
   snapshot?: SponsorProviderRaw
 ): Promise<SponsorProviderRaw> => {
   const generation = apiClient.getConnectionGeneration();
+  const original = snapshot ? structuredClone(snapshot) : undefined;
   const latest = normalizeConfigResponse(await apiClient.get('/config'));
   if (!apiClient.isCurrentConnection(generation))
     throw new Error('Configuration connection changed');
@@ -349,7 +354,25 @@ const readSponsorSnapshot = async (
         : brand === 'qiniuCloud'
           ? buildQiniuCloudRaw(latest)
           : buildInfistarRaw(latest);
-  if (snapshot && !providerValuesEqual(snapshot, raw)) {
+  const project = (value: SponsorProviderRaw) => ({
+    openai: value.openai.map(({ index, config }) => ({
+      index,
+      config: providerConfigSnapshot('openai-compatibility', config),
+    })),
+    gemini: value.gemini.map(({ index, config }) => ({
+      index,
+      config: providerConfigSnapshot('gemini-api-key', config),
+    })),
+    codex: value.codex.map(({ index, config }) => ({
+      index,
+      config: providerConfigSnapshot('codex-api-key', config),
+    })),
+    claude: value.claude.map(({ index, config }) => ({
+      index,
+      config: providerConfigSnapshot('claude-api-key', config),
+    })),
+  });
+  if (original && !providerValuesEqual(project(original), project(raw))) {
     throw new Error('Provider configuration changed; refresh and try again.');
   }
   return raw;
@@ -410,8 +433,7 @@ const toggleSponsorConfig = async (raw: SponsorProviderRaw, disabled: boolean) =
 export function useProviderWorkbench(): UseProviderWorkbenchResult {
   const connectionStatus = useAuthStore((s) => s.connectionStatus);
   const config = useConfigStore((s) => s.config);
-  const fetchConfig = useConfigStore((s) => s.fetchConfig);
-  const updateConfigValue = useConfigStore((s) => s.updateConfigValue);
+  const refreshProviders = useConfigStore((s) => s.refreshProviders);
   const isCacheValid = useConfigStore((s) => s.isCacheValid);
 
   const [isPending, setIsPending] = useState<boolean>(() => !isCacheValid());
@@ -424,32 +446,26 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
 
   const connected = connectionStatus === 'connected';
 
+  const refreshRequest = useRef(0);
   const refetch = useCallback(async () => {
+    const request = ++refreshRequest.current;
+    const generation = apiClient.getConnectionGeneration();
+    const isCurrent = () =>
+      request === refreshRequest.current && apiClient.isCurrentConnection(generation);
     setIsFetching(true);
     setErrorMessage(null);
     try {
-      const [configResult, vertexResult, openaiResult] = await Promise.allSettled([
-        fetchConfig(undefined, true),
-        providersApi.getVertexConfigs(),
-        providersApi.getOpenAIProviders(),
-      ]);
-      if (configResult.status !== 'fulfilled') {
-        throw configResult.reason;
-      }
-      if (vertexResult.status === 'fulfilled') {
-        updateConfigValue('vertex-api-key', vertexResult.value || []);
-      }
-      if (openaiResult.status === 'fulfilled') {
-        updateConfigValue('openai-compatibility', openaiResult.value || []);
-      }
+      if (!(await refreshProviders()) || !isCurrent()) return;
       setFetchedAt(new Date().toISOString());
     } catch (err) {
-      setErrorMessage(getErrorMessage(err) || 'Failed to load providers');
+      if (isCurrent()) setErrorMessage(getErrorMessage(err) || 'Failed to load providers');
     } finally {
-      setIsPending(false);
-      setIsFetching(false);
+      if (isCurrent()) {
+        setIsPending(false);
+        setIsFetching(false);
+      }
     }
-  }, [fetchConfig, updateConfigValue]);
+  }, [refreshProviders]);
 
   const refreshSnapshot = useCallback(() => {
     setFetchedAt(new Date().toISOString());
@@ -619,7 +635,11 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           }
         } else {
           for (const item of raw.gemini) {
-            await providersApi.deleteGeminiKey(item.config.apiKey, item.config.baseUrl);
+            await providersApi.deleteGeminiKey(
+              item.config.apiKey,
+              item.config.baseUrl,
+              item.config
+            );
           }
         }
       }
@@ -644,7 +664,11 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
         }
       } else {
         for (const item of raw.codex) {
-          await providersApi.deleteCodexConfig(item.config.apiKey, item.config.baseUrl);
+          await providersApi.deleteCodexConfig(
+            item.config.apiKey,
+            item.config.baseUrl,
+            item.config
+          );
         }
       }
 
@@ -668,7 +692,11 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
         }
       } else {
         for (const item of raw.claude) {
-          await providersApi.deleteClaudeConfig(item.config.apiKey, item.config.baseUrl);
+          await providersApi.deleteClaudeConfig(
+            item.config.apiKey,
+            item.config.baseUrl,
+            item.config
+          );
         }
       }
 
@@ -699,6 +727,10 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
 
   const createProvider = useCallback(
     async (brand: ProviderBrand, input: ProviderEntryFormInput) => {
+      const generation = apiClient.getConnectionGeneration();
+      const refresh = async () => {
+        if (apiClient.isCurrentConnection(generation)) await refetch();
+      };
       setMutating(true);
       try {
         if (brand === 'gemini') {
@@ -735,9 +767,12 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           brand === 'qiniuCloud' ||
           brand === 'infistar'
         ) {
-          await runSponsorMutationWithRecovery(() => persistSponsorConfig(brand, input), refetch);
+          await runSponsorMutationWithRecovery(() => persistSponsorConfig(brand, input), refresh);
         }
-        await refetch();
+        await refresh();
+      } catch (error) {
+        if (!isSponsorPartialMutationError(error)) await refresh();
+        throw error;
       } finally {
         setMutating(false);
       }
@@ -747,6 +782,10 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
 
   const updateProvider = useCallback(
     async (resource: ProviderResource, input: ProviderEntryFormInput) => {
+      const generation = apiClient.getConnectionGeneration();
+      const refresh = async () => {
+        if (apiClient.isCurrentConnection(generation)) await refetch();
+      };
       setMutating(true);
       try {
         const brand = resource.brand;
@@ -821,10 +860,13 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
         ) {
           await runSponsorMutationWithRecovery(
             () => persistSponsorConfig(brand, input, resource.raw as SponsorProviderRaw),
-            refetch
+            refresh
           );
         }
-        await refetch();
+        await refresh();
+      } catch (error) {
+        if (!isSponsorPartialMutationError(error)) await refresh();
+        throw error;
       } finally {
         setMutating(false);
       }
@@ -834,27 +876,55 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
 
   const deleteProvider = useCallback(
     async (resource: ProviderResource) => {
+      const generation = apiClient.getConnectionGeneration();
+      const refresh = async () => {
+        if (apiClient.isCurrentConnection(generation)) await refetch();
+      };
       setMutating(true);
       try {
         const sel = resource.selector;
         if (sel.brand === 'gemini') {
-          await providersApi.deleteGeminiKey(sel.apiKey, sel.baseUrl);
-        } else if (sel.brand === 'interactions') {
-          await providersApi.deleteInteractionsKey(sel.apiKey, sel.baseUrl);
-          const next = (config?.interactionsApiKeys ?? []).filter(
-            (_, index) => index !== sel.index
+          await providersApi.deleteGeminiKey(
+            sel.apiKey,
+            sel.baseUrl,
+            resource.raw as ProviderKeyConfig
           );
-          updateConfigValue('interactions-api-key', next);
+        } else if (sel.brand === 'interactions') {
+          await providersApi.deleteInteractionsKey(
+            sel.apiKey,
+            sel.baseUrl,
+            resource.raw as ProviderKeyConfig
+          );
         } else if (sel.brand === 'codex') {
-          await providersApi.deleteCodexConfig(sel.apiKey, sel.baseUrl);
+          await providersApi.deleteCodexConfig(
+            sel.apiKey,
+            sel.baseUrl,
+            resource.raw as ProviderKeyConfig
+          );
         } else if (sel.brand === 'xai') {
-          await providersApi.deleteXAIConfig(sel.apiKey, sel.baseUrl);
+          await providersApi.deleteXAIConfig(
+            sel.apiKey,
+            sel.baseUrl,
+            resource.raw as ProviderKeyConfig
+          );
         } else if (sel.brand === 'claude') {
-          await providersApi.deleteClaudeConfig(sel.apiKey, sel.baseUrl);
+          await providersApi.deleteClaudeConfig(
+            sel.apiKey,
+            sel.baseUrl,
+            resource.raw as ProviderKeyConfig
+          );
         } else if (sel.brand === 'claudeApi') {
-          await providersApi.deleteClaudeConfig(sel.apiKey, sel.baseUrl);
+          await providersApi.deleteClaudeConfig(
+            sel.apiKey,
+            sel.baseUrl,
+            resource.raw as ProviderKeyConfig
+          );
         } else if (sel.brand === 'vertex') {
-          await providersApi.deleteVertexConfig(sel.apiKey, sel.baseUrl);
+          await providersApi.deleteVertexConfig(
+            sel.apiKey,
+            sel.baseUrl,
+            resource.raw as ProviderKeyConfig
+          );
         } else if (sel.brand === 'openaiCompatibility') {
           await providersApi.deleteOpenAIProvider(sel.index, resource.raw as OpenAIProviderConfig);
         } else if (
@@ -866,13 +936,25 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           const raw = await readSponsorSnapshot(sel.brand, resource.raw as SponsorProviderRaw);
           await runSponsorMutationWithRecovery(async () => {
             for (const item of raw.gemini) {
-              await providersApi.deleteGeminiKey(item.config.apiKey, item.config.baseUrl);
+              await providersApi.deleteGeminiKey(
+                item.config.apiKey,
+                item.config.baseUrl,
+                item.config
+              );
             }
             for (const item of raw.codex) {
-              await providersApi.deleteCodexConfig(item.config.apiKey, item.config.baseUrl);
+              await providersApi.deleteCodexConfig(
+                item.config.apiKey,
+                item.config.baseUrl,
+                item.config
+              );
             }
             for (const item of raw.claude) {
-              await providersApi.deleteClaudeConfig(item.config.apiKey, item.config.baseUrl);
+              await providersApi.deleteClaudeConfig(
+                item.config.apiKey,
+                item.config.baseUrl,
+                item.config
+              );
             }
             for (const index of getSponsorOpenAIDeleteIndices(raw)) {
               const target = raw.openai.find((item) => item.index === index);
@@ -880,18 +962,25 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
                 throw new Error('Provider configuration changed; refresh and try again.');
               await providersApi.deleteOpenAIProvider(index, target.config);
             }
-          }, refetch);
+          }, refresh);
         }
-        await refetch();
+        await refresh();
+      } catch (error) {
+        if (!isSponsorPartialMutationError(error)) await refresh();
+        throw error;
       } finally {
         setMutating(false);
       }
     },
-    [config?.interactionsApiKeys, refetch, updateConfigValue]
+    [refetch]
   );
 
   const toggleDisabled = useCallback(
     async (resource: ProviderResource, disabled: boolean) => {
+      const generation = apiClient.getConnectionGeneration();
+      const refresh = async () => {
+        if (apiClient.isCurrentConnection(generation)) await refetch();
+      };
       setMutating(true);
       try {
         const brand = resource.brand;
@@ -958,9 +1047,12 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           brand === 'infistar'
         ) {
           const raw = await readSponsorSnapshot(brand, resource.raw as SponsorProviderRaw);
-          await runSponsorMutationWithRecovery(() => toggleSponsorConfig(raw, disabled), refetch);
+          await runSponsorMutationWithRecovery(() => toggleSponsorConfig(raw, disabled), refresh);
         }
-        await refetch();
+        await refresh();
+      } catch (error) {
+        if (!isSponsorPartialMutationError(error)) await refresh();
+        throw error;
       } finally {
         setMutating(false);
       }

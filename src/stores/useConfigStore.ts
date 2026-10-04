@@ -7,6 +7,9 @@ import { create } from 'zustand';
 import type { Config } from '@/types';
 import type { RawConfigSection } from '@/types/config';
 import { configApi } from '@/services/api/config';
+import { apiClient } from '@/services/api/client';
+import { providersApi, providerConfigSnapshot } from '@/services/api/providers';
+import { providerValuesEqual } from '@/services/api/providerGroups';
 import { CACHE_EXPIRY_MS } from '@/utils/constants';
 
 interface ConfigCache {
@@ -25,6 +28,7 @@ interface ConfigState {
     (section?: undefined, forceRefresh?: boolean): Promise<Config>;
     (section: RawConfigSection, forceRefresh?: boolean): Promise<unknown>;
   };
+  refreshProviders: () => Promise<Config | null>;
   updateConfigValue: (section: RawConfigSection, value: unknown) => void;
   clearCache: (section?: RawConfigSection) => void;
   isCacheValid: (section?: RawConfigSection) => boolean;
@@ -53,7 +57,7 @@ const SECTION_KEYS: RawConfigSection[] = [
   'claude-api-key',
   'vertex-api-key',
   'openai-compatibility',
-  'oauth-excluded-models'
+  'oauth-excluded-models',
 ];
 
 const extractSectionValue = (config: Config | null, section?: RawConfigSection) => {
@@ -165,17 +169,21 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
       set({
         config: data,
         cache: newCache,
-        loading: false
+        loading: false,
       });
 
       return section ? extractSectionValue(data, section) : data;
     } catch (error: unknown) {
       const message =
-        error instanceof Error ? error.message : typeof error === 'string' ? error : 'Failed to fetch config';
+        error instanceof Error
+          ? error.message
+          : typeof error === 'string'
+            ? error
+            : 'Failed to fetch config';
       if (requestId === configRequestToken) {
         set({
           error: message || 'Failed to fetch config',
-          loading: false
+          loading: false,
         });
       }
       throw error;
@@ -186,10 +194,72 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
     }
   }) as ConfigState['fetchConfig'],
 
+  refreshProviders: async () => {
+    const generation = apiClient.getConnectionGeneration();
+    const requestId = ++configRequestToken;
+    inFlightConfigRequest = null;
+    set({ cache: new Map(), loading: true, error: null });
+    try {
+      const [configResult, vertexResult, openaiResult] = await Promise.allSettled([
+        configApi.getConfig(),
+        providersApi.getVertexConfigs(),
+        providersApi.getOpenAIProviders(),
+      ]);
+      if (requestId !== configRequestToken || !apiClient.isCurrentConnection(generation))
+        return null;
+      if (configResult.status !== 'fulfilled') throw configResult.reason;
+      const data = configResult.value;
+      const same = <
+        T extends
+          | NonNullable<Config['vertexApiKeys']>[number]
+          | NonNullable<Config['openaiCompatibility']>[number],
+      >(
+        section: string,
+        before: T[],
+        after: T[]
+      ) =>
+        providerValuesEqual(
+          before.map((item) => providerConfigSnapshot(section, item)),
+          after.map((item) => providerConfigSnapshot(section, item))
+        );
+      // Runtime indexes may enrich a matching config view, never replace newer configuration.
+      if (
+        vertexResult.status === 'fulfilled' &&
+        same('vertex-api-key', data.vertexApiKeys ?? [], vertexResult.value)
+      )
+        data.vertexApiKeys = vertexResult.value;
+      if (
+        openaiResult.status === 'fulfilled' &&
+        same('openai-compatibility', data.openaiCompatibility ?? [], openaiResult.value)
+      )
+        data.openaiCompatibility = openaiResult.value;
+      set({ config: data, cache: new Map(), loading: false, error: null });
+      return data;
+    } catch (error) {
+      if (requestId === configRequestToken && apiClient.isCurrentConnection(generation))
+        set({
+          loading: false,
+          error: error instanceof Error ? error.message : 'Failed to fetch config',
+        });
+      throw error;
+    }
+  },
+
   updateConfigValue: (section, value) => {
     set((state) => {
       const raw = { ...(state.config?.raw || {}) };
-      raw[section] = value;
+      if (
+        ![
+          'gemini-api-key',
+          'interactions-api-key',
+          'codex-api-key',
+          'xai-api-key',
+          'claude-api-key',
+          'vertex-api-key',
+          'openai-compatibility',
+        ].includes(section)
+      )
+        raw[section] = value;
       const nextConfig: Config = { ...(state.config || {}), raw };
 
       switch (section) {
@@ -302,5 +372,5 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
     if (!cached) return false;
 
     return Date.now() - cached.timestamp < CACHE_EXPIRY_MS;
-  }
+  },
 }));

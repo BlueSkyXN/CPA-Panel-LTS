@@ -1,3 +1,4 @@
+import { apiClient } from '@/services/api/client';
 import type { Dispatch, SetStateAction } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -150,7 +151,7 @@ export function AiProvidersOpenAIEditLayout() {
 
   const config = useConfigStore((state) => state.config);
   const fetchConfig = useConfigStore((state) => state.fetchConfig);
-  const updateConfigValue = useConfigStore((state) => state.updateConfigValue);
+  const refreshProviders = useConfigStore((state) => state.refreshProviders);
   const isCacheValid = useConfigStore((state) => state.isCacheValid);
 
   const [providers, setProviders] = useState<OpenAIProviderConfig[]>(
@@ -267,7 +268,6 @@ export function AiProvidersOpenAIEditLayout() {
         if (cancelled) return;
         const nextProviders = value || [];
         setProviders(nextProviders);
-        updateConfigValue('openai-compatibility', nextProviders);
       })
       .catch(async (err: unknown) => {
         if (cancelled) return;
@@ -289,7 +289,7 @@ export function AiProvidersOpenAIEditLayout() {
     return () => {
       cancelled = true;
     };
-  }, [fetchConfig, isCacheValid, showNotification, t, updateConfigValue]);
+  }, [fetchConfig, isCacheValid, showNotification, t]);
 
   useEffect(() => {
     if (loading) return;
@@ -318,6 +318,7 @@ export function AiProvidersOpenAIEditLayout() {
           : available[0] || '';
       const baseline = buildOpenAIBaseline(seededForm, initialTestModel);
       initDraft(draftKey, {
+        source: structuredClone(providers),
         baseline,
         form: seededForm,
         testModel: initialTestModel,
@@ -328,6 +329,7 @@ export function AiProvidersOpenAIEditLayout() {
     } else {
       const emptyForm = buildEmptyForm();
       initDraft(draftKey, {
+        source: structuredClone(providers),
         baseline: buildOpenAIBaseline(emptyForm, ''),
         form: emptyForm,
         testModel: '',
@@ -336,7 +338,7 @@ export function AiProvidersOpenAIEditLayout() {
         keyTestStatuses: [],
       });
     }
-  }, [draft?.initialized, draftKey, initDraft, initialData, loading]);
+  }, [draft?.initialized, draftKey, initDraft, initialData, loading, providers]);
 
   useEffect(() => {
     if (loading) return;
@@ -467,6 +469,8 @@ export function AiProvidersOpenAIEditLayout() {
       return;
     }
 
+    if (!draft?.initialized) return;
+    const generation = apiClient.getConnectionGeneration();
     setSaving(true);
     try {
       const payload: OpenAIProviderConfig = {
@@ -483,8 +487,8 @@ export function AiProvidersOpenAIEditLayout() {
       if (form.priority !== undefined && Number.isFinite(form.priority)) {
         payload.priority = Math.trunc(form.priority);
       }
-      if (initialData?.disabled !== undefined) {
-        payload.disabled = initialData.disabled;
+      if (draft.source[editIndex ?? -1]?.disabled !== undefined) {
+        payload.disabled = draft.source[editIndex ?? -1].disabled;
       }
       const resolvedTestModel = testModel.trim();
       if (resolvedTestModel) payload.testModel = resolvedTestModel;
@@ -493,20 +497,12 @@ export function AiProvidersOpenAIEditLayout() {
 
       const nextList =
         editIndex !== null
-          ? providers.map((item, idx) => (idx === editIndex ? payload : item))
-          : [...providers, payload];
+          ? draft.source.map((item, idx) => (idx === editIndex ? payload : item))
+          : [...draft.source, payload];
 
-      await providersApi.saveOpenAIProviders(nextList);
+      await providersApi.saveOpenAIProviders(nextList, draft.source);
+      if (!apiClient.isCurrentConnection(generation)) return;
 
-      let syncedProviders = nextList;
-      try {
-        syncedProviders = await providersApi.getOpenAIProviders();
-      } catch {
-        // 保存成功后刷新失败时，回退到本地计算结果，避免页面数据为空或回退
-      }
-
-      setProviders(syncedProviders);
-      updateConfigValue('openai-compatibility', syncedProviders);
       showNotification(
         editIndex !== null
           ? t('notification.openai_provider_updated')
@@ -517,8 +513,17 @@ export function AiProvidersOpenAIEditLayout() {
       setDraftBaseline(draftKey, buildOpenAIBaseline(form, testModel));
       handleBack();
     } catch (err: unknown) {
+      if (!apiClient.isCurrentConnection(generation)) return;
       showNotification(`${t('notification.update_failed')}: ${getErrorMessage(err)}`, 'error');
     } finally {
+      if (apiClient.isCurrentConnection(generation)) {
+        try {
+          await refreshProviders();
+        } catch {
+          if (apiClient.isCurrentConnection(generation))
+            showNotification(t('notification.refresh_failed'), 'warning');
+        }
+      }
       setSaving(false);
     }
   }, [
@@ -527,13 +532,12 @@ export function AiProvidersOpenAIEditLayout() {
     editIndex,
     form,
     handleBack,
-    initialData?.disabled,
-    providers,
     setDraftBaseline,
     showNotification,
     t,
     testModel,
-    updateConfigValue,
+    refreshProviders,
+    draft,
   ]);
 
   return (

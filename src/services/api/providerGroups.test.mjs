@@ -31,7 +31,7 @@ function workbench() {
   renderToStaticMarkup(createElement(Harness));
   return result;
 }
-test.afterEach(() => useConfigStore.setState({ config: null }));
+test.afterEach(() => useConfigStore.getState().clearCache());
 
 test('discovery never drops existing same-name aliases or a configured placeholder', () => {
   const original = [
@@ -157,7 +157,7 @@ for (const v8 of [false, true]) {
     await providersApi.updateCodexConfig('synthetic-one', 'https://example.invalid', {
       ...config,
       proxyUrl: 'http://localhost:7890',
-    });
+    }, config);
     assert.equal(writes.length, 1);
     assert.equal(writes[0].baseURL, `https://example.invalid/${v8 ? 'v8' : 'v0'}/management`);
     assert.equal(writes[0].url, v8 ? '/config/api-keys/codex' : '/codex-api-key');
@@ -205,7 +205,7 @@ test('grouped model rename and reorder retain per-row metadata hidden by the run
   await providersApi.updateCodexConfig('synthetic', 'https://upstream.invalid', {
     ...normalized,
     models: [{ ...normalized.models[1], name: 'renamed' }, normalized.models[0]],
-  });
+  }, normalized);
   assert.deepEqual(saved[0].models, rawModels);
   assert.deepEqual(saved[0].keys[0].models, [
     { name: 'renamed', alias: 'b', future: 'second' },
@@ -603,4 +603,173 @@ test('server conflict after final reads is surfaced without retry or legacy fall
   };
   await assert.rejects(mutateProviderConfig('codex-api-key', (items) => items), /changed after final read/);
   assert.equal(writes, 1);
+});
+
+// These endpoints intentionally differ as they do in Core: config omits false and runtime indexes.
+function statefulProviders(raw, { v8 = true } = {}) {
+  apiClient.setConfig({ apiBase: 'https://stateful.invalid', managementKey: 'synthetic' });
+  useConfigStore.getState().clearCache();
+  let current = structuredClone(raw);
+  let version = 0;
+  const writes = [];
+  const etag = () => `"${String(version).padStart(64, '0')}"`;
+  const openaiView = () => (current['openai-compatibility'] ?? []).map(item => ({
+    ...item, disabled: item.disabled ?? false,
+    'api-key-entries': (item['api-key-entries'] ?? []).map(key => ({ ...key, 'auth-index': 'synthetic-runtime' })),
+  }));
+  apiClient.instance.defaults.adapter = async config => {
+    const reply = data => ({ ...response(config, structuredClone(data)), headers: { etag: etag() } });
+    const family = config.url.split('/').at(-1);
+    const section = family === 'openai-compatibility' ? family : `${family}-api-key`;
+    if (config.method !== 'get') {
+      writes.push(config);
+      if (config.method === 'put') {
+        assert.equal(config.headers.get('If-Match'), etag());
+        const groups = JSON.parse(config.data);
+        current[section] = family === 'openai-compatibility'
+          ? groups.map(({ keys, ...item }) => {
+              if (item.disabled === false) delete item.disabled;
+              return { ...item, 'api-key-entries': keys };
+            })
+          : groups.flatMap(({ name, keys, ...group }) => keys.map(key => ({ ...group, ...key })));
+      } else if (config.method === 'patch') {
+        const body = JSON.parse(config.data);
+        const target = current['openai-compatibility'].find(item => item.name === body.name);
+        if (body.value.disabled) target.disabled = true;
+        else delete target.disabled;
+      } else if (config.method === 'delete') {
+        const name = new URL(`https://stateful.invalid${config.url}`).searchParams.get('name');
+        current['openai-compatibility'] = current['openai-compatibility'].filter(item => item.name !== name);
+      }
+      version++;
+      return reply({});
+    }
+    if (config.url === '/config.yaml') return reply(v8 ? 'server: {port: 8317}\n' : 'port: 8317\n');
+    if (config.url === '/config') return reply(current);
+    if (config.url === '/openai-compatibility') return reply({ 'openai-compatibility': openaiView() });
+    if (config.url === '/vertex-api-key') return reply({ 'vertex-api-key': current['vertex-api-key'] ?? [] });
+    if (config.url === '/config/api-keys/openai-compatibility') return reply(openaiGroups(current['openai-compatibility'] ?? []));
+    if (config.url.startsWith('/config/api-keys/')) return reply((current[section] ?? []).map(({ 'base-url': url, ...key }, index) => ({ name: `group-${index}`, 'base-url': url, keys: [key] })));
+    throw new Error(`Unexpected request: ${config.url}`);
+  };
+  return { writes, get raw() { return current; }, replace(next) { current = structuredClone(next); version++; } };
+}
+
+for (const v8 of [true, false]) {
+  test(`real endpoint shapes permit sequential OpenAI operations after readback (${v8 ? 'v8' : 'legacy'})`, async () => {
+    const fixture = statefulProviders({ 'openai-compatibility': [openaiA, openaiB] }, { v8 });
+    await workbench().refetch();
+    const selected = useConfigStore.getState().config.openaiCompatibility[0];
+    assert.equal(selected.disabled, false);
+    assert.equal(selected.apiKeyEntries[0].authIndex, 'synthetic-runtime');
+    fixture.replace({ 'openai-compatibility': [openaiA, { ...openaiB, priority: 42 }] });
+    await workbench().deleteProvider(openaiToResource(selected, 0));
+    let remaining = useConfigStore.getState().config.openaiCompatibility[0];
+    assert.equal(remaining.priority, 42);
+    assert.equal(remaining.sourceIndex, 0);
+    await workbench().toggleDisabled(openaiToResource(remaining, 0), true);
+    remaining = useConfigStore.getState().config.openaiCompatibility[0];
+    assert.equal(remaining.disabled, true);
+    await workbench().toggleDisabled(openaiToResource(remaining, 0), false);
+    remaining = useConfigStore.getState().config.openaiCompatibility[0];
+    assert.equal(remaining.disabled, false);
+    await workbench().deleteProvider(openaiToResource(remaining, 0));
+    assert.deepEqual(useConfigStore.getState().config.openaiCompatibility, []);
+    assert.equal(fixture.writes.length, 4);
+  });
+}
+
+test('provider refresh keeps wire raw; explicit full-list baseline cannot be replaced by store refresh', async () => {
+  const fixture = statefulProviders({ 'openai-compatibility': [openaiA, openaiB] });
+  await workbench().refetch();
+  const store = useConfigStore.getState();
+  assert.deepEqual(store.config.raw, fixture.raw);
+  const baseline = structuredClone(store.config.openaiCompatibility);
+  store.updateConfigValue('openai-compatibility', baseline);
+  assert.deepEqual(useConfigStore.getState().config.raw, fixture.raw);
+  await providersApi.saveOpenAIProviders([{ ...baseline[0], priority: 9 }, baseline[1]], baseline);
+  assert.equal(fixture.raw['openai-compatibility'][0].priority, 9);
+  await workbench().refetch();
+  await assert.rejects(providersApi.saveOpenAIProviders(baseline, baseline), /changed/);
+  const latest = useConfigStore.getState().config.openaiCompatibility;
+  await providersApi.updateOpenAIProvider(latest[0].name, 0, { ...latest[0], priority: 10 }, latest[0]);
+  await providersApi.createOpenAIProvider({ name: 'new', baseUrl: 'https://new.invalid', apiKeyEntries: [] });
+  assert.equal(fixture.writes.length, 3);
+});
+
+test('Sponsor aggregate ignores runtime attribution but retains configuration fields', async () => {
+  const fixture = statefulProviders({ 'openai-compatibility': [{ ...openaiA, 'base-url': 'https://code0.ai/v1' }] });
+  await workbench().refetch();
+  let selected = code0ToResource(buildCode0Raw(useConfigStore.getState().config));
+  await workbench().toggleDisabled(selected, true);
+  selected = code0ToResource(buildCode0Raw(useConfigStore.getState().config));
+  await workbench().deleteProvider(selected);
+  assert.deepEqual(fixture.raw['openai-compatibility'], []);
+  assert.equal(fixture.writes.length, 2);
+});
+
+test('Sponsor same-family sequences advance without accepting a changed later target', async () => {
+  for (const family of ['codex', 'gemini', 'claude']) {
+    const section = `${family}-api-key`;
+    const original = [1, 2].map(index => ({ 'api-key': `synthetic-${index}`, 'base-url': family === 'codex' ? 'https://code0.ai/v1' : 'https://code0.ai' }));
+    const fixture = statefulProviders({ [section]: original });
+    await workbench().refetch();
+    const resource = () => code0ToResource(buildCode0Raw(useConfigStore.getState().config));
+    await workbench().toggleDisabled(resource(), true);
+    assert.ok(fixture.raw[section].every(item => item['excluded-models'].includes('*')));
+    await workbench().toggleDisabled(resource(), false);
+    assert.ok(fixture.raw[section].every(item => !item['excluded-models']?.includes('*')));
+    await workbench().deleteProvider(resource());
+    assert.deepEqual(fixture.raw[section], []);
+    assert.equal(fixture.writes.length, 6);
+  }
+  const section = 'codex-api-key';
+  const rows = [1, 2].map(index => ({ 'api-key': `synthetic-${index}`, 'base-url': 'https://code0.ai/v1' }));
+  const fixture = statefulProviders({ [section]: rows });
+  const transport = apiClient.instance.defaults.adapter;
+  apiClient.instance.defaults.adapter = async config => {
+    const result = await transport(config);
+    if (config.method === 'put' && fixture.writes.length === 1)
+      fixture.replace({ [section]: [fixture.raw[section][0], { ...rows[1], priority: 42 }] });
+    return result;
+  };
+  await workbench().refetch();
+  const selected = code0ToResource(buildCode0Raw(useConfigStore.getState().config));
+  await assert.rejects(workbench().toggleDisabled(selected, true), error => error.name === 'SponsorPartialMutationError');
+  assert.equal(fixture.writes.length, 1);
+  assert.equal(useConfigStore.getState().config.codexApiKeys[1].priority, 42);
+});
+
+test('late provider readback cannot overwrite a newer store refresh or another connection', async () => {
+  const fixture = statefulProviders({ 'openai-compatibility': [openaiA] });
+  const transport = apiClient.instance.defaults.adapter;
+  let release;
+  let started;
+  const pending = new Promise(resolve => { started = resolve; });
+  let held = false;
+  apiClient.instance.defaults.adapter = async config => {
+    const result = await transport(config);
+    if (config.url === '/config' && !held) {
+      held = true;
+      started();
+      await new Promise(resolve => { release = resolve; });
+    }
+    return result;
+  };
+  const old = useConfigStore.getState().refreshProviders();
+  await pending;
+  fixture.replace({ 'openai-compatibility': [{ ...openaiA, priority: 42 }] });
+  await useConfigStore.getState().refreshProviders();
+  release();
+  assert.equal(await old, null);
+  assert.equal(useConfigStore.getState().config.openaiCompatibility[0].priority, 42);
+  held = false;
+  const pendingConnection = new Promise(resolve => { started = resolve; });
+  const obsolete = useConfigStore.getState().refreshProviders();
+  await pendingConnection;
+  apiClient.setConfig({ apiBase: 'https://other.invalid', managementKey: 'synthetic' });
+  useConfigStore.getState().clearCache();
+  release();
+  assert.equal(await obsolete, null);
+  assert.equal(useConfigStore.getState().config, null);
 });

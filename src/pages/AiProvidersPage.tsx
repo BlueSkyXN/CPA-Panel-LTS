@@ -18,8 +18,8 @@ import {
 import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer';
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { ampcodeApi, getOpenAIProviderMutationIndex, providersApi } from '@/services/api';
+import { apiClient } from '@/services/api/client';
 import { useAuthStore, useConfigStore, useNotificationStore } from '@/stores';
-import type { GeminiKeyConfig, OpenAIProviderConfig, ProviderKeyConfig } from '@/types';
 import { indexUsageDetailsByAuthIndex, indexUsageDetailsBySource } from '@/utils/usageIndex';
 import styles from './AiProvidersPage.module.scss';
 
@@ -30,40 +30,36 @@ export function AiProvidersPage() {
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
 
   const config = useConfigStore((state) => state.config);
-  const fetchConfig = useConfigStore((state) => state.fetchConfig);
+  const refreshProviders = useConfigStore((state) => state.refreshProviders);
   const updateConfigValue = useConfigStore((state) => state.updateConfigValue);
-  const clearCache = useConfigStore((state) => state.clearCache);
   const isCacheValid = useConfigStore((state) => state.isCacheValid);
 
   const hasMounted = useRef(false);
   const [loading, setLoading] = useState(() => !isCacheValid());
   const [error, setError] = useState('');
 
-  const [geminiKeys, setGeminiKeys] = useState<GeminiKeyConfig[]>(
-    () => config?.geminiApiKeys || []
-  );
-  const [codexConfigs, setCodexConfigs] = useState<ProviderKeyConfig[]>(
-    () => config?.codexApiKeys || []
-  );
-  const [claudeConfigs, setClaudeConfigs] = useState<ProviderKeyConfig[]>(
-    () => config?.claudeApiKeys || []
-  );
-  const [vertexConfigs, setVertexConfigs] = useState<ProviderKeyConfig[]>(
-    () => config?.vertexApiKeys || []
-  );
-  const [openaiProviders, setOpenaiProviders] = useState<OpenAIProviderConfig[]>(
-    () => config?.openaiCompatibility || []
-  );
+  const geminiKeys = config?.geminiApiKeys ?? [];
+  const codexConfigs = config?.codexApiKeys ?? [];
+  const claudeConfigs = config?.claudeApiKeys ?? [];
+  const vertexConfigs = config?.vertexApiKeys ?? [];
+  const openaiProviders = config?.openaiCompatibility ?? [];
 
   const [configSwitchingKey, setConfigSwitchingKey] = useState<string | null>(null);
 
-  const disableControls = connectionStatus !== 'connected';
+  const disableControls = connectionStatus !== 'connected' || loading;
   const isSwitching = Boolean(configSwitchingKey);
 
   const pageTransitionLayer = usePageTransitionLayer();
   const isCurrentLayer = pageTransitionLayer ? pageTransitionLayer.status === 'current' : true;
 
-  const { keyStats, usageDetails, querySummary, loadKeyStats, refreshKeyStats, error: usageError } = useProviderStats({
+  const {
+    keyStats,
+    usageDetails,
+    querySummary,
+    loadKeyStats,
+    refreshKeyStats,
+    error: usageError,
+  } = useProviderStats({
     enabled: isCurrentLayer,
   });
   const usageDetailsBySource = useMemo(
@@ -81,54 +77,31 @@ export function AiProvidersPage() {
     return '';
   };
 
+  const loadRequest = useRef(0);
   const loadConfigs = useCallback(async () => {
-    const hasValidCache = isCacheValid();
-    if (!hasValidCache) {
-      setLoading(true);
-    }
+    const request = ++loadRequest.current;
+    const generation = apiClient.getConnectionGeneration();
+    const isCurrent = () =>
+      request === loadRequest.current && apiClient.isCurrentConnection(generation);
+    setLoading(true);
     setError('');
     try {
-      const [configResult, vertexResult, ampcodeResult, openaiResult] = await Promise.allSettled([
-        fetchConfig(),
-        providersApi.getVertexConfigs(),
-        ampcodeApi.getAmpcode(),
-        providersApi.getOpenAIProviders(),
+      const [data, ampcodeResult] = await Promise.all([
+        refreshProviders(),
+        ampcodeApi
+          .getAmpcode()
+          .then((value) => ({ value }))
+          .catch(() => null),
       ]);
-
-      if (configResult.status !== 'fulfilled') {
-        throw configResult.reason;
-      }
-
-      const data = configResult.value;
-      setGeminiKeys(data?.geminiApiKeys || []);
-      setCodexConfigs(data?.codexApiKeys || []);
-      setClaudeConfigs(data?.claudeApiKeys || []);
-      setVertexConfigs(data?.vertexApiKeys || []);
-      setOpenaiProviders(data?.openaiCompatibility || []);
-
-      if (vertexResult.status === 'fulfilled') {
-        setVertexConfigs(vertexResult.value || []);
-        updateConfigValue('vertex-api-key', vertexResult.value || []);
-        clearCache('vertex-api-key');
-      }
-
-      if (ampcodeResult.status === 'fulfilled') {
+      if (!isCurrent() || !data) return;
+      if (ampcodeResult && useConfigStore.getState().config === data)
         updateConfigValue('ampcode', ampcodeResult.value);
-        clearCache('ampcode');
-      }
-
-      if (openaiResult.status === 'fulfilled') {
-        setOpenaiProviders(openaiResult.value || []);
-        updateConfigValue('openai-compatibility', openaiResult.value || []);
-        clearCache('openai-compatibility');
-      }
-    } catch (err: unknown) {
-      const message = getErrorMessage(err) || t('notification.refresh_failed');
-      setError(message);
+    } catch (err) {
+      if (isCurrent()) setError(getErrorMessage(err) || t('notification.refresh_failed'));
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
-  }, [clearCache, fetchConfig, isCacheValid, t, updateConfigValue]);
+  }, [refreshProviders, t, updateConfigValue]);
 
   useEffect(() => {
     if (hasMounted.current) return;
@@ -141,20 +114,6 @@ export function AiProvidersPage() {
     void loadKeyStats().catch(() => {});
   }, [isCurrentLayer, loadKeyStats]);
 
-  useEffect(() => {
-    if (config?.geminiApiKeys) setGeminiKeys(config.geminiApiKeys);
-    if (config?.codexApiKeys) setCodexConfigs(config.codexApiKeys);
-    if (config?.claudeApiKeys) setClaudeConfigs(config.claudeApiKeys);
-    if (config?.vertexApiKeys) setVertexConfigs(config.vertexApiKeys);
-    if (config?.openaiCompatibility) setOpenaiProviders(config.openaiCompatibility);
-  }, [
-    config?.geminiApiKeys,
-    config?.codexApiKeys,
-    config?.claudeApiKeys,
-    config?.vertexApiKeys,
-    config?.openaiCompatibility,
-  ]);
-
   useHeaderRefresh(refreshKeyStats, isCurrentLayer);
 
   const openEditor = useCallback(
@@ -164,6 +123,23 @@ export function AiProvidersPage() {
     [navigate]
   );
 
+  const runProviderMutation = async (
+    action: () => Promise<unknown>,
+    successKey: string,
+    failureKey: string
+  ) => {
+    const generation = apiClient.getConnectionGeneration();
+    try {
+      await action();
+      if (apiClient.isCurrentConnection(generation)) showNotification(t(successKey), 'success');
+    } catch (err) {
+      if (apiClient.isCurrentConnection(generation))
+        showNotification(`${t(failureKey)}: ${getErrorMessage(err)}`, 'error');
+    } finally {
+      if (apiClient.isCurrentConnection(generation)) await loadConfigs();
+    }
+  };
+
   const deleteGemini = async (index: number) => {
     const entry = geminiKeys[index];
     if (!entry) return;
@@ -172,19 +148,12 @@ export function AiProvidersPage() {
       message: t('ai_providers.gemini_delete_confirm'),
       variant: 'danger',
       confirmText: t('common.confirm'),
-      onConfirm: async () => {
-        try {
-          await providersApi.deleteGeminiKey(entry.apiKey, entry.baseUrl);
-          const next = geminiKeys.filter((_, idx) => idx !== index);
-          setGeminiKeys(next);
-          updateConfigValue('gemini-api-key', next);
-          clearCache('gemini-api-key');
-          showNotification(t('notification.gemini_key_deleted'), 'success');
-        } catch (err: unknown) {
-          const message = getErrorMessage(err);
-          showNotification(`${t('notification.delete_failed')}: ${message}`, 'error');
-        }
-      },
+      onConfirm: () =>
+        runProviderMutation(
+          () => providersApi.deleteGeminiKey(entry.apiKey, entry.baseUrl, entry),
+          'notification.gemini_key_deleted',
+          'notification.delete_failed'
+        ),
     });
   };
 
@@ -193,103 +162,37 @@ export function AiProvidersPage() {
     index: number,
     enabled: boolean
   ) => {
-    if (provider === 'gemini') {
-      const current = geminiKeys[index];
-      if (!current) return;
-
-      const switchingKey = `${provider}:${current.apiKey}`;
-      setConfigSwitchingKey(switchingKey);
-
-      const previousList = geminiKeys;
-      const nextExcluded = enabled
-        ? withoutDisableAllModelsRule(current.excludedModels)
-        : withDisableAllModelsRule(current.excludedModels);
-      const nextItem: GeminiKeyConfig = { ...current, excludedModels: nextExcluded };
-      const nextList = previousList.map((item, idx) => (idx === index ? nextItem : item));
-
-      setGeminiKeys(nextList);
-      updateConfigValue('gemini-api-key', nextList);
-      clearCache('gemini-api-key');
-
-      try {
-        await providersApi.saveGeminiKeys(nextList);
-        showNotification(
-          enabled ? t('notification.config_enabled') : t('notification.config_disabled'),
-          'success'
-        );
-      } catch (err: unknown) {
-        const message = getErrorMessage(err);
-        setGeminiKeys(previousList);
-        updateConfigValue('gemini-api-key', previousList);
-        clearCache('gemini-api-key');
-        showNotification(`${t('notification.update_failed')}: ${message}`, 'error');
-      } finally {
-        setConfigSwitchingKey(null);
-      }
-      return;
-    }
-
     const source =
-      provider === 'codex'
-        ? codexConfigs
-        : provider === 'claude'
-          ? claudeConfigs
-          : vertexConfigs;
+      provider === 'gemini'
+        ? geminiKeys
+        : provider === 'codex'
+          ? codexConfigs
+          : provider === 'claude'
+            ? claudeConfigs
+            : vertexConfigs;
     const current = source[index];
     if (!current) return;
-
-    const switchingKey = `${provider}:${current.apiKey}`;
-    setConfigSwitchingKey(switchingKey);
-
-    const previousList = source;
-    const nextExcluded = enabled
-      ? withoutDisableAllModelsRule(current.excludedModels)
-      : withDisableAllModelsRule(current.excludedModels);
-    const nextItem: ProviderKeyConfig = { ...current, excludedModels: nextExcluded };
-    const nextList = previousList.map((item, idx) => (idx === index ? nextItem : item));
-
-    if (provider === 'codex') {
-      setCodexConfigs(nextList);
-      updateConfigValue('codex-api-key', nextList);
-      clearCache('codex-api-key');
-    } else if (provider === 'claude') {
-      setClaudeConfigs(nextList);
-      updateConfigValue('claude-api-key', nextList);
-      clearCache('claude-api-key');
-    } else {
-      setVertexConfigs(nextList);
-      updateConfigValue('vertex-api-key', nextList);
-      clearCache('vertex-api-key');
-    }
-
+    setConfigSwitchingKey(`${provider}:${current.apiKey}`);
+    const next = {
+      ...current,
+      excludedModels: enabled
+        ? withoutDisableAllModelsRule(current.excludedModels)
+        : withDisableAllModelsRule(current.excludedModels),
+    };
     try {
-      if (provider === 'codex') {
-        await providersApi.saveCodexConfigs(nextList);
-      } else if (provider === 'claude') {
-        await providersApi.saveClaudeConfigs(nextList);
-      } else {
-        await providersApi.saveVertexConfigs(nextList);
-      }
-      showNotification(
-        enabled ? t('notification.config_enabled') : t('notification.config_disabled'),
-        'success'
+      await runProviderMutation(
+        () => {
+          if (provider === 'gemini')
+            return providersApi.updateGeminiKey(current.apiKey, current.baseUrl, next, current);
+          if (provider === 'codex')
+            return providersApi.updateCodexConfig(current.apiKey, current.baseUrl, next, current);
+          if (provider === 'claude')
+            return providersApi.updateClaudeConfig(current.apiKey, current.baseUrl, next, current);
+          return providersApi.updateVertexConfig(current.apiKey, current.baseUrl, next, current);
+        },
+        enabled ? 'notification.config_enabled' : 'notification.config_disabled',
+        'notification.update_failed'
       );
-    } catch (err: unknown) {
-      const message = getErrorMessage(err);
-      if (provider === 'codex') {
-        setCodexConfigs(previousList);
-        updateConfigValue('codex-api-key', previousList);
-        clearCache('codex-api-key');
-      } else if (provider === 'claude') {
-        setClaudeConfigs(previousList);
-        updateConfigValue('claude-api-key', previousList);
-        clearCache('claude-api-key');
-      } else {
-        setVertexConfigs(previousList);
-        updateConfigValue('vertex-api-key', previousList);
-        clearCache('vertex-api-key');
-      }
-      showNotification(`${t('notification.update_failed')}: ${message}`, 'error');
     } finally {
       setConfigSwitchingKey(null);
     }
@@ -299,66 +202,37 @@ export function AiProvidersPage() {
     const current = openaiProviders[index];
     if (!current) return;
     const mutationIndex = getOpenAIProviderMutationIndex(current, index);
-
-    const switchingKey = `openai:${current.name}:${index}`;
-    setConfigSwitchingKey(switchingKey);
-
-    const previousList = openaiProviders;
-    const nextItem: OpenAIProviderConfig = { ...current, disabled: !enabled };
-    const nextList = previousList.map((item, idx) => (idx === index ? nextItem : item));
-
-    setOpenaiProviders(nextList);
-
+    setConfigSwitchingKey(`openai:${current.name}:${index}`);
     try {
-      await providersApi.updateOpenAIProviderDisabled(mutationIndex, !enabled, current);
-      updateConfigValue('openai-compatibility', nextList);
-      clearCache('openai-compatibility');
-      showNotification(
-        enabled ? t('notification.config_enabled') : t('notification.config_disabled'),
-        'success'
+      await runProviderMutation(
+        () => providersApi.updateOpenAIProviderDisabled(mutationIndex, !enabled, current),
+        enabled ? 'notification.config_enabled' : 'notification.config_disabled',
+        'notification.update_failed'
       );
-    } catch (err: unknown) {
-      const message = getErrorMessage(err);
-      setOpenaiProviders(previousList);
-      updateConfigValue('openai-compatibility', previousList);
-      clearCache('openai-compatibility');
-      showNotification(`${t('notification.update_failed')}: ${message}`, 'error');
     } finally {
       setConfigSwitchingKey(null);
     }
   };
 
   const deleteProviderEntry = async (type: 'codex' | 'claude', index: number) => {
-    const source = type === 'codex' ? codexConfigs : claudeConfigs;
-    const entry = source[index];
+    const entry = (type === 'codex' ? codexConfigs : claudeConfigs)[index];
     if (!entry) return;
     showConfirmation({
-      title: t(`ai_providers.${type}_delete_title`, { defaultValue: `Delete ${type === 'codex' ? 'Codex' : 'Claude'} Config` }),
+      title: t(`ai_providers.${type}_delete_title`, {
+        defaultValue: `Delete ${type === 'codex' ? 'Codex' : 'Claude'} Config`,
+      }),
       message: t(`ai_providers.${type}_delete_confirm`),
       variant: 'danger',
       confirmText: t('common.confirm'),
-      onConfirm: async () => {
-        try {
-          if (type === 'codex') {
-            await providersApi.deleteCodexConfig(entry.apiKey, entry.baseUrl);
-            const next = codexConfigs.filter((_, idx) => idx !== index);
-            setCodexConfigs(next);
-            updateConfigValue('codex-api-key', next);
-            clearCache('codex-api-key');
-            showNotification(t('notification.codex_config_deleted'), 'success');
-          } else {
-            await providersApi.deleteClaudeConfig(entry.apiKey, entry.baseUrl);
-            const next = claudeConfigs.filter((_, idx) => idx !== index);
-            setClaudeConfigs(next);
-            updateConfigValue('claude-api-key', next);
-            clearCache('claude-api-key');
-            showNotification(t('notification.claude_config_deleted'), 'success');
-          }
-        } catch (err: unknown) {
-          const message = getErrorMessage(err);
-          showNotification(`${t('notification.delete_failed')}: ${message}`, 'error');
-        }
-      },
+      onConfirm: () =>
+        runProviderMutation(
+          () =>
+            type === 'codex'
+              ? providersApi.deleteCodexConfig(entry.apiKey, entry.baseUrl, entry)
+              : providersApi.deleteClaudeConfig(entry.apiKey, entry.baseUrl, entry),
+          `notification.${type}_config_deleted`,
+          'notification.delete_failed'
+        ),
     });
   };
 
@@ -370,19 +244,12 @@ export function AiProvidersPage() {
       message: t('ai_providers.vertex_delete_confirm'),
       variant: 'danger',
       confirmText: t('common.confirm'),
-      onConfirm: async () => {
-        try {
-          await providersApi.deleteVertexConfig(entry.apiKey, entry.baseUrl);
-          const next = vertexConfigs.filter((_, idx) => idx !== index);
-          setVertexConfigs(next);
-          updateConfigValue('vertex-api-key', next);
-          clearCache('vertex-api-key');
-          showNotification(t('notification.vertex_config_deleted'), 'success');
-        } catch (err: unknown) {
-          const message = getErrorMessage(err);
-          showNotification(`${t('notification.delete_failed')}: ${message}`, 'error');
-        }
-      },
+      onConfirm: () =>
+        runProviderMutation(
+          () => providersApi.deleteVertexConfig(entry.apiKey, entry.baseUrl, entry),
+          'notification.vertex_config_deleted',
+          'notification.delete_failed'
+        ),
     });
   };
 
@@ -395,25 +262,22 @@ export function AiProvidersPage() {
       message: t('ai_providers.openai_delete_confirm'),
       variant: 'danger',
       confirmText: t('common.confirm'),
-      onConfirm: async () => {
-        try {
-          await providersApi.deleteOpenAIProvider(mutationIndex, entry);
-          const next = openaiProviders.filter((_, idx) => idx !== index);
-          setOpenaiProviders(next);
-          updateConfigValue('openai-compatibility', next);
-          clearCache('openai-compatibility');
-          showNotification(t('notification.openai_provider_deleted'), 'success');
-        } catch (err: unknown) {
-          const message = getErrorMessage(err);
-          showNotification(`${t('notification.delete_failed')}: ${message}`, 'error');
-        }
-      },
+      onConfirm: () =>
+        runProviderMutation(
+          () => providersApi.deleteOpenAIProvider(mutationIndex, entry),
+          'notification.openai_provider_deleted',
+          'notification.delete_failed'
+        ),
     });
   };
 
   return (
     <div className={styles.container}>
-      {usageError && <div role="alert">{t('usage_stats.loading_error')}: {usageError}</div>}
+      {usageError && (
+        <div role="alert">
+          {t('usage_stats.loading_error')}: {usageError}
+        </div>
+      )}
       <h1 className={styles.pageTitle}>{t('ai_providers.title')}</h1>
       <div className={styles.content}>
         {error && <div className="error-box">{error}</div>}

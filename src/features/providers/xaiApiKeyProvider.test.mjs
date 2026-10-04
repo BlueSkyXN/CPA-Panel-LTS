@@ -128,8 +128,10 @@ test('preserves unknown fields and selects xAI mutations by api-key plus base-ur
     baseUrl: 'https://xai-b.example.test/v1',
     priority: 9,
     websockets: false,
+  }, { apiKey: 'shared-key', baseUrl: 'https://xai-b.example.test/v1' });
+  await providersApi.deleteXAIConfig('shared-key', 'https://xai-b.example.test/v1', {
+    apiKey: 'shared-key', baseUrl: 'https://xai-b.example.test/v1'
   });
-  await providersApi.deleteXAIConfig('shared-key', 'https://xai-b.example.test/v1');
 
   assert.deepEqual(calls, [
     { method: 'GET', url: '/config' },
@@ -173,6 +175,7 @@ test('preserves unknown fields and selects xAI mutations by api-key plus base-ur
         },
       ],
     },
+    { method: 'GET', url: '/config' },
     {
       method: 'DELETE',
       url: '/xai-api-key?api-key=shared-key&base-url=https%3A%2F%2Fxai-b.example.test%2Fv1',

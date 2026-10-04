@@ -1,3 +1,4 @@
+import { apiClient } from '@/services/api/client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -101,8 +102,7 @@ export function AiProvidersCodexEditPage() {
   const disableControls = connectionStatus !== 'connected';
 
   const fetchConfig = useConfigStore((state) => state.fetchConfig);
-  const updateConfigValue = useConfigStore((state) => state.updateConfigValue);
-  const clearCache = useConfigStore((state) => state.clearCache);
+  const refreshProviders = useConfigStore((state) => state.refreshProviders);
 
   const [configs, setConfigs] = useState<ProviderKeyConfig[]>([]);
   const [loading, setLoading] = useState(true);
@@ -453,6 +453,7 @@ export function AiProvidersCodexEditPage() {
       return;
     }
 
+    const generation = apiClient.getConnectionGeneration();
     setSaving(true);
     setError('');
     try {
@@ -473,9 +474,8 @@ export function AiProvidersCodexEditPage() {
           ? configs.map((item, idx) => (idx === editIndex ? payload : item))
           : [...configs, payload];
 
-      await providersApi.saveCodexConfigs(nextList);
-      updateConfigValue('codex-api-key', nextList);
-      clearCache('codex-api-key');
+      await providersApi.saveCodexConfigs(nextList, configs);
+      if (!apiClient.isCurrentConnection(generation)) return;
       showNotification(
         editIndex !== null
           ? t('notification.codex_config_updated')
@@ -486,23 +486,31 @@ export function AiProvidersCodexEditPage() {
       setBaseline(buildCodexBaseline(form));
       handleBack();
     } catch (err: unknown) {
+      if (!apiClient.isCurrentConnection(generation)) return;
       const message = err instanceof Error ? err.message : '';
       setError(message);
       showNotification(`${t('notification.update_failed')}: ${message}`, 'error');
     } finally {
+      if (apiClient.isCurrentConnection(generation)) {
+        try {
+          await refreshProviders();
+        } catch {
+          if (apiClient.isCurrentConnection(generation))
+            showNotification(t('notification.refresh_failed'), 'warning');
+        }
+      }
       setSaving(false);
     }
   }, [
     allowNextNavigation,
     canSave,
-    clearCache,
     configs,
     editIndex,
     form,
     handleBack,
     showNotification,
     t,
-    updateConfigValue,
+    refreshProviders,
   ]);
 
   const canOpenModelDiscovery =

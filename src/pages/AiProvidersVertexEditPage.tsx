@@ -1,3 +1,4 @@
+import { apiClient } from '@/services/api/client';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -15,7 +16,11 @@ import { useAuthStore, useConfigStore, useNotificationStore } from '@/stores';
 import type { ProviderKeyConfig } from '@/types';
 import { excludedModelsToText, parseExcludedModels } from '@/components/providers/utils';
 import { buildHeaderObject, headersToEntries, normalizeHeaderEntries } from '@/utils/headers';
-import { areKeyValueEntriesEqual, areModelEntriesEqual, areStringArraysEqual } from '@/utils/compare';
+import {
+  areKeyValueEntriesEqual,
+  areModelEntriesEqual,
+  areStringArraysEqual,
+} from '@/utils/compare';
 import { parseRouteIndexParam } from '@/utils/routeParams';
 import type { VertexFormState } from '@/components/providers';
 import layoutStyles from './AiProvidersEditLayout.module.scss';
@@ -57,7 +62,9 @@ type VertexFormBaseline = {
 const buildVertexBaseline = (form: VertexFormState): VertexFormBaseline => ({
   apiKey: String(form.apiKey ?? '').trim(),
   priority:
-    form.priority !== undefined && Number.isFinite(form.priority) ? Math.trunc(form.priority) : null,
+    form.priority !== undefined && Number.isFinite(form.priority)
+      ? Math.trunc(form.priority)
+      : null,
   prefix: String(form.prefix ?? '').trim(),
   baseUrl: String(form.baseUrl ?? '').trim(),
   proxyUrl: String(form.proxyUrl ?? '').trim(),
@@ -77,8 +84,7 @@ export function AiProvidersVertexEditPage() {
   const disableControls = connectionStatus !== 'connected';
 
   const fetchConfig = useConfigStore((state) => state.fetchConfig);
-  const updateConfigValue = useConfigStore((state) => state.updateConfigValue);
-  const clearCache = useConfigStore((state) => state.clearCache);
+  const refreshProviders = useConfigStore((state) => state.refreshProviders);
 
   const [configs, setConfigs] = useState<ProviderKeyConfig[]>([]);
   const [loading, setLoading] = useState(true);
@@ -99,7 +105,9 @@ export function AiProvidersVertexEditPage() {
   const invalidIndex = editIndex !== null && !initialData;
 
   const title =
-    editIndex !== null ? t('ai_providers.vertex_edit_modal_title') : t('ai_providers.vertex_add_modal_title');
+    editIndex !== null
+      ? t('ai_providers.vertex_edit_modal_title')
+      : t('ai_providers.vertex_add_modal_title');
 
   const handleBack = useCallback(() => {
     const state = location.state as LocationState;
@@ -137,8 +145,6 @@ export function AiProvidersVertexEditPage() {
             ? (configResult as ProviderKeyConfig[])
             : [];
         setConfigs(list);
-        updateConfigValue('vertex-api-key', list);
-        clearCache('vertex-api-key');
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -153,7 +159,7 @@ export function AiProvidersVertexEditPage() {
     return () => {
       cancelled = true;
     };
-  }, [clearCache, fetchConfig, t, updateConfigValue]);
+  }, [fetchConfig, t]);
 
   useEffect(() => {
     if (loading) return;
@@ -232,6 +238,7 @@ export function AiProvidersVertexEditPage() {
     const trimmedBaseUrl = (form.baseUrl ?? '').trim();
     const baseUrl = trimmedBaseUrl || undefined;
 
+    const generation = apiClient.getConnectionGeneration();
     setSaving(true);
     setError('');
     try {
@@ -245,7 +252,9 @@ export function AiProvidersVertexEditPage() {
         baseUrl,
         proxyUrl: form.proxyUrl?.trim() || undefined,
         headers: buildHeaderObject(form.headers),
-        models: entriesToModels(form.modelEntries).filter((model) => Boolean(model.alias)) as ProviderKeyConfig['models'],
+        models: entriesToModels(form.modelEntries).filter((model) =>
+          Boolean(model.alias)
+        ) as ProviderKeyConfig['models'],
         excludedModels: parseExcludedModels(form.excludedText),
       };
 
@@ -254,34 +263,43 @@ export function AiProvidersVertexEditPage() {
           ? configs.map((item, idx) => (idx === editIndex ? payload : item))
           : [...configs, payload];
 
-      await providersApi.saveVertexConfigs(nextList);
-      updateConfigValue('vertex-api-key', nextList);
-      clearCache('vertex-api-key');
+      await providersApi.saveVertexConfigs(nextList, configs);
+      if (!apiClient.isCurrentConnection(generation)) return;
       showNotification(
-        editIndex !== null ? t('notification.vertex_config_updated') : t('notification.vertex_config_added'),
+        editIndex !== null
+          ? t('notification.vertex_config_updated')
+          : t('notification.vertex_config_added'),
         'success'
       );
       allowNextNavigation();
       setBaseline(buildVertexBaseline(form));
       handleBack();
     } catch (err: unknown) {
+      if (!apiClient.isCurrentConnection(generation)) return;
       const message = err instanceof Error ? err.message : '';
       setError(message);
       showNotification(`${t('notification.update_failed')}: ${message}`, 'error');
     } finally {
+      if (apiClient.isCurrentConnection(generation)) {
+        try {
+          await refreshProviders();
+        } catch {
+          if (apiClient.isCurrentConnection(generation))
+            showNotification(t('notification.refresh_failed'), 'warning');
+        }
+      }
       setSaving(false);
     }
   }, [
     allowNextNavigation,
     canSave,
-    clearCache,
     configs,
     editIndex,
     form,
     handleBack,
     showNotification,
     t,
-    updateConfigValue,
+    refreshProviders,
   ]);
 
   return (

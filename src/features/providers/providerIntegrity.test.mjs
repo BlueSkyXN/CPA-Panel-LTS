@@ -270,7 +270,7 @@ test('round-trips the Claude fingerprint profile without dropping unknown fields
       apiKey: 'claude-secret',
       baseUrl: 'https://api.anthropic.com',
       fingerprintProfile: '',
-    });
+    }, config.claudeApiKeys[0]);
   } finally {
     client.apiClient.get = originalGet;
     client.apiClient.put = originalPut;
@@ -364,12 +364,12 @@ test('round-trips credential weights without dropping provider fields', async ()
       apiKey: 'gemini-secret',
       baseUrl: 'https://gemini.example.test',
       weight: 7,
-    });
+    }, { apiKey: 'gemini-secret', baseUrl: 'https://gemini.example.test', weight: 2 });
     await providers.providersApi.updateOpenAIProvider('custom', 0, {
       name: 'custom',
       baseUrl: 'https://openai.example.test/v1',
       apiKeyEntries: [{ apiKey: 'openai-secret', weight: 0 }],
-    });
+    }, { name: 'custom', baseUrl: 'https://openai.example.test/v1', apiKeyEntries: [{ apiKey: 'openai-secret', weight: 3 }] });
   } finally {
     client.apiClient.get = originalGet;
     client.apiClient.put = originalPut;
@@ -488,11 +488,11 @@ test('manages Interactions API resources through the Core contract', async () =>
         apiKey: 'interaction-secret',
         baseUrl: 'https://generativelanguage.googleapis.com',
         weight: 6,
-      }
+      }, config.interactionsApiKeys[0]
     );
     await providers.providersApi.deleteInteractionsKey(
       'interaction-secret',
-      'https://generativelanguage.googleapis.com'
+      'https://generativelanguage.googleapis.com', config.interactionsApiKeys[0]
     );
   } finally {
     client.apiClient.get = originalGet;
@@ -520,6 +520,7 @@ test('manages Interactions API resources through the Core contract', async () =>
         },
       ],
     },
+    { method: 'GET', url: '/config' },
     {
       method: 'DELETE',
       url: '/interactions-api-key?api-key=interaction-secret&base-url=https%3A%2F%2Fgenerativelanguage.googleapis.com',

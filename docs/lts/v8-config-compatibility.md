@@ -30,6 +30,12 @@ YAML 每次读取返回不可变的 content/generation/layout/revision 快照；
 
 OpenAI-compatible 删除和启停必须传入选中时的原始 provider 快照，检查名称唯一、backend sourceIndex/当前位置和归一化可编辑字段一致；列表重排、目标缺失/改名、同名歧义或字段变化均在写请求前拒绝。工作台、旧 provider 页面、Sponsor 聚合删除/启停及表单移除协议都使用此保护。快照在操作入口复制，其他读取不能替换它。目标未变时基于最新列表只删除目标或修改 disabled，保留其他 provider 的并发更新，再使用最终文档 `If-Match`；不把操作开始时的全局 store 当作原始目标证据。Sponsor 删除/启停额外在首个协议写入前核验聚合快照，多个 OpenAI 目标按原始 sourceIndex 降序删除，逐笔读取新文档版本。
 
+Provider 比较使用配置字段投影，不比较 UI 对象本身。仅 OpenAI 的 `disabled` 缺省与 false 按相同状态处理；provider/key 的运行时 auth index 不参与比较，真实 headers 和其他字段的 null/缺省语义不放宽。名称唯一、backend sourceIndex 和原目标检查仍保留。
+
+单目标更新/删除必须显式传入原目标快照，不再隐式依赖全局 `config.raw` 整表基线。Sponsor 每笔操作校验该笔目标并读取新版本，因此自己的前一笔修改不会造成虚假冲突；后续目标真的改变仍停止并读回部分结果。整表 `save*` 则必须显式传入与草稿配套的原始列表；旧编辑器继续采用这一保守语义，无关条目变化也要求重新加载。OpenAI/Claude 原列表随共享草稿保存，跨模型选择页面不能换成另一份新基线。
+
+`config.raw` 的 provider 部分只保存 `/config` 原始响应，归一化列表更新不再覆盖它。工作台和旧页面共享受连接 generation、请求顺序保护的读回；专用接口只在配置投影一致时补充运行时归属信息。旧页面直接展示 store 列表，不再维护并回写第二份旧数组；修改成功或失败均尝试读回，失败不回滚旧列表，读回失败单独显示，不自动重放写请求。
+
 v8 必须有配套 Core 的 `ETag` 支持，否则拒绝保存并提示升级；缺失版本 428、过期版本 412 均不重试、不降级重放。legacy/v7 的 OpenAI 删除/启停也先校验目标快照，再使用已存在的按名称 DELETE/PATCH，避免再次依赖旧下标；但读后写仍没有服务端 CAS，不能保证同时改名、同名重建或新增重名记录等竞态下的事务安全。多协议 sponsor 操作不是整体事务，部分成功仍走既有恢复流程；无条件 v0 客户端和同时写文件的外部进程也不在保护范围内。不得宣传为无条件多写者安全。
 
 本轮逐提交取舍见 [2026-10-03 intake](upstream-intake-20261003-v8.md)。延期项不属于已移植功能。
@@ -41,6 +47,7 @@ v8 必须有配套 Core 的 `ETag` 支持，否则拒绝保存并提示升级；
 - `npm run validate:lts`：保留完整 usage、Flow、plugins、provider 合同和 single-file 构建。
 - 前次 intake 做过临时 v7/v8 API 读写与浏览器可视化保存。本次修复另外使用实际 Panel API modules 对接隔离 Core 的 legacy/v8 配置实例，验证 group 保存、旧表单拒绝、旧 YAML 412、fresh YAML 保存和 legacy 不隐式迁移。
 - 2026-10-04 删除/启停补修的 `npm run validate:lts` 通过，lint 仅保留未修改的 `useConnectivityTest.ts:174` 既有 warning。实际 Panel API 模块对接隔离 v8 Core：通过 v8 API 重排后刷新 store，旧目标删除/启停被拒，YAML 原始字节不变；重新读取目标后禁用、启用、删除均成功且 sibling 保留。联调初次将省略的 `disabled: false` 当成显式 false 导致夹具断言失败；核对 Core `omitempty` 后按 false 默认语义重跑通过。
+- 后续源码复核发现前述联调没有覆盖页面专用接口与 `/config` 的表示差异，不能证明真实页面链路正确。后续补修增加 6 个聚焦回归：两种 Core 响应形状下连续 OpenAI 操作、显式整表基线与 raw 分离、Sponsor 运行时归属字段、三类同协议连续操作及真实目标冲突、读回乱序/连接切换；其证据属于真实 Panel 模块与有状态模拟响应，不是新的真实 Core 或浏览器验收。
 - 浏览器回归仍未完成 authenticated GUI 验收。本次当前构建可打开、可填写合成测试口令；登录 locator 超时，DOM 节点点击也没有页面变化。诊断捕获到点击事件 0、XHR 请求 0、页面错误 0；按钮未禁用且样式可见，但 `document.visibilityState` 为 `hidden`，Core 日志也未出现登录对应请求。证据定位在请求发出前，不据此判定产品登录失败，不通过延长超时或修改客户端绕过。前次 GUI 结果不替代本次回归，API 联调通过也不等于 GUI 通过；保留 Draft，未验证的平台和真实部署不可由本地测试推断。
 
 上游参考固定为 `ee79a794526a30c03748a8864a9ac6589a31833b` 的配置分域和写入语义；采用局部适配，不 full-sync 官方 Panel、不替换 LTS usage、quota 或插件页面。

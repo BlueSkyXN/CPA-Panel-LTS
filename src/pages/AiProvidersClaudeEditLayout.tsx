@@ -1,15 +1,25 @@
+import { apiClient } from '@/services/api/client';
 import type { Dispatch, SetStateAction } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard';
 import { providersApi } from '@/services/api';
-import { useAuthStore, useClaudeEditDraftStore, useConfigStore, useNotificationStore } from '@/stores';
+import {
+  useAuthStore,
+  useClaudeEditDraftStore,
+  useConfigStore,
+  useNotificationStore,
+} from '@/stores';
 import type { ProviderKeyConfig } from '@/types';
 import type { ModelInfo } from '@/utils/models';
 import type { ModelEntry, ProviderFormState } from '@/components/providers/types';
 import { buildHeaderObject, headersToEntries, normalizeHeaderEntries } from '@/utils/headers';
-import { areKeyValueEntriesEqual, areModelEntriesEqual, areStringArraysEqual } from '@/utils/compare';
+import {
+  areKeyValueEntriesEqual,
+  areModelEntriesEqual,
+  areStringArraysEqual,
+} from '@/utils/compare';
 import { excludedModelsToText, parseExcludedModels } from '@/components/providers/utils';
 import { entriesToModels, modelsToEntries } from '@/components/ui/modelInputListUtils';
 import { parseRouteIndexParam } from '@/utils/routeParams';
@@ -74,7 +84,10 @@ const normalizeClaudeModelEntries = (entries: Array<{ name: string; alias: strin
 
 const normalizeCloakConfig = (cloak: ProviderFormState['cloak']) => {
   if (!cloak) return null;
-  const mode = String(cloak.mode ?? '').trim().toLowerCase() || 'auto';
+  const mode =
+    String(cloak.mode ?? '')
+      .trim()
+      .toLowerCase() || 'auto';
   const strictMode = Boolean(cloak.strictMode);
   const sensitiveWords = Array.isArray(cloak.sensitiveWords)
     ? cloak.sensitiveWords.map((word) => String(word ?? '').trim()).filter(Boolean)
@@ -89,7 +102,9 @@ const normalizeCloakConfig = (cloak: ProviderFormState['cloak']) => {
 const buildClaudeBaseline = (form: ProviderFormState): ClaudeEditBaseline => ({
   apiKey: String(form.apiKey ?? '').trim(),
   priority:
-    form.priority !== undefined && Number.isFinite(form.priority) ? Math.trunc(form.priority) : null,
+    form.priority !== undefined && Number.isFinite(form.priority)
+      ? Math.trunc(form.priority)
+      : null,
   prefix: String(form.prefix ?? '').trim(),
   baseUrl: String(form.baseUrl ?? '').trim(),
   proxyUrl: String(form.proxyUrl ?? '').trim(),
@@ -99,7 +114,10 @@ const buildClaudeBaseline = (form: ProviderFormState): ClaudeEditBaseline => ({
   cloak: normalizeCloakConfig(form.cloak),
 });
 
-const areCloakConfigsEqual = (left: ClaudeEditBaseline['cloak'], right: ClaudeEditBaseline['cloak']) => {
+const areCloakConfigsEqual = (
+  left: ClaudeEditBaseline['cloak'],
+  right: ClaudeEditBaseline['cloak']
+) => {
   if (left === right) return true;
   if (!left || !right) return false;
   if (left.mode !== right.mode || left.strictMode !== right.strictMode) return false;
@@ -125,9 +143,8 @@ export function AiProvidersClaudeEditLayout() {
 
   const config = useConfigStore((state) => state.config);
   const fetchConfig = useConfigStore((state) => state.fetchConfig);
+  const refreshProviders = useConfigStore((state) => state.refreshProviders);
   const isCacheValid = useConfigStore((state) => state.isCacheValid);
-  const updateConfigValue = useConfigStore((state) => state.updateConfigValue);
-  const clearCache = useConfigStore((state) => state.clearCache);
 
   const [configs, setConfigs] = useState<ProviderKeyConfig[]>(() => config?.claudeApiKeys ?? []);
   const [loading, setLoading] = useState(() => !isCacheValid('claude-api-key'));
@@ -249,6 +266,7 @@ export function AiProvidersClaudeEditLayout() {
       const available = seededForm.modelEntries.map((entry) => entry.name.trim()).filter(Boolean);
       const baseline = buildClaudeBaseline(seededForm);
       initDraft(draftKey, {
+        source: structuredClone(configs),
         baseline,
         form: seededForm,
         testModel: available[0] || '',
@@ -260,13 +278,14 @@ export function AiProvidersClaudeEditLayout() {
 
     const emptyForm = buildEmptyForm();
     initDraft(draftKey, {
+      source: structuredClone(configs),
       baseline: buildClaudeBaseline(emptyForm),
       form: emptyForm,
       testModel: '',
       testStatus: 'idle',
       testMessage: '',
     });
-  }, [draft?.initialized, draftKey, initDraft, initialData, loading]);
+  }, [draft?.initialized, draftKey, initDraft, initialData, loading, configs]);
 
   const resolvedLoading = !draft?.initialized;
   const baseline = draft?.baseline ?? null;
@@ -325,8 +344,7 @@ export function AiProvidersClaudeEditLayout() {
     enabled: canGuard,
     shouldBlock: ({ nextLocation }) => {
       const nextPath = nextLocation.pathname;
-      const isWithinRoot =
-        nextPath === editorRootPath || nextPath.startsWith(`${editorRootPath}/`);
+      const isWithinRoot = nextPath === editorRootPath || nextPath.startsWith(`${editorRootPath}/`);
       return isDirty && !isWithinRoot;
     },
     dialog: {
@@ -385,7 +403,10 @@ export function AiProvidersClaudeEditLayout() {
       });
 
       if (addedCount > 0) {
-        showNotification(t('ai_providers.claude_models_fetch_added', { count: addedCount }), 'success');
+        showNotification(
+          t('ai_providers.claude_models_fetch_added', { count: addedCount }),
+          'success'
+        );
       }
     },
     [setForm, showNotification, t]
@@ -396,6 +417,8 @@ export function AiProvidersClaudeEditLayout() {
       !disableControls && !saving && !resolvedLoading && !invalidIndexParam && !invalidIndex;
     if (!canSave) return;
 
+    if (!draft?.initialized) return;
+    const generation = apiClient.getConnectionGeneration();
     setSaving(true);
     try {
       const payload: ProviderKeyConfig = {
@@ -415,29 +438,36 @@ export function AiProvidersClaudeEditLayout() {
 
       const nextList =
         editIndex !== null
-          ? configs.map((item, idx) => (idx === editIndex ? payload : item))
-          : [...configs, payload];
+          ? draft.source.map((item, idx) => (idx === editIndex ? payload : item))
+          : [...draft.source, payload];
 
-      await providersApi.saveClaudeConfigs(nextList);
-      setConfigs(nextList);
-      updateConfigValue('claude-api-key', nextList);
-      clearCache('claude-api-key');
+      await providersApi.saveClaudeConfigs(nextList, draft.source);
+      if (!apiClient.isCurrentConnection(generation)) return;
       showNotification(
-        editIndex !== null ? t('notification.claude_config_updated') : t('notification.claude_config_added'),
+        editIndex !== null
+          ? t('notification.claude_config_updated')
+          : t('notification.claude_config_added'),
         'success'
       );
       allowNextNavigation();
       setDraftBaseline(draftKey, buildClaudeBaseline(form));
       handleBack();
     } catch (err: unknown) {
+      if (!apiClient.isCurrentConnection(generation)) return;
       showNotification(`${t('notification.update_failed')}: ${getErrorMessage(err)}`, 'error');
     } finally {
+      if (apiClient.isCurrentConnection(generation)) {
+        try {
+          await refreshProviders();
+        } catch {
+          if (apiClient.isCurrentConnection(generation))
+            showNotification(t('notification.refresh_failed'), 'warning');
+        }
+      }
       setSaving(false);
     }
   }, [
     allowNextNavigation,
-    clearCache,
-    configs,
     draftKey,
     disableControls,
     editIndex,
@@ -450,32 +480,35 @@ export function AiProvidersClaudeEditLayout() {
     saving,
     showNotification,
     t,
-    updateConfigValue,
+    refreshProviders,
+    draft,
   ]);
 
   return (
     <Outlet
-      context={{
-        hasIndexParam,
-        editIndex,
-        invalidIndexParam,
-        invalidIndex,
-        disableControls,
-        loading: resolvedLoading,
-        saving,
-        form,
-        setForm,
-        testModel,
-        setTestModel,
-        testStatus,
-        setTestStatus,
-        testMessage,
-        setTestMessage,
-        availableModels,
-        handleBack,
-        handleSave,
-        mergeDiscoveredModels,
-      } satisfies ClaudeEditOutletContext}
+      context={
+        {
+          hasIndexParam,
+          editIndex,
+          invalidIndexParam,
+          invalidIndex,
+          disableControls,
+          loading: resolvedLoading,
+          saving,
+          form,
+          setForm,
+          testModel,
+          setTestModel,
+          testStatus,
+          setTestStatus,
+          testMessage,
+          setTestMessage,
+          availableModels,
+          handleBack,
+          handleSave,
+          mergeDiscoveredModels,
+        } satisfies ClaudeEditOutletContext
+      }
     />
   );
 }
