@@ -36,7 +36,7 @@ test('empty cursor clears state and Home pagination retains signal and routing i
   const result = await logsApi.fetchLogs({ limit: 2 }, { signal: controller.signal });
   assert.equal(calls.length, 2);
   assert.ok(
-    calls.every((call) => call.options.signal === controller.signal && call.path === '/logs')
+    calls.every((call) => call.options.signal === controller.signal && call.path === '/observability/logs')
   );
   assert.equal(result.requestLogHomeIpById['r-1'], 'synthetic-home');
 });

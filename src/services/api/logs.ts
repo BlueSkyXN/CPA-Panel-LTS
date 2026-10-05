@@ -204,7 +204,7 @@ const fetchCompleteHomeLogs = async (
 
   const pages = await Promise.all(
     pageRequests.map(async ({ offset, limit }) => {
-      const data = await apiClient.get('/logs', {
+      const data = await apiClient.get('/observability/logs', {
         ...options,
         params: { ...params, limit, offset },
         timeout: LOGS_TIMEOUT_MS,
@@ -252,7 +252,11 @@ const downloadLog = async (path: string, options: LogsRequestOptions, homeIp?: s
 export const logsApi = {
   async fetchLogs(params: LogsQuery = {}, options: LogsRequestOptions = {}): Promise<LogsResponse> {
     const generation = apiClient.getConnectionGeneration();
-    const data = await apiClient.get('/logs', { ...options, params, timeout: LOGS_TIMEOUT_MS });
+    const data = await apiClient.get('/observability/logs', {
+      ...options,
+      params,
+      timeout: LOGS_TIMEOUT_MS,
+    });
     if (!apiClient.isCurrentConnection(generation)) throw new Error('Connection changed');
     if (isRecord(data) && Array.isArray(data.logs)) {
       return normalizeLogsResponse(await fetchCompleteHomeLogs(data, params, options));
@@ -260,10 +264,11 @@ export const logsApi = {
     return normalizeLogsResponse(data);
   },
 
-  clearLogs: (options: LogsRequestOptions = {}) => apiClient.delete('/logs', options),
+  clearLogs: (options: LogsRequestOptions = {}) =>
+    apiClient.delete('/observability/logs', options),
 
   async fetchErrorLogs(options: LogsRequestOptions = {}): Promise<ErrorLogsResponse> {
-    const data = await apiClient.get('/request-error-logs', {
+    const data = await apiClient.get('/observability/logs/errors', {
       ...options,
       timeout: LOGS_TIMEOUT_MS,
     });
@@ -288,8 +293,8 @@ export const logsApi = {
   },
 
   downloadErrorLog: (filename: string, options: LogsRequestOptions = {}) =>
-    downloadLog(`/request-error-logs/${encodeURIComponent(filename)}`, options),
+    downloadLog(`/observability/logs/errors/${encodeURIComponent(filename)}`, options),
 
   downloadRequestLogById: (id: string, homeIp?: string, options: LogsRequestOptions = {}) =>
-    downloadLog(`/request-log-by-id/${encodeURIComponent(id)}`, options, homeIp),
+    downloadLog(`/observability/logs/requests/${encodeURIComponent(id)}`, options, homeIp),
 };

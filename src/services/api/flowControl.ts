@@ -7,7 +7,7 @@
  * The paths below are relative to the management API base configured on the
  * shared ApiClient instance.
  */
-import { apiClient } from './client';
+import { ltsExtensionClient } from './client';
 
 export const FLOW_CONTROL_ENDPOINTS = {
   /** Capability, effective policy, catalogs and summary. */
@@ -27,10 +27,10 @@ export const FLOW_CONTROL_ENDPOINTS = {
 } as const;
 
 export const flowControlApi = {
-  getStatus: () => apiClient.get<unknown>(FLOW_CONTROL_ENDPOINTS.status),
-  getSummary: () => apiClient.get<unknown>(FLOW_CONTROL_ENDPOINTS.summary),
-  getDetails: (query: string) => apiClient.get<unknown>(`${FLOW_CONTROL_ENDPOINTS.details}?${query}`),
-  postPreview: (body: unknown) => apiClient.post<unknown>(FLOW_CONTROL_ENDPOINTS.preview, body),
+  getStatus: () => ltsExtensionClient.get<unknown>(FLOW_CONTROL_ENDPOINTS.status),
+  getSummary: () => ltsExtensionClient.get<unknown>(FLOW_CONTROL_ENDPOINTS.summary),
+  getDetails: (query: string) => ltsExtensionClient.get<unknown>(`${FLOW_CONTROL_ENDPOINTS.details}?${query}`),
+  postPreview: (body: unknown) => ltsExtensionClient.post<unknown>(FLOW_CONTROL_ENDPOINTS.preview, body),
   postMigrationPreview: (body: unknown) =>
-    apiClient.post<unknown>(FLOW_CONTROL_ENDPOINTS.migrationPreview, body),
+    ltsExtensionClient.post<unknown>(FLOW_CONTROL_ENDPOINTS.migrationPreview, body),
 };

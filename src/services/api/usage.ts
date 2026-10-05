@@ -2,7 +2,7 @@
  * 使用统计相关 API
  */
 
-import { apiClient } from './client';
+import { ltsExtensionClient } from './client';
 import { computeKeyStats, KeyStats } from '@/utils/usage';
 import { decodeUsageImportReceipt, type UsageImportReceipt } from './usageImportContract';
 
@@ -21,19 +21,19 @@ export const usageApi = {
   /**
    * 获取使用统计原始数据
    */
-  getUsage: () => apiClient.get<Record<string, unknown>>('/usage', { timeout: USAGE_TIMEOUT_MS }),
+  getUsage: () => ltsExtensionClient.get<Record<string, unknown>>('/usage', { timeout: USAGE_TIMEOUT_MS }),
 
   /**
    * 导出使用统计快照
    */
   exportUsage: () =>
-    apiClient.get<UsageExportPayload>('/usage/export', { timeout: USAGE_TIMEOUT_MS }),
+    ltsExtensionClient.get<UsageExportPayload>('/usage/export', { timeout: USAGE_TIMEOUT_MS }),
 
   /**
    * 导入使用统计快照
    */
   importUsage: async (payload: unknown) => {
-    const response = await apiClient.post<unknown>('/usage/import', payload, {
+    const response = await ltsExtensionClient.post<unknown>('/usage/import', payload, {
       timeout: USAGE_TIMEOUT_MS,
     });
     const receipt = decodeUsageImportReceipt(response);
@@ -47,7 +47,7 @@ export const usageApi = {
   async getKeyStats(usageData?: unknown): Promise<KeyStats> {
     let payload = usageData;
     if (!payload) {
-      const response = await apiClient.get<Record<string, unknown>>('/usage', {
+      const response = await ltsExtensionClient.get<Record<string, unknown>>('/usage', {
         timeout: USAGE_TIMEOUT_MS,
       });
       payload = response?.usage ?? response;

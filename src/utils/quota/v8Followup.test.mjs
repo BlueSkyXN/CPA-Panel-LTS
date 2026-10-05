@@ -205,7 +205,7 @@ test('auth status sends stable auth index only when provided', async () => {
   await authFilesApi.setStatus('synthetic.json', false, 'index-one');
   await authFilesApi.setStatus('synthetic.json', true);
   assert.deepEqual(calls[0], [
-    '/auth-files/status',
+    '/credentials/status',
     { name: 'synthetic.json', disabled: false, auth_index: 'index-one' },
   ]);
   assert.deepEqual(calls[1][1], { name: 'synthetic.json', disabled: true });

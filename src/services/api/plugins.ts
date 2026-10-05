@@ -1,4 +1,5 @@
-import { apiClient } from './client';
+import { apiClient, ltsExtensionClient } from './client';
+import { guardConfigConnection, putConfigValue, readConfigSnapshot } from './configValue';
 import { isRecord } from '@/utils/helpers';
 import type {
   PluginConfigField,
@@ -271,13 +272,15 @@ export const pluginsApi = {
     return normalizePluginList(data);
   },
 
+  // LTS extension: plugin readiness has no v8 route.
   readiness: (id: string, authIndex?: string) =>
-    apiClient.get<unknown>(`/plugins/${encodeURIComponent(id)}/readiness`, {
+    ltsExtensionClient.get<unknown>(`/plugins/${encodeURIComponent(id)}/readiness`, {
       params: authIndex ? { auth_index: authIndex } : {},
     }),
 
+  /** v8 config field `plugins.configs.<id>.enabled`, written with If-Match. */
   updateEnabled: (id: string, enabled: boolean) =>
-    apiClient.patch(`/plugins/${encodeURIComponent(id)}/enabled`, { enabled }),
+    putConfigValue(`/config/plugins/configs/${encodeURIComponent(id)}/enabled`, enabled),
 
   async deletePlugin(id: string): Promise<PluginDeleteResult> {
     const data = await apiClient.delete(`/plugins/${encodeURIComponent(id)}`);
@@ -285,20 +288,34 @@ export const pluginsApi = {
   },
 
   async getConfig(id: string): Promise<PluginConfigObject> {
-    const data = await apiClient.get(`/plugins/${encodeURIComponent(id)}/config`);
-    return normalizePluginConfig(data);
+    const { value } = await readConfigSnapshot<unknown>(
+      `/config/plugins/configs/${encodeURIComponent(id)}`,
+      {}
+    );
+    return normalizePluginConfig(value);
   },
 
-  putConfig: (id: string, config: PluginConfigObject) =>
-    apiClient.put(`/plugins/${encodeURIComponent(id)}/config`, config),
-
-  patchConfig: (id: string, patch: PluginConfigObject) =>
-    apiClient.patch(`/plugins/${encodeURIComponent(id)}/config`, patch),
+  async patchConfig(id: string, changes: PluginConfigObject) {
+    // Form fields are complete values: clearing removes a field and editing an
+    // object replaces that object. A v8 PATCH would instead retain nulls and
+    // recursively merge objects, so merge touched fields into the latest object
+    // and replace only this plugin instance (never the complete config tree).
+    const path = `/config/plugins/configs/${encodeURIComponent(id)}`;
+    const assertConnection = guardConfigConnection();
+    const { value, revision } = await readConfigSnapshot<unknown>(path, {});
+    assertConnection();
+    const next = normalizePluginConfig(value);
+    for (const [key, change] of Object.entries(changes)) {
+      if (change === null) delete next[key];
+      else next[key] = change;
+    }
+    return putConfigValue(path, next, revision);
+  },
 };
 
 export const pluginStoreApi = {
   async list(): Promise<PluginStoreResponse> {
-    const data = await apiClient.get('/plugin-store');
+    const data = await apiClient.get('/plugins/store');
     return normalizeStoreList(data);
   },
 
@@ -306,7 +323,7 @@ export const pluginStoreApi = {
     id: string,
     options: PluginStoreInstallOptions = {}
   ): Promise<PluginStoreInstallResult> {
-    const path = `/plugin-store/${encodeURIComponent(id)}/install`;
+    const path = `/plugins/store/${encodeURIComponent(id)}/install`;
     const params = new URLSearchParams();
     const sourceId = options.sourceId?.trim();
     const version = options.version?.trim();
