@@ -189,3 +189,61 @@ test('F23: renaming a Vertex model keeps force-mapping and unknown model metadat
   assert.equal(written[1]['force-mapping'], true);
   assert.equal(written[1]['future-model'], 'keep');
 });
+
+test('runtime policy intent: inherit keeps an explicit null, override writes the key value', async () => {
+  const { buildRuntimePolicy, readRuntimePolicy } = await vite.ssrLoadModule(
+    '/src/features/providers/runtimePolicy.ts'
+  );
+  core = installFakeV8Core(apiClient, {
+    'api-keys': {
+      codex: [
+        {
+          name: 'codex-1',
+          'base-url': 'https://codex.invalid',
+          'request-retry': 3,
+          keys: [{ 'api-key': 'synthetic-codex', 'request-retry': null, 'alpha-search': true }],
+        },
+      ],
+    },
+  });
+  let codex = (await loadConfig()).codexApiKeys[0];
+  const draft = readRuntimePolicy(codex);
+  assert.equal(draft.retry, '');
+  assert.equal(codex.alphaSearch, true);
+  await providersApi.updateCodexConfig(codex.apiKey, codex.baseUrl, {
+    ...codex,
+    priority: 2,
+    ...buildRuntimePolicy(draft),
+  });
+  assert.equal(core.writes[0].data[0].keys[0]['request-retry'], null);
+  assert.equal(core.writes[0].data[0].keys[0]['alpha-search'], true);
+
+  codex = (await loadConfig()).codexApiKeys[0];
+  await providersApi.updateCodexConfig(codex.apiKey, codex.baseUrl, {
+    ...codex,
+    ...buildRuntimePolicy({ ...readRuntimePolicy(codex), retry: '5' }),
+  });
+  assert.equal(core.writes[1].data[0].keys[0]['request-retry'], 5);
+  assert.equal(core.writes[1].data[0]['request-retry'], 3);
+});
+
+test('configPatch binds its first write to the caller revision and re-reads for later steps', async () => {
+  const { applyConfigPatch } = await vite.ssrLoadModule('/src/services/api/configPatch.ts');
+  core = installFakeV8Core(apiClient, { routing: { strategy: 'round-robin' }, debug: true });
+  // PATCH is not modelled by the fake; exercise PUT/DELETE steps only.
+  const plan = { patch: {}, deletions: [['debug']], emptyMaps: [['routing']] };
+  const revision = core.etag();
+  await applyConfigPatch(plan, apiClient.getConnectionRevision(), revision);
+  const writes = core.calls.filter((call) => call.method !== 'GET');
+  assert.equal(writes[0].ifMatch, revision);
+  assert.equal(core.calls[1].url, '/config.yaml');
+  assert.equal(writes[1].ifMatch, core.calls[1].etag);
+  assert.deepEqual(core.doc, { routing: {} });
+  core.concurrentEdit((doc) => {
+    doc.debug = false;
+  });
+  await assert.rejects(
+    applyConfigPatch({ patch: {}, deletions: [['debug']] }, apiClient.getConnectionRevision(), revision),
+    (error) => error.status === 412
+  );
+});

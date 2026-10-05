@@ -6,7 +6,8 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties
+  type CSSProperties,
+  type AriaAttributes,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { IconChevronDown } from './icons';
@@ -27,6 +28,7 @@ interface SelectProps {
   ariaLabel?: string;
   ariaLabelledBy?: string;
   ariaDescribedBy?: string;
+  ariaInvalid?: AriaAttributes['aria-invalid'];
   fullWidth?: boolean;
   size?: 'sm' | 'md';
   id?: string;
@@ -87,6 +89,7 @@ export function Select({
   ariaLabel,
   ariaLabelledBy,
   ariaDescribedBy,
+  ariaInvalid,
   fullWidth = true,
   size = 'md',
   id,
@@ -317,6 +320,7 @@ export function Select({
           aria-label={ariaLabel}
           aria-labelledby={ariaLabelledBy}
           aria-describedby={ariaDescribedBy}
+          aria-invalid={ariaInvalid}
           disabled={disabled}
         >
           <span className={`${styles.triggerText} ${isPlaceholder ? styles.placeholder : ''}`}>

@@ -27,6 +27,7 @@ import {
 } from '../../sponsorDefinitions';
 import type {
   ModelEntryInput,
+  ProviderBrand,
   ProviderEntryFormInput,
   ProviderResource,
   SponsorKeyEntryInput,
@@ -36,6 +37,12 @@ import type {
 } from '../../types';
 import { ModelDiscoveryPanel } from './ModelDiscoveryPanel';
 import { ModelEntriesEditor } from './ModelEntriesEditor';
+import { RuntimePolicyEditor } from './RuntimePolicyEditor';
+import { ProviderBehaviorEditor } from './ProviderBehaviorEditor';
+import { readRuntimePolicy, validateRuntimePolicy } from '../../runtimePolicy';
+import { readModelOptions, validateModelOptions } from '../../modelOptions';
+import { pickProviderBehavior } from '../../providerBehavior';
+import { PROVIDER_DESCRIPTORS } from '../../descriptors';
 import { useModelDiscovery, type UseModelDiscoveryResult } from './useModelDiscovery';
 import styles from './sharedForm.module.scss';
 import {
@@ -60,6 +67,7 @@ interface SponsorModelSectionProps {
   models: ModelEntryInput[];
   discovery: UseModelDiscoveryResult;
   supportsImage: boolean;
+  providerBrand?: ProviderBrand;
   mutating: boolean;
   onChange: (next: ModelEntryInput[]) => void;
 }
@@ -96,6 +104,7 @@ const emptySponsorKeyEntry = (
   prefix: '',
   disabled: false,
   disableCooling: undefined,
+  runtimePolicy: readRuntimePolicy(),
   priority: undefined,
   weight: undefined,
   models: [emptyModel()],
@@ -141,6 +150,7 @@ const modelsFromConfig = (models: ModelAlias[] | undefined): ModelEntryInput[] =
         testModel: model.testModel,
         image: model.image === true,
         thinkingJson: formatThinkingJson(model.thinking),
+        ...readModelOptions(model),
       }))
     : [emptyModel()];
 
@@ -159,6 +169,8 @@ const sponsorEntryFromProviderKey = (
   prefix: config.prefix ?? '',
   disabled: hasDisableAllModelsRule(config.excludedModels),
   disableCooling: config.disableCooling,
+  runtimePolicy: readRuntimePolicy(config),
+  ...pickProviderBehavior(config, protocol),
   priority: config.priority,
   weight: config.weight,
   models: modelsFromConfig(config.models),
@@ -177,6 +189,8 @@ const sponsorEntryFromOpenAI = (
     prefix: config.prefix ?? '',
     disabled: config.disabled === true,
     disableCooling: config.disableCooling,
+    runtimePolicy: readRuntimePolicy(config),
+    ...pickProviderBehavior(config, 'openaiCompatibility'),
     priority: config.priority,
     weight: firstEntry?.weight,
     models: modelsFromConfig(config.models),
@@ -205,6 +219,7 @@ function SponsorModelSection({
   models,
   discovery,
   supportsImage,
+  providerBrand,
   mutating,
   onChange,
 }: SponsorModelSectionProps) {
@@ -267,6 +282,7 @@ function SponsorModelSection({
           />
         ) : null}
         <ModelEntriesEditor
+          providerBrand={providerBrand}
           models={modelsList}
           supportsImage={supportsImage}
           supportsThinking
@@ -580,19 +596,18 @@ function SponsorKeyEntryCard({
             </span>
           </label>
 
-          <label className={styles.checkboxRow}>
-            <input
-              type="checkbox"
-              className={styles.checkboxBox}
-              checked={entry.disableCooling ?? false}
-              disabled={mutating}
-              onChange={(event) => updateEntry({ disableCooling: event.target.checked })}
-            />
-            <span className={styles.checkboxText}>
-              <span>{t('providersPage.form.disableCooling')}</span>
-              <small>{t('providersPage.form.disableCoolingHint')}</small>
-            </span>
-          </label>
+          <ProviderBehaviorEditor
+            brand={entry.protocol === 'openai' ? 'openaiCompatibility' : entry.protocol}
+            value={entry}
+            onChange={(patch) => updateEntry(patch)}
+            disabled={mutating}
+          />
+          <RuntimePolicyEditor
+            value={entry.runtimePolicy ?? readRuntimePolicy()}
+            onChange={(runtimePolicy) => updateEntry({ runtimePolicy })}
+            disabled={mutating}
+            supportsErrors
+          />
 
           <SponsorModelSection
             label={t(`providersPage.sponsor.protocolModels.${modelKey}`)}
@@ -600,6 +615,7 @@ function SponsorKeyEntryCard({
             models={entry.models}
             discovery={discovery}
             supportsImage={entry.protocol === 'openai'}
+            providerBrand={entry.protocol === 'openai' ? 'openaiCompatibility' : entry.protocol}
             mutating={mutating}
             onChange={(models) => updateEntry({ models })}
           />
@@ -703,6 +719,16 @@ export function SponsorProviderForm({
       return t('providersPage.form.validation.weightMax', { max: MAX_CREDENTIAL_WEIGHT });
     }
     for (const entry of entries) {
+      const modelError = validateModelOptions(entry.models);
+      if (modelError) return t(modelError);
+      if (entry.runtimePolicy) {
+        const brand = entry.protocol === 'openai' ? 'openaiCompatibility' : entry.protocol;
+        const policyError = validateRuntimePolicy(
+          entry.runtimePolicy,
+          PROVIDER_DESCRIPTORS[brand].supportsRequestScopedErrors
+        );
+        if (policyError) return t(policyError);
+      }
       for (const model of entry.models) {
         try {
           const thinking = parseThinkingJson(model.thinkingJson);

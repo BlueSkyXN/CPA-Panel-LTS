@@ -180,8 +180,37 @@ test('adapts configured Infistar endpoints without promotional metadata', () => 
     Object.keys(infistar).some((key) => key.toLowerCase().includes('affiliate')),
     false
   );
-  assert.equal(descriptors.PROVIDER_BRAND_ORDER.at(-1), 'infistar');
+  assert.deepEqual(descriptors.PROVIDER_BRAND_ORDER.slice(-2), ['infistar', 'kimi']);
   assert.match(brandLogos.PROVIDER_LOGOS.infistar.src, /infistar\.png/);
+});
+
+test('adapts configured Kimi endpoints as a config-detected group without affiliate links', async () => {
+  const kimi = await vite.ssrLoadModule('/src/features/providers/kimi.ts');
+  assert.equal(
+    Object.keys(kimi).some((key) => /affiliate/i.test(key)),
+    false
+  );
+  const config = transformers.normalizeConfigResponse({
+    'api-keys': {
+      'openai-compatibility': [
+        { name: 'kimi', 'base-url': 'https://api.moonshot.cn/v1', keys: [{ 'api-key': 'synthetic-kimi' }] },
+      ],
+      claude: [
+        {
+          name: 'claude-kimi',
+          'base-url': 'https://api.moonshot.cn/anthropic',
+          keys: [{ 'api-key': 'synthetic-kimi-claude' }],
+        },
+      ],
+    },
+  });
+  const raw = kimi.buildKimiRaw(config);
+  assert.equal(raw.openai.length, 1);
+  assert.equal(raw.claude.length, 1);
+  const resource = adapters.kimiToResource(raw);
+  assert.equal(resource.brand, 'kimi');
+  assert.equal(sponsorDefinitions.isMultiProtocolSponsorBrand('kimi'), true);
+  assert.ok(brandLogos.PROVIDER_LOGOS.kimi.src);
 });
 
 test('deletes sponsor OpenAI entries by unique descending source index', () => {

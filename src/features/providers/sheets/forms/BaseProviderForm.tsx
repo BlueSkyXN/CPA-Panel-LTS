@@ -31,6 +31,11 @@ import { ModelEntriesEditor } from './ModelEntriesEditor';
 import styles from './sharedForm.module.scss';
 import { CLAUDE_API_BASE_URL } from '../../claudeApi';
 import { MAX_CREDENTIAL_WEIGHT } from '@/utils/credentialWeight';
+import { readRuntimePolicy, validateRuntimePolicy } from '../../runtimePolicy';
+import { readModelOptions, validateModelOptions } from '../../modelOptions';
+import { RuntimePolicyEditor } from './RuntimePolicyEditor';
+import { ProviderBehaviorEditor } from './ProviderBehaviorEditor';
+import { pickProviderBehavior } from '../../providerBehavior';
 import {
   formatThinkingJson,
   hasThinkingBudgetRangeError,
@@ -82,6 +87,7 @@ function buildInitialForm(
       prefix: '',
       disabled: false,
       disableCooling: undefined,
+      runtimePolicy: readRuntimePolicy(),
       priority: undefined,
       weight: undefined,
       models: [emptyModel()],
@@ -116,6 +122,8 @@ function buildInitialForm(
       prefix: cfg.prefix ?? '',
       disabled: cfg.disabled === true,
       disableCooling: cfg.disableCooling,
+      runtimePolicy: readRuntimePolicy(cfg),
+      ...pickProviderBehavior(cfg, brand),
       priority: cfg.priority,
       models: cfg.models?.length
         ? cfg.models.map((m) => ({
@@ -127,6 +135,7 @@ function buildInitialForm(
             testModel: m.testModel,
             image: m.image === true,
             thinkingJson: formatThinkingJson(m.thinking),
+            ...readModelOptions(m),
           }))
         : [emptyModel()],
       headers: cfg.headers
@@ -138,6 +147,7 @@ function buildInitialForm(
         ? cfg.apiKeyEntries.map((entry) => ({
             apiKey: '',
             existingApiKey: entry.apiKey,
+            sourceIndex: entry.sourceIndex,
             proxyUrl: entry.proxyUrl ?? '',
             weight: entry.weight,
             authIndex: entry.authIndex,
@@ -161,6 +171,8 @@ function buildInitialForm(
     prefix: cfg.prefix ?? '',
     disabled,
     disableCooling: cfg.disableCooling,
+    runtimePolicy: readRuntimePolicy(cfg),
+    ...pickProviderBehavior(cfg, brand),
     priority: cfg.priority,
     weight: cfg.weight,
     models: cfg.models?.length
@@ -172,6 +184,7 @@ function buildInitialForm(
           priority: m.priority,
           testModel: m.testModel,
           thinkingJson: formatThinkingJson(m.thinking),
+          ...readModelOptions(m),
         }))
       : [emptyModel()],
     headers: cfg.headers
@@ -360,6 +373,15 @@ export function BaseProviderForm({
   };
 
   const validate = (): string | null => {
+    const modelError = validateModelOptions(form.models);
+    if (modelError) return t(modelError);
+    if (form.runtimePolicy) {
+      const policyError = validateRuntimePolicy(
+        form.runtimePolicy,
+        descriptor.supportsRequestScopedErrors
+      );
+      if (policyError) return t(policyError);
+    }
     if (descriptor.supportsName && !form.name.trim()) {
       return t('providersPage.form.validation.nameRequired');
     }
@@ -425,13 +447,6 @@ export function BaseProviderForm({
     [form.apiKeyEntries]
   );
   const actualApiKeyEntries = form.apiKeyEntries ?? [];
-  const supportsDisableCooling =
-    brand === 'gemini' ||
-    brand === 'interactions' ||
-    brand === 'codex' ||
-    brand === 'xai' ||
-    isClaudeLikeBrand(brand) ||
-    brand === 'openaiCompatibility';
   const supportsImageModels = brand === 'openaiCompatibility';
   const singleConnectivity =
     brand === 'codex' || brand === 'xai'
@@ -699,23 +714,21 @@ export function BaseProviderForm({
             </span>
           </label>
         ) : null}
-
-        {supportsDisableCooling ? (
-          <label className={styles.checkboxRow}>
-            <input
-              type="checkbox"
-              className={styles.checkboxBox}
-              checked={form.disableCooling ?? false}
-              disabled={mutating}
-              onChange={(e) => updateField('disableCooling', e.target.checked)}
-            />
-            <span className={styles.checkboxText}>
-              <span>{t('providersPage.form.disableCooling')}</span>
-              <small>{t('providersPage.form.disableCoolingHint')}</small>
-            </span>
-          </label>
-        ) : null}
       </div>
+
+      {/* Upstream runtime policy (d78fcecd) replaces the boolean cooling checkbox: inherit/override. */}
+      <ProviderBehaviorEditor
+        brand={brand}
+        value={form}
+        onChange={(patch) => setForm((current) => ({ ...current, ...patch }))}
+        disabled={mutating}
+      />
+      <RuntimePolicyEditor
+        value={form.runtimePolicy ?? readRuntimePolicy()}
+        onChange={(value) => updateField('runtimePolicy', value)}
+        disabled={mutating}
+        supportsErrors={descriptor.supportsRequestScopedErrors}
+      />
 
       {/* 高级折叠区 */}
       {descriptor.supportsApiKeyEntries && form.apiKeyEntries ? (
@@ -852,6 +865,7 @@ export function BaseProviderForm({
               />
             ) : null}
             <ModelEntriesEditor
+              providerBrand={brand}
               models={modelsList}
               supportsImage={supportsImageModels}
               supportsThinking

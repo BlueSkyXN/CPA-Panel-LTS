@@ -9,6 +9,7 @@ import fennoAILogo from '@/assets/icons/fenno-ai.png';
 import qiniuCloudLogo from '@/assets/icons/qiniu-cloud.png';
 import infistarLogo from '@/assets/icons/infistar.png';
 import xaiLightLogo from '@/assets/icons/grok.svg';
+import kimiDarkLogo from '@/assets/icons/kimi-dark.svg';
 import type { ProviderBrand } from './types';
 
 export interface ProviderBrandLogo {
@@ -29,4 +30,5 @@ export const PROVIDER_LOGOS: Record<ProviderBrand, ProviderBrandLogo> = {
   fennoAI: { src: fennoAILogo, transparent: true },
   qiniuCloud: { src: qiniuCloudLogo, transparent: true },
   infistar: { src: infistarLogo, transparent: true },
+  kimi: { src: kimiDarkLogo, transparent: true },
 };
