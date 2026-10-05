@@ -308,7 +308,7 @@ features:
     core_endpoints:
       - /v0/management/config
       - /v0/management/auth-files
-      - /v0/management/api-key-usage
+      - /v8/management/observability/usage/api-keys
       - /v1/models
     required_markers:
       - useConfigStore
@@ -329,43 +329,38 @@ features:
 
   - id: provider-stable-lts-page
     status: protected
-    reason: The legacy provider page preserves full usage-backed status bars and LTS-only providers; the Workbench is the canonical provider management surface at /ai-providers.
+    reason: Full usage-backed provider status bars (auth-index attribution from the complete usage statistics) are an LTS contract. Under the v8-only Panel the legacy per-family pages were removed; the same status surface now lives in the Workbench resource table, where full usage is the primary source and Core recent-request summaries are only a fallback when usage statistics are disabled. /lts/providers redirects to /ai-providers.
     routes:
-      - /ai-providers/legacy
+      - /ai-providers
       - /lts/providers
-      - /ai-providers/gemini/*
-      - /ai-providers/codex/*
-      - /ai-providers/claude/*
-      - /ai-providers/vertex/*
-      - /ai-providers/openai/*
-      - /ai-providers/ampcode
     panel_files:
-      - src/pages/AiProvidersPage.tsx
+      - src/features/providers/components/ProviderResourceTable.tsx
+      - src/features/providers/fullUsageStatus.ts
+      - src/features/providers/useProviderFullUsage.ts
+      - src/features/providers/fullUsageStatus.test.mjs
       - src/pages/AiProvidersPage.module.scss
       - src/components/providers/
       - src/components/providers/hooks/useProviderStats.ts
       - src/components/providers/ProviderStatusBar.tsx
       - src/services/api/providers.ts
-      - src/services/api/providerGroups.ts
-      - src/services/api/providerGroups.test.mjs
       - src/services/api/usage.ts
       - src/utils/usage.ts
       - src/utils/usageIndex.ts
     core_endpoints:
-      - /v0/management/config
-      - /v0/management/gemini-api-key
-      - /v0/management/codex-api-key
-      - /v0/management/claude-api-key
-      - /v0/management/vertex-api-key
-      - /v0/management/openai-compatibility
+      - /v8/management/config
+      - /v8/management/config/api-keys/:family
       - /v0/management/usage
     required_markers:
       - ProviderStatusBar
       - calculateStatusBarData
+      - resolveFullUsageStatus
+      - useProviderFullUsage
+      - data-usage-source
+      - Workbench status bars use full usage attributed by the v8 auth_index
 
   - id: provider-workbench
     status: coexist
-    reason: The Workbench is the canonical provider management surface at /ai-providers; /ai-providers/workbench remains a redirect alias, while the legacy LTS provider page stays available under /ai-providers/legacy. It must preserve and edit Core model mapping fields including canonical display-name from Core v7.2.70 or later. Its all-provider thinking editor follows Core ThinkingSupport fields levels, min, max, zero_allowed, and dynamic_allowed. It does not expose the Codex client-only ultra compatibility preset as a provider wire capability, while unknown existing levels and fields remain lossless through advanced JSON. The accepted xAI and Interactions API adapt-ports target current CPA-Core-LTS management contracts, preserve unknown config fields, and use api-key plus base-url selectors. Credential weights round-trip for provider keys and OpenAI key entries. Branded groups, including the Infistar adaptation, remain config-detected only and must not add promotional quick-start routes, affiliate metadata, recommendations, or registration links.
+    reason: The Workbench is the only provider management surface at /ai-providers (v8-only Panel); /ai-providers/workbench remains a redirect alias. It writes native v8 provider families with PUT /config/api-keys/{family}, bound by If-Match to the ETag of the same GET /config, re-reading before every write, stripping response-only auth_index/auth-index, and locating groups by persisted source snapshots and sourceIndex. It adopts upstream runtime policy, error-rule, provider behavior and advanced model capability editors while keeping the LTS thinking editor. It must preserve and edit Core model mapping fields including canonical display-name from Core v7.2.70 or later. Its all-provider thinking editor follows Core ThinkingSupport fields levels, min, max, zero_allowed, and dynamic_allowed. It does not expose the Codex client-only ultra compatibility preset as a provider wire capability, while unknown existing levels and fields remain lossless through advanced JSON. The accepted xAI and Interactions API adapt-ports target current CPA-Core-LTS management contracts, preserve unknown config fields, and use api-key plus base-url selectors. Credential weights round-trip for provider keys and OpenAI key entries. Branded groups, including the Infistar and Kimi adaptations, remain config-detected only and must not add promotional quick-start routes, affiliate metadata, recommendations, or registration links.
     routes:
       - /ai-providers
       - /ai-providers/workbench
@@ -396,8 +391,20 @@ features:
       - src/components/ui/modelInputListUtils.ts
       - src/services/api/config.ts
       - src/services/api/providers.ts
-      - src/services/api/providerGroups.ts
-      - src/services/api/providerGroups.test.mjs
+      - src/services/api/providersNative.test.mjs
+      - src/services/api/testing/fakeV8Core.mjs
+      - src/services/api/configValue.ts
+      - src/services/api/configRevision.ts
+      - src/services/api/providerModels.ts
+      - src/features/providers/runtimePolicy.ts
+      - src/features/providers/errorRules.ts
+      - src/features/providers/modelOptions.ts
+      - src/features/providers/providerBehavior.ts
+      - src/features/providers/kimi.ts
+      - src/features/providers/sheets/forms/RuntimePolicyEditor.tsx
+      - src/features/providers/sheets/forms/ErrorRulesEditor.tsx
+      - src/features/providers/sheets/forms/ProviderBehaviorEditor.tsx
+      - src/features/providers/sheets/forms/ModelAdvancedFields.tsx
       - src/services/api/transformers.ts
       - src/stores/useConfigStore.ts
       - src/types/config.ts
@@ -408,15 +415,9 @@ features:
       - scripts/smoke-lts-panel.py
       - scripts/smoke-lts-panel-core.py
     core_endpoints:
-      - /v0/management/config
-      - /v0/management/api-key-usage
-      - /v0/management/gemini-api-key
-      - /v0/management/interactions-api-key
-      - /v0/management/codex-api-key
-      - /v0/management/xai-api-key
-      - /v0/management/claude-api-key
-      - /v0/management/vertex-api-key
-      - /v0/management/openai-compatibility
+      - /v8/management/config
+      - /v8/management/config/api-keys/:family
+      - /v8/management/observability/usage/api-keys
     required_markers:
       - useProviderRecentRequests
       - MODEL_DISCOVERY_BRANDS
@@ -426,8 +427,8 @@ features:
       - createXAIConfig
       - updateXAIConfig
       - deleteXAIConfig
-      - xai-api-key
-      - interactions-api-key
+      - createXAIConfig(
+      - 'interactions'
       - createInteractionsKey
       - updateInteractionsKey
       - deleteInteractionsKey
@@ -461,17 +462,13 @@ features:
       - run_browser_provider_key_crud_smoke
       - BROWSER provider workbench OpenAI Compatibility save PUT /v0/management/openai-compatibility
       - Provider write smoke persisted response-only auth-index
-      - mutateLatestProviderList
-      - replaceLatestProviderRecord
       - getSponsorAggregationConflict
       - getSponsorOpenAIDeleteIndices
       - runSponsorMutationWithRecovery
       - sourceIndex
-      - getOpenAIProviderMutationIndex
       - createProviderRecentRequestsCacheController
       - assert_each_request_immediately_preceded_by
       - display-name
-      - item.alias || item.display_name || item.displayName
       - modelDisplayNamePlaceholder
       - updated model display-name
       - new model display-name
@@ -490,6 +487,19 @@ features:
       - round-trips the Claude fingerprint profile without dropping unknown fields
       - cleared Claude fingerprint profile without dropping unknown fields
       - BROWSER provider workbench Claude fingerprint-profile round-trip and reset
+      - locateProviderGroup
+      - applyProviderChanges
+      - preserveModelMetadata
+      - stripProviderGroupResponseFields
+      - ifMatch(revision)
+      - buildRuntimePolicy
+      - pickProviderBehavior
+      - ModelAdvancedFields
+      - KIMI_PROVIDER_NAME
+      - provider writes send If-Match from the same GET
+      - 'F22: deleting with a stale snapshot'
+      - 'F23: renaming a Vertex model keeps force-mapping'
+      - 'F24: changing provider B keeps provider A auth index'
     validation:
       - npm run test:providers
       - npm run smoke:lts
@@ -497,32 +507,27 @@ features:
 
   - id: ampcode
     status: lts-maintained
-    reason: Upstream Panel removed Ampcode, but CPA-Core-LTS still exposes Ampcode config and management endpoints.
+    reason: Upstream Panel removed Ampcode, but CPA-Core-LTS still exposes the top-level v8 ampcode config node. The Panel edits it at /ai-providers/ampcode with one revisioned PUT /config/ampcode; /lts/ampcode redirects there.
     routes:
-      - /ai-providers/legacy/ampcode
       - /ai-providers/ampcode
       - /lts/ampcode
     panel_files:
       - src/router/MainRoutes.tsx
       - src/assets/icons/amp.svg
-      - src/components/providers/AmpcodeSection/
       - src/pages/AiProvidersAmpcodeEditPage.tsx
       - src/services/api/ampcode.ts
       - src/types/ampcode.ts
     core_endpoints:
-      - /v0/management/ampcode
-      - /v0/management/ampcode/upstream-url
-      - /v0/management/ampcode/upstream-api-key
-      - /v0/management/ampcode/upstream-api-keys
-      - /v0/management/ampcode/model-mappings
-      - /v0/management/ampcode/force-model-mappings
+      - /v8/management/config/ampcode
     required_markers:
       - saveAmpcode
+      - getAmpcodeSnapshot
       - force-model-mappings
+      - upstream-api-keys
 
   - id: plugin-management
     status: coexist
-    reason: CPA-Core-LTS exposes real plugin management capabilities behind a support header.
+    reason: CPA-Core-LTS exposes real plugin management capabilities behind a support header. Plugin list/store/delete use v8 routes; plugin enable/config are v8 config nodes written with If-Match; readiness stays on the LTS extension client.
     routes:
       - /plugins
       - /plugin-store
@@ -566,12 +571,12 @@ features:
       - scripts/smoke-lts-panel.py
       - scripts/smoke-lts-panel-core.py
     core_endpoints:
-      - /v0/management/plugins
-      - /v0/management/plugins/:id/config
-      - /v0/management/plugins/:id/enabled
+      - /v8/management/plugins
+      - /v8/management/config/plugins/configs/:id
+      - /v8/management/config/plugins/configs/:id/enabled
       - /v0/management/plugins/:id/readiness
-      - /v0/management/plugin-store
-      - /v0/management/plugin-store/:id/install
+      - /v8/management/plugins/store
+      - /v8/management/plugins/store/:id/install
     capability_gates:
       - x-cpa-support-plugin
     required_markers:
@@ -622,7 +627,7 @@ features:
       - src/utils/recentRequests.ts
       - src/features/providers/ProvidersWorkbenchPage.tsx
     core_endpoints:
-      - /v0/management/api-key-usage
+      - /v8/management/observability/usage/api-keys
     required_markers:
       - useProviderRecentRequests
       - createProviderRecentRequestsCacheController
@@ -644,10 +649,10 @@ features:
       - scripts/smoke-lts-panel.py
       - scripts/smoke-lts-panel-core.py
     core_endpoints:
-      - /v0/management/logs
-      - /v0/management/request-error-logs
-      - /v0/management/request-error-logs/:name
-      - /v0/management/request-log-by-id/:id
+      - /v8/management/observability/logs
+      - /v8/management/observability/logs/errors
+      - /v8/management/observability/logs/errors/:name
+      - /v8/management/observability/logs/requests/:id
     required_markers:
       - 'cursor?: string'
       - latestAfter
@@ -665,7 +670,7 @@ features:
 
   - id: config-management
     status: shared
-    reason: Source and visual saves preserve unmanaged YAML and concurrent changes across legacy and v8 layouts without confusing client access keys with provider groups or redirecting LTS usage APIs.
+    reason: Source and visual saves use only /v8/management/config.yaml with the read ETag sent as If-Match; the visual editor projects the canonical v8 tree into its field names (no layout classification), preserves unmanaged YAML and concurrent changes, and never confuses client access keys with provider groups.
     routes:
       - /config
     panel_files:
@@ -676,8 +681,11 @@ features:
       - src/hooks/useVisualConfig.ts
       - src/services/api/config.ts
       - src/services/api/configFile.ts
-      - src/utils/configLayout.ts
-      - src/utils/configLayout.test.mjs
+      - src/utils/v8VisualProjection.ts
+      - src/utils/v8VisualProjection.test.mjs
+      - src/services/api/configRevision.ts
+      - src/services/api/configValue.ts
+      - src/services/api/configPatch.ts
       - src/services/api/configFile.test.mjs
       - src/types/visualConfig.ts
       - src/utils/credentialWeight.ts
@@ -686,9 +694,9 @@ features:
       - scripts/smoke-lts-panel.py
       - scripts/smoke-lts-panel-core.py
     core_endpoints:
-      - /v0/management/config
-      - /v0/management/config.yaml
-      - /v0/management/usage-statistics-enabled
+      - /v8/management/config
+      - /v8/management/config.yaml
+      - /v8/management/config/observability/logs/request-log
     required_markers:
       - visualBaseYaml
       - normalizeYamlForVisualDiff
@@ -890,13 +898,13 @@ features:
       - scripts/smoke-lts-panel.py
       - scripts/smoke-lts-panel-core.py
     core_endpoints:
-      - /v0/management/auth-files
-      - /v0/management/auth-files/status
-      - /v0/management/auth-files/fields
-      - /v0/management/auth-files/models
+      - /v8/management/credentials
+      - /v8/management/credentials/status
+      - /v8/management/credentials/fields
+      - /v8/management/credentials/models
       - /v0/management/auth-files/models/refresh
-      - /v0/management/oauth-excluded-models
-      - /v0/management/oauth-model-alias
+      - /v8/management/config/oauth/excluded-models
+      - /v8/management/config/oauth/model-alias
     required_markers:
       - normalizeBatchUploadResponse
       - normalizeBatchDeleteResponse

@@ -23,7 +23,9 @@ const warn = (message) => warnings.push(message);
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const endpointToRegex = (endpoint) => {
-  const stripped = endpoint.replace(/^\/v0\/management/, '') || endpoint;
+  // Panel clients use relative paths under /v8/management (apiClient) or the LTS extension
+  // prefix /v0/management (ltsExtensionClient); both prefixes are stripped for marker search.
+  const stripped = endpoint.replace(/^\/v[08]\/management/, '') || endpoint;
   const parts = stripped.split('/').map((part) => {
     if (!part) return '';
     if (part.startsWith(':')) {

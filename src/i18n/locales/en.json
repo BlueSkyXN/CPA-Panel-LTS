@@ -168,7 +168,6 @@
     "api_keys": "API Keys",
     "ai_providers": "AI Providers",
     "provider_workbench": "Provider Workbench",
-    "provider_legacy": "LTS Provider Status",
     "auth_files": "Auth Files",
     "oauth": "OAuth Login",
     "quota_management": "Quota Management",

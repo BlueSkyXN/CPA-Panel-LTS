@@ -1,53 +1,51 @@
-# v8 开发线配置兼容
+# v8 配置契约（V8-only）
 
-此候选仅供 `v8-dev` PR 评审，不代表 main 或已发布 management.html 已升级。
+自 2026-10-05 起，Panel 只配套 CPA-Core-LTS v8 版本线。用户按 v8 教程重新配置 Core；Panel 不再兼容 v7/v0 配置、不检测 legacy/mixed 布局、不通过 `/v0/management` 写任何配置。此前 2026-10-03/04 的“按布局分流”方案已被本文件取代（历史见 git 记录与 [2026-10-03 intake](upstream-intake-20261003-v8.md)）。
 
-## 适用 Core
+端点归属见 [v8 endpoint map](v8-endpoint-map.md)。
 
-- v7 CPA-Core-LTS：继续使用 legacy YAML 与 `/v0/management`。
-- 配套 v8 CPA-Core-LTS：保留 v0 structured config/usage/Flow/plugin APIs；配置文档可采用 legacy、canonical v8 或 mixed 布局。Provider 写入按当前布局分流：legacy 使用 v0；v8/mixed 使用 `/v8/management/config/api-keys/<family>`，不经 legacy 展平再保存。
-- 不承诺可管理已删除 v0 业务 API 的官方原版 Core v8。本改动不是全局切换 API prefix。
+## 连接与客户端
 
-## 配置编辑
+- `apiClient` 固定访问 `/v8/management`；`ltsExtensionClient` 只承载 Core 没有 v8 等价路由的 LTS 扩展（完整 usage、usage query、Flow、插件 readiness 与插件自有路由、单凭证模型刷新、Home `/nodes`），访问 `/v0/management`。两者共享同一 transport：base URL、management key、connection generation、session write freeze、能力响应头与 401 处理。
+- 登录时 `GET /v8/management/config` 返回 404 且同一凭据能读到 `/v0/management/config`，判定为仅 v0 的旧后端，提示升级 CPA-Core-LTS v8（`LegacyBackendError`）。v0 响应只用于诊断，绝不作为数据或登录回退。
 
-原始 legacy 文档继续通过 v0 读写，不因为连接到新 Core 自动迁移。
+## 配置写入：ETag + If-Match
 
-发现 v8/mixed 后，配置域读取 `/v8/management/config.yaml` 的 canonical YAML 视图，视觉编辑器将已支持字段投影到既有 UI，再只把实际改动写回原文档相应 canonical 路径。client keys 始终映射到 `access.api-keys`，provider `api-keys` map 不参与数组写入；未知 provider 配置、插件 opaque YAML、payload AST 和 LTS 扩展保留。
+Core 对 `/v8/management/config*` 的每个 PUT/PATCH/DELETE 都要求恰好一个强 `If-Match`，值等于当前持久化文件的 sha256 ETag；缺失返回 `428 config_revision_required`，过期返回 `412 config_revision_conflict`。写成功后响应 ETag 为空。Panel 的规则：
 
-v8/mixed 的保存通过 v8 YAML API。canonical GET 不写盘；确认保存会规范化 mixed/历史别名，差异预览比较 canonical 视图，不能将其解释为磁盘逐字 diff。布局切换不是普通编辑操作，保存中检测到布局变化必须重新加载。
+- 由读取数据推导出的写入（provider 分组、client API keys、OAuth excluded/alias map、Ampcode 节点、插件配置、YAML 编辑器）必须携带**同一次读取**响应里的 ETag。
+- 独立标量（请求日志开关、插件 enabled）写入前读取当前 revision（`GET /config.yaml`）再提交。
+- 412/428 以冲突形式交给调用方（`isConfigRevisionConflict`），不盲目重试、不降级到 v0。
+- 每次写入后都重新读取；ETag 不跨写入复用。
+- `GET /v8/management/config` 及子路径在 404 时同样返回 ETag，缺失字段也有版本。
 
-Core 侧必须同时拒绝旧缓存 Panel 的危险 v0 raw 替换；仅发新版 Panel 不能保护尚未刷新的浏览器。失败写入不会自动切换 API 版本重放。
+## Provider（Workbench）
 
-连接 generation 用于拒绝旧配置响应及后续写入，仍复用既有 session write freeze。配置错误形状/读取失败不能当空配置。
+- 读：`GET /v8/management/config`。Core 已在 `api-keys` 的组/key 上注入 `auth_index`（官方拼写为 `auth-index`，两者都读）。`useConfigStore.refreshProviders` 只读这一份 v8 配置，不再合并 vertex/openai 运行时列表，也没有快照门控；修改 provider B 不会让 provider A 的 auth index 丢失（F24）。
+- 写：`PUT /v8/management/config/api-keys/{family}`，按官方原生层（ee79a794）以持久化组快照（`ProviderSource`）和 `sourceIndex` 定位目标，只写变化字段，保留组名、共享策略、显式 null 继承、未知字段与模型元数据；模型改名按 `sourceIndex` 保留 force-mapping 等元数据（F23）。写前剥离 `auth_index`/`auth-index`。
+- 目标已被他人修改时，基于旧快照的更新/删除在写请求前拒绝；读取与 PUT 之间的并发写由 Core 412 拒绝（F22）。
+- 不再存在布局分类代码与 legacy 反向适配器（F21，`npm run check:lts` 守护）。
 
-## Provider 分组编辑边界
+## 配置编辑器
 
-普通行编辑保留组名、共享策略、未编辑 key、显式 null 继承与隐藏模型元数据；删除 key 不拆分剩余组。模型重排/改名通过原始 sourceIndex 绑定元数据，发现同名不同 alias 不合并。
+- 源码与可视编辑统一使用 `GET`/`PUT /v8/management/config.yaml`；保存前复读并比较内容，确认无变化后以该次读取的 ETag 提交，成功后复读。
+- `/config.yaml` 总是返回 canonical v8 树。可视编辑器仍以历史字段名组织界面，`src/utils/v8VisualProjection.ts` 把 canonical 节点投影到这些字段，并把改动映射回 canonical 路径；不再判断或接受其他布局。client keys 只映射到 `access.api-keys`，provider `api-keys` map 不参与；未知 YAML、插件 opaque 配置、payload AST 与注释保留。
 
-重复 key/base URL 身份、共享组单行修改 base URL 等歧义操作明确拒绝，使用 YAML 编辑器处理。高级策略的显式继承意图、全量原生 group UI 未实现。
+## LTS 能力保留
 
-YAML 每次读取返回不可变的 content/generation/layout/revision 快照；其他编辑器的读取不能替换本草稿使用的版本。确认保存仍复读并重建差异，最后 PUT 携带该次读取的 `If-Match`。Provider 分组写入同样携带文档版本，由 Core 在锁内做条件写入（CAS），堵住最后读取到 PUT 的竞态。普通表单保存同时比较打开时的 provider 快照；全局 store 刷新不能使旧表单覆盖新字段。Sponsor 表单在首笔写入前校验最新聚合快照，各现有协议更新继续校验对应记录。
+完整 usage（导入/导出、事件、定价）、Flow V3、插件能力门控与 readiness、PAT 账号、Codex quota/reset credits/remote cloud、Ampcode（`/ai-providers/ampcode`，单次 `PUT /config/ampcode`）、赞助商 code0/infistar/fennoAI/qiniuCloud（及仅按配置识别、无推广链接的 Kimi）、provider 状态条（Workbench 中以完整 usage 的 auth-index 归因为主，recent requests 仅在 usage 关闭时回退）、主题/导航与多实例连接均保留。
 
-OpenAI-compatible 删除和启停必须传入选中时的原始 provider 快照，检查名称唯一、backend sourceIndex/当前位置和归一化可编辑字段一致；列表重排、目标缺失/改名、同名歧义或字段变化均在写请求前拒绝。工作台、旧 provider 页面、Sponsor 聚合删除/启停及表单移除协议都使用此保护。快照在操作入口复制，其他读取不能替换它。目标未变时基于最新列表只删除目标或修改 disabled，保留其他 provider 的并发更新，再使用最终文档 `If-Match`；不把操作开始时的全局 store 当作原始目标证据。Sponsor 删除/启停额外在首个协议写入前核验聚合快照，多个 OpenAI 目标按原始 sourceIndex 降序删除，逐笔读取新文档版本。
+## 已知边界
 
-Provider 比较使用配置字段投影，不比较 UI 对象本身。仅 OpenAI 的 `disabled` 缺省与 false 按相同状态处理；provider/key 的运行时 auth index 不参与比较，真实 headers 和其他字段的 null/缺省语义不放宽。名称唯一、backend sourceIndex 和原目标检查仍保留。
-
-单目标更新/删除必须显式传入原目标快照，不再隐式依赖全局 `config.raw` 整表基线。Sponsor 每笔操作校验该笔目标并读取新版本，因此自己的前一笔修改不会造成虚假冲突；后续目标真的改变仍停止并读回部分结果。整表 `save*` 则必须显式传入与草稿配套的原始列表；旧编辑器继续采用这一保守语义，无关条目变化也要求重新加载。OpenAI/Claude 原列表随共享草稿保存，跨模型选择页面不能换成另一份新基线。
-
-`config.raw` 的 provider 部分只保存 `/config` 原始响应，归一化列表更新不再覆盖它。工作台和旧页面共享受连接 generation、请求顺序保护的读回；专用接口只在配置投影一致时补充运行时归属信息。旧页面直接展示 store 列表，不再维护并回写第二份旧数组；修改成功或失败均尝试读回，失败不回滚旧列表，读回失败单独显示，不自动重放写请求。
-
-v8 必须有配套 Core 的 `ETag` 支持，否则拒绝保存并提示升级；缺失版本 428、过期版本 412 均不重试、不降级重放。legacy/v7 的 OpenAI 删除/启停也先校验目标快照，再使用已存在的按名称 DELETE/PATCH，避免再次依赖旧下标；但读后写仍没有服务端 CAS，不能保证同时改名、同名重建或新增重名记录等竞态下的事务安全。多协议 sponsor 操作不是整体事务，部分成功仍走既有恢复流程；无条件 v0 客户端和同时写文件的外部进程也不在保护范围内。不得宣传为无条件多写者安全。
-
-本轮逐提交取舍见 [2026-10-03 intake](upstream-intake-20261003-v8.md)。延期项不属于已移植功能。
+- 连接不提供 `/v8/management` 的 Home 控制面无法使用本 Panel。
+- v8 JSON 视图遇到非字符串 map key 返回 422；此时只能使用 YAML 编辑器。
+- `configPatch.applyConfigPatch` 的多步计划只把第一步绑定调用方 revision，后续步骤复读 revision；需要原子性时使用单次 PUT。
+- 多协议 sponsor 操作不是整体事务，部分成功走既有恢复流程。
+- `scripts/smoke-lts-panel*.py` 的 mock/real-Core 浏览器 smoke 仍按 v0 路由与 legacy 页面编写，尚未迁移到 v8，不能作为本契约的验收证据。
 
 ## 验证
 
-- `npm run test:config`：包含真实 visual hook 的 legacy/v8/mixed、client-key/provider隔离、false/0优先级、payload AST与注释测试。
-- `npm run test:api-client`：包含配置域版本分流、旧连接延迟返回、独立 YAML 快照、七类 provider 旧表单、真实 workbench hook 快照传递与启停保护、sponsor 首写校验、正常保存，以及最终读取后的 412 不重试/不 fallback。2026-10-04 补修新增 78 项用例：v8/legacy 的 OpenAI 删除、启用、禁用；旧目标与已刷新 store 遇到重排/插入/删除/改名/字段变化/重名时零写入；正常操作、backend sourceIndex、其他 provider 更新保留、Sponsor 多目标连续操作及跨协议首写拦截。补修前的 API、workbench 和 Sponsor 三条旧目标删除回归均实际失败，补修后通过。
-- `npm run validate:lts`：保留完整 usage、Flow、plugins、provider 合同和 single-file 构建。
-- 前次 intake 做过临时 v7/v8 API 读写与浏览器可视化保存。本次修复另外使用实际 Panel API modules 对接隔离 Core 的 legacy/v8 配置实例，验证 group 保存、旧表单拒绝、旧 YAML 412、fresh YAML 保存和 legacy 不隐式迁移。
-- 2026-10-04 删除/启停补修的 `npm run validate:lts` 通过，lint 仅保留未修改的 `useConnectivityTest.ts:174` 既有 warning。实际 Panel API 模块对接隔离 v8 Core：通过 v8 API 重排后刷新 store，旧目标删除/启停被拒，YAML 原始字节不变；重新读取目标后禁用、启用、删除均成功且 sibling 保留。联调初次将省略的 `disabled: false` 当成显式 false 导致夹具断言失败；核对 Core `omitempty` 后按 false 默认语义重跑通过。
-- 后续源码复核发现前述联调没有覆盖页面专用接口与 `/config` 的表示差异，不能证明真实页面链路正确。后续补修增加 6 个聚焦回归：两种 Core 响应形状下连续 OpenAI 操作、显式整表基线与 raw 分离、Sponsor 运行时归属字段、三类同协议连续操作及真实目标冲突、读回乱序/连接切换；其证据属于真实 Panel 模块与有状态模拟响应，不是新的真实 Core 或浏览器验收。
-- 浏览器回归仍未完成 authenticated GUI 验收。本次当前构建可打开、可填写合成测试口令；登录 locator 超时，DOM 节点点击也没有页面变化。诊断捕获到点击事件 0、XHR 请求 0、页面错误 0；按钮未禁用且样式可见，但 `document.visibilityState` 为 `hidden`，Core 日志也未出现登录对应请求。证据定位在请求发出前，不据此判定产品登录失败，不通过延长超时或修改客户端绕过。前次 GUI 结果不替代本次回归，API 联调通过也不等于 GUI 通过；保留 Draft，未验证的平台和真实部署不可由本地测试推断。
-
-上游参考固定为 `ee79a794526a30c03748a8864a9ac6589a31833b` 的配置分域和写入语义；采用局部适配，不 full-sync 官方 Panel、不替换 LTS usage、quota 或插件页面。
+- `npm run test:api-client` / `test:providers`：client 共享状态与 scope、v8-only `config.yaml` 修订写入、合成 v8 Core 下的 If-Match 同源、412/428 不重试、写后重读、F22/F23/F24、运行时策略继承意图、configPatch 修订绑定、Workbench 完整 usage 状态条。
+- `npm run test:config`：canonical v8 可视投影、payload AST、cache affinity、敏感词等。
+- `npm run validate:lts`、`npm run check:lts`。
+- 本地测试只证明 Panel 模块行为；真实 Core 联调、浏览器 GUI 与部署验收需另行进行。

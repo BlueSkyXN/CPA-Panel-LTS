@@ -1,4 +1,4 @@
-> **v8 development candidate:** See [configuration compatibility](docs/lts/v8-config-compatibility.md). Supports the companion LTS Core v7/v8; this branch is not a released upgrade.
+> **v8 development candidate:** pairs only with the CPA-Core-LTS v8 line (reconfigure Core per the v8 guide). See [v8 configuration contract](docs/lts/v8-config-compatibility.md) and [endpoint map](docs/lts/v8-endpoint-map.md). This branch is not a released upgrade.
 
 # CPA Panel LTS
 
@@ -48,7 +48,7 @@ Since version 6.0.19, the Web UI ships with the main program; access it via `/ma
 
 ## What this is (and isn’t)
 
-- This repository is the Web UI only. It talks to the CPA Core LTS / CLI Proxy API **Management API** (`/v0/management`) to read/update config, upload credentials, view logs, and inspect usage.
+- This repository is the Web UI only. It talks to the CPA Core LTS / CLI Proxy API **Management API** (`/v8/management`, plus `/v0/management` for LTS-only extensions such as full usage statistics) to read/update config, upload credentials, view logs, and inspect usage.
 - It is **not** a proxy and does not forward traffic.
 
 ## Quick start
@@ -99,7 +99,7 @@ You can enter any of the following; the UI will normalize it:
 - `localhost:8317`
 - `http://192.168.1.10:8317`
 - `https://example.com:8317`
-- `http://example.com:8317/v0/management` (also accepted; the suffix is removed internally)
+- `http://example.com:8317/v8/management` (also accepted; the suffix is removed internally)
 
 ### Management key (not the same as API keys)
 

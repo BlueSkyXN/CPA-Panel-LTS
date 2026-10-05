@@ -168,7 +168,6 @@
     "api_keys": "API ключи",
     "ai_providers": "Поставщики AI",
     "provider_workbench": "Рабочая область поставщиков",
-    "provider_legacy": "Статус провайдеров LTS",
     "auth_files": "Файлы аутентификации",
     "oauth": "OAuth вход",
     "quota_management": "Управление квотами",

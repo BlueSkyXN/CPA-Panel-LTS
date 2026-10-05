@@ -85,7 +85,6 @@ for path in \
   src/components/usage/presetPricingCatalogUtils.ts \
   src/components/usage/PresetPricingCatalog.test.mjs \
   src/components/providers \
-  src/components/providers/AmpcodeSection \
   src/components/providers/ProviderStatusBar.tsx \
   src/components/providers/hooks/useProviderRecentRequests.ts \
   src/components/layout/CommandPalette.tsx \
@@ -93,7 +92,12 @@ for path in \
   src/components/layout/SidebarNavigation.tsx \
   src/components/layout/sidebarNavigationModel.ts \
   src/assets/icons/amp.svg \
-  src/pages/AiProvidersPage.tsx \
+  src/features/providers/fullUsageStatus.ts \
+  src/features/providers/useProviderFullUsage.ts \
+  src/utils/v8VisualProjection.ts \
+  src/services/api/configValue.ts \
+  src/services/api/legacyBackendProbe.ts \
+  docs/lts/v8-endpoint-map.md \
   src/pages/CoreWorkspace.tsx \
   src/pages/CoreWorkspace.module.scss \
   src/pages/AiProvidersAmpcodeEditPage.tsx \
@@ -235,25 +239,20 @@ require_file_contains src/router/MainRoutes.tsx "path: '/lts/providers'"
 require_file_contains src/router/MainRoutes.tsx "path: '/lts/ampcode'"
 require_file_contains src/router/MainRoutes.tsx "path: '/ai-providers'"
 require_file_contains src/router/MainRoutes.tsx "path: '/ai-providers/workbench'"
-require_file_contains src/router/MainRoutes.tsx "path: '/ai-providers/legacy'"
-require_file_contains src/router/MainRoutes.tsx "path: '/ai-providers/legacy/ampcode'"
-require_file_contains src/router/MainRoutes.tsx "path: '/ai-providers/gemini/*'"
-require_file_contains src/router/MainRoutes.tsx "path: '/ai-providers/codex/*'"
-require_file_contains src/router/MainRoutes.tsx "path: '/ai-providers/claude/*'"
-require_file_contains src/router/MainRoutes.tsx "path: '/ai-providers/vertex/*'"
-require_file_contains src/router/MainRoutes.tsx "path: '/ai-providers/openai/*'"
+# v8-only Panel: legacy per-family provider editors are removed; old bookmarks reach the Workbench.
+require_file_not_contains src/router/MainRoutes.tsx "/ai-providers/legacy"
+require_file_contains src/router/MainRoutes.tsx "path: '/ai-providers/*'"
 require_file_contains src/router/MainRoutes.tsx "path: '/ai-providers/ampcode'"
 require_file_contains src/router/MainRoutes.tsx "to=\"/ai-providers\""
-require_file_contains src/router/MainRoutes.tsx "to=\"/ai-providers/legacy"
-require_file_contains src/router/MainRoutes.tsx "to=\"/ai-providers/legacy/ampcode"
+require_file_contains src/router/MainRoutes.tsx "to=\"/ai-providers/ampcode\""
 require_file_contains src/router/MainRoutes.tsx "path: '/auth-files/oauth-excluded'"
 require_file_contains src/router/MainRoutes.tsx "path: '/auth-files/oauth-model-alias'"
 require_file_contains src/router/MainRoutes.tsx "path: '/oauth'"
 require_file_contains src/router/MainRoutes.tsx "UsagePage"
 require_file_contains src/router/MainRoutes.tsx "AiProvidersAmpcodeEditPage"
 require_file_contains src/components/layout/MainLayout.tsx "path: '/usage'"
-require_file_contains src/components/layout/MainLayout.tsx "path: '/ai-providers/legacy'"
-require_file_contains src/components/layout/MainLayout.tsx "nav.provider_legacy"
+require_file_contains src/components/layout/MainLayout.tsx "path: '/ai-providers/ampcode'"
+require_file_not_contains src/components/layout/MainLayout.tsx "/ai-providers/legacy"
 require_file_contains src/components/layout/MainLayout.tsx "data-workspace-layout"
 require_file_contains src/components/layout/MainLayout.tsx 'sidebar-mode-${effectiveSidebarMode}'
 require_file_contains src/components/layout/MainLayout.tsx "CommandPalette"
@@ -291,7 +290,8 @@ require_file_contains src/services/api/usageQuery.ts "'/usage/query/details'"
 require_file_contains src/services/api/usageQuery.ts "'/usage/query/pricing'"
 require_file_contains src/utils/usage/queryView.ts "usage-query-v1"
 require_file_contains src/stores/useUsageQueryStore.ts "mode:"
-require_file_contains src/services/api/config.ts "'/usage-statistics-enabled'"
+require_file_contains src/stores/useUsageQueryStore.ts "'/usage-statistics-enabled'"
+require_file_contains src/stores/useUsageQueryStore.ts "ltsExtensionClient"
 require_file_contains src/utils/constants.ts "USAGE: '/usage'"
 require_file_contains src/utils/usage.ts "service_tier"
 require_file_contains src/utils/usage.ts "request_service_tier"
@@ -537,10 +537,11 @@ require_file_not_contains src/i18n/locales/en.json "request_events_effort_max_ul
 require_file_not_contains src/i18n/locales/zh-CN.json "request_events_effort_max_ultra_wire"
 require_file_not_contains src/i18n/locales/zh-TW.json "request_events_effort_max_ultra_wire"
 require_file_not_contains src/i18n/locales/ru.json "request_events_effort_max_ultra_wire"
-require_file_contains src/services/api/ampcode.ts "'/ampcode'"
-require_file_contains src/services/api/ampcode.ts "'/ampcode/upstream-api-keys'"
-require_file_contains src/services/api/ampcode.ts "'/ampcode/model-mappings'"
-require_file_contains src/services/api/ampcode.ts "'/ampcode/force-model-mappings'"
+require_file_contains src/services/api/ampcode.ts "'/config/ampcode'"
+require_file_contains src/services/api/ampcode.ts "'upstream-api-keys'"
+require_file_contains src/services/api/ampcode.ts "'model-mappings'"
+require_file_contains src/services/api/ampcode.ts "'force-model-mappings'"
+require_file_contains src/services/api/ampcode.ts "snapshot.revision"
 require_file_contains src/services/api/index.ts "export * from './usage'"
 require_file_contains src/services/api/index.ts "export * from './ampcode'"
 require_file_contains .github/workflows/release.yml "management.html"
@@ -556,14 +557,31 @@ require_file_contains docs/lts/panel-protected-deltas.yaml "release source resol
 require_file_contains docs/lts/sync-runbook.md "protected selective-port"
 require_file_contains docs/lts/panel-feature-contracts.yaml "npm run test:usage-cache"
 
+# v8-only Core contract (docs/lts/v8-config-compatibility.md, docs/lts/v8-endpoint-map.md).
+require_file_contains src/utils/constants.ts "MANAGEMENT_API_PREFIX = '/v8/management'"
+require_file_contains src/utils/constants.ts "LTS_EXTENSION_API_PREFIX = '/v0/management'"
+require_file_contains src/services/api/client.ts "export const ltsExtensionClient"
+require_file_not_contains src/services/api/client.ts "managementApiVersion"
+require_file_contains src/services/api/configFile.ts "'If-Match': revision"
+require_file_contains src/services/api/configRevision.ts "isConfigRevisionConflict"
+require_file_contains src/stores/useAuthStore.ts "probeLegacyBackend"
+# F21: no configuration layout classification code remains.
+require_repo_not_contains "usesV8ConfigLayout"
+require_repo_not_contains "utils/configLayout"
+require_repo_not_contains "services/api/providerGroups"
+require_repo_not_contains "mutateProviderConfig"
+require_repo_not_contains "providerConfigSnapshot"
+
 # Accepted upstream feature regression checks.
 require_file_contains src/router/MainRoutes.tsx "ProvidersWorkbenchPage"
-require_file_contains src/services/api/providers.ts "mutateLatestProviderList"
-require_file_contains src/services/api/providers.ts "replaceLatestProviderRecord"
+require_file_contains src/services/api/providers.ts "locateProviderGroup"
+require_file_contains src/services/api/providers.ts "/config/api-keys/\${family}"
+require_file_contains src/services/api/providers.ts "ifMatch(revision)"
+require_file_contains src/services/api/providers.ts "stripProviderGroupResponseFields"
 require_file_contains src/services/api/providers.ts "createXAIConfig"
 require_file_contains src/services/api/providers.ts "updateXAIConfig"
 require_file_contains src/services/api/providers.ts "deleteXAIConfig"
-require_file_contains src/services/api/providers.ts "'xai-api-key'"
+require_file_contains src/services/api/providers.ts "'xai'"
 require_file_contains src/services/api/transformers.ts "xaiApiKeys"
 require_file_contains src/features/providers/descriptors.ts "id: 'xai'"
 require_file_contains src/features/providers/adapters.ts "xaiToResource"
@@ -581,7 +599,7 @@ require_file_contains src/i18n/locales/zh-TW.json '"xai": "xAI"'
 require_file_contains src/i18n/locales/ru.json '"xai": "xAI"'
 
 # Core-backed deferred contracts accepted as narrow LTS adaptations.
-require_file_contains src/services/api/providers.ts "'interactions-api-key'"
+require_file_contains src/services/api/providers.ts "'interactions'"
 require_file_contains src/features/providers/descriptors.ts "id: 'interactions'"
 require_file_contains src/components/providers/utils.ts "buildInteractionsEndpoint"
 require_file_contains src/components/providers/utils.ts "INTERACTIONS_API_REVISION"
@@ -605,15 +623,14 @@ require_file_contains src/i18n/locales/en.json '"weight_label"'
 require_file_contains src/i18n/locales/zh-CN.json '"weight_label"'
 require_file_contains src/i18n/locales/zh-TW.json '"weight_label"'
 require_file_contains src/i18n/locales/ru.json '"weight_label"'
-require_file_contains src/i18n/locales/en.json '"provider_legacy": "LTS Provider Status"'
-require_file_contains src/i18n/locales/zh-CN.json '"provider_legacy": "LTS 提供商状态"'
-require_file_contains src/i18n/locales/zh-TW.json '"provider_legacy": "LTS 提供商狀態"'
-require_file_contains src/i18n/locales/ru.json '"provider_legacy": "Статус провайдеров LTS"'
+require_file_contains src/i18n/locales/en.json '"error_legacy_backend"'
+require_file_contains src/i18n/locales/zh-CN.json '"error_legacy_backend"'
+require_file_contains src/i18n/locales/zh-TW.json '"error_legacy_backend"'
+require_file_contains src/i18n/locales/ru.json '"error_legacy_backend"'
 require_file_contains src/types/provider.ts "displayName?: string"
 require_file_contains src/features/providers/types.ts "displayName?: string"
-require_file_contains src/services/api/transformers.ts "item['display-name']"
-require_file_contains src/services/api/transformers.ts "item.alias || item.display_name || item.displayName"
-require_file_contains src/services/api/providers.ts "payload['display-name']"
+require_file_contains src/services/api/providerModels.ts "raw['display-name']"
+require_file_contains src/services/api/providerModels.ts "result['display-name']"
 require_file_contains src/features/providers/sheets/forms/ModelEntriesEditor.tsx "modelDisplayNamePlaceholder"
 require_file_contains src/features/providers/sheets/forms/SponsorProviderForm.tsx "ModelEntriesEditor"
 require_file_contains src/i18n/locales/en.json '"modelDisplayNamePlaceholder"'
@@ -639,7 +656,7 @@ require_file_contains src/features/providers/sheets/forms/ModelEntriesEditor.tsx
 require_file_contains src/features/providers/sheets/forms/ModelEntriesEditor.tsx "thinkingBudgetRangeInvalid"
 require_file_contains src/features/providers/sheets/forms/BaseProviderForm.tsx "supportsThinking"
 require_file_contains src/features/providers/sheets/forms/SponsorProviderForm.tsx "supportsThinking"
-require_file_contains src/services/api/providers.ts "'thinking'"
+require_file_contains src/services/api/providerModels.ts "serializeModelThinking"
 require_file_contains src/components/ui/modelInputListUtils.ts "preserved"
 require_file_contains src/features/providers/providerIntegrity.test.mjs "legacy model inputs preserve fields that are not visually editable"
 require_file_contains src/types/provider.ts "fingerprintProfile?: string"
@@ -723,9 +740,10 @@ require_file_contains src/i18n/locales/zh-TW.json "runtime_unavailable_title"
 require_file_contains src/i18n/locales/ru.json "runtime_unavailable_title"
 require_file_contains src/services/api/index.ts "export * from './apiKeyUsage'"
 require_file_contains src/services/api/index.ts "export * from './plugins'"
-require_file_contains src/services/api/apiKeyUsage.ts "'/api-key-usage'"
+require_file_contains src/services/api/apiKeyUsage.ts "'/observability/usage/api-keys'"
 require_file_contains src/services/api/plugins.ts "'/plugins'"
-require_file_contains src/services/api/plugins.ts "'/plugin-store'"
+require_file_contains src/services/api/plugins.ts "'/plugins/store'"
+require_file_contains src/services/api/plugins.ts "/config/plugins/configs/"
 require_file_contains src/services/api/plugins.ts "source_errors"
 require_file_contains src/services/api/plugins.ts "auth_required"
 require_file_contains src/services/api/plugins.ts "PluginStoreInstallOptions"
@@ -1010,9 +1028,9 @@ require_file_contains src/services/api/logs.ts "cursor?: string"
 require_file_contains src/services/api/logs.ts "latestAfter"
 require_file_contains src/services/api/logs.ts "nextCursor"
 require_file_contains src/services/api/logs.ts "cursorReset"
-require_file_contains src/services/api/logs.ts "'/logs'"
-require_file_contains src/services/api/logs.ts "'/request-error-logs'"
-require_file_contains src/services/api/logs.ts "/request-log-by-id"
+require_file_contains src/services/api/logs.ts "'/observability/logs'"
+require_file_contains src/services/api/logs.ts "'/observability/logs/errors'"
+require_file_contains src/services/api/logs.ts "/observability/logs/requests/"
 require_file_contains src/pages/LogsPage.tsx "buildLogsQuery"
 require_file_contains src/pages/LogsPage.tsx "LogPosition"
 require_file_contains src/pages/LogsPage.tsx "cursorReset"
@@ -1024,10 +1042,11 @@ require_file_contains src/pages/LogsPage.tsx "downloadErrorLog"
 require_file_contains src/pages/LogsPage.tsx "downloadRequestLog"
 require_file_contains src/pages/LogsPage.module.scss ".logCardFullscreen"
 require_file_contains src/pages/LogsPage.module.scss ".logPanelFullscreen"
-require_file_contains src/services/api/authFiles.ts "'/auth-files'"
-require_file_contains src/services/api/authFiles.ts "'/auth-files/status'"
-require_file_contains src/services/api/authFiles.ts "'/auth-files/fields'"
-require_file_contains src/services/api/authFiles.ts "/auth-files/models"
+require_file_contains src/services/api/authFiles.ts "'/credentials'"
+require_file_contains src/services/api/authFiles.ts "'/credentials/status'"
+require_file_contains src/services/api/authFiles.ts "'/credentials/fields'"
+require_file_contains src/services/api/authFiles.ts "/credentials/models"
+require_file_contains src/services/api/authFiles.ts "'/config/oauth/model-alias'"
 require_file_contains src/services/api/authFiles.ts "/auth-files/models/refresh"
 require_file_contains src/services/api/authFiles.ts "normalizeBatchUploadResponse"
 require_file_contains src/services/api/authFiles.ts "normalizeBatchDeleteResponse"
@@ -1052,9 +1071,10 @@ require_file_contains src/lts/i18n/zh-TW.lts.json "codex_remote_cloud_connect_en
 require_file_contains src/lts/i18n/ru.lts.json "codex_remote_cloud_connect_environment_button"
 require_file_contains src/services/api/oauth.ts "'xai'"
 require_file_contains src/services/api/oauth.ts "WEBUI_SUPPORTED"
-require_file_contains src/services/api/oauth.ts "/get-auth-status"
-require_file_contains src/services/api/oauth.ts "'/oauth-callback'"
-require_file_contains src/services/api/apiCall.ts "'/api-call'"
+require_file_contains src/services/api/oauth.ts "'/oauth/status'"
+require_file_contains src/services/api/oauth.ts "'/oauth/callback'"
+require_file_contains src/services/api/oauth.ts "'/oauth/auth-url'"
+require_file_contains src/services/api/apiCall.ts "'/requests/api-call'"
 require_file_contains src/features/authFiles/constants.ts "QUOTA_PROVIDER_TYPES"
 require_file_contains src/features/authFiles/constants.ts "OAUTH_PROVIDER_PRESETS"
 require_file_contains src/features/authFiles/constants.ts "xai"
@@ -1171,9 +1191,9 @@ require_file_contains src/features/providers/fennoAI.ts "FENNO_AI_PROVIDER_NAME"
 require_file_contains src/features/providers/qiniuCloud.ts "QINIU_CLOUD_PROVIDER_NAME"
 require_file_contains src/features/providers/infistar.ts "INFISTAR_PROVIDER_NAME"
 require_file_contains src/types/provider.ts "sourceIndex?: number"
-require_file_contains src/services/api/transformers.ts "normalizeOpenAIProvider(item, index)"
-require_file_contains src/services/api/providers.ts "getOpenAIProviderMutationIndex"
-require_file_contains src/pages/AiProvidersPage.tsx "getOpenAIProviderMutationIndex"
+require_file_contains src/services/api/transformers.ts "normalizeOpenAIProvider(raw, groupIndex)"
+require_file_contains src/services/api/providers.ts "entry.sourceIndex"
+require_file_contains src/features/providers/useProviderWorkbench.ts "sourceIndex: entry.sourceIndex"
 require_file_contains src/features/providers/adapters.ts "config.sourceIndex ?? index"
 require_file_contains src/features/providers/sponsorDefinitions.ts "getSponsorOpenAIDeleteIndices"
 require_file_contains src/features/providers/useProviderWorkbench.ts "getSponsorOpenAIDeleteIndices(raw)"

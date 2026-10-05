@@ -168,7 +168,6 @@
     "api_keys": "API 金鑰",
     "ai_providers": "AI 供應商",
     "provider_workbench": "供應商工作台",
-    "provider_legacy": "LTS 提供商狀態",
     "auth_files": "驗證檔案",
     "oauth": "OAuth 登入",
     "quota_management": "配額管理",
