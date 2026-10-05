@@ -2,13 +2,15 @@
 """Authenticated LTS Panel smoke against a real local CPA-Core-LTS process.
 
 This optional smoke complements `scripts/smoke-lts-panel.py`, which uses a mock
-Core API. It starts a sibling CPA-Core-LTS checkout with a temporary config and
-runtime directories, then checks real Management API endpoints and a small set
-of browser routes.
+Core API. It builds a CPA-Core-LTS v8 checkout (`--core-dir`, default
+../CPA-Core-LTS) into a temporary directory, starts it there with a fresh, pure
+v8 config (`config-version: 8`, a synthetic management secret and one synthetic
+client API key), then checks the v8 Management API (ETag/If-Match), the LTS
+`/v0/management` extensions and the Panel GUI. The Core checkout is only read.
 """
 
 from __future__ import annotations
-from panel_browser import PanelBrowser
+from panel_browser import PanelBrowser, launch_chromium
 
 import argparse
 import contextlib
@@ -38,13 +40,12 @@ ROOT = Path(__file__).resolve().parents[1]
 DIST = ROOT / "dist"
 INDEX_HTML = DIST / "index.html"
 DEFAULT_CORE_DIR = ROOT.parent / "CPA-Core-LTS"
+V8 = "/v8/management"
+LTS = "/v0/management"
 MANAGEMENT_KEY = "smoke-management-key"
 CLIENT_API_KEY = "smoke-client-api-key"
 BROWSER_PLUGIN_STORE_SOURCE = "https://example.com/lts-core-browser-registry.json"
 BROWSER_SOURCE_MARKER = "# lts-core-browser-source-smoke: saved"
-CORE_LOG_REQUEST_ID = "corefile1"
-CORE_ERROR_LOG_NAME = "error-core-smoke-coreerror1.log"
-CORE_ERROR_LOG_BODY = "real core error log body request_id=coreerror1"
 
 
 def find_free_port() -> int:
@@ -109,6 +110,11 @@ class CoreRuntime:
 
 
 def build_core_config(port: int, temp_dir: Path) -> str:
+    """Fresh, pure v8 layout: no legacy keys and no provider credentials.
+
+    The management secret is supplied through MANAGEMENT_PASSWORD; the only client key is the
+    synthetic CLIENT_API_KEY. Provider resources are created by the smoke itself.
+    """
     auth_dir = temp_dir / "auths"
     plugins_dir = temp_dir / "plugins"
     auth_dir.mkdir(parents=True, exist_ok=True)
@@ -116,99 +122,51 @@ def build_core_config(port: int, temp_dir: Path) -> str:
 
     return textwrap.dedent(
         f"""\
-        host: "127.0.0.1"
-        port: {port}
-        auth-dir: "{auth_dir.as_posix()}"
-        remote-management:
+        config-version: 8
+        server:
+          host: "127.0.0.1"
+          port: {port}
+          commercial-mode: false
+        management:
           allow-remote: false
           secret-key: ""
           disable-control-panel: true
           disable-auto-update-panel: true
-        api-keys:
-          - "{MANAGEMENT_KEY}"
-          - "{CLIENT_API_KEY}"
-        debug: false
-        commercial-mode: false
-        logging-to-file: true
-        request-log: true
-        logs-max-total-size-mb: 0
-        error-logs-max-files: 10
-        usage-statistics-enabled: true
-        redis-usage-queue-retention-seconds: 60
-        request-retry: 0
-        max-retry-credentials: 1
-        max-retry-interval: 1
-        transient-error-cooldown-seconds: 30
-        disable-image-generation: chat
+        access:
+          api-keys:
+            - "{CLIENT_API_KEY}"
+        oauth:
+          auth-dir: "{auth_dir.as_posix()}"
+        observability:
+          logs:
+            debug: false
+            logging-to-file: true
+            request-log: true
+            logs-max-total-size-mb: 0
+            error-logs-max-files: 10
+          usage:
+            usage-statistics-enabled: true
+            redis-usage-queue-retention-seconds: 60
         routing:
           strategy: round-robin
-        codex:
-          abnormal-reasoning-retry:
-            hedged-retry:
-              require-distinct-auth: false
+          retry:
+            request-retry: 0
+            max-retry-credentials: 1
+            max-retry-interval: 1
+          cooldown:
+            transient-error-cooldown-seconds: 30
+        multimedia:
+          disable-image-generation: chat
+        upstream:
+          codex:
+            abnormal-reasoning-retry:
+              hedged-retry:
+                require-distinct-auth: false
         plugins:
           enabled: true
           dir: "{plugins_dir.as_posix()}"
           store-sources: []
           configs: {{}}
-        gemini-api-key:
-          - api-key: "gemini-smoke-key"
-            base-url: "https://generativelanguage.googleapis.com"
-            models:
-              - name: "gemini-2.5-flash"
-                display-name: "Gemini Flash Smoke"
-        codex-api-key:
-          - api-key: "codex-smoke-key"
-            base-url: "https://api.openai.com"
-            websockets: true
-            models:
-              - name: "gpt-5"
-                display-name: "GPT-5 Smoke"
-        xai-api-key:
-          - api-key: "xai-smoke-key"
-            base-url: "https://api.x.ai/v1"
-            websockets: true
-            models:
-              - name: "grok-4.5"
-                display-name: "Grok 4.5 Smoke"
-        claude-api-key:
-          - api-key: "claude-smoke-key"
-            base-url: "https://api.anthropic.com"
-            fingerprint-profile: "claude-code-cli"
-            models:
-              - name: "claude-sonnet-4"
-                display-name: "Claude Sonnet Smoke"
-        vertex-api-key:
-          - api-key: "vertex-smoke-key"
-            base-url: "https://vertex.example.test"
-            models:
-              - name: "vertex-smoke-model"
-                alias: "vertex-smoke"
-                display-name: "Vertex Smoke"
-        openai-compatibility:
-          - name: "Smoke OpenAI Compatible"
-            base-url: "https://openai-compatible.example.test/v1"
-            api-key-entries:
-              - api-key: "openai-smoke-key"
-            models:
-              - name: "k3"
-                alias: "kimi-k3"
-                display-name: "Kimi K3 Smoke"
-                thinking:
-                  levels: ["low", "vendor-custom"]
-                  min: 128
-                  max: 32768
-        ampcode:
-          upstream-url: "https://amp.example.test"
-          upstream-api-key: "amp-smoke-upstream-key"
-          force-model-mappings: true
-          model-mappings:
-            - from: "amp-default"
-              to: "claude-sonnet-4"
-          upstream-api-keys:
-            - upstream-api-key: "amp-smoke-route-key"
-              api-keys:
-                - "{CLIENT_API_KEY}"
         """
     )
 
@@ -259,9 +217,133 @@ def request_json(
     return json.loads(body.decode("utf-8"))
 
 
+def http_request(
+    api_url: str,
+    path: str,
+    method: str = "GET",
+    body: bytes | None = None,
+    headers: dict[str, str] | None = None,
+    token: str = MANAGEMENT_KEY,
+) -> tuple[int, Any, bytes]:
+    """Raw request returning (status, headers, body) for any status code."""
+    merged = {"Authorization": f"Bearer {token}", **(headers or {})}
+    request = Request(f"{api_url}{path}", data=body, headers=merged, method=method)
+    try:
+        with urlopen(request, timeout=15) as response:
+            return response.status, response.headers, response.read()
+    except HTTPError as exc:
+        return exc.code, exc.headers, exc.read()
+
+
+ETAG_PATTERN = re.compile(r'^"[0-9a-f]{64}"$')
+# Core defects observed while the Panel behaved correctly. They do not stop the remaining
+# checks, but the smoke still fails and prints them at the end.
+CORE_DEFECTS: list[str] = []
+
+
+def record_core_defect(message: str) -> None:
+    print(f"CORE DEFECT: {message}", file=sys.stderr)
+    CORE_DEFECTS.append(message)
+
+
+def read_config(api_url: str) -> tuple[dict[str, Any], str]:
+    """GET /v8/management/config: canonical JSON view plus the file revision (ETag)."""
+    status, headers, body = http_request(api_url, f"{V8}/config", headers={"Accept": "application/json"})
+    if status != 200:
+        raise AssertionError(f"GET {V8}/config returned {status}: {body[:300]!r}")
+    etag = headers.get("ETag", "")
+    if not ETAG_PATTERN.match(etag):
+        raise AssertionError(f"GET {V8}/config returned a non-sha256 ETag: {etag!r}")
+    return assert_mapping(json.loads(body.decode("utf-8")), f"{V8}/config"), etag
+
+
+def read_config_yaml(api_url: str) -> tuple[str, str]:
+    status, headers, body = http_request(
+        api_url, f"{V8}/config.yaml", headers={"Accept": "application/yaml, text/plain"}
+    )
+    if status != 200:
+        raise AssertionError(f"GET {V8}/config.yaml returned {status}")
+    etag = headers.get("ETag", "")
+    if not ETAG_PATTERN.match(etag):
+        raise AssertionError(f"GET {V8}/config.yaml returned a non-sha256 ETag: {etag!r}")
+    return body.decode("utf-8", errors="replace"), etag
+
+
+def config_at(config: Any, dotted: str) -> Any:
+    node = config
+    for part in dotted.split("."):
+        if not isinstance(node, dict) or part not in node:
+            return None
+        node = node[part]
+    return node
+
+
+def write_config(
+    api_url: str,
+    path: str,
+    value: Any = None,
+    *,
+    method: str = "PUT",
+    yaml_text: str | None = None,
+    revision: str | None = None,
+) -> Any:
+    """v8 config write bound to the current revision; asserts Core clears the ETag."""
+    if revision is None:
+        _, revision = read_config_yaml(api_url)
+    if yaml_text is not None:
+        body = yaml_text.encode("utf-8")
+        content_type = "application/yaml; charset=utf-8"
+    else:
+        body = None if method == "DELETE" else json.dumps(value).encode("utf-8")
+        content_type = "application/json"
+    headers = {"Accept": "application/json", "If-Match": revision}
+    if body is not None:
+        headers["Content-Type"] = content_type
+    status, response_headers, response_body = http_request(api_url, f"{V8}{path}", method, body, headers)
+    if status != 200:
+        raise AssertionError(
+            f"{method} {V8}{path} returned {status}: {response_body[:500].decode('utf-8', 'replace')}"
+        )
+    if response_headers.get("ETag", None) not in ("", None):
+        raise AssertionError(f"{method} {V8}{path} did not clear the ETag after a write")
+    return json.loads(response_body.decode("utf-8")) if response_body else None
+
+
+def disk_thinking(config_path: Path) -> list[dict[str, Any]]:
+    """Thinking blocks of every persisted OpenAI Compatibility model (format-independent)."""
+    return [
+        model["thinking"]
+        for group in provider_groups(disk_config(config_path), "openai-compatibility")
+        for model in group.get("models") or []
+        if isinstance(model, dict) and isinstance(model.get("thinking"), dict)
+    ]
+
+
+def disk_config(config_path: Path) -> dict[str, Any]:
+    import yaml  # PyYAML; only the real-Core smoke reads the persisted file.
+
+    return assert_mapping(yaml.safe_load(config_path.read_text(encoding="utf-8")), str(config_path))
+
+
+def provider_groups(config: dict[str, Any], family: str) -> list[dict[str, Any]]:
+    groups = config_at(config, f"api-keys.{family}") or []
+    return [group for group in assert_list(groups, f"api-keys.{family}") if isinstance(group, dict)]
+
+
+def provider_entries(config: dict[str, Any], family: str) -> list[dict[str, Any]]:
+    """Effective per-key entries: group fields merged under key fields (Core semantics)."""
+    entries: list[dict[str, Any]] = []
+    for group in provider_groups(config, family):
+        shared = {key: value for key, value in group.items() if key not in ("keys", "name")}
+        for key in group.get("keys") or []:
+            if isinstance(key, dict):
+                entries.append({**shared, **{k: v for k, v in key.items() if v is not None}})
+    return entries
+
+
 def read_supports_plugin_header(api_url: str) -> bool:
     request = Request(
-        f"{api_url}/v0/management/config",
+        f"{api_url}{V8}/config",
         headers={
             "Authorization": f"Bearer {MANAGEMENT_KEY}",
             "Accept": "application/json",
@@ -338,7 +420,7 @@ def wait_for_core(runtime: CoreRuntime, timeout_seconds: float = 90) -> None:
                 f"CPA-Core-LTS exited before becoming ready (code={runtime.process.returncode}).\n{tail}"
             )
         try:
-            request_json(runtime.api_url, "/v0/management/config")
+            request_json(runtime.api_url, f"{V8}/config")
             return
         except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
             last_error = exc
@@ -373,19 +455,26 @@ def run_core(core_dir: Path, temp_dir: Path):
     )
     logs_dir.mkdir(parents=True, exist_ok=True)
 
-    command = [
-        "go",
-        "run",
-        "./cmd/server",
-        "--config",
-        str(config_path),
-        "--no-browser",
-        "--local-model",
-    ]
+    # Build outside the checkout and run from the temporary directory, so the Core worktree
+    # (possibly owned by another session) is only read.
+    binary = temp_dir / "cpa-core-smoke"
+    build = subprocess.run(
+        ["go", "-C", str(core_dir), "build", "-o", str(binary), "./cmd/server"],
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
+    if build.returncode != 0:
+        raise RuntimeError(
+            "Could not build CPA-Core-LTS for the smoke:\n"
+            + build.stdout.decode("utf-8", errors="replace")[-6000:]
+        )
+    command = [str(binary), "--config", str(config_path), "--no-browser", "--local-model"]
     with log_path.open("wb") as log_file:
         process = subprocess.Popen(
             command,
-            cwd=core_dir,
+            cwd=temp_dir,
             env=env,
             stdout=log_file,
             stderr=subprocess.STDOUT,
@@ -539,19 +628,17 @@ def wait_for_config_value(
     expected: Any,
     timeout_seconds: float = 8,
 ) -> dict[str, Any]:
+    """Poll GET /v8/management/config until the dotted v8 path has the expected value."""
     deadline = time.monotonic() + timeout_seconds
     last_config: dict[str, Any] | None = None
     while time.monotonic() < deadline:
-        last_config = assert_mapping(
-            request_json(api_url, "/v0/management/config"),
-            "/v0/management/config",
-        )
-        if last_config.get(key) == expected:
+        last_config, _ = read_config(api_url)
+        if config_at(last_config, key) == expected:
             return last_config
         time.sleep(0.25)
     raise AssertionError(
         f"Core config did not reload {key}={expected!r}; last value="
-        f"{None if last_config is None else last_config.get(key)!r}"
+        f"{None if last_config is None else config_at(last_config, key)!r}"
     )
 
 
@@ -567,48 +654,21 @@ def add_browser_plugin_store_source(yaml_payload: str) -> str:
     return replace_one(yaml_payload, pattern, replacement, "plugins.store-sources")
 
 
+V8_LOG_BOOLEANS = {
+    "debug": "observability.logs.debug",
+    "logging-to-file": "observability.logs.logging-to-file",
+    "request-log": "observability.logs.request-log",
+}
+
+
 def set_core_config_booleans(api_url: str, values: dict[str, bool]) -> None:
-    yaml_payload = request_text(api_url, "/v0/management/config.yaml")
-    updated_yaml = yaml_payload
+    """Set v8 log toggles as independent scalars (fresh revision per write)."""
     for key, enabled in values.items():
-        value = "true" if enabled else "false"
-        updated_yaml = replace_one(
-            updated_yaml,
-            rf"^{re.escape(key)}:\s*(true|false)\s*$",
-            f"{key}: {value}",
-            key,
-        )
-
-    if updated_yaml != yaml_payload:
-        assert_mapping(
-            put_text(api_url, "/v0/management/config.yaml", updated_yaml),
-            "/v0/management/config.yaml",
-        )
-
-    for key, enabled in values.items():
-        wait_for_config_value(api_url, key, enabled)
-
-
-def seed_core_file_log_fixtures(logs_dir: Path) -> None:
-    logs_dir.mkdir(parents=True, exist_ok=True)
-    main_log = logs_dir / "main.log"
-    main_line = (
-        "[2026-06-16 12:34:56] [info ] | request_id="
-        f"{CORE_LOG_REQUEST_ID} | 200 | 12ms | 127.0.0.1 | "
-        "GET /v1/lts-core-file-log-smoke\n"
-    )
-    with main_log.open("a", encoding="utf-8") as file:
-        file.write(main_line)
-
-    (logs_dir / f"request-lts-core-file-{CORE_LOG_REQUEST_ID}.log").write_text(
-        "real core request log body request_id="
-        f"{CORE_LOG_REQUEST_ID}\n=== REQUEST ===\nGET /v1/lts-core-file-log-smoke\n",
-        encoding="utf-8",
-    )
-    (logs_dir / CORE_ERROR_LOG_NAME).write_text(
-        f"{CORE_ERROR_LOG_BODY}\n=== RESPONSE ===\n500 smoke error\n",
-        encoding="utf-8",
-    )
+        path = V8_LOG_BOOLEANS[key]
+        config, revision = read_config(api_url)
+        if config_at(config, path) is not enabled:
+            write_config(api_url, "/config/" + path.replace(".", "/"), enabled, revision=revision)
+        wait_for_config_value(api_url, path, enabled)
 
 
 def provider_items(payload: Any, key: str, path: str) -> list[Any]:
@@ -617,10 +677,10 @@ def provider_items(payload: Any, key: str, path: str) -> list[Any]:
 
 def auth_file_entries(api_url: str) -> list[dict[str, Any]]:
     payload = assert_mapping(
-        request_json(api_url, "/v0/management/auth-files"),
-        "/v0/management/auth-files",
+        request_json(api_url, f"{V8}/credentials"),
+        f"{V8}/credentials",
     )
-    files = assert_list(payload.get("files"), "/v0/management/auth-files")
+    files = assert_list(payload.get("files"), f"{V8}/credentials")
     return [item for item in files if isinstance(item, dict)]
 
 
@@ -631,252 +691,162 @@ def find_auth_file_entry(api_url: str, name: str) -> dict[str, Any] | None:
     return None
 
 
-def run_write_smoke(api_url: str) -> list[str]:
+def run_revision_contract_smoke(api_url: str) -> list[str]:
+    """Core v8 contract the Panel relies on: 428 without If-Match, 412 when stale."""
     seen: list[str] = []
+    path = f"{V8}/config/observability/logs/debug"
+    body = b"true"
+    json_headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    _, before = read_config_yaml(api_url)
+    status, headers, response = http_request(api_url, path, "PUT", body, json_headers)
+    if status != 428 or b"config_revision_required" not in response:
+        raise AssertionError(f"PUT {path} without If-Match returned {status}: {response[:200]!r}")
+    seen.append(f"PUT {path} without If-Match -> 428 config_revision_required")
+    stale = '"' + "0" * 64 + '"'
+    status, headers, response = http_request(
+        api_url, path, "PUT", body, {**json_headers, "If-Match": stale}
+    )
+    if status != 412 or b"config_revision_conflict" not in response:
+        raise AssertionError(f"PUT {path} with a stale If-Match returned {status}: {response[:200]!r}")
+    seen.append(f"PUT {path} with stale If-Match -> 412 config_revision_conflict")
+    _, after = read_config_yaml(api_url)
+    if after != before:
+        raise AssertionError("Rejected v8 writes changed the configuration revision")
+    write_config(api_url, "/config/observability/logs/debug", True, revision=after)
+    wait_for_config_value(api_url, "observability.logs.debug", True)
+    write_config(api_url, "/config/observability/logs/debug", False)
+    wait_for_config_value(api_url, "observability.logs.debug", False)
+    seen.append(f"PUT {path} with current If-Match -> 200, empty ETag, readback")
+    return seen
 
-    original_yaml = request_text(api_url, "/v0/management/config.yaml")
+
+def run_write_smoke(api_url: str, config_path: Path) -> list[str]:
+    seen: list[str] = run_revision_contract_smoke(api_url)
+
+    original_yaml, revision = read_config_yaml(api_url)
     marker = "# lts-core-write-smoke: saved"
-    updated_yaml = original_yaml.replace("debug: false", "debug: true", 1)
+    updated_yaml = replace_one(
+        original_yaml, r"^([ \t]*)debug:\s*false[ \t]*$", "\\1debug: true", "observability.logs.debug"
+    )
     if marker not in updated_yaml:
         updated_yaml = f"{updated_yaml.rstrip()}\n{marker}\n"
-    seen.append("PUT /v0/management/config.yaml")
-    assert_mapping(
-        put_text(api_url, "/v0/management/config.yaml", updated_yaml),
-        "/v0/management/config.yaml",
-    )
-    reloaded_yaml = request_text(api_url, "/v0/management/config.yaml")
-    seen.append("GET /v0/management/config.yaml after write")
-    if marker not in reloaded_yaml or "debug: true" not in reloaded_yaml:
+    seen.append(f"PUT {V8}/config.yaml with If-Match")
+    write_config(api_url, "/config.yaml", yaml_text=updated_yaml, revision=revision)
+    reloaded_yaml, _ = read_config_yaml(api_url)
+    if marker not in reloaded_yaml or not re.search(r"^\s+debug: true\s*$", reloaded_yaml, re.M):
         raise AssertionError("config.yaml write smoke did not persist marker and debug flag")
-    reloaded_config = wait_for_config_value(api_url, "debug", True)
-    seen.append("GET /v0/management/config after config.yaml write")
-    if reloaded_config.get("debug") is not True:
-        raise AssertionError("Core config did not reload debug=true after config.yaml write")
+    wait_for_config_value(api_url, "observability.logs.debug", True)
+    seen.append(f"GET {V8}/config after config.yaml write")
+    write_config(api_url, "/config/observability/logs/debug", False)
+    wait_for_config_value(api_url, "observability.logs.debug", False)
 
-    gemini_payload = [
-        {
-            "api-key": "gemini-real-write-key",
-            "base-url": "https://generativelanguage.googleapis.com",
-            "excluded-models": ["*"],
-            "models": [{"name": "gemini-2.5-flash", "display-name": "Gemini Flash Write"}],
-        }
-    ]
-    seen.append("PUT /v0/management/gemini-api-key")
-    assert_mapping(
-        request_json(api_url, "/v0/management/gemini-api-key", method="PUT", payload=gemini_payload),
-        "/v0/management/gemini-api-key",
+    def put_family(family: str, groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        _, revision = read_config(api_url)
+        seen.append(f"PUT {V8}/config/api-keys/{family}")
+        write_config(api_url, f"/config/api-keys/{family}", groups, revision=revision)
+        config, _ = read_config(api_url)
+        seen.append(f"GET {V8}/config after {family} write")
+        return provider_entries(config, family)
+
+    gemini_items = put_family(
+        "gemini",
+        [
+            {
+                "name": "gemini-1",
+                "base-url": "https://generativelanguage.googleapis.com",
+                "excluded-models": ["*"],
+                "models": [{"name": "gemini-2.5-flash", "display-name": "Gemini Flash Write"}],
+                # Response-only; Core must strip it on write (the Panel strips it too).
+                "keys": [{"api-key": "gemini-real-write-key", "auth_index": "client-supplied"}],
+            }
+        ],
     )
-    gemini_items = provider_items(
-        request_json(api_url, "/v0/management/gemini-api-key"),
-        "gemini-api-key",
-        "/v0/management/gemini-api-key",
-    )
-    seen.append("GET /v0/management/gemini-api-key after write")
     if not any(
-        isinstance(item, dict)
-        and item.get("api-key") == "gemini-real-write-key"
+        item.get("api-key") == "gemini-real-write-key"
         and item.get("excluded-models") == ["*"]
+        and isinstance(item.get("auth_index"), str)
+        and item.get("auth_index") not in ("", "client-supplied")
         and any(
-            isinstance(model, dict)
-            and model.get("display-name") == "Gemini Flash Write"
+            isinstance(model, dict) and model.get("display-name") == "Gemini Flash Write"
             for model in item.get("models", [])
         )
         for item in gemini_items
     ):
-        raise AssertionError(f"Gemini write smoke did not round-trip excluded-models: {gemini_items!r}")
+        raise AssertionError(f"Gemini v8 group write did not round-trip: {gemini_items!r}")
+    seen.append("Core injected auth_index into GET /v8/management/config api-keys")
 
-    codex_payload = [
-        {
-            "api-key": "codex-real-write-key",
-            "base-url": "https://api.openai.com",
-            "websockets": True,
-            "models": [
-                {
-                    "name": "gpt-5",
-                    "alias": "gpt-5-real-write",
-                    "display-name": "GPT-5 Real Write",
-                }
-            ],
-        }
-    ]
-    seen.append("PUT /v0/management/codex-api-key")
-    assert_mapping(
-        request_json(api_url, "/v0/management/codex-api-key", method="PUT", payload=codex_payload),
-        "/v0/management/codex-api-key",
+    codex_items = put_family(
+        "codex",
+        [
+            {
+                "name": "codex-1",
+                "base-url": "https://api.openai.com",
+                "models": [
+                    {"name": "gpt-5", "alias": "gpt-5-real-write", "display-name": "GPT-5 Real Write"}
+                ],
+                "keys": [{"api-key": "codex-real-write-key", "websockets": True}],
+            }
+        ],
     )
-    codex_items = provider_items(
-        request_json(api_url, "/v0/management/codex-api-key"),
-        "codex-api-key",
-        "/v0/management/codex-api-key",
-    )
-    seen.append("GET /v0/management/codex-api-key after write")
     if not any(
-        isinstance(item, dict)
-        and item.get("api-key") == "codex-real-write-key"
-        and item.get("websockets") is True
-        and any(
-            isinstance(model, dict)
-            and model.get("display-name") == "GPT-5 Real Write"
-            for model in item.get("models", [])
-        )
+        item.get("api-key") == "codex-real-write-key" and item.get("websockets") is True
         for item in codex_items
     ):
-        raise AssertionError(f"Codex write smoke did not round-trip websockets: {codex_items!r}")
+        raise AssertionError(f"Codex v8 group write did not round-trip websockets: {codex_items!r}")
+    codex_after_delete = put_family("codex", [])
+    if codex_after_delete:
+        raise AssertionError(f"Codex family PUT [] did not remove the key: {codex_after_delete!r}")
+    seen.append("Codex v8 family write and removal round-tripped through Core")
 
-    delete_query = urlencode(
-        {
-            "api-key": "codex-real-write-key",
-            "base-url": "https://api.openai.com",
-        }
-    )
-    seen.append("DELETE /v0/management/codex-api-key")
-    assert_mapping(
-        request_json(api_url, f"/v0/management/codex-api-key?{delete_query}", method="DELETE"),
-        "/v0/management/codex-api-key",
-    )
-    codex_after_delete = provider_items(
-        request_json(api_url, "/v0/management/codex-api-key"),
-        "codex-api-key",
-        "/v0/management/codex-api-key",
-    )
-    seen.append("GET /v0/management/codex-api-key after delete")
-    if any(
-        isinstance(item, dict) and item.get("api-key") == "codex-real-write-key"
-        for item in codex_after_delete
-    ):
-        raise AssertionError(f"Codex delete smoke did not remove written key: {codex_after_delete!r}")
-
-    xai_payload = [
-        {
-            "api-key": "xai-real-write-key",
-            "base-url": "https://api.x.ai/v1",
-            "websockets": True,
-            "models": [
-                {
-                    "name": "grok-4.5",
-                    "alias": "grok-real-write",
-                    "display-name": "Grok Real Write",
-                }
-            ],
-        }
-    ]
-    seen.append("PUT /v0/management/xai-api-key")
-    assert_mapping(
-        request_json(api_url, "/v0/management/xai-api-key", method="PUT", payload=xai_payload),
-        "/v0/management/xai-api-key",
-    )
-    xai_items = provider_items(
-        request_json(api_url, "/v0/management/xai-api-key"),
-        "xai-api-key",
-        "/v0/management/xai-api-key",
-    )
-    seen.append("GET /v0/management/xai-api-key after write")
-    if not any(
-        isinstance(item, dict)
-        and item.get("api-key") == "xai-real-write-key"
-        and item.get("websockets") is True
-        and any(
-            isinstance(model, dict)
-            and model.get("display-name") == "Grok Real Write"
-            for model in item.get("models", [])
-        )
-        for item in xai_items
-    ):
-        raise AssertionError(f"xAI write smoke did not round-trip websockets: {xai_items!r}")
-
-    xai_delete_query = urlencode(
-        {
-            "api-key": "xai-real-write-key",
-            "base-url": "https://api.x.ai/v1",
-        }
-    )
-    seen.append("DELETE /v0/management/xai-api-key")
-    assert_mapping(
-        request_json(
-            api_url,
-            f"/v0/management/xai-api-key?{xai_delete_query}",
-            method="DELETE",
-        ),
-        "/v0/management/xai-api-key",
-    )
-    xai_after_delete = provider_items(
-        request_json(api_url, "/v0/management/xai-api-key"),
-        "xai-api-key",
-        "/v0/management/xai-api-key",
-    )
-    seen.append("GET /v0/management/xai-api-key after delete")
-    if any(
-        isinstance(item, dict) and item.get("api-key") == "xai-real-write-key"
-        for item in xai_after_delete
-    ):
-        raise AssertionError(f"xAI delete smoke did not remove written key: {xai_after_delete!r}")
-
-    openai_payload = [
+    openai_groups = [
         {
             "name": "Smoke OpenAI Compatible",
             "prefix": "real-write",
             "base-url": "https://openai-compatible.example.test/v1",
-            "api-key-entries": [{"api-key": "openai-real-write-key"}],
+            "keys": [{"api-key": "openai-real-write-key"}],
             "models": [
                 {
                     "name": "k3",
                     "alias": "kimi-k3",
                     "display-name": "Kimi K3 Smoke",
                     "image": True,
-                    "thinking": {
-                        "levels": ["low", "vendor-custom"],
-                        "min": 128,
-                        "max": 32768,
-                    },
+                    "thinking": {"levels": ["low", "vendor-custom"], "min": 128, "max": 32768},
                 }
             ],
         }
     ]
-    seen.append("PUT /v0/management/openai-compatibility")
-    assert_mapping(
-        request_json(
-            api_url,
-            "/v0/management/openai-compatibility",
-            method="PUT",
-            payload=openai_payload,
-        ),
-        "/v0/management/openai-compatibility",
-    )
-    openai_items = provider_items(
-        request_json(api_url, "/v0/management/openai-compatibility"),
-        "openai-compatibility",
-        "/v0/management/openai-compatibility",
-    )
-    seen.append("GET /v0/management/openai-compatibility after write")
+    put_family("openai-compatibility", openai_groups)
+    config, _ = read_config(api_url)
+    openai_items = provider_groups(config, "openai-compatibility")
     if not any(
-        isinstance(item, dict)
-        and item.get("name") == "Smoke OpenAI Compatible"
+        item.get("name") == "Smoke OpenAI Compatible"
         and item.get("prefix") == "real-write"
         and any(
             isinstance(model, dict)
             and model.get("display-name") == "Kimi K3 Smoke"
-            and model.get("thinking")
-            == {
-                "levels": ["low", "vendor-custom"],
-                "min": 128,
-                "max": 32768,
-            }
+            and model.get("thinking") == {"levels": ["low", "vendor-custom"], "min": 128, "max": 32768}
             for model in item.get("models", [])
         )
         for item in openai_items
     ):
-        raise AssertionError(f"OpenAI Compatibility write smoke did not round-trip prefix: {openai_items!r}")
+        raise AssertionError(f"OpenAI Compatibility v8 write did not round-trip: {openai_items!r}")
     seen.append("OpenAI Compatibility thinking config round-tripped through Core")
-    persisted_yaml = request_text(api_url, "/v0/management/config.yaml")
-    seen.append("GET /v0/management/config.yaml after provider writes")
-    if "auth-index" in persisted_yaml or "authIndex" in persisted_yaml:
-        raise AssertionError("Provider write smoke persisted response-only auth-index into config.yaml")
-    if contains_key(openai_payload, "auth-index") or contains_key(openai_payload, "authIndex"):
+
+    persisted_yaml, _ = read_config_yaml(api_url)
+    on_disk = config_path.read_text(encoding="utf-8")
+    seen.append(f"GET {V8}/config.yaml and on-disk config after provider writes")
+    for text in (persisted_yaml, on_disk):
+        if "auth_index" in text or "auth-index" in text or "authIndex" in text:
+            raise AssertionError("Provider write smoke persisted response-only auth-index into config.yaml")
+    if contains_key(openai_groups, "auth-index") or contains_key(openai_groups, "auth_index"):
         raise AssertionError("OpenAI Compatibility write smoke payload unexpectedly contains auth-index")
-    if "vendor-custom" not in persisted_yaml or "max: 32768" not in persisted_yaml:
-        raise AssertionError(
-            "OpenAI Compatibility write smoke did not persist thinking config to config.yaml"
-        )
+    if not any(
+        "vendor-custom" in (thinking.get("levels") or []) and thinking.get("max") == 32768
+        for thinking in disk_thinking(config_path)
+    ):
+        raise AssertionError("OpenAI Compatibility write smoke did not persist thinking config to disk")
+    if "config-version: 8" not in on_disk:
+        raise AssertionError("v8 writes did not keep the persisted file at config-version 8")
 
     return seen
 
@@ -884,8 +854,8 @@ def run_write_smoke(api_url: str) -> list[str]:
 def run_auth_files_write_smoke(api_url: str) -> list[str]:
     seen: list[str] = []
     auth_name = "lts-xai-auth-smoke.json"
-    upload_path = f"/v0/management/auth-files?{urlencode({'name': auth_name})}"
-    download_path = f"/v0/management/auth-files/download?{urlencode({'name': auth_name})}"
+    upload_path = f"{V8}/credentials?{urlencode({'name': auth_name})}"
+    download_path = f"{V8}/credentials/download?{urlencode({'name': auth_name})}"
     auth_payload = {
         "type": "xai",
         "email": "lts-xai-auth-smoke@example.test",
@@ -894,7 +864,7 @@ def run_auth_files_write_smoke(api_url: str) -> list[str]:
         "note": "created by lts smoke",
     }
 
-    seen.append("POST /v0/management/auth-files")
+    seen.append(f"POST {V8}/credentials")
     seen.append(f"POST {upload_path}")
     assert_mapping(
         request_json(api_url, upload_path, method="POST", payload=auth_payload),
@@ -902,7 +872,7 @@ def run_auth_files_write_smoke(api_url: str) -> list[str]:
     )
 
     created_entry = find_auth_file_entry(api_url, auth_name)
-    seen.append("GET /v0/management/auth-files after auth upload")
+    seen.append("GET /v8/management/credentials after auth upload")
     if (
         not created_entry
         or created_entry.get("type") != "xai"
@@ -910,7 +880,7 @@ def run_auth_files_write_smoke(api_url: str) -> list[str]:
     ):
         raise AssertionError(f"Auth file upload did not appear in list: {created_entry!r}")
 
-    seen.append("PATCH /v0/management/auth-files/fields")
+    seen.append(f"PATCH {V8}/credentials/fields")
     fields_patch = {
         "name": auth_name,
         "prefix": "auth-smoke",
@@ -925,12 +895,12 @@ def run_auth_files_write_smoke(api_url: str) -> list[str]:
         },
     }
     assert_mapping(
-        request_json(api_url, "/v0/management/auth-files/fields", method="PATCH", payload=fields_patch),
-        "/v0/management/auth-files/fields",
+        request_json(api_url, f"{V8}/credentials/fields", method="PATCH", payload=fields_patch),
+        f"{V8}/credentials/fields",
     )
 
     patched_entry = find_auth_file_entry(api_url, auth_name)
-    seen.append("GET /v0/management/auth-files after auth fields patch")
+    seen.append("GET /v8/management/credentials after auth fields patch")
     if not patched_entry:
         raise AssertionError("Auth file disappeared after fields patch")
     if patched_entry.get("priority") != 7:
@@ -945,7 +915,7 @@ def run_auth_files_write_smoke(api_url: str) -> list[str]:
     # /auth-files intentionally returns a curated list shape and does not expose every
     # arbitrary auth-file field. The raw download is the persistence truth for using_api.
     downloaded = json.loads(request_text(api_url, download_path))
-    seen.append("GET /v0/management/auth-files/download after auth fields patch")
+    seen.append("GET /v8/management/credentials/download after auth fields patch")
     if (
         downloaded.get("prefix") != "auth-smoke"
         or downloaded.get("proxy_url") != "http://127.0.0.1:7890"
@@ -959,35 +929,35 @@ def run_auth_files_write_smoke(api_url: str) -> list[str]:
         raise AssertionError(f"Auth file fields patch did not persist to download payload: {downloaded!r}")
     seen.append("Auth file credential weight round-tripped through Core")
 
-    seen.append("PATCH /v0/management/auth-files/status")
+    seen.append(f"PATCH {V8}/credentials/status")
     disabled_result = assert_mapping(
         request_json(
             api_url,
-            "/v0/management/auth-files/status",
+            f"{V8}/credentials/status",
             method="PATCH",
             payload={"name": auth_name, "disabled": True},
         ),
-        "/v0/management/auth-files/status",
+        f"{V8}/credentials/status",
     )
     if disabled_result.get("disabled") is not True:
         raise AssertionError(f"Auth file status patch did not report disabled=true: {disabled_result!r}")
     disabled_entry = find_auth_file_entry(api_url, auth_name)
-    seen.append("GET /v0/management/auth-files after auth status patch")
+    seen.append("GET /v8/management/credentials after auth status patch")
     if not disabled_entry or disabled_entry.get("disabled") is not True:
         raise AssertionError(f"Auth file status patch did not round-trip through list: {disabled_entry!r}")
 
-    seen.append("DELETE /v0/management/auth-files")
+    seen.append(f"DELETE {V8}/credentials")
     assert_mapping(
         request_json(
             api_url,
-            "/v0/management/auth-files",
+            f"{V8}/credentials",
             method="DELETE",
             payload={"names": [auth_name]},
         ),
-        "/v0/management/auth-files",
+        f"{V8}/credentials",
     )
     deleted_entry = find_auth_file_entry(api_url, auth_name)
-    seen.append("GET /v0/management/auth-files after auth delete")
+    seen.append("GET /v8/management/credentials after auth delete")
     if deleted_entry is not None:
         raise AssertionError(f"Auth file delete did not remove smoke file: {deleted_entry!r}")
     seen.append(
@@ -1000,30 +970,23 @@ def run_auth_files_write_smoke(api_url: str) -> list[str]:
 def run_plugin_config_smoke(api_url: str) -> list[str]:
     seen: list[str] = []
     plugin_id = "lts-smoke-plugin"
-    config_path = f"/v0/management/plugins/{plugin_id}/config"
-    enabled_path = f"/v0/management/plugins/{plugin_id}/enabled"
-    plugin_path = f"/v0/management/plugins/{plugin_id}"
+    config_node = f"/config/plugins/configs/{plugin_id}"
+    plugin_path = f"{V8}/plugins/{plugin_id}"
+
+    def read_plugin_config() -> dict[str, Any]:
+        config, _ = read_config(api_url)
+        return assert_mapping(config_at(config, f"plugins.configs.{plugin_id}"), config_node)
 
     plugin_payload = {
         "enabled": True,
         "priority": 4,
         "mode": "safe",
-        "permissions": {
-            "auth-list": True,
-            "model-execute": True,
-        },
-        "nested": {
-            "keep": "yes",
-        },
+        "permissions": {"auth-list": True, "model-execute": True},
+        "nested": {"keep": "yes"},
     }
-
-    seen.append(f"PUT {config_path}")
-    assert_mapping(
-        request_json(api_url, config_path, method="PUT", payload=plugin_payload),
-        config_path,
-    )
-    saved_config = assert_mapping(request_json(api_url, config_path), config_path)
-    seen.append(f"GET {config_path} after put")
+    seen.append(f"PUT {V8}{config_node} with If-Match")
+    write_config(api_url, config_node, plugin_payload)
+    saved_config = read_plugin_config()
     if (
         saved_config.get("enabled") is not True
         or saved_config.get("priority") != 4
@@ -1032,47 +995,28 @@ def run_plugin_config_smoke(api_url: str) -> list[str]:
     ):
         raise AssertionError(f"Plugin config PUT did not round-trip: {saved_config!r}")
 
-    seen.append(f"PATCH {enabled_path} disabled")
-    assert_mapping(
-        request_json(api_url, enabled_path, method="PATCH", payload={"enabled": False}),
-        enabled_path,
-    )
-    disabled_config = assert_mapping(request_json(api_url, config_path), config_path)
-    seen.append(f"GET {config_path} after disable")
-    if disabled_config.get("enabled") is not False:
-        raise AssertionError(
-            f"Plugin enabled endpoint did not expose disabled state: {disabled_config!r}"
-        )
+    seen.append(f"PUT {V8}{config_node}/enabled false")
+    write_config(api_url, f"{config_node}/enabled", False)
+    if read_plugin_config().get("enabled") is not False:
+        raise AssertionError("Plugin enabled node did not persist false")
+    write_config(api_url, f"{config_node}/enabled", True)
 
-    seen.append(f"PATCH {enabled_path} enabled")
-    assert_mapping(
-        request_json(api_url, enabled_path, method="PATCH", payload={"enabled": True}),
-        enabled_path,
-    )
-
-    seen.append(f"PATCH {config_path}")
-    assert_mapping(
-        request_json(
-            api_url,
-            config_path,
-            method="PATCH",
-            payload={"mode": "fast", "count": 3},
-        ),
-        config_path,
-    )
-    patched_config = assert_mapping(request_json(api_url, config_path), config_path)
-    seen.append(f"GET {config_path} after patch")
+    # The Panel merges touched fields into the latest object and replaces the instance.
+    latest = read_plugin_config()
+    seen.append(f"PUT {V8}{config_node} merged object")
+    write_config(api_url, config_node, {**latest, "mode": "fast", "count": 3})
+    patched_config = read_plugin_config()
     if (
         patched_config.get("enabled") is not True
         or patched_config.get("priority") != 4
         or patched_config.get("mode") != "fast"
         or patched_config.get("count") != 3
     ):
-        raise AssertionError(f"Plugin config PATCH did not merge fields: {patched_config!r}")
+        raise AssertionError(f"Plugin config merge did not round-trip: {patched_config!r}")
 
-    list_payload = assert_mapping(request_json(api_url, "/v0/management/plugins"), "/v0/management/plugins")
-    seen.append("GET /v0/management/plugins after plugin config patch")
-    plugins = assert_list(list_payload.get("plugins"), "/v0/management/plugins")
+    list_payload = assert_mapping(request_json(api_url, f"{V8}/plugins"), f"{V8}/plugins")
+    seen.append(f"GET {V8}/plugins after plugin config write")
+    plugins = assert_list(list_payload.get("plugins"), f"{V8}/plugins")
     plugin_entry = next((item for item in plugins if isinstance(item, dict) and item.get("id") == plugin_id), None)
     if (
         not isinstance(plugin_entry, dict)
@@ -1083,17 +1027,19 @@ def run_plugin_config_smoke(api_url: str) -> list[str]:
     ):
         raise AssertionError(f"Configured-only plugin list entry is invalid: {plugin_entry!r}")
 
-    persisted_yaml = request_text(api_url, "/v0/management/config.yaml")
-    seen.append("GET /v0/management/config.yaml after plugin config patch")
-    for marker in [plugin_id, "mode: fast", "count: 3", "permissions:"]:
-        if marker not in persisted_yaml:
-            raise AssertionError(f"Plugin config YAML missing marker {marker!r}")
+    import yaml  # PyYAML
+
+    persisted_yaml, _ = read_config_yaml(api_url)
+    persisted_plugin = config_at(yaml.safe_load(persisted_yaml), f"plugins.configs.{plugin_id}") or {}
+    if (
+        persisted_plugin.get("mode") != "fast"
+        or persisted_plugin.get("count") != 3
+        or not isinstance(persisted_plugin.get("permissions"), dict)
+    ):
+        raise AssertionError(f"Plugin config YAML did not persist the merged object: {persisted_plugin!r}")
 
     seen.append(f"DELETE {plugin_path}")
-    delete_result = assert_mapping(
-        request_json(api_url, plugin_path, method="DELETE"),
-        plugin_path,
-    )
+    delete_result = assert_mapping(request_json(api_url, plugin_path, method="DELETE"), plugin_path)
     if (
         delete_result.get("status") != "deleted"
         or delete_result.get("configured_removed") is not True
@@ -1102,10 +1048,9 @@ def run_plugin_config_smoke(api_url: str) -> list[str]:
     ):
         raise AssertionError(f"Plugin DELETE returned unexpected result: {delete_result!r}")
     plugins_after_delete = assert_list(
-        assert_mapping(request_json(api_url, "/v0/management/plugins"), "/v0/management/plugins").get("plugins"),
-        "/v0/management/plugins",
+        assert_mapping(request_json(api_url, f"{V8}/plugins"), f"{V8}/plugins").get("plugins"),
+        f"{V8}/plugins",
     )
-    seen.append("GET /v0/management/plugins after plugin delete")
     if any(isinstance(item, dict) and item.get("id") == plugin_id for item in plugins_after_delete):
         raise AssertionError(f"Plugin DELETE did not remove configured plugin from live API: {plugins_after_delete!r}")
     seen.append("Plugin config smoke removed configured-only plugin from live API")
@@ -1387,7 +1332,7 @@ def run_usage_import_contract_smoke(
 
 
 def run_endpoint_smoke(
-    api_url: str, include_plugin_store: bool, include_write_smoke: bool
+    api_url: str, include_plugin_store: bool, include_write_smoke: bool, config_path: Path
 ) -> tuple[list[str], bool, int]:
     seen: list[str] = []
     supports_plugin = read_supports_plugin_header(api_url)
@@ -1397,17 +1342,26 @@ def run_endpoint_smoke(
         seen.append(f"GET {path}")
         return request_json(api_url, path)
 
-    config_payload = assert_mapping(get("/v0/management/config"), "/v0/management/config")
-    if config_payload.get("usage-statistics-enabled") is not True:
-        raise AssertionError("Core config did not expose usage-statistics-enabled=true")
-    if "ampcode" not in config_payload:
-        raise AssertionError("Core config did not expose ampcode block")
+    config_payload, json_revision = read_config(api_url)
+    seen.append(f"GET {V8}/config (sha256 ETag)")
+    if config_payload.get("config-version") != 8:
+        raise AssertionError(f"Core did not render the v8 layout: {sorted(config_payload)!r}")
+    if config_at(config_payload, "observability.usage.usage-statistics-enabled") is not True:
+        raise AssertionError("Core v8 config did not expose observability.usage.usage-statistics-enabled=true")
+    if config_at(config_payload, "access.api-keys") != [CLIENT_API_KEY]:
+        raise AssertionError("Core v8 config did not keep the single synthetic client API key")
 
-    yaml_payload = request_text(api_url, "/v0/management/config.yaml")
-    seen.append("GET /v0/management/config.yaml")
-    for marker in ["usage-statistics-enabled: true", "plugins:", "ampcode:"]:
+    yaml_payload, yaml_revision = read_config_yaml(api_url)
+    seen.append(f"GET {V8}/config.yaml")
+    if yaml_revision != json_revision:
+        raise AssertionError("JSON and YAML views reported different revisions for the same file")
+    for marker in ["config-version: 8", "usage-statistics-enabled: true", "plugins:"]:
         if marker not in yaml_payload:
             raise AssertionError(f"config.yaml missing marker {marker!r}")
+    status, headers, _ = http_request(api_url, f"{V8}/config/ampcode")
+    if status != 404 or not ETAG_PATTERN.match(headers.get("ETag", "")):
+        raise AssertionError(f"Absent v8 node must 404 with a revision; got {status}")
+    seen.append(f"GET {V8}/config/ampcode absent -> 404 with ETag")
 
     usage = assert_mapping(get("/v0/management/usage"), "/v0/management/usage")
     if "usage" not in usage:
@@ -1570,30 +1524,15 @@ def run_endpoint_smoke(
     else:
         seen.append("Released Core v1 baseline has no v1-to-v3 migration receipt")
 
-    assert_mapping(get("/v0/management/api-key-usage"), "/v0/management/api-key-usage")
-    assert_mapping(get("/v0/management/ampcode"), "/v0/management/ampcode")
-    assert_mapping(get("/v0/management/ampcode/upstream-api-keys"), "/v0/management/ampcode/upstream-api-keys")
-    assert_mapping(get("/v0/management/ampcode/model-mappings"), "/v0/management/ampcode/model-mappings")
-    assert_mapping(get("/v0/management/plugins"), "/v0/management/plugins")
-    assert_mapping(get("/v0/management/auth-files"), "/v0/management/auth-files")
-    assert_mapping(get("/v0/management/logs?limit=100"), "/v0/management/logs")
-    assert_mapping(get("/v0/management/request-error-logs"), "/v0/management/request-error-logs")
-    assert_mapping(get("/v0/management/oauth-excluded-models"), "/v0/management/oauth-excluded-models")
-    assert_mapping(get("/v0/management/oauth-model-alias"), "/v0/management/oauth-model-alias")
-
-    for provider_path, key in [
-        ("/v0/management/gemini-api-key", "gemini-api-key"),
-        ("/v0/management/codex-api-key", "codex-api-key"),
-        ("/v0/management/xai-api-key", "xai-api-key"),
-        ("/v0/management/claude-api-key", "claude-api-key"),
-        ("/v0/management/vertex-api-key", "vertex-api-key"),
-        ("/v0/management/openai-compatibility", "openai-compatibility"),
-    ]:
-        payload = assert_mapping(get(provider_path), provider_path)
-        assert_list(payload.get(key), provider_path)
+    assert_mapping(get(f"{V8}/observability/usage/api-keys"), f"{V8}/observability/usage/api-keys")
+    assert_mapping(get(f"{V8}/plugins"), f"{V8}/plugins")
+    assert_mapping(get(f"{V8}/credentials"), f"{V8}/credentials")
+    assert_mapping(get(f"{V8}/observability/logs?limit=100"), f"{V8}/observability/logs")
+    assert_mapping(get(f"{V8}/observability/logs/errors"), f"{V8}/observability/logs/errors")
+    assert_mapping(get(f"{LTS}/flow-control"), f"{LTS}/flow-control")
 
     models = assert_mapping(
-        request_json(api_url, "/v1/models", token=MANAGEMENT_KEY),
+        request_json(api_url, "/v1/models", token=CLIENT_API_KEY),
         "/v1/models",
     )
     seen.append("GET /v1/models")
@@ -1601,10 +1540,10 @@ def run_endpoint_smoke(
         raise AssertionError(f"/v1/models missing data: {models!r}")
 
     if include_plugin_store:
-        assert_mapping(get("/v0/management/plugin-store"), "/v0/management/plugin-store")
+        assert_mapping(get(f"{V8}/plugins/store"), f"{V8}/plugins/store")
 
     if include_write_smoke:
-        seen.extend(run_write_smoke(api_url))
+        seen.extend(run_write_smoke(api_url, config_path))
         seen.extend(run_auth_files_write_smoke(api_url))
         if supports_plugin:
             seen.extend(run_plugin_config_smoke(api_url))
@@ -1623,7 +1562,16 @@ def locate_config_field(page: Any, field: str, key: str) -> None:
     page.wait_for_function("field => document.activeElement?.closest('[data-config-field]')?.dataset.configField === field", arg=field)
 
 
-def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
+def assert_browser_revisioned_write(response: Any, label: str) -> None:
+    """The Panel must send exactly the strong sha256 ETag it read; Core must accept it."""
+    if_match = response.request.headers.get("if-match", "")
+    if not ETAG_PATTERN.match(if_match):
+        raise AssertionError(f"Panel {label} did not send a strong If-Match: {if_match!r}")
+    if response.status != 200:
+        raise AssertionError(f"Core rejected the Panel {label}: {response.status}")
+
+
+def run_browser_config_save_smoke(page: Any, api_url: str, config_path: Path) -> list[str]:
     seen: list[str] = []
 
     page.evaluate("() => { window.location.hash = '/config'; }")
@@ -1633,16 +1581,16 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
     editor = page.locator(".cm-content").first
     editor.wait_for()
 
-    current_yaml = request_text(api_url, "/v0/management/config.yaml")
-    debug_match = re.search(r"^debug:\s*(true|false)\s*$", current_yaml, re.MULTILINE)
+    current_yaml, _ = read_config_yaml(api_url)
+    debug_match = re.search(r"^([ \t]*)debug:\s*(true|false)[ \t]*$", current_yaml, re.MULTILINE)
     if not debug_match:
-        raise AssertionError("config.yaml missing debug boolean for browser source smoke")
-    next_debug = "false" if debug_match.group(1) == "true" else "true"
+        raise AssertionError("config.yaml missing observability.logs.debug for browser source smoke")
+    next_debug = "false" if debug_match.group(2) == "true" else "true"
     source_yaml = replace_one(
         current_yaml,
-        r"^debug:\s*(true|false)\s*$",
-        f"debug: {next_debug}",
-        "debug",
+        r"^([ \t]*)debug:\s*(true|false)[ \t]*$",
+        f"\\1debug: {next_debug}",
+        "observability.logs.debug",
     )
     source_yaml = add_browser_plugin_store_source(source_yaml)
     if BROWSER_SOURCE_MARKER not in source_yaml:
@@ -1653,17 +1601,20 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
     page.get_by_text("Review Changes", exact=False).first.wait_for()
     with page.expect_response(
         lambda response: response.request.method == "PUT"
-        and response.url.endswith("/v0/management/config.yaml")
-    ):
+        and response.url.endswith(f"{V8}/config.yaml")
+    ) as source_saved:
         page.get_by_role("button", name="Confirm Save").click()
     page.get_by_text("Configuration saved successfully", exact=False).first.wait_for()
-    seen.append("BROWSER source save PUT /v0/management/config.yaml")
+    assert_browser_revisioned_write(source_saved.value, "source config.yaml save")
+    seen.append("BROWSER source save PUT /v8/management/config.yaml with If-Match")
 
-    saved_yaml = request_text(api_url, "/v0/management/config.yaml")
+    saved_yaml, _ = read_config_yaml(api_url)
     if f"debug: {next_debug}" not in saved_yaml:
         raise AssertionError("Browser source save did not persist debug toggle")
     if BROWSER_PLUGIN_STORE_SOURCE not in saved_yaml:
         raise AssertionError("Browser source save did not persist plugins.store-sources")
+    if BROWSER_SOURCE_MARKER not in saved_yaml:
+        raise AssertionError("Browser source save did not persist the source mode marker comment")
 
     page.get_by_role("button", name="Visual Editor").click()
     locate_config_field(page, "loggingToFile", "logging-to-file")
@@ -1739,13 +1690,27 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
     page.get_by_text("Review Changes", exact=False).first.wait_for()
     with page.expect_response(
         lambda response: response.request.method == "PUT"
-        and response.url.endswith("/v0/management/config.yaml")
-    ):
+        and response.url.endswith(f"{V8}/config.yaml")
+    ) as visual_saved:
         page.get_by_role("button", name="Confirm Save").click()
     page.get_by_text("Configuration saved successfully", exact=False).first.wait_for()
-    seen.append("BROWSER visual save PUT /v0/management/config.yaml")
+    assert_browser_revisioned_write(visual_saved.value, "visual config.yaml save")
+    seen.append("BROWSER visual save PUT /v8/management/config.yaml with If-Match")
 
-    visual_saved_yaml = request_text(api_url, "/v0/management/config.yaml")
+    visual_saved_yaml, _ = read_config_yaml(api_url)
+    on_disk = disk_config(config_path)
+    for dotted, expected in [
+        ("routing.strategy", "weighted-round-robin"),
+        ("routing.cooldown.transient-error-cooldown-seconds", 0),
+        ("multimedia.disable-image-generation", "passthrough"),
+        ("upstream.codex.abnormal-reasoning-retry.action", "retry"),
+    ]:
+        if config_at(on_disk, dotted) != expected:
+            raise AssertionError(
+                f"Visual save did not persist canonical v8 {dotted}={expected!r} on disk: "
+                f"{config_at(on_disk, dotted)!r}"
+            )
+    seen.append("BROWSER visual save persisted canonical v8 paths in the on-disk YAML")
     if 'word-obfuscation-smoke' not in visual_saved_yaml or 'sensitive-words:' not in visual_saved_yaml:
         raise AssertionError('Real Core did not persist Antigravity sensitive words')
     expected_logging_text = f"logging-to-file: {str(expected_logging).lower()}"
@@ -1812,7 +1777,15 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
             "Browser visual save dropped plugins.store-sources from the source draft"
         )
     if BROWSER_SOURCE_MARKER not in visual_saved_yaml:
-        raise AssertionError("Browser visual save dropped the source mode marker comment")
+        sent = visual_saved.value.request.post_data or ""
+        if BROWSER_SOURCE_MARKER not in sent:
+            raise AssertionError("Browser visual save dropped the source mode marker comment")
+        # The Panel sent the comment (as a document foot comment); losing it is a Core defect.
+        record_core_defect(
+            "PUT /v8/management/config.yaml dropped a document-level foot comment that the "
+            "Panel sent (internal/api/handlers/management/config_v8.go: whole-document PUT "
+            "copies only update.Content[0])"
+        )
     seen.append("BROWSER visual save preserved plugins.store-sources")
 
     page.reload(wait_until="domcontentloaded")
@@ -1844,19 +1817,19 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
         page.locator('button[aria-label="Save"]').click()
         with page.expect_response(
             lambda response: response.request.method == "PUT"
-            and response.url.endswith("/v0/management/config.yaml")
+            and response.url.endswith(f"{V8}/config.yaml")
         ) as saved:
             page.get_by_role("button", name="Confirm Save").click()
         if saved.value.status != 200:
             raise AssertionError(f"Core rejected cache affinity strategy {strategy}")
         page.get_by_text("Configuration saved successfully", exact=False).first.wait_for()
-        saved_yaml = request_text(api_url, "/v0/management/config.yaml")
+        saved_yaml, _ = read_config_yaml(api_url)
         if not re.search(r"cache-affinity:\s*\n\s+strategy: " + strategy + r"\b", saved_yaml):
             raise AssertionError(f"Core did not persist cache affinity strategy {strategy}")
         deadline = time.monotonic() + 8
         while True:
-            config = request_json(api_url, "/v0/management/config")
-            if config.get("codex", {}).get("cache-affinity", {}).get("strategy") == strategy:
+            config, _ = read_config(api_url)
+            if config_at(config, "upstream.codex.cache-affinity.strategy") == strategy:
                 break
             if time.monotonic() >= deadline:
                 raise AssertionError(f"Core did not reload cache affinity strategy {strategy}")
@@ -1872,7 +1845,7 @@ def run_browser_config_save_smoke(page: Any, api_url: str) -> list[str]:
     # visual-save value to reach the live config before the next smoke phase,
     # otherwise a delayed write can overwrite the log fixtures it is about to
     # inspect.
-    wait_for_config_value(api_url, "logging-to-file", expected_logging)
+    wait_for_config_value(api_url, "observability.logs.logging-to-file", expected_logging)
     if not expected_logging:
         set_core_config_booleans(api_url, {"logging-to-file": True})
 
@@ -1886,7 +1859,7 @@ def run_browser_flow_control_smoke(page: Any, app_url: str, api_url: str) -> lis
         raise AssertionError("Local Core must expose supported Flow schema 3")
     if before["state"]["enabled"] or before["events-enabled"]:
         raise AssertionError("Fresh Flow must default to disabled admission and observation")
-    original_yaml = request_text(api_url, "/v0/management/config.yaml")
+    original_yaml, _ = read_config_yaml(api_url)
     if "flow-control:" in original_yaml:
         raise AssertionError("Unrelated visual edits unexpectedly created Flow configuration")
 
@@ -1902,10 +1875,9 @@ def run_browser_flow_control_smoke(page: Any, app_url: str, api_url: str) -> lis
         page.locator('button[aria-label="Save"]').click()
         page.get_by_text("Review Changes", exact=False).first.wait_for()
         with page.expect_response(lambda response: response.request.method == "PUT"
-                                  and response.url.endswith("/v0/management/config.yaml")) as saved:
+                                  and response.url.endswith(f"{V8}/config.yaml")) as saved:
             page.get_by_role("button", name="Confirm Save").click()
-        if saved.value.status != 200:
-            raise AssertionError("Flow visual config save was rejected")
+        assert_browser_revisioned_write(saved.value, "Flow page config.yaml save")
         page.get_by_text("Configuration saved successfully", exact=False).first.wait_for()
 
     save()
@@ -1935,9 +1907,9 @@ def run_browser_flow_control_smoke(page: Any, app_url: str, api_url: str) -> lis
     flow.get_by_role("button", name="Stop live updates", exact=True).click()
     # Change the actual policy while observation is stopped. Its first resumed
     # summary must refresh the full policy, not only its counters/revision.
-    current_yaml = request_text(api_url, "/v0/management/config.yaml")
+    current_yaml, revision = read_config_yaml(api_url)
     changed_yaml = replace_one(current_yaml, r"max-concurrent: 2", "max-concurrent: 3", "Flow limit")
-    put_text(api_url, "/v0/management/config.yaml", changed_yaml)
+    write_config(api_url, "/config.yaml", yaml_text=changed_yaml, revision=revision)
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline:
         changed = request_json(api_url, endpoint)
@@ -1992,18 +1964,32 @@ def provider_row_for_api_key(page: Any, api_key: str) -> Any:
 
 
 BROWSER_PROVIDER_KEY_CRUD_MARKERS = (
-    "BROWSER provider workbench Interactions API create PUT /v0/management/interactions-api-key",
-    "BROWSER provider workbench Interactions API update PUT /v0/management/interactions-api-key",
-    "BROWSER provider workbench Interactions API delete DELETE /v0/management/interactions-api-key",
+    "BROWSER provider workbench Interactions API create PUT /v8/management/config/api-keys/interactions",
+    "BROWSER provider workbench Interactions API update PUT /v8/management/config/api-keys/interactions",
+    "BROWSER provider workbench Interactions API delete PUT /v8/management/config/api-keys/interactions",
     "BROWSER provider workbench Interactions API weight round-trip",
-    "BROWSER provider workbench Claude create PUT /v0/management/claude-api-key",
-    "BROWSER provider workbench Claude update PUT /v0/management/claude-api-key",
-    "BROWSER provider workbench Claude delete DELETE /v0/management/claude-api-key",
+    "BROWSER provider workbench Claude create PUT /v8/management/config/api-keys/claude",
+    "BROWSER provider workbench Claude update PUT /v8/management/config/api-keys/claude",
+    "BROWSER provider workbench Claude delete PUT /v8/management/config/api-keys/claude",
     "BROWSER provider workbench Claude fingerprint-profile round-trip and reset",
-    "BROWSER provider workbench Vertex create PUT /v0/management/vertex-api-key",
-    "BROWSER provider workbench Vertex update PUT /v0/management/vertex-api-key",
-    "BROWSER provider workbench Vertex delete DELETE /v0/management/vertex-api-key",
+    "BROWSER provider workbench Vertex create PUT /v8/management/config/api-keys/vertex",
+    "BROWSER provider workbench Vertex update PUT /v8/management/config/api-keys/vertex",
+    "BROWSER provider workbench Vertex delete PUT /v8/management/config/api-keys/vertex",
 )
+
+# v8 JSON is rendered from YAML, so thinking flags use their YAML tags.
+V8_THINKING_FLAGS = {"zero-allowed": True, "dynamic-allowed": True}
+
+
+def entries_from_groups(groups: Any) -> list[dict[str, Any]]:
+    return provider_entries({"api-keys": {"family": groups if isinstance(groups, list) else []}}, "family")
+
+
+def expect_family_put(page: Any, family: str) -> Any:
+    return page.expect_response(
+        lambda response: response.request.method == "PUT"
+        and response.url.endswith(f"{V8}/config/api-keys/{family}")
+    )
 
 
 def run_browser_provider_key_crud_smoke(
@@ -2011,24 +1997,26 @@ def run_browser_provider_key_crud_smoke(
     api_url: str,
     label: str,
     button_pattern: str,
-    endpoint: str,
-    response_key: str,
+    family: str,
     api_key: str,
     create_base_url: str,
     update_base_url: str,
     weight: int | None = None,
 ) -> list[str]:
     seen: list[str] = []
+    endpoint = f"{V8}/config/api-keys/{family}"
     label_slug = re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-")
     model_name = f"{label_slug}-browser-model"
     model_alias = f"{label_slug}-browser-alias"
     created_display_name = f"{label} Browser Model"
     updated_display_name = f"{label} Browser Model Updated"
 
+    def entries() -> list[dict[str, Any]]:
+        config, _ = read_config(api_url)
+        return provider_entries(config, family)
+
     page.get_by_role("button", name=re.compile(button_pattern, re.I)).click()
     page.get_by_role("heading", name=label).wait_for()
-    if label == "Claude":
-        page.get_by_text("CLI Profile", exact=True).wait_for()
     page.get_by_role("button", name=re.compile(r"^New$", re.I)).first.click()
     sheet = page.get_by_role("dialog").last
     sheet.get_by_role("textbox", name="API key").fill(api_key)
@@ -2059,39 +2047,48 @@ def run_browser_provider_key_crud_smoke(
     thinking_textarea = model_card.locator("textarea")
     thinking_config = json.loads(thinking_textarea.input_value())
     thinking_config["levels"].append("vendor-custom")
-    thinking_config["x-lts-thinking-note"] = f"keep-{label.lower()}-thinking"
-    thinking_textarea.fill(json.dumps(thinking_config))
+    # Core v8 decodes provider config strictly: a field outside its schema is rejected (400
+    # invalid_config) and must surface in the open sheet without persisting anything.
+    thinking_textarea.fill(json.dumps({**thinking_config, "x-lts-thinking-note": "rejected"}))
     model_card.get_by_role("checkbox", name="High", exact=True).set_checked(True, force=True)
-    with page.expect_response(
-        lambda response: response.request.method == "PUT"
-        and response.url.endswith(endpoint)
-    ) as create_response_info:
+    with expect_family_put(page, family) as rejected_info:
+        sheet.get_by_role("button", name="Create").click()
+    if rejected_info.value.status != 400:
+        raise AssertionError(f"Core v8 accepted an unknown thinking field for {label}: {rejected_info.value.status}")
+    sheet.get_by_text("x-lts-thinking-note", exact=False).first.wait_for()
+    if any(item.get("api-key") == api_key for item in entries()):
+        raise AssertionError(f"Rejected {label} create still persisted the key")
+    seen.append(f"BROWSER provider workbench {label} surfaced Core v8 strict-schema rejection in the sheet")
+    accepted_thinking = json.loads(thinking_textarea.input_value())
+    accepted_thinking.pop("x-lts-thinking-note", None)
+    thinking_textarea.fill(json.dumps(accepted_thinking))
+    with expect_family_put(page, family) as create_response_info:
         sheet.get_by_role("button", name="Create").click()
     wait_for_no_dialog(page)
+    assert_browser_revisioned_write(create_response_info.value, f"{label} create")
     seen.append(f"BROWSER provider workbench {label} create PUT {endpoint}")
     create_payload = json.loads(create_response_info.value.request.post_data or "null")
-    if not isinstance(create_payload, list) or not any(
-        isinstance(item, dict)
-        and item.get("api-key") == api_key
+    if contains_key(create_payload, "auth_index") or contains_key(create_payload, "auth-index"):
+        raise AssertionError(f"{label} browser PUT wrote response-only auth index: {create_payload!r}")
+    if not any(
+        item.get("api-key") == api_key
         and (weight is None or item.get("weight") == weight)
         and (label != "Claude" or item.get("fingerprint-profile") == "claude-code-cli")
         and any(
             isinstance(model, dict)
             and model.get("name") == model_name
             and isinstance(model.get("thinking"), dict)
-            and model["thinking"].get("x-lts-thinking-note")
-            == f"keep-{label.lower()}-thinking"
+            and "vendor-custom" in (model["thinking"].get("levels") or [])
             for model in item.get("models", [])
         )
-        for item in create_payload
-        if isinstance(item, dict)
+        for item in entries_from_groups(create_payload)
     ):
         raise AssertionError(f"{label} browser PUT dropped advanced thinking JSON: {create_payload!r}")
-    items_after_create = provider_items(request_json(api_url, endpoint), response_key, endpoint)
+    items_after_create = entries()
     if not any(
-        isinstance(item, dict)
-        and item.get("api-key") == api_key
+        item.get("api-key") == api_key
         and item.get("base-url") == create_base_url
+        and item.get("auth_index")
         and (weight is None or item.get("weight") == weight)
         and (label != "Claude" or item.get("fingerprint-profile") == "claude-code-cli")
         and any(
@@ -2099,14 +2096,16 @@ def run_browser_provider_key_crud_smoke(
             and model.get("name") == model_name
             and model.get("alias") == model_alias
             and model.get("display-name") == created_display_name
-            and model.get("thinking")
-            == {
-                "levels": ["high", "max", "vendor-custom"],
-                "min": 128,
-                "max": 32768,
-                "zero_allowed": True,
-                "dynamic_allowed": True,
-            }
+            and isinstance(model.get("thinking"), dict)
+            and all(
+                model["thinking"].get(key) == value
+                for key, value in {
+                    "levels": ["high", "max", "vendor-custom"],
+                    "min": 128,
+                    "max": 32768,
+                    **V8_THINKING_FLAGS,
+                }.items()
+            )
             for model in item.get("models", [])
         )
         for item in items_after_create
@@ -2141,17 +2140,14 @@ def run_browser_provider_key_crud_smoke(
         "Not explicitly configured. Core will use the model's built-in or default capability.",
         exact=True,
     ).wait_for()
-    with page.expect_response(
-        lambda response: response.request.method == "PUT"
-        and response.url.endswith(endpoint)
-    ):
+    with expect_family_put(page, family) as update_response_info:
         sheet.get_by_role("button", name="Save").click()
     wait_for_no_dialog(page)
+    assert_browser_revisioned_write(update_response_info.value, f"{label} update")
     seen.append(f"BROWSER provider workbench {label} update PUT {endpoint}")
-    items_after_update = provider_items(request_json(api_url, endpoint), response_key, endpoint)
+    items_after_update = entries()
     if not any(
-        isinstance(item, dict)
-        and item.get("api-key") == api_key
+        item.get("api-key") == api_key
         and item.get("base-url") == update_base_url
         and (weight is None or item.get("weight") == weight + 1)
         and (label != "Claude" or "fingerprint-profile" not in item)
@@ -2177,153 +2173,193 @@ def run_browser_provider_key_crud_smoke(
     row.get_by_role("button", name="Delete").click()
     confirm = page.get_by_role("dialog", name="Delete resource")
     confirm.get_by_text("This action cannot be undone", exact=False).first.wait_for()
-    with page.expect_response(
-        lambda response: response.request.method == "DELETE"
-        and endpoint in response.url
-    ):
+    with expect_family_put(page, family) as delete_response_info:
         confirm.get_by_role("button", name="Delete").click()
     wait_for_no_dialog(page)
-    seen.append(f"BROWSER provider workbench {label} delete DELETE {endpoint}")
-    items_after_delete = provider_items(request_json(api_url, endpoint), response_key, endpoint)
-    if any(isinstance(item, dict) and item.get("api-key") == api_key for item in items_after_delete):
-        raise AssertionError(f"{label} browser delete did not remove the created key: {items_after_delete!r}")
+    assert_browser_revisioned_write(delete_response_info.value, f"{label} delete")
+    seen.append(f"BROWSER provider workbench {label} delete PUT {endpoint}")
+    if any(item.get("api-key") == api_key for item in entries()):
+        raise AssertionError(f"{label} browser delete did not remove the created key")
 
     return seen
 
 
-def run_browser_provider_workbench_smoke(page: Any, app_url: str, api_url: str) -> list[str]:
+def ensure_provider_fixtures(api_url: str) -> None:
+    """Synthetic provider resources the Workbench edits (created when --no-write-smoke)."""
+    config, revision = read_config(api_url)
+    if not provider_groups(config, "gemini"):
+        write_config(
+            api_url,
+            "/config/api-keys/gemini",
+            [
+                {
+                    "name": "gemini-1",
+                    "base-url": "https://generativelanguage.googleapis.com",
+                    "models": [{"name": "gemini-2.5-flash", "display-name": "Gemini Flash Write"}],
+                    "keys": [{"api-key": "gemini-real-write-key"}],
+                }
+            ],
+            revision=revision,
+        )
+        config, revision = read_config(api_url)
+    if not provider_groups(config, "openai-compatibility"):
+        write_config(
+            api_url,
+            "/config/api-keys/openai-compatibility",
+            [
+                {
+                    "name": "Smoke OpenAI Compatible",
+                    "base-url": "https://openai-compatible.example.test/v1",
+                    "keys": [{"api-key": "openai-real-write-key"}],
+                    "models": [
+                        {
+                            "name": "k3",
+                            "alias": "kimi-k3",
+                            "display-name": "Kimi K3 Smoke",
+                            "thinking": {"levels": ["low", "vendor-custom"], "min": 128, "max": 32768},
+                        }
+                    ],
+                }
+            ],
+            revision=revision,
+        )
+
+
+def run_browser_provider_workbench_smoke(
+    page: Any, app_url: str, api_url: str, config_path: Path
+) -> list[str]:
     seen: list[str] = []
+    ensure_provider_fixtures(api_url)
 
     page.goto(f"{app_url}?core-provider-workbench#/ai-providers", wait_until="domcontentloaded")
     page.wait_for_function("() => window.location.hash.endsWith('/ai-providers')")
     page.get_by_role("heading", name="AI Providers").wait_for()
 
-    gemini_before = provider_items(
-        request_json(api_url, "/v0/management/gemini-api-key"),
-        "gemini-api-key",
-        "/v0/management/gemini-api-key",
-    )
+    config, _ = read_config(api_url)
+    gemini_before = provider_entries(config, "gemini")
     if not gemini_before:
         raise AssertionError("Browser workbench smoke expected at least one Gemini resource")
-    expected_gemini_display_name = next(
-        (
-            model.get("display-name")
-            for model in gemini_before[0].get("models", [])
-            if isinstance(model, dict) and model.get("name") == "gemini-2.5-flash"
-        ),
-        None,
-    )
-    if not expected_gemini_display_name:
-        raise AssertionError(f"Gemini fixture missing model display-name: {gemini_before!r}")
     gemini_was_disabled = is_provider_disabled(gemini_before[0])
-    with page.expect_response(
-        lambda response: response.request.method == "PUT"
-        and response.url.endswith("/v0/management/gemini-api-key")
-    ):
+    with expect_family_put(page, "gemini") as toggled:
         page.get_by_label(re.compile(r"Enable|Disable", re.I)).first.evaluate(
             "(element) => element.click()"
         )
-    seen.append("BROWSER provider workbench Gemini toggle PUT /v0/management/gemini-api-key")
-    gemini_after = provider_items(
-        request_json(api_url, "/v0/management/gemini-api-key"),
-        "gemini-api-key",
-        "/v0/management/gemini-api-key",
-    )
+    assert_browser_revisioned_write(toggled.value, "Gemini toggle")
+    seen.append("BROWSER provider workbench Gemini toggle PUT /v8/management/config/api-keys/gemini")
+    config, _ = read_config(api_url)
+    gemini_after = provider_entries(config, "gemini")
     if not gemini_after or is_provider_disabled(gemini_after[0]) == gemini_was_disabled:
         raise AssertionError(f"Gemini browser toggle did not change disabled state: {gemini_after!r}")
     if not any(
-        isinstance(model, dict)
-        and model.get("name") == "gemini-2.5-flash"
-        and model.get("display-name") == expected_gemini_display_name
+        isinstance(model, dict) and model.get("display-name") == "Gemini Flash Write"
         for model in gemini_after[0].get("models", [])
     ):
         raise AssertionError(f"Gemini toggle dropped model display-name: {gemini_after!r}")
+
+    # Codex create/edit with an inherit/override runtime policy field; read back from the
+    # persisted file and from GET /v8/management/config (auth_index injected, never stored).
+    codex_key = "codex-browser-new"
+
+    def codex_disk_key() -> dict[str, Any] | None:
+        for group in provider_groups(disk_config(config_path), "codex"):
+            for key in group.get("keys") or []:
+                if isinstance(key, dict) and key.get("api-key") == codex_key:
+                    return {"group": group, "key": key}
+        return None
 
     page.get_by_role("button", name=re.compile(r"Codex", re.I)).click()
     page.get_by_role("heading", name="Codex").wait_for()
     page.get_by_role("button", name=re.compile(r"^New$", re.I)).first.click()
     sheet = page.get_by_role("dialog").last
-    sheet.get_by_role("textbox", name="API key").fill("codex-browser-new")
+    sheet.get_by_role("textbox", name="API key").fill(codex_key)
     sheet.get_by_label("Base URL").fill("https://codex.browser.example/v1")
     sheet.get_by_label("Enable WebSockets").check()
+    sheet.get_by_text("Advanced runtime policy", exact=True).click()
+    sheet.get_by_label("Request retries", exact=True).fill("2")
+    sheet.get_by_role("button", name="Cooling", exact=True).click()
+    page.get_by_role("option", name="Disable cooling", exact=True).click()
     sheet.get_by_text("Custom models", exact=True).click()
     sheet.get_by_label("Upstream model name").fill("gpt-5")
     sheet.get_by_label("Routing alias (optional)").fill("gpt-5-browser")
     sheet.get_by_label("Display name (optional)").fill("Codex Browser Model")
-    with page.expect_response(
-        lambda response: response.request.method == "PUT"
-        and response.url.endswith("/v0/management/codex-api-key")
-    ):
+    with expect_family_put(page, "codex") as created:
         sheet.get_by_role("button", name="Create").click()
     wait_for_no_dialog(page)
-    seen.append("BROWSER provider workbench Codex create PUT /v0/management/codex-api-key")
-    codex_after_create = provider_items(
-        request_json(api_url, "/v0/management/codex-api-key"),
-        "codex-api-key",
-        "/v0/management/codex-api-key",
-    )
-    if not any(
-        isinstance(item, dict)
-        and item.get("api-key") == "codex-browser-new"
-        and item.get("base-url") == "https://codex.browser.example/v1"
-        and item.get("websockets") is True
-        and any(
-            isinstance(model, dict)
-            and model.get("name") == "gpt-5"
-            and model.get("display-name") == "Codex Browser Model"
-            for model in item.get("models", [])
-        )
-        for item in codex_after_create
+    assert_browser_revisioned_write(created.value, "Codex create")
+    seen.append("BROWSER provider workbench Codex create PUT /v8/management/config/api-keys/codex")
+    persisted = codex_disk_key()
+    if (
+        not persisted
+        or persisted["group"].get("base-url") != "https://codex.browser.example/v1"
+        or persisted["key"].get("websockets") is not True
+        or persisted["key"].get("request-retry") != 2
+        or persisted["key"].get("disable-cooling") is not True
     ):
-        raise AssertionError(f"Codex browser create did not round-trip: {codex_after_create!r}")
+        raise AssertionError(f"Codex create did not persist the override policy on disk: {persisted!r}")
+    config, _ = read_config(api_url)
+    codex_entry = next(
+        (item for item in provider_entries(config, "codex") if item.get("api-key") == codex_key), None
+    )
+    if not codex_entry or not codex_entry.get("auth_index"):
+        raise AssertionError(f"GET /v8/management/config did not inject auth_index: {codex_entry!r}")
+    if "auth_index" in config_path.read_text(encoding="utf-8"):
+        raise AssertionError("Codex create persisted the response-only auth_index on disk")
+    gemini_index_before = [item.get("auth_index") for item in provider_entries(config, "gemini")]
+    seen.append("BROWSER Codex override policy (request-retry, disable-cooling) persisted on disk; auth_index only in GET")
 
-    page.get_by_role("button", name="Edit").first.click()
+    provider_row_for_api_key(page, codex_key).get_by_role("button", name="Edit").click()
     sheet = page.get_by_role("dialog").last
     sheet.get_by_label("Base URL").fill("https://codex.browser-updated.example/v1")
+    sheet.get_by_text("Advanced runtime policy", exact=True).click()
+    retries = sheet.get_by_label("Request retries", exact=True)
+    if retries.input_value() != "2":
+        raise AssertionError(f"Codex edit did not reload the retry override: {retries.input_value()!r}")
+    retries.fill("")
+    sheet.get_by_role("button", name="Cooling", exact=True).click()
+    page.get_by_role("option", name="Inherit", exact=True).click()
     sheet.get_by_text("Custom models", exact=True).click()
     sheet.get_by_label("Display name (optional)").fill("Codex Browser Model Updated")
-    with page.expect_response(
-        lambda response: response.request.method == "PUT"
-        and response.url.endswith("/v0/management/codex-api-key")
-    ):
+    with expect_family_put(page, "codex") as updated:
         sheet.get_by_role("button", name="Save").click()
     wait_for_no_dialog(page)
-    seen.append("BROWSER provider workbench Codex update PUT /v0/management/codex-api-key")
-    codex_after_update = provider_items(
-        request_json(api_url, "/v0/management/codex-api-key"),
-        "codex-api-key",
-        "/v0/management/codex-api-key",
-    )
-    if not any(
-        isinstance(item, dict)
-        and item.get("api-key") == "codex-browser-new"
-        and item.get("base-url") == "https://codex.browser-updated.example/v1"
-        and any(
-            isinstance(model, dict)
-            and model.get("display-name") == "Codex Browser Model Updated"
-            for model in item.get("models", [])
+    assert_browser_revisioned_write(updated.value, "Codex update")
+    seen.append("BROWSER provider workbench Codex update PUT /v8/management/config/api-keys/codex")
+    persisted = codex_disk_key()
+    if (
+        not persisted
+        or persisted["group"].get("base-url") != "https://codex.browser-updated.example/v1"
+        or "request-retry" in persisted["key"]
+        or "disable-cooling" in persisted["key"]
+        or not any(
+            isinstance(model, dict) and model.get("display-name") == "Codex Browser Model Updated"
+            for model in persisted["key"].get("models", []) + persisted["group"].get("models", [])
         )
-        for item in codex_after_update
     ):
-        raise AssertionError(f"Codex browser update did not round-trip: {codex_after_update!r}")
+        raise AssertionError(f"Codex edit back to inherit did not persist on disk: {persisted!r}")
+    config, _ = read_config(api_url)
+    if not any(
+        item.get("api-key") == codex_key and item.get("auth_index")
+        for item in provider_entries(config, "codex")
+    ):
+        raise AssertionError("Codex edit dropped the injected auth_index")
+    # F24: editing provider B must not disturb provider A's usage attribution identity.
+    gemini_index_after = [item.get("auth_index") for item in provider_entries(config, "gemini")]
+    if gemini_index_after != gemini_index_before or not all(gemini_index_after):
+        raise AssertionError(
+            f"Codex edit changed Gemini auth_index: {gemini_index_before!r} -> {gemini_index_after!r}"
+        )
+    seen.append("BROWSER Codex inherit policy removed key overrides on disk; other providers' auth_index unchanged")
 
-    page.get_by_role("button", name="Delete").first.click()
+    provider_row_for_api_key(page, codex_key).get_by_role("button", name="Delete").click()
     confirm = page.get_by_role("dialog", name="Delete resource")
     confirm.get_by_text("This action cannot be undone", exact=False).first.wait_for()
-    with page.expect_response(
-        lambda response: response.request.method == "DELETE"
-        and "/v0/management/codex-api-key" in response.url
-    ):
+    with expect_family_put(page, "codex") as deleted:
         confirm.get_by_role("button", name="Delete").click()
     wait_for_no_dialog(page)
-    seen.append("BROWSER provider workbench Codex delete DELETE /v0/management/codex-api-key")
-    codex_after_delete = provider_items(
-        request_json(api_url, "/v0/management/codex-api-key"),
-        "codex-api-key",
-        "/v0/management/codex-api-key",
-    )
-    if any(isinstance(item, dict) and item.get("api-key") == "codex-browser-new" for item in codex_after_delete):
-        raise AssertionError(f"Codex browser delete did not remove the created key: {codex_after_delete!r}")
+    assert_browser_revisioned_write(deleted.value, "Codex delete")
+    seen.append("BROWSER provider workbench Codex delete PUT /v8/management/config/api-keys/codex")
+    if codex_disk_key() is not None:
+        raise AssertionError("Codex browser delete did not remove the created key from disk")
 
     page.get_by_role("button", name=re.compile(r"^xAI(?:\s|$)", re.I)).click()
     page.get_by_role("heading", name="xAI", exact=True).wait_for()
@@ -2341,81 +2377,35 @@ def run_browser_provider_workbench_smoke(page: Any, app_url: str, api_url: str) 
     sheet.get_by_label("Upstream model name").fill("grok-4.5")
     sheet.get_by_label("Routing alias (optional)").fill("grok-browser")
     sheet.get_by_label("Display name (optional)").fill("Grok Browser Model")
-    with page.expect_response(
-        lambda response: response.request.method == "PUT"
-        and response.url.endswith("/v0/management/xai-api-key")
-    ):
+    with expect_family_put(page, "xai") as xai_created:
         sheet.get_by_role("button", name="Create").click()
     wait_for_no_dialog(page)
-    seen.append("BROWSER provider workbench xAI create PUT /v0/management/xai-api-key")
-    xai_after_create = provider_items(
-        request_json(api_url, "/v0/management/xai-api-key"),
-        "xai-api-key",
-        "/v0/management/xai-api-key",
-    )
+    assert_browser_revisioned_write(xai_created.value, "xAI create")
+    seen.append("BROWSER provider workbench xAI create PUT /v8/management/config/api-keys/xai")
+    config, _ = read_config(api_url)
     if not any(
-        isinstance(item, dict)
-        and item.get("api-key") == "xai-browser-new"
+        item.get("api-key") == "xai-browser-new"
         and item.get("base-url") == "https://api.x.ai/v1"
         and item.get("websockets") is True
         and any(
             isinstance(model, dict)
-            and model.get("name") == "grok-4.5"
             and model.get("alias") == "grok-browser"
             and model.get("display-name") == "Grok Browser Model"
             for model in item.get("models", [])
         )
-        for item in xai_after_create
+        for item in provider_entries(config, "xai")
     ):
-        raise AssertionError(f"xAI browser create did not round-trip: {xai_after_create!r}")
-
-    page.get_by_role("button", name="Edit").first.click()
-    sheet = page.get_by_role("dialog").last
-    sheet.get_by_label("Base URL").fill("https://xai.browser-updated.example/v1")
-    sheet.get_by_text("Custom models", exact=True).click()
-    sheet.get_by_label("Display name (optional)").fill("Grok Browser Model Updated")
-    with page.expect_response(
-        lambda response: response.request.method == "PUT"
-        and response.url.endswith("/v0/management/xai-api-key")
-    ):
-        sheet.get_by_role("button", name="Save").click()
-    wait_for_no_dialog(page)
-    seen.append("BROWSER provider workbench xAI update PUT /v0/management/xai-api-key")
-    xai_after_update = provider_items(
-        request_json(api_url, "/v0/management/xai-api-key"),
-        "xai-api-key",
-        "/v0/management/xai-api-key",
-    )
-    if not any(
-        isinstance(item, dict)
-        and item.get("api-key") == "xai-browser-new"
-        and item.get("base-url") == "https://xai.browser-updated.example/v1"
-        and any(
-            isinstance(model, dict)
-            and model.get("display-name") == "Grok Browser Model Updated"
-            for model in item.get("models", [])
-        )
-        for item in xai_after_update
-    ):
-        raise AssertionError(f"xAI browser update did not round-trip: {xai_after_update!r}")
-
-    page.get_by_role("button", name="Delete").first.click()
+        raise AssertionError(f"xAI browser create did not round-trip: {provider_entries(config, 'xai')!r}")
+    provider_row_for_api_key(page, "xai-browser-new").get_by_role("button", name="Delete").click()
     confirm = page.get_by_role("dialog", name="Delete resource")
-    confirm.get_by_text("This action cannot be undone", exact=False).first.wait_for()
-    with page.expect_response(
-        lambda response: response.request.method == "DELETE"
-        and "/v0/management/xai-api-key" in response.url
-    ):
+    with expect_family_put(page, "xai") as xai_deleted:
         confirm.get_by_role("button", name="Delete").click()
     wait_for_no_dialog(page)
-    seen.append("BROWSER provider workbench xAI delete DELETE /v0/management/xai-api-key")
-    xai_after_delete = provider_items(
-        request_json(api_url, "/v0/management/xai-api-key"),
-        "xai-api-key",
-        "/v0/management/xai-api-key",
-    )
-    if any(isinstance(item, dict) and item.get("api-key") == "xai-browser-new" for item in xai_after_delete):
-        raise AssertionError(f"xAI browser delete did not remove the created key: {xai_after_delete!r}")
+    assert_browser_revisioned_write(xai_deleted.value, "xAI delete")
+    config, _ = read_config(api_url)
+    if any(item.get("api-key") == "xai-browser-new" for item in provider_entries(config, "xai")):
+        raise AssertionError("xAI browser delete did not remove the created key")
+    seen.append("BROWSER provider workbench xAI delete PUT /v8/management/config/api-keys/xai")
 
     seen.extend(
         run_browser_provider_key_crud_smoke(
@@ -2423,37 +2413,32 @@ def run_browser_provider_workbench_smoke(page: Any, app_url: str, api_url: str) 
             api_url,
             label="Interactions API",
             button_pattern=r"^Interactions API\b",
-            endpoint="/v0/management/interactions-api-key",
-            response_key="interactions-api-key",
+            family="interactions",
             api_key="interactions-browser-new",
             create_base_url="https://interactions.browser.example",
             update_base_url="https://interactions.browser-updated.example",
             weight=5,
         )
     )
-
     seen.extend(
         run_browser_provider_key_crud_smoke(
             page,
             api_url,
             label="Claude",
             button_pattern=r"^Claude\b",
-            endpoint="/v0/management/claude-api-key",
-            response_key="claude-api-key",
+            family="claude",
             api_key="claude-browser-new",
             create_base_url="https://claude.browser.example",
             update_base_url="https://claude.browser-updated.example",
         )
     )
-
     seen.extend(
         run_browser_provider_key_crud_smoke(
             page,
             api_url,
             label="Vertex",
             button_pattern=r"Vertex",
-            endpoint="/v0/management/vertex-api-key",
-            response_key="vertex-api-key",
+            family="vertex",
             api_key="vertex-browser-new",
             create_base_url="https://vertex.browser.example",
             update_base_url="https://vertex.browser-updated.example",
@@ -2462,31 +2447,11 @@ def run_browser_provider_workbench_smoke(page: Any, app_url: str, api_url: str) 
 
     page.get_by_role("button", name=re.compile(r"OpenAI Compatible", re.I)).click()
     page.get_by_role("heading", name="OpenAI Compatible").wait_for()
-    openai_before_edit = provider_items(
-        request_json(api_url, "/v0/management/openai-compatibility"),
-        "openai-compatibility",
-        "/v0/management/openai-compatibility",
-    )
-    expected_openai_display_name = next(
-        (
-            model.get("display-name")
-            for item in openai_before_edit
-            if isinstance(item, dict) and item.get("name") == "Smoke OpenAI Compatible"
-            for model in item.get("models", [])
-            if isinstance(model, dict) and model.get("display-name")
-        ),
-        None,
-    )
-    if not expected_openai_display_name:
-        raise AssertionError(f"OpenAI fixture missing model display-name: {openai_before_edit!r}")
     page.get_by_role("button", name="Edit").first.click()
     sheet = page.get_by_role("dialog").last
     sheet.get_by_label("Prefix").fill("browser-oa-smoke")
     sheet.get_by_text("Custom models", exact=True).click()
-    if (
-        sheet.get_by_label("Display name (optional)").first.input_value()
-        != expected_openai_display_name
-    ):
+    if sheet.get_by_label("Display name (optional)").first.input_value() != "Kimi K3 Smoke":
         raise AssertionError("OpenAI workbench did not parse existing model display-name")
     first_model = sheet.get_by_label("Display name (optional)").first.locator(
         "xpath=ancestor::div[contains(@class, 'modelEntry')][1]"
@@ -2494,51 +2459,33 @@ def run_browser_provider_workbench_smoke(page: Any, app_url: str, api_url: str) 
     first_model.get_by_role("button", name="Expand", exact=True).click()
     if not first_model.get_by_role("checkbox", name="Low", exact=True).is_checked():
         raise AssertionError("OpenAI workbench did not parse the existing low thinking level")
-    first_model.get_by_role("checkbox", name="High", exact=True).set_checked(
-        True, force=True
-    )
-    first_model.get_by_role("checkbox", name="Maximum", exact=True).set_checked(
-        True, force=True
-    )
+    first_model.get_by_role("checkbox", name="High", exact=True).set_checked(True, force=True)
+    first_model.get_by_role("checkbox", name="Maximum", exact=True).set_checked(True, force=True)
     first_model.get_by_text("Advanced thinking JSON", exact=True).click()
-    thinking_textarea = first_model.locator("textarea")
-    updated_thinking = json.loads(thinking_textarea.input_value())
-    if updated_thinking != {
-        "levels": ["low", "high", "max", "vendor-custom"],
-        "min": 128,
-        "max": 32768,
-    }:
-        raise AssertionError(
-            f"OpenAI workbench dropped advanced thinking config: {updated_thinking!r}"
-        )
+    updated_thinking = json.loads(first_model.locator("textarea").input_value())
+    if updated_thinking != {"levels": ["low", "high", "max", "vendor-custom"], "min": 128, "max": 32768}:
+        raise AssertionError(f"OpenAI workbench dropped advanced thinking config: {updated_thinking!r}")
     sheet.get_by_label("Display name (optional)").first.fill("OpenAI Smoke Updated")
-    with page.expect_response(
-        lambda response: response.request.method == "PUT"
-        and response.url.endswith("/v0/management/openai-compatibility")
-    ):
+    with expect_family_put(page, "openai-compatibility") as openai_saved:
         sheet.get_by_role("button", name="Save").click()
     wait_for_no_dialog(page)
+    assert_browser_revisioned_write(openai_saved.value, "OpenAI Compatibility save")
     seen.append(
-        "BROWSER provider workbench OpenAI Compatibility save PUT /v0/management/openai-compatibility"
+        "BROWSER provider workbench OpenAI Compatibility save PUT /v8/management/config/api-keys/openai-compatibility"
     )
-    openai_after_save = provider_items(
-        request_json(api_url, "/v0/management/openai-compatibility"),
-        "openai-compatibility",
-        "/v0/management/openai-compatibility",
-    )
+    config, _ = read_config(api_url)
+    openai_after_save = provider_groups(config, "openai-compatibility")
     if not any(
-        isinstance(item, dict)
-        and item.get("name") == "Smoke OpenAI Compatible"
+        item.get("name") == "Smoke OpenAI Compatible"
         and item.get("prefix") == "browser-oa-smoke"
+        and any(
+            isinstance(key, dict) and key.get("auth_index") for key in item.get("keys", [])
+        )
         and any(
             isinstance(model, dict)
             and model.get("display-name") == "OpenAI Smoke Updated"
             and model.get("thinking")
-            == {
-                "levels": ["low", "high", "max", "vendor-custom"],
-                "min": 128,
-                "max": 32768,
-            }
+            == {"levels": ["low", "high", "max", "vendor-custom"], "min": 128, "max": 32768}
             for model in item.get("models", [])
         )
         for item in openai_after_save
@@ -2547,14 +2494,98 @@ def run_browser_provider_workbench_smoke(page: Any, app_url: str, api_url: str) 
     seen.append("BROWSER provider workbench thinking levels preserved advanced config")
     seen.append("BROWSER provider workbench new model display-name round-trip")
     seen.append("BROWSER provider workbench updated model display-name round-trip")
-    persisted_yaml = request_text(api_url, "/v0/management/config.yaml")
-    if "auth-index" in persisted_yaml or "authIndex" in persisted_yaml:
+    persisted_yaml = config_path.read_text(encoding="utf-8")
+    if "auth_index" in persisted_yaml or "auth-index" in persisted_yaml or "authIndex" in persisted_yaml:
         raise AssertionError("Browser provider workbench persisted response-only auth-index")
-    if "vendor-custom" not in persisted_yaml or "max: 32768" not in persisted_yaml:
+    if not any(
+        thinking.get("levels") == ["low", "high", "max", "vendor-custom"] and thinking.get("max") == 32768
+        for thinking in disk_thinking(config_path)
+    ):
         raise AssertionError("Browser provider workbench did not persist thinking config")
     seen.append("BROWSER provider workbench kept auth-index out of config.yaml")
 
     return seen
+
+
+def run_browser_full_usage_status_smoke(page: Any, app_url: str, api_url: str) -> list[str]:
+    """Workbench status bars are driven by full usage, attributed through the v8 auth_index."""
+    usage_key = "codex-usage-status-key"
+    config, revision = read_config(api_url)
+    groups = provider_groups(config, "codex")
+    groups = [
+        {k: v for k, v in group.items()} | {
+            "keys": [
+                {k: v for k, v in key.items() if k != "auth_index"}
+                for key in group.get("keys") or []
+                if isinstance(key, dict)
+            ]
+        }
+        for group in groups
+    ]
+    groups.append(
+        {"name": "codex-usage", "base-url": "https://codex.usage.example/v1", "keys": [{"api-key": usage_key}]}
+    )
+    write_config(api_url, "/config/api-keys/codex", groups, revision=revision)
+    config, _ = read_config(api_url)
+    auth_index = next(
+        (item.get("auth_index") for item in provider_entries(config, "codex") if item.get("api-key") == usage_key),
+        None,
+    )
+    if not auth_index:
+        raise AssertionError("Core did not inject an auth_index for the usage-status Codex key")
+
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    details = [
+        {
+            "timestamp": (now - timedelta(minutes=minute)).isoformat().replace("+00:00", "Z"),
+            "source": usage_key,
+            "auth_index": auth_index,
+            "latency_ms": 100,
+            "tokens": {"input_tokens": 3, "output_tokens": 2, "reasoning_tokens": 0, "cached_tokens": 0, "total_tokens": 5},
+            "failed": failed,
+        }
+        for minute, failed in [(1, False), (2, False), (3, False), (4, True)]
+    ]
+    snapshot = {
+        "version": 3,
+        "exported_at": now.isoformat().replace("+00:00", "Z"),
+        "usage": {
+            "total_requests": 4,
+            "success_count": 3,
+            "failure_count": 1,
+            "total_tokens": 20,
+            "apis": {
+                "panel-core-provider-status": {
+                    "total_requests": 4,
+                    "total_tokens": 20,
+                    "models": {"gpt-5": {"total_requests": 4, "total_tokens": 20, "details": details}},
+                }
+            },
+        },
+    }
+    receipt = assert_mapping(
+        request_json(api_url, f"{LTS}/usage/import", method="POST", payload=snapshot),
+        f"{LTS}/usage/import provider status fixture",
+    )
+    if receipt.get("total_requests") is None:
+        raise AssertionError(f"Usage import for the provider status bar failed: {receipt!r}")
+
+    # Full usage comes from the LTS extension (usage query summary when Core supports it,
+    # otherwise GET /usage); either way it is read fresh on this navigation.
+    with page.expect_response(
+        lambda response: f"{LTS}/usage" in response.url and response.status == 200
+    ):
+        page.goto(f"{app_url}?core-provider-usage#/ai-providers", wait_until="domcontentloaded")
+    page.get_by_role("button", name=re.compile(r"Codex", re.I)).click()
+    page.get_by_role("heading", name="Codex").wait_for()
+    row = provider_row_for_api_key(page, usage_key)
+    stats = row.locator('[data-usage-source="full"]')
+    stats.wait_for()
+    stats.get_by_text("Success: 3", exact=True).wait_for()
+    stats.get_by_text("Failure: 1", exact=True).wait_for()
+    return [
+        "BROWSER Workbench full-usage status bar attributed imported v3 usage by v8 auth_index (3 success / 1 failure)"
+    ]
 
 
 def read_download_text(download: Any) -> str:
@@ -2564,30 +2595,48 @@ def read_download_text(download: Any) -> str:
     return Path(path).read_text(encoding="utf-8", errors="replace")
 
 
+def trigger_real_core_request_log(api_url: str) -> str:
+    """Send one synthetic failing /v1 request and return the request id Core logged for it."""
+    marker_model = "lts-core-log-smoke-model"
+    http_request(
+        api_url,
+        "/v1/chat/completions",
+        "POST",
+        json.dumps({"model": marker_model, "messages": [{"role": "user", "content": "smoke"}]}).encode(),
+        {"Content-Type": "application/json"},
+        token=CLIENT_API_KEY,
+    )
+    deadline = time.monotonic() + 8
+    while time.monotonic() < deadline:
+        payload = assert_mapping(
+            request_json(api_url, f"{V8}/observability/logs?limit=200"), f"{V8}/observability/logs"
+        )
+        for line in reversed(payload.get("lines") or []):
+            match = re.search(r"\[([0-9a-f]{8})\][^\n]*/v1/chat/completions", str(line))
+            if match:
+                return match.group(1)
+        time.sleep(0.25)
+    raise AssertionError("Real Core did not log the synthetic /v1 request with a request id")
+
+
 def run_browser_real_core_logs_smoke(
     page: Any,
     app_url: str,
     api_url: str,
     logs_dir: Path,
 ) -> list[str]:
+    """Logs produced by real Core traffic (no files written into Core's live log)."""
     seen: list[str] = []
 
-    set_core_config_booleans(
-        api_url,
-        {
-            "logging-to-file": True,
-            "request-log": True,
-        },
-    )
-    seed_core_file_log_fixtures(logs_dir)
-    seen.append("SEEDED real Core file logs with request-log enabled")
+    set_core_config_booleans(api_url, {"logging-to-file": True, "request-log": True})
+    request_id = trigger_real_core_request_log(api_url)
+    seen.append("TRIGGERED real Core request log with a synthetic failing /v1 request")
 
     page.goto(f"{app_url}?core-logs=file-request#/logs", wait_until="domcontentloaded")
     page.wait_for_function("() => window.location.hash.endsWith('/logs')")
     page.get_by_text("Logs Viewer", exact=False).first.wait_for()
-    page.get_by_text(CORE_LOG_REQUEST_ID, exact=False).first.wait_for()
-
-    request_id_badge = page.get_by_text(CORE_LOG_REQUEST_ID, exact=True).first
+    request_id_badge = page.get_by_text(request_id, exact=True).first
+    request_id_badge.wait_for()
     box = request_id_badge.bounding_box()
     if not box:
         raise AssertionError("Could not locate real Core request id badge for long-press smoke")
@@ -2596,59 +2645,61 @@ def run_browser_real_core_logs_smoke(
     page.wait_for_timeout(750)
     page.mouse.up()
     request_dialog = page.get_by_role("dialog", name="Download Request Log")
-    request_dialog.get_by_text(CORE_LOG_REQUEST_ID, exact=False).wait_for()
+    request_dialog.get_by_text(request_id, exact=False).wait_for()
     with page.expect_download() as request_download:
         request_dialog.get_by_role("button", name="Confirm").click()
     request_file = request_download.value
-    if request_file.suggested_filename != f"request-{CORE_LOG_REQUEST_ID}.log":
+    if request_file.suggested_filename != f"request-{request_id}.log":
         raise AssertionError(
-            "Unexpected real Core request log download filename: "
-            f"{request_file.suggested_filename}"
+            f"Unexpected real Core request log download filename: {request_file.suggested_filename}"
         )
-    if CORE_LOG_REQUEST_ID not in read_download_text(request_file):
-        raise AssertionError("Real Core request log download did not contain the smoke request id")
-    seen.append("BROWSER real Core request log download GET /v0/management/request-log-by-id")
+    if "lts-core-log-smoke-model" not in read_download_text(request_file):
+        raise AssertionError("Real Core request log download did not contain the smoke request")
+    seen.append("BROWSER real Core request log download GET /v8/management/observability/logs/requests")
 
-    set_core_config_booleans(
-        api_url,
-        {
-            "logging-to-file": True,
-            "request-log": False,
-        },
-    )
+    set_core_config_booleans(api_url, {"logging-to-file": True, "request-log": False})
     seen.append("SET real Core request-log false for error log listing")
+    trigger_real_core_request_log(api_url)
+    error_files: list[str] = []
+    deadline = time.monotonic() + 8
+    while time.monotonic() < deadline and not error_files:
+        listing = assert_mapping(
+            request_json(api_url, f"{V8}/observability/logs/errors"), f"{V8}/observability/logs/errors"
+        )
+        error_files = [
+            str(item.get("name"))
+            for item in listing.get("files") or []
+            if isinstance(item, dict) and item.get("name")
+        ]
+        if not error_files:
+            time.sleep(0.25)
+    if not error_files:
+        raise AssertionError("Real Core did not write an error log for the failing request")
+    error_name = error_files[0]
 
     page.goto(f"{app_url}?core-logs=file-error#/logs", wait_until="domcontentloaded")
     page.wait_for_function("() => window.location.hash.endsWith('/logs')")
     page.get_by_text("Logs Viewer", exact=False).first.wait_for()
     page.get_by_role("button", name="Error Request Logs").click()
-    page.get_by_text(CORE_ERROR_LOG_NAME, exact=False).first.wait_for()
-
-    error_row = page.locator(".item-row").filter(has_text=CORE_ERROR_LOG_NAME).first
+    page.get_by_text(error_name, exact=False).first.wait_for()
+    error_row = page.locator(".item-row").filter(has_text=error_name).first
     error_row.get_by_role("button", name="Open").click()
-    error_dialog = page.get_by_role("dialog", name=CORE_ERROR_LOG_NAME)
-    error_dialog.get_by_text(CORE_ERROR_LOG_BODY, exact=False).wait_for()
+    error_dialog = page.get_by_role("dialog", name=error_name)
+    error_dialog.get_by_text("lts-core-log-smoke-model", exact=False).first.wait_for()
     with page.expect_download() as error_download:
         error_dialog.get_by_role("button", name="Download").click()
     error_file = error_download.value
-    if error_file.suggested_filename != CORE_ERROR_LOG_NAME:
+    if error_file.suggested_filename != error_name:
         raise AssertionError(
-            "Unexpected real Core error log download filename: "
-            f"{error_file.suggested_filename}"
+            f"Unexpected real Core error log download filename: {error_file.suggested_filename}"
         )
-    if CORE_ERROR_LOG_BODY not in read_download_text(error_file):
-        raise AssertionError("Real Core error log download did not contain the smoke body")
-    seen.append("BROWSER real Core error log open download GET /v0/management/request-error-logs")
+    if "lts-core-log-smoke-model" not in read_download_text(error_file):
+        raise AssertionError("Real Core error log download did not contain the smoke request")
+    seen.append("BROWSER real Core error log open download GET /v8/management/observability/logs/errors")
     error_dialog.get_by_role("button", name="Close").nth(1).click()
 
-    set_core_config_booleans(
-        api_url,
-        {
-            "request-log": True,
-        },
-    )
+    set_core_config_booleans(api_url, {"request-log": True})
     seen.append("RESTORED real Core request-log true after logs smoke")
-
     return seen
 
 
@@ -2660,6 +2711,7 @@ def run_browser_smoke(
     supports_plugin: bool,
     core_usage_version: int,
     logs_dir: Path,
+    config_path: Path,
 ) -> list[str]:
     try:
         from playwright.sync_api import Error as PlaywrightError
@@ -2683,16 +2735,12 @@ def run_browser_smoke(
         ("/auth-files/oauth-model-alias", "OAuth Model Aliases", None),
         ("/ai-providers", "AI Providers", None),
         ("/ai-providers/workbench", "AI Providers", "/ai-providers"),
-        ("/ai-providers/legacy", "AI Providers Configuration", None),
-        ("/ai-providers/legacy/ampcode", "Configure Ampcode", None),
-        ("/lts/providers", "AI Providers Configuration", "/ai-providers/legacy"),
-        ("/lts/ampcode", "Configure Ampcode", "/ai-providers/legacy/ampcode"),
-        ("/ai-providers/gemini/new", "AI Providers", "/ai-providers/legacy/gemini/new"),
-        ("/ai-providers/codex/new", "AI Providers", "/ai-providers/legacy/codex/new"),
-        ("/ai-providers/claude/new", "AI Providers", "/ai-providers/legacy/claude/new"),
-        ("/ai-providers/vertex/new", "AI Providers", "/ai-providers/legacy/vertex/new"),
-        ("/ai-providers/openai/new", "AI Providers", "/ai-providers/legacy/openai/new"),
-        ("/ai-providers/ampcode", "Configure Ampcode", "/ai-providers/legacy/ampcode"),
+        ("/ai-providers/ampcode", "Configure Ampcode", None),
+        # V8-only: legacy provider editors are removed; old links land on the Workbench.
+        ("/lts/providers", "AI Providers", "/ai-providers"),
+        ("/lts/ampcode", "Configure Ampcode", "/ai-providers/ampcode"),
+        ("/ai-providers/legacy", "AI Providers", "/ai-providers"),
+        ("/flow-control", "Flow", None),
         ("/logs", "Logs Viewer", None),
     ]
     if supports_plugin:
@@ -2703,7 +2751,7 @@ def run_browser_smoke(
     seen: list[str] = []
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=not headed)
+        browser = launch_chromium(playwright, headless=not headed)
         context = browser.new_context(locale="en-US", accept_downloads=True)
         context.add_init_script(
             """
@@ -2725,10 +2773,11 @@ def run_browser_smoke(
             page.get_by_label("Remember password").check(force=True)
             page.get_by_role("button", name=re.compile(r"^(Login|Connect)$", re.I)).click()
             page.wait_for_url(re.compile(r".*/#/$"), timeout=30_000)
-            seen.extend(run_browser_config_save_smoke(page, api_url))
+            seen.extend(run_browser_config_save_smoke(page, api_url, config_path))
             seen.extend(run_browser_flow_control_smoke(page, app_url, api_url))
-            seen.extend(run_browser_provider_workbench_smoke(page, app_url, api_url))
+            seen.extend(run_browser_provider_workbench_smoke(page, app_url, api_url, config_path))
             seen.extend(run_browser_real_core_logs_smoke(page, app_url, api_url, logs_dir))
+            seen.append("BROWSER login against the real Core v8 Management API")
 
             for index, (route, expected_text, expected_hash) in enumerate(route_checks):
                 page.goto(f"{app_url}?core-route={index}#{route}", wait_until="domcontentloaded")
@@ -2837,6 +2886,13 @@ def run_browser_smoke(
                     seen.append(
                         "BROWSER real Core pricing route estimates every matched usage record locally"
                     )
+                elif route == "/plugins":
+                    seen.append("BROWSER real Core plugins page rendered")
+                elif route == "/flow-control":
+                    page.get_by_test_id("flow-control-settings").wait_for()
+                    seen.append("BROWSER real Core Flow page rendered")
+            # Seeded after the route checks so the usage page row counts above stay exact.
+            seen.extend(run_browser_full_usage_status_smoke(page, app_url, api_url))
         except PlaywrightError as exc:
             with contextlib.suppress(Exception):
                 body_text = page.locator("body").inner_text(timeout=1000)
@@ -2858,7 +2914,10 @@ def main() -> int:
     parser.add_argument(
         "--core-dir",
         default=str(DEFAULT_CORE_DIR),
-        help="Path to CPA-Core-LTS checkout. Defaults to ../CPA-Core-LTS.",
+        help=(
+            "Path to the CPA-Core-LTS v8 checkout (read only; built into a temp dir). "
+            "Defaults to ../CPA-Core-LTS."
+        ),
     )
     parser.add_argument("--no-browser", action="store_true", help="Skip Playwright route checks.")
     parser.add_argument(
@@ -2889,6 +2948,7 @@ def main() -> int:
                 runtime.api_url,
                 include_plugin_store=args.include_plugin_store,
                 include_write_smoke=not args.no_write_smoke,
+                config_path=runtime.config_path,
             )
             if not supports_plugin:
                 seen.append("SKIP browser /plugins routes because x-cpa-support-plugin is false")
@@ -2903,12 +2963,18 @@ def main() -> int:
                             supports_plugin=supports_plugin,
                             core_usage_version=core_usage_version,
                             logs_dir=runtime.logs_dir,
+                            config_path=runtime.config_path,
                         )
                     )
 
-    print("LTS panel real Core smoke passed.")
     for entry in seen:
         print(f"  {entry}")
+    if CORE_DEFECTS:
+        print("LTS panel real Core smoke found Core defects:", file=sys.stderr)
+        for defect in CORE_DEFECTS:
+            print(f"  CORE DEFECT: {defect}", file=sys.stderr)
+        return 1
+    print("LTS panel real Core smoke passed.")
     return 0
 
 
