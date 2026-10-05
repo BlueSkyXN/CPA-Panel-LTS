@@ -27,7 +27,7 @@
     "test:dashboard": "node --test src/features/dashboard/dashboardMetrics.test.mjs",
     "test:config": "node --test src/utils/v8VisualProjection.test.mjs src/components/config/apiKeySecurity.test.mjs src/components/config/antigravitySensitiveWords.test.mjs src/components/config/configNavigation.test.mjs src/components/config/payloadAst.test.mjs src/lts/codexPolicy/cacheAffinity.test.mjs && npm run test:flow-control",
     "test:provider-xai": "node --test src/features/providers/xaiApiKeyProvider.test.mjs",
-    "test:provider-integrity": "node --test src/features/providers/providerIntegrity.test.mjs",
+    "test:provider-integrity": "node --test src/features/providers/providerIntegrity.test.mjs src/features/providers/fullUsageStatus.test.mjs src/services/api/providersNative.test.mjs",
     "test:provider-recent": "node --test src/components/providers/hooks/providerRecentRequests.test.mjs",
     "test:providers": "npm run test:provider-xai && npm run test:provider-integrity && npm run test:provider-recent",
     "test:plugins": "node --test src/features/plugins/pluginResources.test.mjs src/features/plugins/pluginReadiness.test.mjs",
