@@ -590,7 +590,7 @@ require_file_contains src/features/providers/sheets/forms/BaseProviderForm.tsx "
 require_file_contains src/features/providers/sheets/forms/useModelDiscovery.ts "'xai'"
 require_file_contains src/features/providers/sheets/forms/useConnectivityTest.ts "brand !== 'xai'"
 require_file_contains src/features/providers/xaiApiKeyProvider.test.mjs "preserves unknown fields"
-require_file_contains scripts/smoke-lts-panel.py "xAI provider payload wrote response-only auth-index"
+require_file_contains scripts/smoke-lts-panel.py "provider payload wrote response-only auth index"
 require_file_contains scripts/smoke-lts-panel.py "created xAI resource using the Core contract"
 require_file_contains scripts/smoke-lts-panel-core.py "BROWSER provider workbench xAI create"
 require_file_contains src/i18n/locales/en.json '"xai": "xAI"'
@@ -683,16 +683,18 @@ require_file_contains src/features/providers/sponsorMutationRecovery.ts "runSpon
 require_file_contains scripts/smoke-lts-panel.py "assert_each_request_immediately_preceded_by"
 require_file_contains scripts/smoke-lts-panel.py '("/ai-providers", "AI Providers", None)'
 require_file_contains scripts/smoke-lts-panel.py '("/ai-providers/workbench", "AI Providers", "/ai-providers")'
-require_file_contains scripts/smoke-lts-panel.py '("/ai-providers/legacy", "AI Providers Configuration", None)'
-require_file_contains scripts/smoke-lts-panel.py '("/lts/providers", "AI Providers Configuration", "/ai-providers/legacy")'
-require_file_contains scripts/smoke-lts-panel.py '("/lts/ampcode", "Configure Ampcode", "/ai-providers/legacy/ampcode")'
+require_file_contains scripts/smoke-lts-panel.py '("/ai-providers/ampcode", "Configure Ampcode", None)'
+require_file_contains scripts/smoke-lts-panel.py '("/lts/providers", "AI Providers", "/ai-providers")'
+require_file_contains scripts/smoke-lts-panel.py '("/lts/ampcode", "Configure Ampcode", "/ai-providers/ampcode")'
+require_file_contains scripts/smoke-lts-panel.py '("/ai-providers/legacy", "AI Providers", "/ai-providers")'
 require_file_contains scripts/smoke-lts-panel.py '"/auth-files/oauth-excluded"'
 require_file_contains scripts/smoke-lts-panel.py '"/auth-files/oauth-model-alias"'
 require_file_contains scripts/smoke-lts-panel-core.py '("/ai-providers", "AI Providers", None)'
 require_file_contains scripts/smoke-lts-panel-core.py '("/ai-providers/workbench", "AI Providers", "/ai-providers")'
-require_file_contains scripts/smoke-lts-panel-core.py '("/ai-providers/legacy", "AI Providers Configuration", None)'
-require_file_contains scripts/smoke-lts-panel-core.py '("/lts/providers", "AI Providers Configuration", "/ai-providers/legacy")'
-require_file_contains scripts/smoke-lts-panel-core.py '("/lts/ampcode", "Configure Ampcode", "/ai-providers/legacy/ampcode")'
+require_file_contains scripts/smoke-lts-panel-core.py '("/ai-providers/ampcode", "Configure Ampcode", None)'
+require_file_contains scripts/smoke-lts-panel-core.py '("/lts/providers", "AI Providers", "/ai-providers")'
+require_file_contains scripts/smoke-lts-panel-core.py '("/lts/ampcode", "Configure Ampcode", "/ai-providers/ampcode")'
+require_file_contains scripts/smoke-lts-panel-core.py '("/ai-providers/legacy", "AI Providers", "/ai-providers")'
 require_file_contains scripts/smoke-lts-panel-core.py '"/auth-files/oauth-excluded"'
 require_file_contains scripts/smoke-lts-panel-core.py '"/auth-files/oauth-model-alias"'
 require_file_not_contains src/router/MainRoutes.tsx "path: '/quick-start'"
@@ -1276,6 +1278,19 @@ require_file_contains scripts/check-panel-feature-contracts.mjs "panel-feature-c
 require_file_contains scripts/smoke-lts-panel.py "LTS panel browser smoke"
 require_file_contains scripts/smoke-lts-panel.py "assert_request_not_seen"
 require_file_contains scripts/smoke-lts-panel.py "/v0/management/nodes"
+# V8-only browser smokes: mock Core enforces If-Match, real Core runs a pure v8 config.
+require_file_contains scripts/smoke-lts-panel.py "config_revision_required"
+require_file_contains scripts/smoke-lts-panel.py "Panel used a non-extension v0 route"
+require_file_contains scripts/smoke-lts-panel.py "Panel config writes were rejected by If-Match checks"
+require_file_contains scripts/smoke-lts-panel-core.py "config-version: 8"
+require_file_contains scripts/smoke-lts-panel-core.py "run_revision_contract_smoke"
+require_file_contains scripts/smoke-lts-panel-core.py "assert_browser_revisioned_write"
+require_file_contains scripts/smoke-lts-panel-core.py "run_browser_full_usage_status_smoke"
+require_file_contains scripts/smoke-lts-panel-core.py "record_core_defect"
+require_file_contains scripts/panel_browser.py "CPA_SMOKE_BROWSER_CHANNEL"
+# Flow observation (SSE) is an LTS extension and must not target /v8/management.
+require_file_contains src/lts/flowControl/useStatus.ts "computeLtsExtensionApiUrl"
+require_file_not_contains src/lts/flowControl/useStatus.ts "computeApiUrl("
 require_file_contains scripts/smoke-lts-panel.py "run_logs_runtime_smoke"
 require_file_contains scripts/smoke-lts-panel.py "run_home_logs_runtime_smoke"
 require_file_contains scripts/smoke-lts-panel.py "build_home_logs_payload"

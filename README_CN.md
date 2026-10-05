@@ -192,9 +192,11 @@ npm run type-check # tsc --noEmit
 npm run check:feature-contract # feature contract 检查
 npm run check:lts  # LTS 统计/发布/provider/plugin 契约检查
 npm run validate:lts # check:lts + type-check + lint + build
-npm run smoke:lts  # 可选：用 Python Playwright + mock Core API 做浏览器 smoke
-npm run smoke:lts:core # 可选：对本地 CPA-Core-LTS checkout 做带鉴权 smoke
+npm run smoke:lts  # 可选：用 Python Playwright + mock v8 Core API 做浏览器 smoke
+npm run smoke:lts:core # 可选：对本地 CPA-Core-LTS v8 checkout 做真实 Core smoke
 ```
+
+真实 Core smoke 会把 Core checkout（`-- --core-dir <path>`，默认 `../CPA-Core-LTS`）构建到临时目录，并以只含合成管理密钥与合成 client key 的全新纯 v8 配置启动。设置 `CPA_SMOKE_BROWSER_CHANNEL=chrome` 可改用本机已安装的 Chrome，而不是 Playwright 自带 Chromium。
 
 ## 贡献
 

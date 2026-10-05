@@ -460,7 +460,7 @@ features:
       - shown as a recommendation
       - run_browser_provider_workbench_smoke
       - run_browser_provider_key_crud_smoke
-      - BROWSER provider workbench OpenAI Compatibility save PUT /v0/management/openai-compatibility
+      - BROWSER provider workbench OpenAI Compatibility save PUT /v8/management/config/api-keys/openai-compatibility
       - Provider write smoke persisted response-only auth-index
       - getSponsorAggregationConflict
       - getSponsorOpenAIDeleteIndices

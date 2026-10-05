@@ -41,11 +41,14 @@ Core 对 `/v8/management/config*` 的每个 PUT/PATCH/DELETE 都要求恰好一�
 - v8 JSON 视图遇到非字符串 map key 返回 422；此时只能使用 YAML 编辑器。
 - `configPatch.applyConfigPatch` 的多步计划只把第一步绑定调用方 revision，后续步骤复读 revision；需要原子性时使用单次 PUT。
 - 多协议 sponsor 操作不是整体事务，部分成功走既有恢复流程。
-- `scripts/smoke-lts-panel*.py` 的 mock/real-Core 浏览器 smoke 仍按 v0 路由与 legacy 页面编写，尚未迁移到 v8，不能作为本契约的验收证据。
+- Core v8 对 provider/model/thinking 配置做严格 schema 解码：未知字段（如 `x-*` 扩展字段）会被 `400 invalid_config` 拒绝。Panel 的“保留未知字段”只对 Core 接受的字段有意义；高级 thinking JSON 中的自定义字段会在表单中显示 Core 的拒绝信息，不会落盘。
+- 已知 Core 缺陷（2026-10-06 smoke 发现，未在 Panel 规避）：整文档 `PUT /v8/management/config.yaml` 会丢弃与最后一个节点隔一空行的文档尾注释（`config_v8.go` 仅拷贝 `update.Content[0]`）。Panel 可视保存会以这种形式输出尾注释。
 
 ## 验证
 
 - `npm run test:api-client` / `test:providers`：client 共享状态与 scope、v8-only `config.yaml` 修订写入、合成 v8 Core 下的 If-Match 同源、412/428 不重试、写后重读、F22/F23/F24、运行时策略继承意图、configPatch 修订绑定、Workbench 完整 usage 状态条。
 - `npm run test:config`：canonical v8 可视投影、payload AST、cache affinity、敏感词等。
 - `npm run validate:lts`、`npm run check:lts`。
-- 本地测试只证明 Panel 模块行为；真实 Core 联调、浏览器 GUI 与部署验收需另行进行。
+- `npm run smoke:lts`：mock v8 Core（强制 If-Match、412/428、`auth_index` 注入、v0 仅限扩展路由）下的浏览器全流程。
+- `npm run smoke:lts:core -- --core-dir <CPA-Core-LTS v8>`：真实 Core（临时目录构建、纯 v8 临时配置）下的登录、配置页 If-Match 保存回读、Workbench 继承/覆盖策略与磁盘 YAML/`auth_index` 回读、完整 usage 状态条、usage/Flow/插件页面；Core 缺陷会单独列出并使 smoke 失败。
+- 本地 smoke 不代表部署、发布或线上验收。

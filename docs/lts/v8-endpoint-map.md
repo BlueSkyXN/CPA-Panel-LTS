@@ -61,7 +61,7 @@ Response-only `auth_index` / `auth-index` are stripped from groups and keys befo
 | Full usage statistics | `/usage`, `/usage/export`, `/usage/import` | LTS protected; no v8 route |
 | Usage query workspace | `/usage/query/capabilities`, `/summary`, `/details`, `/pricing` | no v8 route |
 | Old-Core usage probe | `GET /usage-statistics-enabled` (read only) | probe only; no write |
-| Flow control V3 | `/flow-control`, `/events`, `/explain`, `/summary`, `/details`, `/preview`, `/migration-preview` | no v8 route |
+| Flow control V3 | `/flow-control`, `/events` (raw SSE `fetch` via `computeLtsExtensionApiUrl`), `/explain`, `/summary`, `/details`, `/preview`, `/migration-preview` | no v8 route |
 | Plugin readiness | `/plugins/:id/readiness` | no v8 route |
 | Plugin-owned management routes | `/plugins/copilot/login-info`, `/plugins/{pat}/summary` | pluginhost serves only under `/v0/management` |
 | Per-credential model refresh | `POST /auth-files/models/refresh` | no v8 route |

@@ -193,9 +193,14 @@ npm run type-check # tsc --noEmit
 npm run check:feature-contract # feature contract guard
 npm run check:lts  # LTS protected usage/release/provider/plugin contract guard
 npm run validate:lts # check:lts + type-check + lint + build
-npm run smoke:lts  # optional Python Playwright smoke against a mock Core API
-npm run smoke:lts:core # optional authenticated smoke against a local CPA-Core-LTS checkout
+npm run smoke:lts  # optional Python Playwright smoke against a mock v8 Core API
+npm run smoke:lts:core # optional smoke against a local CPA-Core-LTS v8 checkout
 ```
+
+The real-Core smoke builds the Core checkout (`-- --core-dir <path>`, default `../CPA-Core-LTS`)
+into a temporary directory and runs it with a fresh pure v8 config containing only a synthetic
+management secret and client key. Set `CPA_SMOKE_BROWSER_CHANNEL=chrome` to use an installed
+Chrome instead of Playwright's bundled Chromium.
 
 ## Contributing
 
