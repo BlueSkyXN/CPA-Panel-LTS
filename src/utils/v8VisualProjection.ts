@@ -1,6 +1,12 @@
 import { isMap, isNode, isSeq, parseDocument } from 'yaml';
 type ConfigDocument = ReturnType<typeof parseDocument>;
 
+/**
+ * The Panel pairs only with v8 Core: `/v8/management/config.yaml` always returns the canonical
+ * v8 tree. The visual editor still addresses fields by their historical flat names, so this
+ * module projects canonical v8 nodes into that editor key space and maps edits back. It does
+ * not classify or accept any other configuration layout.
+ */
 const paths: [string, string][] = [
   ['host', 'server.host'],
   ['port', 'server.port'],
@@ -75,26 +81,6 @@ const paths: [string, string][] = [
   ['codex.optimize-multi-agent-v2', 'client.codex.optimize-multi-agent-v2'],
 ];
 
-export function usesV8ConfigLayout(content: string): boolean {
-  const doc = parseConfigDocument(content);
-  return (
-    [
-      'config-version',
-      'server',
-      'management',
-      'access',
-      'credentials',
-      'requests',
-      'oauth',
-      'observability',
-      'multimedia',
-      'upstream',
-    ].some((key) => doc.has(key)) ||
-    isMap(doc.get('api-keys', true)) ||
-    paths.some(([legacy, canonical]) => legacy !== canonical && doc.hasIn(canonical.split('.')))
-  );
-}
-
 export function parseConfigDocument(content: string): ConfigDocument {
   const doc = parseDocument(content);
   if (doc.errors.length || !isMap(doc.contents)) throw new Error('Invalid configuration mapping');
@@ -107,7 +93,6 @@ const clone = (node: unknown) => (isNode(node) ? node.clone() : structuredClone(
 // This is an editor-only projection; the original provider tree is never replaced by it.
 export function projectConfigForVisual(content: string): ConfigDocument {
   const original = parseConfigDocument(content);
-  if (!usesV8ConfigLayout(content)) return original;
   const accessKeys = original.getIn(['access', 'api-keys'], true);
   if (original.hasIn(['access', 'api-keys']) && !isSeq(accessKeys))
     throw new Error('Invalid access.api-keys list');
@@ -145,8 +130,6 @@ export function applyVisualProjection(
   before: ConfigDocument,
   after: ConfigDocument
 ): string {
-  if (!usesV8ConfigLayout(originalYaml))
-    return after.toString({ indent: 2, lineWidth: 120, minContentWidth: 0 });
   const original = parseConfigDocument(originalYaml);
   const visit = (a: unknown, b: unknown, path: string[]) => {
     if ((isMap(a) && (isMap(b) || b === undefined)) || (isMap(b) && a === undefined)) {

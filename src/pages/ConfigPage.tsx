@@ -1,4 +1,4 @@
-import { projectConfigForVisual } from '@/utils/configLayout';
+import { projectConfigForVisual } from '@/utils/v8VisualProjection';
 import { apiClient } from '@/services/api/client';
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';

@@ -13,7 +13,36 @@ const vite = await createServer({
 const { useVisualConfig } = await vite.ssrLoadModule('/src/hooks/useVisualConfig.ts');
 test.after(() => vite.close());
 
-function apply(source, edit, target = source) {
+// Core v8 stores payload rules under requests.payload; fixtures are written in the editor's
+// flat spelling for readability and moved to the canonical location here.
+function toV8(yaml) {
+  const out = [];
+  let inPayload = false;
+  for (const line of yaml.split('\n')) {
+    if (/^payload:\s*$/.test(line)) {
+      out.push('requests:', '  payload:');
+      inPayload = true;
+      continue;
+    }
+    const inline = line.match(/^payload:\s*(.+)$/);
+    if (inline) {
+      out.push(`requests: {payload: ${inline[1]}}`);
+      inPayload = false;
+      continue;
+    }
+    if (inPayload && (line.startsWith(' ') || line === '')) {
+      out.push(line ? `  ${line}` : line);
+      continue;
+    }
+    inPayload = false;
+    out.push(line);
+  }
+  return out.join('\n');
+}
+
+function apply(rawSource, edit, rawTarget = rawSource) {
+  const source = toV8(rawSource);
+  const target = toV8(rawTarget);
   let output;
   function Harness() {
     const config = useVisualConfig();
@@ -72,8 +101,8 @@ for (const [section, field, raw] of [
     const output = apply(source, edit, source + 'future-root: preserve\n');
     const parsed = parse(output);
     assert.equal(parsed['future-root'], 'preserve');
-    assert.equal(parsed.payload[section].length, 1);
-    const rule = parsed.payload[section][0];
+    assert.equal(parsed.requests.payload[section].length, 1);
+    const rule = parsed.requests.payload[section][0];
     assert.deepEqual(rule.models, [
       { name: 'renamed', scope: 'requested', 'future-model': 'preserve' },
     ]);
@@ -107,7 +136,7 @@ test('multi-key condition groups stay intact when another payload field is edite
     ],
   }));
   assert.deepEqual(
-    parse(output).payload.override[0].models[0].match,
+    parse(output).requests.payload.override[0].models[0].match,
     parse(source).payload.override[0].models[0].match
   );
   assert.ok(output.includes('group-comment'));
@@ -137,7 +166,7 @@ test('editing and reordering multi-key conditions maps each field to its origina
       ],
     };
   });
-  assert.deepEqual(parse(output).payload.override[0].models[0].match, [
+  assert.deepEqual(parse(output).requests.payload.override[0].models[0].match, [
     { third: 3 },
     { second: 4 },
   ]);
@@ -162,7 +191,7 @@ test('filter sequence reorder keeps per-item comments and unknown model/rule fie
   const output = apply(source, (v) => ({
     payloadFilterRules: [{ ...v.payloadFilterRules[0], params: ['second.path', 'new.path'] }],
   }));
-  const rule = parse(output).payload.filter[0];
+  const rule = parse(output).requests.payload.filter[0];
   assert.equal(rule['future-rule'], true);
   assert.equal(rule.models[0]['future-model'], true);
   assert.deepEqual(rule.params, ['second.path', 'new.path']);
@@ -176,7 +205,7 @@ test('unrelated visual changes do not rewrite payload or remove anchors', () => 
   const output = apply(source, () => ({ debug: true }));
   assert.ok(output.includes('&limit'));
   assert.ok(output.includes('*limit'));
-  assert.deepEqual(parse(output).payload, parse(source).payload);
+  assert.deepEqual(parse(output).requests.payload, parse(source).payload);
 });
 
 const payloadSections = [
@@ -238,13 +267,13 @@ test('nested condition reorder is detected even when outer rule/model order is u
 
 test('only dirty sections conflict; unrelated server changes and repeated preview remain valid', () => {
   const source =
-    'debug: false\npayload:\n  default:\n    - models: [{name: model-a}]\n      params: {temperature: 1}\n';
+    'observability: {logs: {debug: false}}\npayload:\n  default:\n    - models: [{name: model-a}]\n      params: {temperature: 1}\n';
   const target =
     source.replace('debug: false', 'debug: true') +
     '  override:\n    - models: [{name: server-rule}]\n      params: {other: 3}\n';
   const first = apply(source, renameFirst('payloadDefaultRules'), target);
-  assert.equal(parse(first).payload.override[0].models[0].name, 'server-rule');
-  assert.equal(parse(first).debug, true);
+  assert.equal(parse(first).requests.payload.override[0].models[0].name, 'server-rule');
+  assert.equal(parse(first).observability.logs.debug, true);
   assert.equal(first, apply(source, renameFirst('payloadDefaultRules'), target));
   assert.doesNotThrow(() => apply(source, () => ({ debug: true }), target));
 });
@@ -273,11 +302,11 @@ const changeTemperature = (values) => ({
 
 test('editing a sibling parameter retains cross-rule anchors, aliases and nested comments', () => {
   const output = apply(anchoredPayload, changeTemperature);
-  assert.equal(parse(output).payload.default[0].params.temperature, 2);
+  assert.equal(parse(output).requests.payload.default[0].params.temperature, 2);
   assert.match(output, /&options/);
   assert.match(output, /\*options/);
   assert.match(output, /nested-comment/);
-  assert.deepEqual(parse(output).payload.override[0].params.options, { limit: 1 });
+  assert.deepEqual(parse(output).requests.payload.override[0].params.options, { limit: 1 });
 });
 
 test('changing an anchored object retains its anchor and updates untouched aliases', () => {
@@ -291,7 +320,7 @@ test('changing an anchored object retains its anchor and updates untouched alias
   }));
   assert.match(output, /&options/);
   assert.match(output, /\*options/);
-  assert.deepEqual(parse(output).payload.override[0].params.options, { limit: 2 });
+  assert.deepEqual(parse(output).requests.payload.override[0].params.options, { limit: 2 });
 });
 
 test('deleting a referenced anchor reports conversion failure instead of returning unchanged YAML', () => {
@@ -327,7 +356,7 @@ test('invalid target YAML is a failure and cannot masquerade as a no-op', () => 
 test('formatting-only changes outside the edited subtree do not cause a conflict', () => {
   const target = '# another editor\n' + parseDocument(anchoredPayload).toString();
   const output = apply(anchoredPayload, changeTemperature, target);
-  assert.equal(parse(output).payload.default[0].params.temperature, 2);
+  assert.equal(parse(output).requests.payload.default[0].params.temperature, 2);
 });
 
 test('structural aliases fail explicitly rather than dropping fields while expanding them', () => {

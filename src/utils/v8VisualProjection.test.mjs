@@ -14,9 +14,7 @@ const { useVisualConfig, getVisualConfigValidationErrors } = await vite.ssrLoadM
   '/src/hooks/useVisualConfig.ts'
 );
 const { DEFAULT_VISUAL_VALUES } = await vite.ssrLoadModule('/src/types/visualConfig.ts');
-const { projectConfigForVisual, usesV8ConfigLayout } = await vite.ssrLoadModule(
-  '/src/utils/configLayout.ts'
-);
+const { projectConfigForVisual } = await vite.ssrLoadModule('/src/utils/v8VisualProjection.ts');
 const { assertConfigListsUnchanged } = await vite.ssrLoadModule('/src/utils/configListConflict.ts');
 test.after(() => vite.close());
 
@@ -136,20 +134,21 @@ test('editing canonical retry values safely replaces a null routing parent', () 
 
 test('invalid root and invalid client-key shape are not empty configurations', () => {
   assert.throws(() => projectConfigForVisual('[]'));
-  assert.throws(() => usesV8ConfigLayout('not-a-config'));
+  assert.throws(() => projectConfigForVisual('not-a-config'));
 });
 
-test('legacy configuration remains legacy after ordinary edits', () => {
+test('visual edits always write canonical v8 paths (no layout classification)', () => {
   const result = parse(
-    apply('port: 8317\napi-keys: [old]\n', () => ({ port: '8318', apiKeysText: 'new' }))
+    apply('server: {port: 8317}\n', () => ({ port: '8318', apiKeysText: 'new' }))
   );
-  assert.equal(result.port, 8318);
-  assert.deepEqual(result['api-keys'], ['new']);
-  assert.equal(result.server, undefined);
+  assert.equal(result.server.port, 8318);
+  assert.deepEqual(result.access['api-keys'], ['new']);
+  assert.equal(result.port, undefined);
+  assert.equal(result['api-keys'], undefined);
 });
 
-test('backend boolean defaults and explicit false survive legacy and v8 writes', () => {
-  for (const source of ['port: 8317\n', 'server: {port: 8317}\n']) {
+test('backend boolean defaults and explicit false survive v8 writes', () => {
+  for (const source of ['server: {port: 8317}\n', 'config-version: 8\n']) {
     const output = apply(source, (values) => {
       assert.equal(values.wsAuth, true);
       assert.equal(values.quotaSwitchProject, false);
@@ -180,7 +179,11 @@ test('YAML 1.1 booleans use typed backend semantics, not string truthiness', () 
     ['ON', true],
     ['Y', true],
   ]) {
-    apply(`debug: ${text}\nws-auth: ${text}\ncodex: {identity-confuse: ${text}}\n`, (values) => {
+    const source =
+      `observability: {logs: {debug: ${text}}}\n` +
+      `oauth: {providers: {aistudio: {ws-auth: ${text}}}}\n` +
+      `upstream: {codex: {identity-confuse: ${text}}}\n`;
+    apply(source, (values) => {
       assert.equal(values.debug, expected);
       assert.equal(values.wsAuth, expected);
       assert.equal(values.codexIdentityConfuse, expected);
@@ -219,28 +222,29 @@ test('safe integers are enforced while supported negative sentinels remain writa
       'non_negative_integer'
     );
   }
-  const output = apply('max-retry-credentials: 2\n', () => ({
+  const output = apply('routing: {retry: {max-retry-credentials: 2}}\n', () => ({
     maxRetryCredentials: '9007199254740993',
   }));
-  assert.equal(parse(output)['max-retry-credentials'], 2);
+  assert.equal(parse(output).routing.retry['max-retry-credentials'], 2);
   const sentinels = parse(
-    apply('port: 8317\n', () => ({
+    apply('server: {port: 8317}\n', () => ({
       maxRetryCredentials: '-1',
       streaming: { keepaliveSeconds: '-1' },
     }))
   );
-  assert.equal(sentinels['max-retry-credentials'], -1);
-  assert.equal(sentinels.streaming['keepalive-seconds'], -1);
+  assert.equal(sentinels.routing.retry['max-retry-credentials'], -1);
+  assert.equal(sentinels.requests.streaming['keepalive-seconds'], -1);
 });
 
-test('partial v8 structs preserve legacy sibling values but explicit empty resets them', () => {
-  const raw =
-    'codex: {client-metadata: {mode: strict, workspace-policy: drop}}\nupstream: {codex: {client-metadata: {mode: repair}}}\n';
+test('canonical v8 structs project field by field and explicit empty resets them', () => {
+  const raw = 'upstream: {codex: {client-metadata: {mode: repair, workspace-policy: drop}}}\n';
   const view = projectConfigForVisual(raw).toJS();
   assert.equal(view.codex['client-metadata'].mode, 'repair');
   assert.equal(view.codex['client-metadata']['workspace-policy'], 'drop');
   assert.deepEqual(
-    projectConfigForVisual(raw.replace('{mode: repair}', '{}')).toJS().codex['client-metadata'],
+    projectConfigForVisual('upstream: {codex: {client-metadata: {}}}\n').toJS().codex[
+      'client-metadata'
+    ],
     {}
   );
   assert.throws(() => projectConfigForVisual('access: {api-keys: {bad: true}}\n'));

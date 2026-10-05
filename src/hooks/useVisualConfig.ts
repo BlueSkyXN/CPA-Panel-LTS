@@ -1,4 +1,4 @@
-import { projectConfigForVisual, applyVisualProjection } from '@/utils/configLayout';
+import { projectConfigForVisual, applyVisualProjection } from '@/utils/v8VisualProjection';
 import { readConfigBoolean } from '@/utils/configBoolean';
 import {
   readCodexCacheAffinity,
