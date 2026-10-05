@@ -12,7 +12,7 @@ const vite = await createServer({
   server: { middlewareMode: true },
 });
 
-const [{ apiClient }, { parseApiErrorResponse }, versionUtils] = await Promise.all([
+const [{ apiClient, ltsExtensionClient }, { parseApiErrorResponse }, versionUtils] = await Promise.all([
   vite.ssrLoadModule('/src/services/api/client.ts'),
   vite.ssrLoadModule('/src/services/api/apiError.ts'),
   vite.ssrLoadModule('/src/utils/version.ts'),
@@ -110,9 +110,31 @@ test('binds connection details when the request is created', async () => {
 
   await pending;
 
-  assert.equal(capturedConfig.baseURL, 'https://old-core.example.test/v0/management');
+  assert.equal(capturedConfig.baseURL, 'https://old-core.example.test/v8/management');
   assert.equal(capturedConfig.headers.get('Authorization'), 'Bearer old-management-key');
   assert.equal(capturedConfig.__cpaConnectionGeneration, initialGeneration);
+});
+
+test('the LTS extension client shares connection state but targets /v0/management', async () => {
+  const generation = ltsExtensionClient.setConfig({
+    apiBase: 'https://core.example.test/v8/management',
+    managementKey: 'shared-key',
+  });
+  assert.equal(apiClient.getConnectionGeneration(), generation);
+  assert.equal(apiClient.getConnectionRevision(), generation);
+  const seen = [];
+  const adapter = async (config) => {
+    seen.push({ base: config.baseURL, auth: config.headers.get('Authorization') });
+    return { data: {}, status: 200, statusText: 'OK', headers: {}, config };
+  };
+  await apiClient.get('/config', { adapter });
+  await ltsExtensionClient.get('/usage', { adapter });
+  assert.deepEqual(seen, [
+    { base: 'https://core.example.test/v8/management', auth: 'Bearer shared-key' },
+    { base: 'https://core.example.test/v0/management', auth: 'Bearer shared-key' },
+  ]);
+  apiClient.clearConfig();
+  assert.equal(ltsExtensionClient.isCurrentConnection(generation), false);
 });
 
 test('prefers a human-readable Management API message and preserves the stable code', () => {

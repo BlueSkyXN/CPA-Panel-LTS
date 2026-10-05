@@ -142,7 +142,8 @@
     "error_timeout": "連線逾時，伺服器無回應",
     "error_unauthorized": "驗證失敗，管理金鑰缺失或無效",
     "error_forbidden": "存取被拒絕，遠端管理未啟用、管理金鑰未設定或 IP 被暫時封鎖",
-    "error_not_found": "找不到 Management API，請確認服務位址指向 CLIProxyAPI 後端",
+    "error_not_found": "找不到 v8 Management API，請檢查服務位址並將 CPA-Core-LTS 升級至 v8 版本線；不再支援僅提供 v0 的後端。",
+    "error_legacy_backend": "目前後端僅提供舊版 v0 管理介面。請將 CPA-Core-LTS 升級至 v8 版本線，並依 v8 教學重新設定後再使用此面板。",
     "error_server": "後端處理管理介面時發生錯誤，請查看服務日誌",
     "error_cors": "跨域請求被阻擋，請檢查伺服器設定",
     "error_ssl": "SSL/TLS 憑證驗證失敗"

@@ -23,6 +23,7 @@ import { useUsageStatsStore } from './useUsageStatsStore';
 import { useModelsStore } from './useModelsStore';
 import { useQuotaStore } from './useQuotaStore';
 import { detectApiBaseFromLocation, normalizeApiBase } from '@/utils/connection';
+import { LegacyBackendError, probeLegacyBackend } from '@/services/api/legacyBackendProbe';
 import { generateId } from '@/utils/helpers';
 import {
   getManagedConnection,
@@ -216,8 +217,20 @@ export const useAuthStore = create<AuthStoreState>()(
           useModelsStore.getState().clearCache();
           useQuotaStore.getState().clearQuotaCache();
 
-          // 测试连接 - 获取配置
-          await useConfigStore.getState().fetchConfig(undefined, true);
+          // 测试连接 - 获取 v8 配置。只在 v8 路由不存在时诊断旧版（仅 v0）后端。
+          try {
+            await useConfigStore.getState().fetchConfig(undefined, true);
+          } catch (error) {
+            if (
+              (error as { status?: number })?.status === 404 &&
+              apiClient.isCurrentConnection(connectionGeneration) &&
+              (await probeLegacyBackend(apiBase, managementKey)) &&
+              apiClient.isCurrentConnection(connectionGeneration)
+            ) {
+              throw new LegacyBackendError();
+            }
+            throw error;
+          }
           if (!apiClient.isCurrentConnection(connectionGeneration)) {
             return false;
           }

@@ -142,7 +142,8 @@
     "error_timeout": "Connection timed out, server not responding",
     "error_unauthorized": "Authentication failed, management key is missing or invalid",
     "error_forbidden": "Access denied, remote management is disabled, the management key is not configured, or this IP is temporarily banned",
-    "error_not_found": "Management API not found, confirm the server address points to the CLIProxyAPI backend",
+    "error_not_found": "v8 Management API not found. Check the server address and upgrade CPA-Core-LTS to its v8 line; v0-only backends are not supported.",
+    "error_legacy_backend": "This backend only provides the legacy v0 Management API. Upgrade CPA-Core-LTS to its v8 line and reconfigure it per the v8 guide to use this panel.",
     "error_server": "Backend failed while handling the management request, check the server logs",
     "error_cors": "Cross-origin request blocked, please check server configuration",
     "error_ssl": "SSL/TLS certificate verification failed"

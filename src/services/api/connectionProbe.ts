@@ -16,6 +16,12 @@ export async function probeConnection(
     signal,
     headers: { Authorization: `Bearer ${managementKey.trim()}` },
   });
-  const response = await client.get<unknown>('/config');
-  if (!isRecord(response.data)) throw new Error('Invalid management response');
+  try {
+    const response = await client.get<unknown>('/config');
+    if (!isRecord(response.data)) throw new Error('Invalid management response');
+  } catch (error) {
+    // v8 JSON 视图遇到非字符串 map key 返回 422；认证已通过，实例可达。
+    if (axios.isAxiosError(error) && error.response?.status === 422) return;
+    throw error;
+  }
 }
