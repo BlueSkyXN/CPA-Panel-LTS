@@ -33,7 +33,7 @@ import { copyToClipboard } from '@/utils/clipboard';
 import { getErrorMessage } from '@/utils/helpers';
 import { mergeIncrementalLogLines } from '@/utils/logLines';
 import { downloadBlob } from '@/utils/download';
-import { MANAGEMENT_API_PREFIX } from '@/utils/constants';
+import { LTS_EXTENSION_API_PREFIX, MANAGEMENT_API_PREFIX } from '@/utils/constants';
 import { formatUnixTimestamp } from '@/utils/format';
 import { HTTP_METHODS, STATUS_GROUPS, resolveStatusGroup, type LogState } from './hooks/logTypes';
 import { parseLogLine } from './hooks/logParsing';
@@ -586,7 +586,10 @@ export function LogsPage() {
     let working = baseLines;
 
     if (hideManagementLogs) {
-      working = working.filter((line) => !line.includes(MANAGEMENT_API_PREFIX));
+      // The Panel talks to v8 management and to LTS extensions under v0; hide both.
+      working = working.filter(
+        (line) => !line.includes(MANAGEMENT_API_PREFIX) && !line.includes(LTS_EXTENSION_API_PREFIX)
+      );
     }
 
     if (trimmedSearchQuery) {
@@ -964,7 +967,9 @@ export function LogsPage() {
                 label={
                   <span className={styles.switchLabel}>
                     <IconEyeOff size={16} />
-                    {t('logs.hide_management_logs', { prefix: MANAGEMENT_API_PREFIX })}
+                    {t('logs.hide_management_logs', {
+                      prefix: `${MANAGEMENT_API_PREFIX}, ${LTS_EXTENSION_API_PREFIX}`,
+                    })}
                   </span>
                 }
               />

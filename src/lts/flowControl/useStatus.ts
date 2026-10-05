@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ltsExtensionClient } from '@/services/api/client';
 import { useAuthStore } from '@/stores';
 import { FLOW_CONTROL_ENDPOINTS } from '@/services/api/flowControl';
-import { computeApiUrl } from '@/utils/connection';
+import { computeLtsExtensionApiUrl } from '@/utils/connection';
 import { getConnectionFrameElement } from '@/services/connectionRuntime';
 import {
   asRecord, canObserveLive, mergeSummary, parseFlowCapabilities, parseFlowEvent,
@@ -146,7 +146,8 @@ export function useFlowControlStatus({ active = true, observationVisible = true 
       };
       resetWatchdog();
       try {
-        const response = await fetch(`${computeApiUrl(apiBase)}${FLOW_CONTROL_ENDPOINTS.events}`, {
+        // Flow observation is an LTS extension served only under /v0/management.
+        const response = await fetch(`${computeLtsExtensionApiUrl(apiBase)}${FLOW_CONTROL_ENDPOINTS.events}`, {
           headers: { Authorization: `Bearer ${managementKey}`, Accept: 'text/event-stream' },
           signal: controller.signal, cache: 'no-store', redirect: 'error',
         });

@@ -137,6 +137,18 @@ test('the LTS extension client shares connection state but targets /v0/managemen
   assert.equal(ltsExtensionClient.isCurrentConnection(generation), false);
 });
 
+test('raw LTS extension fetches (Flow SSE) target /v0/management, management targets /v8', async () => {
+  const { computeApiUrl, computeLtsExtensionApiUrl } = await vite.ssrLoadModule(
+    '/src/utils/connection.ts'
+  );
+  assert.equal(computeApiUrl('core.example.test:8317/v0/management'), 'http://core.example.test:8317/v8/management');
+  assert.equal(
+    computeLtsExtensionApiUrl('https://core.example.test/v8/management/'),
+    'https://core.example.test/v0/management'
+  );
+  assert.equal(computeLtsExtensionApiUrl(''), '');
+});
+
 test('prefers a human-readable Management API message and preserves the stable code', () => {
   assert.deepEqual(
     parseApiErrorResponse(
