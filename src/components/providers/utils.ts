@@ -555,7 +555,6 @@ export const getOpenAIEntryKey = (entry: ApiKeyEntry, index: number): string => 
 export const buildApiKeyEntry = (input?: Partial<ApiKeyEntry>): ApiKeyEntry => ({
   apiKey: input?.apiKey ?? '',
   proxyUrl: input?.proxyUrl ?? '',
-  headers: input?.headers ?? {},
 });
 
 export const ampcodeMappingsToEntries = (mappings?: AmpcodeModelMapping[]): ModelEntry[] => {

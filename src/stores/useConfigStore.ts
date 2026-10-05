@@ -8,8 +8,6 @@ import type { Config } from '@/types';
 import type { RawConfigSection } from '@/types/config';
 import { configApi } from '@/services/api/config';
 import { apiClient } from '@/services/api/client';
-import { providersApi, providerConfigSnapshot } from '@/services/api/providers';
-import { providerValuesEqual } from '@/services/api/providerGroups';
 import { CACHE_EXPIRY_MS } from '@/utils/constants';
 
 interface ConfigCache {
@@ -95,6 +93,10 @@ const extractSectionValue = (config: Config | null, section?: RawConfigSection) 
       return config.interactionsApiKeys;
     case 'codex-api-key':
       return config.codexApiKeys;
+    case 'meta-api-key':
+      return config.metaApiKeys;
+    case 'xai-api-key':
+      return config.xaiApiKeys;
     case 'claude-api-key':
       return config.claudeApiKeys;
     case 'vertex-api-key':
@@ -194,45 +196,17 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
     }
   }) as ConfigState['fetchConfig'],
 
+  // v8 GET /config is the single provider source: Core injects auth_index into every
+  // api-keys group/key, so no runtime list merge (and no snapshot gate) is needed.
   refreshProviders: async () => {
     const generation = apiClient.getConnectionGeneration();
     const requestId = ++configRequestToken;
     inFlightConfigRequest = null;
     set({ cache: new Map(), loading: true, error: null });
     try {
-      const [configResult, vertexResult, openaiResult] = await Promise.allSettled([
-        configApi.getConfig(),
-        providersApi.getVertexConfigs(),
-        providersApi.getOpenAIProviders(),
-      ]);
+      const data = await configApi.getConfig();
       if (requestId !== configRequestToken || !apiClient.isCurrentConnection(generation))
         return null;
-      if (configResult.status !== 'fulfilled') throw configResult.reason;
-      const data = configResult.value;
-      const same = <
-        T extends
-          | NonNullable<Config['vertexApiKeys']>[number]
-          | NonNullable<Config['openaiCompatibility']>[number],
-      >(
-        section: string,
-        before: T[],
-        after: T[]
-      ) =>
-        providerValuesEqual(
-          before.map((item) => providerConfigSnapshot(section, item)),
-          after.map((item) => providerConfigSnapshot(section, item))
-        );
-      // Runtime indexes may enrich a matching config view, never replace newer configuration.
-      if (
-        vertexResult.status === 'fulfilled' &&
-        same('vertex-api-key', data.vertexApiKeys ?? [], vertexResult.value)
-      )
-        data.vertexApiKeys = vertexResult.value;
-      if (
-        openaiResult.status === 'fulfilled' &&
-        same('openai-compatibility', data.openaiCompatibility ?? [], openaiResult.value)
-      )
-        data.openaiCompatibility = openaiResult.value;
       set({ config: data, cache: new Map(), loading: false, error: null });
       return data;
     } catch (error) {
@@ -247,20 +221,9 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
 
   updateConfigValue: (section, value) => {
     set((state) => {
-      const raw = { ...(state.config?.raw || {}) };
-      if (
-        ![
-          'gemini-api-key',
-          'interactions-api-key',
-          'codex-api-key',
-          'xai-api-key',
-          'claude-api-key',
-          'vertex-api-key',
-          'openai-compatibility',
-        ].includes(section)
-      )
-        raw[section] = value;
-      const nextConfig: Config = { ...(state.config || {}), raw };
+      // Optimistic values are UI models, not serialized v8 config nodes. Keep the last
+      // server document (`raw`) intact until the invalidated cache is fetched again.
+      const nextConfig: Config = { ...(state.config || {}) };
 
       switch (section) {
         case 'debug':
@@ -310,6 +273,9 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
           break;
         case 'codex-api-key':
           nextConfig.codexApiKeys = value as Config['codexApiKeys'];
+          break;
+        case 'meta-api-key':
+          nextConfig.metaApiKeys = value as Config['metaApiKeys'];
           break;
         case 'xai-api-key':
           nextConfig.xaiApiKeys = value as Config['xaiApiKeys'];

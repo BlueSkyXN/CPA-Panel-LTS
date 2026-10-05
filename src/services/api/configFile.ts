@@ -1,17 +1,24 @@
+import { parseDocument, isMap } from 'yaml';
 import { apiClient } from './client';
 import { configRevision, configRevisionUnavailable } from './configRevision';
-import { parseConfigDocument, usesV8ConfigLayout } from '@/utils/configLayout';
 
 export interface ConfigYamlSnapshot {
   readonly content: string;
   readonly generation: number;
-  readonly v8: boolean;
-  readonly revision?: string;
+  /** ETag of the v8 `/config.yaml` read; every save must send it as If-Match. */
+  readonly revision: string;
 }
+
+const YAML_ACCEPT = 'application/yaml, text/yaml, text/plain';
 
 function guardConnection(generation: number): void {
   if (!apiClient.isCurrentConnection(generation))
     throw new Error('Configuration connection changed');
+}
+
+function assertConfigMapping(content: string): void {
+  const doc = parseDocument(content);
+  if (doc.errors.length || !isMap(doc.contents)) throw new Error('Invalid configuration mapping');
 }
 
 export const configFileApi = {
@@ -19,48 +26,28 @@ export const configFileApi = {
     const generation = apiClient.getConnectionGeneration();
     const response = await apiClient.getRaw('/config.yaml', {
       responseType: 'text',
-      headers: { Accept: 'application/yaml, text/yaml, text/plain' },
+      headers: { Accept: YAML_ACCEPT },
     });
     guardConnection(generation);
     const data: unknown = response.data;
     if (typeof data !== 'string') throw new Error('Invalid configuration response');
-    parseConfigDocument(data);
-    const v8 = usesV8ConfigLayout(data);
-    let content = data;
-    let revision = configRevision(response, false);
-    if (v8) {
-      const options = {
-        managementApiVersion: 'v8' as const,
-        responseType: 'text' as const,
-        headers: { Accept: 'application/yaml, text/yaml, text/plain' },
-      };
-      const canonical = await apiClient.getRaw('/config.yaml', options);
-      guardConnection(generation);
-      if (typeof canonical.data !== 'string') throw new Error('Invalid configuration response');
-      parseConfigDocument(canonical.data);
-      if (!usesV8ConfigLayout(canonical.data)) throw new Error('Invalid v8 configuration response');
-      content = canonical.data;
-      revision = configRevision(canonical, true);
-    }
-    return Object.freeze({ content, generation, v8, revision });
+    assertConfigMapping(data);
+    return Object.freeze({ content: data, generation, revision: configRevision(response, true) });
   },
 
+  /** 412/428 surface to the caller as a conflict; the draft must be reviewed against a reload. */
   async saveConfigYaml(content: string, snapshot: ConfigYamlSnapshot): Promise<void> {
     const { generation, revision } = snapshot;
     guardConnection(generation);
-    parseConfigDocument(content);
-    const v8 = usesV8ConfigLayout(content);
-    if (v8 !== snapshot.v8) throw new Error('Configuration layout changed; reload before saving');
-    if (v8 && !revision) throw configRevisionUnavailable();
-    const options = {
-      managementApiVersion: v8 ? ('v8' as const) : ('v0' as const),
+    assertConfigMapping(content);
+    if (!revision) throw configRevisionUnavailable();
+    await apiClient.put('/config.yaml', content, {
       headers: {
         'Content-Type': 'application/yaml',
         Accept: 'application/json, text/plain, */*',
-        ...(revision ? { 'If-Match': revision } : {}),
+        'If-Match': revision,
       },
-    };
-    await apiClient.put('/config.yaml', content, options);
+    });
     guardConnection(generation);
   },
 };

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createServer } from 'vite';
+import { installFakeV8Core } from '../../services/api/testing/fakeV8Core.mjs';
 
 const originalWindow = globalThis.window;
 globalThis.window = new EventTarget();
@@ -21,17 +22,10 @@ const [{ xaiToResource }, { PROVIDER_DESCRIPTORS }, { apiClient }, { providersAp
   ]);
 
 const { normalizeConfigResponse } = transformers;
-const originalGetRaw = apiClient.getRaw;
-apiClient.getRaw = async () => ({ data: 'port: 8317\n' });
-const originalGet = apiClient.get;
-const originalPut = apiClient.put;
-const originalDelete = apiClient.delete;
+let core;
 
 test.after(async () => {
-  apiClient.getRaw = originalGetRaw;
-  apiClient.get = originalGet;
-  apiClient.put = originalPut;
-  apiClient.delete = originalDelete;
+  core?.restore();
   await vite.close();
   if (originalWindow === undefined) {
     delete globalThis.window;
@@ -40,40 +34,49 @@ test.after(async () => {
   }
 });
 
-test('normalizes the Core xai-api-key contract into a workbench resource', () => {
+test('normalizes the Core v8 xai group contract into a workbench resource', () => {
   const config = normalizeConfigResponse({
-    'xai-api-key': [
-      {
-        'api-key': 'xai-secret',
-        priority: 7,
-        prefix: 'team-xai',
-        'base-url': 'https://api.x.ai/v1',
-        websockets: true,
-        'proxy-url': 'http://proxy.local',
-        headers: { 'X-Custom': 'value' },
-        models: [{ name: 'grok-4.5', alias: 'grok-latest' }],
-        'excluded-models': ['grok-3-*'],
-        'disable-cooling': true,
-        'auth-index': 'xai:apikey:1',
-      },
-    ],
+    'api-keys': {
+      xai: [
+        {
+          name: 'xai-1',
+          'base-url': 'https://api.x.ai/v1',
+          prefix: 'team-xai',
+          keys: [
+            {
+              'api-key': 'xai-secret',
+              priority: 7,
+              websockets: true,
+              'proxy-url': 'http://proxy.local',
+              headers: { 'X-Custom': 'value' },
+              models: [{ name: 'grok-4.5', alias: 'grok-latest' }],
+              'excluded-models': ['grok-3-*'],
+              'disable-cooling': true,
+              auth_index: 'xai:apikey:1',
+            },
+          ],
+        },
+      ],
+    },
   });
 
-  assert.deepEqual(config.xaiApiKeys, [
-    {
-      apiKey: 'xai-secret',
-      priority: 7,
-      prefix: 'team-xai',
-      baseUrl: 'https://api.x.ai/v1',
-      websockets: true,
-      proxyUrl: 'http://proxy.local',
-      headers: { 'X-Custom': 'value' },
-      models: [{ name: 'grok-4.5', alias: 'grok-latest', sourceIndex: 0 }],
-      excludedModels: ['grok-3-*'],
-      disableCooling: true,
-      authIndex: 'xai:apikey:1',
-    },
-  ]);
+  const { source, ...xai } = config.xaiApiKeys[0];
+  assert.deepEqual(xai, {
+    apiKey: 'xai-secret',
+    priority: 7,
+    prefix: 'team-xai',
+    baseUrl: 'https://api.x.ai/v1',
+    websockets: true,
+    proxyUrl: 'http://proxy.local',
+    headers: { 'X-Custom': 'value' },
+    models: [{ name: 'grok-4.5', alias: 'grok-latest', sourceIndex: 0 }],
+    excludedModels: ['grok-3-*'],
+    disableCooling: true,
+    authIndex: 'xai:apikey:1',
+  });
+  assert.equal(source.groupIndex, 0);
+  assert.equal(source.keyIndex, 0);
+  assert.equal(JSON.stringify(source).includes('auth_index'), false);
 
   const resource = xaiToResource(config.xaiApiKeys[0], 0);
   assert.equal(resource.brand, 'xai');
@@ -90,95 +93,60 @@ test('normalizes the Core xai-api-key contract into a workbench resource', () =>
   assert.equal(PROVIDER_DESCRIPTORS.xai.supportsWebsockets, true);
 });
 
-test('preserves unknown fields and selects xAI mutations by api-key plus base-url', async () => {
-  const calls = [];
-  apiClient.get = async (url) => {
-    calls.push({ method: 'GET', url });
-    return {
-      'xai-api-key': [
+test('preserves unknown fields and selects xAI mutations by persisted group identity', async () => {
+  core = installFakeV8Core(apiClient, {
+    'api-keys': {
+      xai: [
         {
-          'api-key': 'shared-key',
+          name: 'xai-a',
           'base-url': 'https://xai-a.example.test/v1',
-          'future-field': 'preserve-a',
-          'auth-index': 'response-only-a',
+          keys: [{ 'api-key': 'shared-key', 'future-field': 'preserve-a' }],
         },
         {
-          'api-key': 'shared-key',
+          name: 'xai-b',
           'base-url': 'https://xai-b.example.test/v1',
-          'future-field': 'preserve-b',
-          'auth-index': 'response-only-b',
+          keys: [{ 'api-key': 'shared-key', 'future-field': 'preserve-b' }],
         },
       ],
-    };
-  };
-  apiClient.put = async (url, data) => {
-    calls.push({ method: 'PUT', url, data });
-  };
-  apiClient.delete = async (url) => {
-    calls.push({ method: 'DELETE', url });
-  };
+    },
+  });
 
   await providersApi.createXAIConfig({
     apiKey: 'new-key',
     baseUrl: 'https://api.x.ai/v1',
     websockets: true,
   });
-  await providersApi.updateXAIConfig('shared-key', 'https://xai-b.example.test/v1', {
-    apiKey: 'shared-key',
-    baseUrl: 'https://xai-b.example.test/v1',
-    priority: 9,
-    websockets: false,
-  }, { apiKey: 'shared-key', baseUrl: 'https://xai-b.example.test/v1' });
-  await providersApi.deleteXAIConfig('shared-key', 'https://xai-b.example.test/v1', {
-    apiKey: 'shared-key', baseUrl: 'https://xai-b.example.test/v1'
-  });
+  let config = normalizeConfigResponse(await apiClient.get('/config'));
+  const b = config.xaiApiKeys.find((item) => item.baseUrl === 'https://xai-b.example.test/v1');
+  await providersApi.updateXAIConfig(b.apiKey, b.baseUrl, { ...b, priority: 9, websockets: false });
+  config = normalizeConfigResponse(await apiClient.get('/config'));
+  const updated = config.xaiApiKeys.find((item) => item.baseUrl === 'https://xai-b.example.test/v1');
+  await providersApi.deleteXAIConfig(updated.apiKey, updated.baseUrl, updated.source);
 
-  assert.deepEqual(calls, [
-    { method: 'GET', url: '/config' },
-    {
-      method: 'PUT',
-      url: '/xai-api-key',
-      data: [
-        {
-          'api-key': 'shared-key',
-          'base-url': 'https://xai-a.example.test/v1',
-          'future-field': 'preserve-a',
-        },
-        {
-          'api-key': 'shared-key',
-          'base-url': 'https://xai-b.example.test/v1',
-          'future-field': 'preserve-b',
-        },
-        {
-          'api-key': 'new-key',
-          'base-url': 'https://api.x.ai/v1',
-          websockets: true,
-        },
-      ],
-    },
-    { method: 'GET', url: '/config' },
-    {
-      method: 'PUT',
-      url: '/xai-api-key',
-      data: [
-        {
-          'api-key': 'shared-key',
-          'base-url': 'https://xai-a.example.test/v1',
-          'future-field': 'preserve-a',
-        },
-        {
-          'future-field': 'preserve-b',
-          'api-key': 'shared-key',
-          priority: 9,
-          'base-url': 'https://xai-b.example.test/v1',
-          websockets: false,
-        },
-      ],
-    },
-    { method: 'GET', url: '/config' },
-    {
-      method: 'DELETE',
-      url: '/xai-api-key?api-key=shared-key&base-url=https%3A%2F%2Fxai-b.example.test%2Fv1',
-    },
-  ]);
+  assert.deepEqual(
+    core.writes.map((write) => `${write.method} ${write.url}`),
+    ['PUT /config/api-keys/xai', 'PUT /config/api-keys/xai', 'PUT /config/api-keys/xai']
+  );
+  assert.deepEqual(core.writes[0].data[2], {
+    name: 'xai-3',
+    'base-url': 'https://api.x.ai/v1',
+    keys: [{ 'api-key': 'new-key', websockets: true }],
+  });
+  assert.deepEqual(core.writes[1].data[0], {
+    name: 'xai-a',
+    'base-url': 'https://xai-a.example.test/v1',
+    keys: [{ 'api-key': 'shared-key', 'future-field': 'preserve-a' }],
+  });
+  assert.deepEqual(core.writes[1].data[1].keys[0], {
+    'api-key': 'shared-key',
+    'future-field': 'preserve-b',
+    priority: 9,
+  });
+  // An omitted WebSocket flag displays as off; editing another field must not materialize it.
+  assert.deepEqual(core.doc['api-keys'].xai[1], {
+    name: 'xai-b',
+    'base-url': 'https://xai-b.example.test/v1',
+    keys: [],
+  });
+  assert.equal(JSON.stringify(core.writes).includes('auth_index'), false);
 });

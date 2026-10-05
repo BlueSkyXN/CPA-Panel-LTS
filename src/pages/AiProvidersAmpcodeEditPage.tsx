@@ -12,6 +12,7 @@ import { SecondaryScreenShell } from '@/components/common/SecondaryScreenShell';
 import { ampcodeApi } from '@/services/api';
 import { useAuthStore, useConfigStore, useNotificationStore } from '@/stores';
 import type { AmpcodeConfig } from '@/types';
+import type { AmpcodeSnapshot } from '@/services/api/ampcode';
 import { maskApiKey } from '@/utils/format';
 import { areStringArraysEqual } from '@/utils/compare';
 import {
@@ -108,6 +109,7 @@ export function AiProvidersAmpcodeEditPage() {
   const [baseline, setBaseline] = useState(() => buildAmpcodeBaseline(buildAmpcodeFormState(null)));
   const initializedRef = useRef(false);
   const mountedRef = useRef(false);
+  const snapshotRef = useRef<AmpcodeSnapshot | null>(null);
 
   const title = useMemo(() => t('ai_providers.ampcode_modal_title'), [t]);
 
@@ -117,7 +119,7 @@ export function AiProvidersAmpcodeEditPage() {
       navigate(-1);
       return;
     }
-    navigate('/ai-providers/legacy', { replace: true });
+    navigate('/ai-providers', { replace: true });
   }, [location.state, navigate]);
 
   const swipeRef = useEdgeSwipeBack({ onBack: handleBack });
@@ -154,8 +156,10 @@ export function AiProvidersAmpcodeEditPage() {
 
     void (async () => {
       try {
-        const ampcode = await ampcodeApi.getAmpcode();
+        const snapshot = await ampcodeApi.getAmpcodeSnapshot();
         if (!mountedRef.current) return;
+        snapshotRef.current = snapshot;
+        const ampcode = snapshot.config;
 
         setLoaded(true);
         updateConfigValue('ampcode', ampcode);
@@ -223,7 +227,18 @@ export function AiProvidersAmpcodeEditPage() {
         setSaving(true);
         setError('');
         try {
-          await ampcodeApi.clearUpstreamApiKey();
+          // v8 写入以读取时的 revision 为前提；成功后 ETag 失效，需重新读取。
+          await ampcodeApi.saveAmpcode(
+            snapshotRef.current ?? (await ampcodeApi.getAmpcodeSnapshot()),
+            { upstreamApiKey: null }
+          );
+          snapshotRef.current = null;
+          void ampcodeApi
+            .getAmpcodeSnapshot()
+            .then((snapshot) => {
+              if (mountedRef.current) snapshotRef.current = snapshot;
+            })
+            .catch(() => undefined);
           const previous = config?.ampcode ?? {};
           const next: AmpcodeConfig = { ...previous };
           delete next.upstreamApiKey;
@@ -250,33 +265,22 @@ export function AiProvidersAmpcodeEditPage() {
       const upstreamApiKeys = entriesToAmpcodeUpstreamApiKeys(form.upstreamApiKeyEntries);
       const modelMappings = entriesToAmpcodeMappings(form.mappingEntries);
 
-      if (upstreamUrl) {
-        await ampcodeApi.updateUpstreamUrl(upstreamUrl);
-      } else {
-        await ampcodeApi.clearUpstreamUrl();
-      }
-
-      await ampcodeApi.updateForceModelMappings(form.forceModelMappings);
-
-      if (loaded || upstreamApiKeysDirty) {
-        if (upstreamApiKeys.length) {
-          await ampcodeApi.saveUpstreamApiKeys(upstreamApiKeys);
-        } else {
-          await ampcodeApi.deleteUpstreamApiKeys([]);
-        }
-      }
-
-      if (loaded || modelMappingsDirty) {
-        if (modelMappings.length) {
-          await ampcodeApi.saveModelMappings(modelMappings);
-        } else {
-          await ampcodeApi.clearModelMappings();
-        }
-      }
-
-      if (overrideKey) {
-        await ampcodeApi.updateUpstreamApiKey(overrideKey);
-      }
+      const writeUpstreamApiKeys = loaded || upstreamApiKeysDirty;
+      const writeModelMappings = loaded || modelMappingsDirty;
+      // 未成功加载时只有显式确认后才写列表；revision 取自本次保存前的最新读取。
+      const snapshot = snapshotRef.current ?? (await ampcodeApi.getAmpcodeSnapshot());
+      await ampcodeApi.saveAmpcode(snapshot, {
+        upstreamUrl: upstreamUrl || null,
+        forceModelMappings: form.forceModelMappings,
+        upstreamApiKeys: writeUpstreamApiKeys
+          ? upstreamApiKeys.length
+            ? upstreamApiKeys
+            : null
+          : undefined,
+        modelMappings: writeModelMappings ? (modelMappings.length ? modelMappings : null) : undefined,
+        upstreamApiKey: overrideKey || undefined,
+      });
+      snapshotRef.current = null;
 
       const previous = config?.ampcode ?? {};
       const next: AmpcodeConfig = {
