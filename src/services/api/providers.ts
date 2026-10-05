@@ -416,8 +416,20 @@ const preserveModelMetadata = (
     used.add(index);
     const previous = serialize([old]);
     if (!Array.isArray(previous) || !isRecord(previous[0])) throw conflict();
-    return [applyProviderChanges(raw[index], previous[0], value)];
+    return [migrateLegacyModelAlias(applyProviderChanges(raw[index], previous[0], value), value)];
   });
+};
+/**
+ * LTS compatibility: camel/snake display-name spellings were historically routing aliases and
+ * Core v8 does not read them. When a model row is rewritten, persist the canonical `alias`.
+ */
+const migrateLegacyModelAlias = (model: Record<string, unknown>, value: Record<string, unknown>) => {
+  if (!('display_name' in model) && !('displayName' in model)) return model;
+  const next = { ...model };
+  delete next.display_name;
+  delete next.displayName;
+  if (value.alias !== undefined) next.alias = value.alias;
+  return next;
 };
 
 const findKeySource = (
@@ -495,6 +507,8 @@ const updateKey = async (
   );
   // Response metadata belongs to credentials, not arbitrary nested maps such as headers.
   delete keys[keyIndex]['auth-index'];
+  // LTS: saving a Claude entry drops the deprecated no-op `experimental-cch-signing`.
+  if (family === 'claude') delete keys[keyIndex]['experimental-cch-signing'];
   groups[index] = { ...nextGroup, keys };
   await putGroups(family, groups, revision);
 };

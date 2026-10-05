@@ -281,6 +281,7 @@ test('round-trips the Claude fingerprint profile without dropping unknown fields
             {
               'api-key': 'claude-secret',
               'fingerprint-profile': 'claude-code-cli',
+              'experimental-cch-signing': true,
               'future-field': 'preserved',
             },
           ],
@@ -307,6 +308,27 @@ test('round-trips the Claude fingerprint profile without dropping unknown fields
   assert.deepEqual(core.writes[1].data[0].keys[0], {
     'api-key': 'claude-secret',
     'future-field': 'preserved',
+  });
+});
+
+test('an untouched default cloak section does not materialize a Claude cloak override', async () => {
+  const { buildCloakConfig } = await vite.ssrLoadModule(
+    '/src/features/providers/useProviderWorkbench.ts'
+  );
+  const defaults = { mode: '', strictMode: false, sensitiveWordsText: '', cacheUserId: false };
+  assert.equal(buildCloakConfig(defaults, undefined), undefined);
+  assert.deepEqual(buildCloakConfig({ ...defaults, strictMode: true }, undefined), {
+    mode: undefined,
+    strictMode: true,
+    sensitiveWords: [],
+    cacheUserId: false,
+  });
+  // An existing cloak node stays editable, including clearing it back to defaults.
+  assert.deepEqual(buildCloakConfig(defaults, { strictMode: true }), {
+    mode: undefined,
+    strictMode: false,
+    sensitiveWords: [],
+    cacheUserId: false,
   });
 });
 

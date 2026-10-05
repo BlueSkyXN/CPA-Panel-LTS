@@ -167,6 +167,26 @@ const buildModelAliases = (
     })
     .filter((m) => m.name);
 
+/**
+ * The form always carries a cloak section with default values. When the stored entry has no
+ * cloak node and the section was left at its defaults, emit nothing so editing an unrelated
+ * field does not materialize `cloak: {strict-mode: false}` in the persisted config.
+ */
+export const buildCloakConfig = (
+  input: NonNullable<ProviderEntryFormInput['cloak']>,
+  existing?: ProviderKeyConfig['cloak']
+): ProviderKeyConfig['cloak'] => {
+  const cloak = {
+    mode: input.mode.trim() || undefined,
+    strictMode: input.strictMode,
+    sensitiveWords: parseTextList(input.sensitiveWordsText),
+    cacheUserId: input.cacheUserId === true,
+  };
+  const untouched =
+    !cloak.mode && cloak.strictMode !== true && !cloak.sensitiveWords?.length && !cloak.cacheUserId;
+  return existing || !untouched ? cloak : undefined;
+};
+
 const buildProviderKeyConfig = (
   brand: 'gemini' | 'interactions' | 'codex' | 'xai' | 'claude' | 'vertex',
   input: ProviderEntryFormInput,
@@ -201,12 +221,7 @@ const buildProviderKeyConfig = (
     next.websockets = input.websockets;
   }
   if (brand === 'claude' && input.cloak) {
-    next.cloak = {
-      mode: input.cloak.mode.trim() || undefined,
-      strictMode: input.cloak.strictMode,
-      sensitiveWords: parseTextList(input.cloak.sensitiveWordsText),
-      cacheUserId: input.cloak.cacheUserId === true,
-    };
+    next.cloak = buildCloakConfig(input.cloak, (existing as ProviderKeyConfig | null)?.cloak);
   }
   if (brand === 'claude') {
     next.fingerprintProfile = input.fingerprintProfile?.trim() || undefined;

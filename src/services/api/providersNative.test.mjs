@@ -247,3 +247,42 @@ test('configPatch binds its first write to the caller revision and re-reads for 
     (error) => error.status === 412
   );
 });
+
+test('legacy display_name/displayName routing aliases are read as aliases and persisted canonically', async () => {
+  core = installFakeV8Core(apiClient, {
+    'config-version': 8,
+    'api-keys': {
+      'openai-compatibility': [
+        {
+          name: 'synthetic-openai',
+          'base-url': 'https://openai.invalid/v1',
+          keys: [{ 'api-key': 'synthetic-openai-key' }],
+          models: [
+            { name: 'm-snake', display_name: 'snake-alias', 'x-model-note': 'keep-snake' },
+            { name: 'm-camel', displayName: 'camel-alias' },
+            { name: 'm-label', alias: 'label-alias', 'display-name': 'Catalog Label' },
+          ],
+        },
+      ],
+    },
+  });
+  const config = await loadConfig();
+  const provider = config.openaiCompatibility[0];
+  assert.deepEqual(
+    provider.models.map((model) => [model.name, model.alias, model.displayName]),
+    [
+      ['m-snake', 'snake-alias', undefined],
+      ['m-camel', 'camel-alias', undefined],
+      ['m-label', 'label-alias', 'Catalog Label'],
+    ]
+  );
+  const models = provider.models.map((model) =>
+    model.name === 'm-label' ? { ...model, displayName: 'Catalog Label Updated' } : model
+  );
+  await providersApi.updateOpenAIProvider(provider.name, 0, { ...provider, models });
+  const written = writesOf(core.calls)[0].data[0].models;
+  assert.deepEqual(written[0], { name: 'm-snake', alias: 'snake-alias', 'x-model-note': 'keep-snake' });
+  assert.deepEqual(written[1], { name: 'm-camel', alias: 'camel-alias' });
+  assert.equal(written[2]['display-name'], 'Catalog Label Updated');
+  assert.equal(written[2].alias, 'label-alias');
+});

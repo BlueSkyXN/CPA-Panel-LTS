@@ -30,7 +30,9 @@ const normalizeModelAliases = (models: unknown): ModelAlias[] => {
 
       const name = item.name;
       if (!name) return null;
-      const alias = item.alias;
+      // LTS compatibility: camel/snake display-name spellings historically represented a
+      // routing alias; Core's catalog label is the distinct canonical `display-name` field.
+      const alias = item.alias || item.display_name || item.displayName;
       const priority = item.priority;
       const testModel = item['test-model'];
       const image = normalizeBoolean(item.image);
