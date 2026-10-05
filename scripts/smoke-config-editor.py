@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Configuration editor browser regression, using only the local mock Core."""
 from __future__ import annotations
-from panel_browser import PanelBrowser
+from panel_browser import PanelBrowser, launch_chromium
 
 import importlib.util
 import json
@@ -126,10 +126,20 @@ def check_contrast(page):
 
 def run_payload_integrity_smoke(page, state):
     original = state.config_yaml
-    a = '    - models: [{name: model-a}]\n      params: {temperature: 1}\n      extension: belongs-to-a\n'
-    b = '    - models: [{name: model-b}]\n      params: {temperature: 3}\n      extension: belongs-to-b\n'
-    source = 'payload:\n  default:\n' + a + b
+    # Canonical v8 location: requests.payload (the visual editor projects it as `payload`).
+    a = '      - models: [{name: model-a}]\n        params: {temperature: 1}\n        extension: belongs-to-a\n'
+    b = '      - models: [{name: model-b}]\n        params: {temperature: 3}\n        extension: belongs-to-b\n'
+    head = 'requests:\n  payload:\n    default:\n'
+    source = head + a + b
     conflict_text = 'The payload section you edited has also changed on the server.'
+    # Since 796121e6 the whole-config list guard can report the same concurrent list
+    # change first; either message is a refused save that keeps the draft.
+    list_conflict_text = 'Configuration list changed concurrently'
+
+    def wait_for_conflict():
+        page.get_by_text(conflict_text, exact=False).or_(
+            page.get_by_text(list_conflict_text, exact=False)
+        ).first.wait_for()
     failure_text = 'Unable to convert the visual draft to YAML.'
 
     def load(yaml):
@@ -148,13 +158,13 @@ def run_payload_integrity_smoke(page, state):
 
     try:
         # Saving before preview: remote reorder and insertion must not reach PUT.
-        for target in ['payload:\n  default:\n' + b + a, source + a.replace('model-a', 'new-server-rule')]:
+        for target in [head + b + a, source + a.replace('model-a', 'new-server-rule')]:
             field = load(source)
             field.get_by_label('Parameter Value', exact=True).first.fill('2')
             state.config_yaml = original + '\n' + target
             before = writes()
             page.locator('button[aria-label="Save"]').click()
-            page.get_by_text(conflict_text, exact=False).wait_for()
+            wait_for_conflict()
             assert writes() == before
             assert page.get_by_role('dialog').count() == 0
             assert_draft(field, '2')
@@ -166,25 +176,26 @@ def run_payload_integrity_smoke(page, state):
         page.locator('button[aria-label="Save"]').click()
         confirm = page.get_by_role('button', name='Confirm Save', exact=True)
         confirm.wait_for()
-        state.config_yaml = original + '\n' + 'payload:\n  default:\n' + b + a
+        state.config_yaml = original + '\n' + head + b + a
         before = writes()
         confirm.click()
-        page.get_by_text(conflict_text, exact=False).wait_for()
+        wait_for_conflict()
         assert writes() == before
         assert confirm.is_visible()
         page.get_by_role('dialog').get_by_role('button', name='Cancel', exact=True).click()
         assert_draft(field, '2')
 
-        anchored = '''payload:
-  default:
-    - models: [{name: model-a}]
-      params:
-        temperature: 1
-        options: &options {limit: 1}
-  override:
-    - models: [{name: model-b}]
-      params:
-        options: *options
+        anchored = '''requests:
+  payload:
+    default:
+      - models: [{name: model-a}]
+        params:
+          temperature: 1
+          options: &options {limit: 1}
+    override:
+      - models: [{name: model-b}]
+        params:
+          options: *options
 '''
         field = load(anchored)
         field.get_by_label('Parameter Value', exact=True).first.fill('2')
@@ -213,7 +224,7 @@ def run_payload_integrity_smoke(page, state):
         assert field.is_visible(), 'Failed source conversion must stay in the visual editor'
         assert field.get_by_label('Parameter Value', exact=True).count() == 1
         assert page.locator('button[aria-label="Save"]').is_enabled()
-        with page.page.expect_response(lambda response: response.request.method == 'GET' and response.url.endswith('/v0/management/config.yaml')):
+        with page.page.expect_response(lambda response: response.request.method == 'GET' and response.url.endswith('/v8/management/config.yaml')):
             page.locator('button[aria-label="Save"]').click()
         page.wait_for_function('!document.querySelector(\'button[aria-label="Save"]\').disabled')
         assert page.get_by_role('dialog').count() == 0
@@ -259,7 +270,9 @@ def run_cache_affinity_smoke(page, state):
         page.screenshot(path=str(OUTPUT / 'cache-affinity-default.png'))
 
         # Existing unknown siblings and comments survive all three choices.
-        source = original.replace('codex:\n', 'codex:\n  cache-affinity:\n    strategy: legacy # cache-policy\n    future-field: preserve\n', 1)
+        # Canonical v8 location: upstream.codex.cache-affinity.
+        source = original.replace('  codex:\n', '  codex:\n    cache-affinity:\n      strategy: legacy # cache-policy\n      future-field: preserve\n', 1)
+        assert source != original
         field = load(source)
         for label, value in [('Session compatibility only', 'stable-id'),
                              ('Automatic optimization (recommended)', 'client-aware'),
@@ -288,7 +301,7 @@ def run():
     state.config_yaml += '\nflow-control:\n  version: 3\n  enabled: false\n  rules: []\n'
     errors = []
     with base.run_server(base.StaticPanelHandler, app_port), base.run_server(ConfigCore, api_port, state), sync_playwright() as pw:
-        browser = pw.chromium.launch()
+        browser = launch_chromium(pw)
         context = browser.new_context(viewport={"width": 1440, "height": 900})
         context.add_init_script("""
           if (!localStorage.getItem('cli-proxy-language')) localStorage.setItem('cli-proxy-language', JSON.stringify({state:{language:'en'},version:0}));

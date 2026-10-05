@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """PAT 表单和额度的 mock-Core 浏览器回归，不连接真实账号。"""
+from panel_browser import PanelBrowser, launch_chromium
 from email.parser import BytesParser
 from email.policy import default
 import importlib.util
@@ -28,7 +29,12 @@ def main():
         nonlocal auths
         request = route.request
         url = urlparse(request.url)
-        path = url.path.removeprefix("/v0/management")
+        if url.path.startswith("/v8/management"):
+            # v8 routes: credentials replace auth-files; plugin config is a v8 config node.
+            path = re.sub(r"^/credentials", "/auth-files", url.path.removeprefix("/v8/management"))
+            path = re.sub(r"^/config/plugins/configs/([^/]+)$", r"/plugins/\1/config", path)
+        else:
+            path = url.path.removeprefix("/v0/management")
         query = parse_qs(url.query)
         result = None
         if path == "/plugins":
@@ -81,28 +87,33 @@ def main():
             route.continue_()
         else:
             route.fulfill(status=200, content_type="application/json", body=json.dumps(result),
-                          headers={"Access-Control-Allow-Origin": "*", "x-cpa-support-plugin": "true"})
+                          headers={"Access-Control-Allow-Origin": "*", "x-cpa-support-plugin": "true",
+                                   "Access-Control-Expose-Headers": "etag,x-cpa-support-plugin",
+                                   "ETag": state.etag()})
 
     with smoke.run_server(smoke.StaticPanelHandler, app_port), smoke.run_server(smoke.MockCoreHandler, api_port, state):
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch()
+            browser = launch_chromium(playwright)
             context = browser.new_context(locale="en-US", viewport={"width": 1440, "height": 1000})
             context.add_init_script("localStorage.setItem('cli-proxy-language', JSON.stringify({state:{language:'en'},version:0}));")
-            page = context.new_page()
+            # The connected workspace renders in an isolated iframe; scope DOM calls to it.
+            page = PanelBrowser(context.new_page())
             page.set_default_timeout(15000)
             output = ROOT / "output/playwright"
             output.mkdir(parents=True, exist_ok=True)
             errors = []
             page.on("pageerror", lambda error: errors.append(str(error)))
             page.route("**/v0/management/**", api)
+            page.route("**/v8/management/**", api)
             base = f"http://127.0.0.1:{app_port}/management.html"
             page.goto(base + "#/login")
             page.locator('input[type="checkbox"]').first.check(force=True)
             page.locator("input.input").first.fill(f"http://127.0.0.1:{api_port}")
             page.locator('input[name="cpa-management-key"]').fill("smoke-management-key")
+            page.get_by_label("Remember password").check(force=True)
             page.get_by_role("button", name=re.compile(r"^(Login|Connect)$", re.I)).click()
-            page.wait_for_function("window.location.hash === '#/'")
-            page.goto(base + "#/auth-files")
+            page.wait_for_url(re.compile(r".*#/$"), timeout=20_000)
+            page.goto(base + "?route=pat-accounts#/auth-files", wait_until="domcontentloaded")
             page.get_by_role("button", name="Add PAT account", exact=True).click()
             dialog = page.get_by_role("dialog", name="Add PAT account")
             dialog.get_by_label("Account label").fill("Fixture account")
@@ -113,6 +124,8 @@ def main():
             name = next(iter(auths))
             assert auths[name]["type"] == "codebuddy" and auths[name]["pat"] == secrets_used[0]
             auths[name]["priority"] = 7
+            # PAT account actions appear on the provider-filtered view, not under "All".
+            page.locator('button[class*="filterTag"]').filter(has_text="Codebuddy").click()
             page.get_by_role("button", name="Update PAT", exact=True).click()
             dialog = page.get_by_role("dialog", name="Update PAT")
             assert dialog.get_by_label("PAT", exact=True).input_value() == ""

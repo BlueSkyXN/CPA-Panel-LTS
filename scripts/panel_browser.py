@@ -5,6 +5,19 @@ real Page. DOM operations address its active same-origin instance document.
 Connection-manager tests deliberately use the raw Page instead.
 """
 
+def launch_chromium(playwright, **kwargs):
+    """Launch Chromium; CPA_SMOKE_BROWSER_CHANNEL (e.g. `chrome`) opts into an installed browser.
+
+    The default stays Playwright's bundled Chromium, so CI and other machines are unchanged.
+    """
+    import os
+
+    channel = os.environ.get('CPA_SMOKE_BROWSER_CHANNEL', '').strip()
+    if channel:
+        kwargs.setdefault('channel', channel)
+    return playwright.chromium.launch(**kwargs)
+
+
 class PanelBrowser:
     DOM_METHODS = {
         'locator', 'get_by_role', 'get_by_text', 'get_by_label', 'get_by_title',
