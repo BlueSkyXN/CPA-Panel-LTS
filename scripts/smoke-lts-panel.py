@@ -6538,12 +6538,38 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
 
             page.get_by_role("button", name="Edit").first.click()
             sheet = page.get_by_role("dialog").last
-            sheet.get_by_label("Base URL").fill("https://codex.updated.example/v1")
+            # The base URL is group-owned in v8; key edits must route it through the group sheet.
+            if not sheet.get_by_label("Base URL").is_disabled():
+                raise AssertionError("codex key edit allowed changing the shared group base URL")
+            sheet.get_by_role("button", name="Edit configuration group").click()
+            group_sheet = page.get_by_role("dialog", name="Edit configuration group")
+            group_sheet.get_by_label("Shared base URL").fill("https://codex.updated.example/v1")
+            group_sheet.get_by_role("button", name="Save").click()
             with page.expect_response(
                 lambda response: response.request.method == "PUT"
                 and response.url.endswith("/v8/management/config/api-keys/codex")
-            ):
-                sheet.get_by_role("button", name="Save").click()
+            ) as group_put:
+                page.get_by_role("dialog", name="Apply group-wide changes?").get_by_role(
+                    "button", name="Save"
+                ).click()
+            group_payload = json.loads(group_put.value.request.post_data or "null")
+            if not group_put.value.request.header_value("if-match") or not any(
+                isinstance(group, dict)
+                and group.get("base-url") == "https://codex.updated.example/v1"
+                and isinstance(group.get("keys"), list)
+                and group["keys"]
+                for group in (group_payload if isinstance(group_payload, list) else [])
+            ) or "auth_index" in json.dumps(group_payload):
+                raise AssertionError(f"codex group edit sent an unexpected PUT: {group_payload!r}")
+            # This mock records config writes without persisting them, so the post-write
+            # readback must fail closed instead of reporting success.
+            group_sheet.get_by_role("alert").get_by_text(
+                "refresh and try again", exact=False
+            ).wait_for()
+            group_sheet.get_by_role("button", name="Cancel").click()
+            page.get_by_role("dialog", name="Discard unsaved changes?").get_by_role(
+                "button", name="Discard changes"
+            ).click()
             wait_for_no_dialog()
 
             page.get_by_role("button", name="Delete").first.click()
@@ -6580,12 +6606,38 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
 
             page.get_by_role("button", name="Edit").first.click()
             sheet = page.get_by_role("dialog").last
-            sheet.get_by_label("Base URL").fill("https://xai.updated.example/v1")
+            # The base URL is group-owned in v8; key edits must route it through the group sheet.
+            if not sheet.get_by_label("Base URL").is_disabled():
+                raise AssertionError("xai key edit allowed changing the shared group base URL")
+            sheet.get_by_role("button", name="Edit configuration group").click()
+            group_sheet = page.get_by_role("dialog", name="Edit configuration group")
+            group_sheet.get_by_label("Shared base URL").fill("https://xai.updated.example/v1")
+            group_sheet.get_by_role("button", name="Save").click()
             with page.expect_response(
                 lambda response: response.request.method == "PUT"
                 and response.url.endswith("/v8/management/config/api-keys/xai")
-            ):
-                sheet.get_by_role("button", name="Save").click()
+            ) as group_put:
+                page.get_by_role("dialog", name="Apply group-wide changes?").get_by_role(
+                    "button", name="Save"
+                ).click()
+            group_payload = json.loads(group_put.value.request.post_data or "null")
+            if not group_put.value.request.header_value("if-match") or not any(
+                isinstance(group, dict)
+                and group.get("base-url") == "https://xai.updated.example/v1"
+                and isinstance(group.get("keys"), list)
+                and group["keys"]
+                for group in (group_payload if isinstance(group_payload, list) else [])
+            ) or "auth_index" in json.dumps(group_payload):
+                raise AssertionError(f"xai group edit sent an unexpected PUT: {group_payload!r}")
+            # This mock records config writes without persisting them, so the post-write
+            # readback must fail closed instead of reporting success.
+            group_sheet.get_by_role("alert").get_by_text(
+                "refresh and try again", exact=False
+            ).wait_for()
+            group_sheet.get_by_role("button", name="Cancel").click()
+            page.get_by_role("dialog", name="Discard unsaved changes?").get_by_role(
+                "button", name="Discard changes"
+            ).click()
             wait_for_no_dialog()
 
             page.get_by_role("button", name="Delete").first.click()
@@ -6971,13 +7023,13 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
         "/v8/management/config/api-keys/claude",
         "/v8/management/config/api-keys/openai-compatibility",
     ]:
-        # The provider write is bound to the ETag of the GET /config it was derived from.
+        # The provider write is bound to the ETag of the provider-subtree GET it was derived from.
         assert_each_request_immediately_preceded_by(
             state,
             "PUT",
             provider_path,
             "GET",
-            "/v8/management/config",
+            provider_path,
         )
     assert_request_query_contains(
         state,

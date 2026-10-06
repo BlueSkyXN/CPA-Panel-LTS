@@ -1992,6 +1992,30 @@ def expect_family_put(page: Any, family: str) -> Any:
     )
 
 
+def edit_browser_provider_group_base_url(
+    page: Any, family: str, label: str, api_key: str, base_url: str
+) -> list[str]:
+    """v8 base URLs are group-owned: key edits keep them read-only and the group sheet writes them."""
+    provider_row_for_api_key(page, api_key).get_by_role("button", name="Edit").click()
+    sheet = page.get_by_role("dialog").last
+    if not sheet.get_by_label("Base URL").is_disabled():
+        raise AssertionError(f"{label} key edit allowed changing the shared group base URL")
+    sheet.get_by_role("button", name="Edit configuration group").click()
+    group_sheet = page.get_by_role("dialog", name="Edit configuration group")
+    group_sheet.get_by_label("Shared base URL").fill(base_url)
+    group_sheet.get_by_role("button", name="Save").click()
+    with expect_family_put(page, family) as group_put:
+        page.get_by_role("dialog", name="Apply group-wide changes?").get_by_role(
+            "button", name="Save"
+        ).click()
+    wait_for_no_dialog(page)
+    assert_browser_revisioned_write(group_put.value, f"{label} group edit")
+    payload = json.loads(group_put.value.request.post_data or "null")
+    if contains_key(payload, "auth_index") or contains_key(payload, "auth-index"):
+        raise AssertionError(f"{label} group PUT wrote response-only auth index: {payload!r}")
+    return [f"BROWSER provider workbench {label} group base-url edit PUT {V8}/config/api-keys/{family} with readback"]
+
+
 def run_browser_provider_key_crud_smoke(
     page: Any,
     api_url: str,
@@ -2115,7 +2139,8 @@ def run_browser_provider_key_crud_smoke(
     row = provider_row_for_api_key(page, api_key)
     row.get_by_role("button", name="Edit").click()
     sheet = page.get_by_role("dialog").last
-    sheet.get_by_label("Base URL").fill(update_base_url)
+    if not sheet.get_by_label("Base URL").is_disabled():
+        raise AssertionError(f"{label} key edit allowed changing the shared group base URL")
     if weight is not None:
         weight_input = sheet.get_by_label("Scheduling weight")
         if weight_input.input_value() != str(weight):
@@ -2148,7 +2173,7 @@ def run_browser_provider_key_crud_smoke(
     items_after_update = entries()
     if not any(
         item.get("api-key") == api_key
-        and item.get("base-url") == update_base_url
+        and item.get("base-url") == create_base_url
         and (weight is None or item.get("weight") == weight + 1)
         and (label != "Claude" or "fingerprint-profile" not in item)
         and any(
@@ -2168,6 +2193,21 @@ def run_browser_provider_key_crud_smoke(
         seen.append("BROWSER provider workbench Claude fingerprint-profile round-trip and reset")
     if weight is not None:
         seen.append(f"BROWSER provider workbench {label} weight round-trip")
+
+    seen.extend(edit_browser_provider_group_base_url(page, family, label, api_key, update_base_url))
+    items_after_group = entries()
+    if not any(
+        item.get("api-key") == api_key
+        and item.get("base-url") == update_base_url
+        and item.get("auth_index")
+        and (weight is None or item.get("weight") == weight + 1)
+        and any(
+            isinstance(model, dict) and model.get("display-name") == updated_display_name
+            for model in item.get("models", [])
+        )
+        for item in items_after_group
+    ):
+        raise AssertionError(f"{label} group edit did not keep key settings: {items_after_group!r}")
 
     row = provider_row_for_api_key(page, api_key)
     row.get_by_role("button", name="Delete").click()
@@ -2309,7 +2349,8 @@ def run_browser_provider_workbench_smoke(
 
     provider_row_for_api_key(page, codex_key).get_by_role("button", name="Edit").click()
     sheet = page.get_by_role("dialog").last
-    sheet.get_by_label("Base URL").fill("https://codex.browser-updated.example/v1")
+    if not sheet.get_by_label("Base URL").is_disabled():
+        raise AssertionError("Codex key edit allowed changing the shared group base URL")
     sheet.get_by_text("Advanced runtime policy", exact=True).click()
     retries = sheet.get_by_label("Request retries", exact=True)
     if retries.input_value() != "2":
@@ -2327,7 +2368,7 @@ def run_browser_provider_workbench_smoke(
     persisted = codex_disk_key()
     if (
         not persisted
-        or persisted["group"].get("base-url") != "https://codex.browser-updated.example/v1"
+        or persisted["group"].get("base-url") != "https://codex.browser.example/v1"
         or "request-retry" in persisted["key"]
         or "disable-cooling" in persisted["key"]
         or not any(
@@ -2349,6 +2390,22 @@ def run_browser_provider_workbench_smoke(
             f"Codex edit changed Gemini auth_index: {gemini_index_before!r} -> {gemini_index_after!r}"
         )
     seen.append("BROWSER Codex inherit policy removed key overrides on disk; other providers' auth_index unchanged")
+    seen.extend(
+        edit_browser_provider_group_base_url(
+            page, "codex", "Codex", codex_key, "https://codex.browser-updated.example/v1"
+        )
+    )
+    persisted = codex_disk_key()
+    if (
+        not persisted
+        or persisted["group"].get("base-url") != "https://codex.browser-updated.example/v1"
+        or persisted["key"].get("websockets") is not True
+        or not any(
+            isinstance(model, dict) and model.get("display-name") == "Codex Browser Model Updated"
+            for model in persisted["key"].get("models", []) + persisted["group"].get("models", [])
+        )
+    ):
+        raise AssertionError(f"Codex group edit did not persist on disk with key settings: {persisted!r}")
 
     provider_row_for_api_key(page, codex_key).get_by_role("button", name="Delete").click()
     confirm = page.get_by_role("dialog", name="Delete resource")
