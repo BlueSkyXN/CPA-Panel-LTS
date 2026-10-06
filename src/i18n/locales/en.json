@@ -1563,7 +1563,10 @@
     "error_analysis_top_reasons": "Top failure reasons",
     "error_analysis_failures": "Failures",
     "share_title": "Model Share",
-    "share_other_models": "Other ({{count}})"
+    "share_other_models": "Other ({{count}})",
+    "share_metric_requests": "Requests",
+    "share_metric_tokens": "Tokens",
+    "share_metric_cost": "Cost"
   },
   "service_health": {
     "title": "Service Health",

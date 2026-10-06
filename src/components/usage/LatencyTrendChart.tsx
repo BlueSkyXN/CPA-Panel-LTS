@@ -13,7 +13,7 @@ import {
   type AnalyticsTimeWindow,
   type UsageDetail,
 } from '@/utils/usage';
-import { buildChartOptions, getHourChartMinWidth } from '@/utils/usage/chartConfig';
+import { buildChartOptions, getHourChartMinWidth, sparsePointRadius } from '@/utils/usage/chartConfig';
 import styles from '@/pages/UsagePage.module.scss';
 
 const SERIES_COLORS = {
@@ -92,6 +92,14 @@ export function LatencyTrendChart({ details, loading, isMobile, timeWindow }: La
     };
     const options: ChartOptions<'line'> = {
       ...baseOptions,
+      elements: {
+        ...baseOptions.elements,
+        point: {
+          ...baseOptions.elements?.point,
+          // 稀疏窗口（如 24 小时只有 1 个有数据桶）在移动端也要可见。
+          radius: sparsePointRadius(baseOptions.elements?.point?.radius),
+        },
+      },
       scales: {
         ...baseOptions.scales,
         y: {

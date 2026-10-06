@@ -1563,7 +1563,10 @@
     "error_analysis_top_reasons": "主要失败原因",
     "error_analysis_failures": "失败数",
     "share_title": "模型份额",
-    "share_other_models": "其他（{{count}} 个模型）"
+    "share_other_models": "其他（{{count}} 个模型）",
+    "share_metric_requests": "请求数",
+    "share_metric_tokens": "Token 数",
+    "share_metric_cost": "费用"
   },
   "service_health": {
     "title": "服务健康监测",

@@ -9,6 +9,7 @@ import {
   formatUsd,
   type ModelStatsSummary,
 } from '@/utils/usage';
+import { buildStaticAxisTheme } from '@/utils/usage/chartConfig';
 import styles from '@/pages/UsagePage.module.scss';
 
 const SHARE_COLORS = [
@@ -33,9 +34,15 @@ export interface ModelShareCardProps {
   modelStats: ModelStatsSummary[];
   loading: boolean;
   showPricing: boolean;
+  isMobile?: boolean;
 }
 
-export function ModelShareCard({ modelStats, loading, showPricing }: ModelShareCardProps) {
+export function ModelShareCard({
+  modelStats,
+  loading,
+  showPricing,
+  isMobile = false,
+}: ModelShareCardProps) {
   const { t, i18n } = useTranslation();
   const [metric, setMetric] = useState<ShareMetric>('requests');
 
@@ -53,6 +60,16 @@ export function ModelShareCard({ modelStats, loading, showPricing }: ModelShareC
       requests: t('usage_stats.requests_count'),
       tokens: t('usage_stats.tokens_count'),
       cost: t('usage_stats.pricing_api_usd_estimate'),
+    }),
+    [t]
+  );
+
+  // 按钮用短文案，长标题保留在图表 tooltip 里。
+  const metricButtonLabel = useMemo(
+    () => ({
+      requests: t('usage_stats.share_metric_requests'),
+      tokens: t('usage_stats.share_metric_tokens'),
+      cost: t('usage_stats.share_metric_cost'),
     }),
     [t]
   );
@@ -91,6 +108,7 @@ export function ModelShareCard({ modelStats, loading, showPricing }: ModelShareC
       ],
     };
 
+    const axis = buildStaticAxisTheme(isMobile ? 10 : 11);
     const options: ChartOptions<'bar'> = {
       indexAxis: 'y',
       responsive: true,
@@ -117,22 +135,24 @@ export function ModelShareCard({ modelStats, loading, showPricing }: ModelShareC
         x: {
           min: 0,
           max: 1,
-          grid: { color: 'rgba(17, 24, 39, 0.06)' },
+          grid: { color: axis.gridColor },
+          border: { color: axis.axisBorderColor },
           ticks: {
-            color: 'rgba(17, 24, 39, 0.72)',
-            font: { size: 11 },
+            color: axis.tickColor,
+            font: axis.tickFont,
             callback: (value) => percentFormatter.format(Number(value)),
           },
         },
         y: {
-          grid: { drawTicks: false },
-          ticks: { color: 'rgba(17, 24, 39, 0.72)', font: { size: 11 } },
+          grid: { color: axis.gridColor, drawTicks: false },
+          border: { color: axis.axisBorderColor },
+          ticks: { color: axis.tickColor, font: axis.tickFont },
         },
       },
     };
 
     return { chartData: data, chartOptions: options, hasData: total > 0 };
-  }, [modelStats, metric, metricLabel, percentFormatter, t]);
+  }, [modelStats, metric, metricLabel, isMobile, percentFormatter, t]);
 
   return (
     <Card
@@ -144,14 +164,14 @@ export function ModelShareCard({ modelStats, loading, showPricing }: ModelShareC
             size="sm"
             onClick={() => setMetric('requests')}
           >
-            {metricLabel.requests}
+            {metricButtonLabel.requests}
           </Button>
           <Button
             variant={metric === 'tokens' ? 'primary' : 'secondary'}
             size="sm"
             onClick={() => setMetric('tokens')}
           >
-            {metricLabel.tokens}
+            {metricButtonLabel.tokens}
           </Button>
           {showPricing && (
             <Button
@@ -159,7 +179,7 @@ export function ModelShareCard({ modelStats, loading, showPricing }: ModelShareC
               size="sm"
               onClick={() => setMetric('cost')}
             >
-              {metricLabel.cost}
+              {metricButtonLabel.cost}
             </Button>
           )}
         </div>

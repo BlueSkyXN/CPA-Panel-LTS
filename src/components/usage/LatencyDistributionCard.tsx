@@ -4,7 +4,6 @@ import type { ChartData, ChartOptions } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
 import { Card } from '@/components/ui/Card';
 import {
-  LATENCY_HISTOGRAM_EDGE_MS,
   buildLatencyHistogram,
   collectLatencyAnalysisRows,
   formatDurationMs,
@@ -12,31 +11,35 @@ import {
   type PercentileSummary,
   type UsageDetail,
 } from '@/utils/usage';
+import { buildStaticAxisTheme } from '@/utils/usage/chartConfig';
 import styles from '@/pages/UsagePage.module.scss';
 
-const formatEdge = (edge: number): string =>
-  edge >= 1_000 ? `${edge / 1_000}${edge % 1_000 === 500 ? '.5' : ''}s` : `${edge}ms`;
+/**
+ * 紧凑桶标签：与 LATENCY_HISTOGRAM_EDGE_MS 一一对应；
+ * 单位在首标签声明一次，避免移动端 45° 旋转时互相重叠。
+ */
+const HISTOGRAM_BIN_LABELS: readonly string[] = [
+  '<100ms',
+  '100–250',
+  '250–500',
+  '0.5–1s',
+  '1–2.5s',
+  '2.5–5s',
+  '5–10s',
+  '≥10s',
+];
 
-const buildBinLabels = (): string[] =>
-  LATENCY_HISTOGRAM_EDGE_MS.map((edge, index) => {
-    if (index === LATENCY_HISTOGRAM_EDGE_MS.length - 1) {
-      return `≥${formatEdge(edge)}`;
-    }
-    if (index === 0) {
-      return `<${formatEdge(LATENCY_HISTOGRAM_EDGE_MS[1])}`;
-    }
-    return `${formatEdge(edge)}–${formatEdge(LATENCY_HISTOGRAM_EDGE_MS[index + 1])}`;
-  });
-
-interface PercentileChipProps {
+interface PercentileChipGroupProps {
   label: string;
   summary: PercentileSummary;
 }
 
-function PercentileChipGroup({ label, summary }: PercentileChipProps) {
+function PercentileChipGroup({ label, summary }: PercentileChipGroupProps) {
   return (
     <div className={styles.analyticsChipGroup}>
-      <span className={styles.analyticsChipGroupLabel}>{label}</span>
+      <span className={styles.analyticsChipGroupLabel}>
+        {label} · n={summary.sampleCount.toLocaleString()}
+      </span>
       <div className={styles.analyticsChips}>
         {(['p50', 'p90', 'p95', 'p99'] as const).map((rank) => (
           <span key={rank} className={styles.analyticsChip}>
@@ -46,9 +49,6 @@ function PercentileChipGroup({ label, summary }: PercentileChipProps) {
             </span>
           </span>
         ))}
-        <span className={styles.analyticsChipMeta}>
-          {summary.sampleCount.toLocaleString()}
-        </span>
       </div>
     </div>
   );
@@ -57,16 +57,18 @@ function PercentileChipGroup({ label, summary }: PercentileChipProps) {
 export interface LatencyDistributionCardProps {
   details: UsageDetail[];
   loading: boolean;
+  isMobile?: boolean;
 }
 
-export function LatencyDistributionCard({ details, loading }: LatencyDistributionCardProps) {
+export function LatencyDistributionCard({ details, loading, isMobile = false }: LatencyDistributionCardProps) {
   const { t } = useTranslation();
 
   const { chartData, chartOptions, histogram, summaries } = useMemo(() => {
     const rows = collectLatencyAnalysisRows(details);
     const histogram = buildLatencyHistogram(rows);
     const summaries = summarizeLatencyRows(rows);
-    const labels = buildBinLabels();
+    const labels = [...HISTOGRAM_BIN_LABELS];
+    const axis = buildStaticAxisTheme(isMobile ? 10 : 11);
 
     const data: ChartData<'bar'> = {
       labels,
@@ -109,26 +111,32 @@ export function LatencyDistributionCard({ details, loading }: LatencyDistributio
       },
       scales: {
         x: {
-          grid: { color: 'rgba(17, 24, 39, 0.06)', drawTicks: false },
+          grid: { color: axis.gridColor, drawTicks: false },
+          border: { color: axis.axisBorderColor },
           ticks: {
-            color: 'rgba(17, 24, 39, 0.72)',
-            font: { size: 11 },
-            maxRotation: 45,
+            color: axis.tickColor,
+            font: axis.tickFont,
+            maxRotation: isMobile ? 45 : 0,
             minRotation: 0,
             autoSkip: true,
-            maxTicksLimit: 8,
+            maxTicksLimit: isMobile ? 4 : 8,
           },
         },
         y: {
           beginAtZero: true,
-          grid: { color: 'rgba(17, 24, 39, 0.06)' },
-          ticks: { color: 'rgba(17, 24, 39, 0.72)', font: { size: 11 } },
+          grid: { color: axis.gridColor },
+          border: { color: axis.axisBorderColor },
+          ticks: {
+            color: axis.tickColor,
+            font: axis.tickFont,
+            precision: 0,
+          },
         },
       },
     };
 
     return { chartData: data, chartOptions: options, histogram, summaries };
-  }, [details, t]);
+  }, [details, isMobile, t]);
 
   return (
     <Card title={t('usage_stats.latency_distribution_title')}>

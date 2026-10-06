@@ -16,7 +16,7 @@ import {
   type CacheTrendPoint,
   type UsageDetail,
 } from '@/utils/usage';
-import { buildChartOptions, getHourChartMinWidth } from '@/utils/usage/chartConfig';
+import { buildChartOptions, getHourChartMinWidth, sparsePointRadius } from '@/utils/usage/chartConfig';
 import styles from '@/pages/UsagePage.module.scss';
 
 const CACHE_RATE_COLOR = '#0E9F6E';
@@ -73,6 +73,14 @@ export function CacheEfficiencyCard({
     const baseOptions = buildChartOptions({ period, labels, isMobile });
     const options: ChartOptions<'line'> = {
       ...baseOptions,
+      elements: {
+        ...baseOptions.elements,
+        point: {
+          ...baseOptions.elements?.point,
+          // 稀疏窗口（单点序列）在移动端 radius=0 时会完全不可见。
+          radius: sparsePointRadius(baseOptions.elements?.point?.radius),
+        },
+      },
       scales: {
         ...baseOptions.scales,
         y: {

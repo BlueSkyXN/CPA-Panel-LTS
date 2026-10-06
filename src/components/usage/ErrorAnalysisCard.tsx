@@ -16,7 +16,7 @@ import {
   type ErrorFamily,
   type UsageDetail,
 } from '@/utils/usage';
-import { buildChartOptions, getHourChartMinWidth } from '@/utils/usage/chartConfig';
+import { buildChartOptions, buildStaticAxisTheme, getHourChartMinWidth, sparsePointRadius } from '@/utils/usage/chartConfig';
 import styles from '@/pages/UsagePage.module.scss';
 
 const FAILURE_RATE_COLOR = '#EF4444';
@@ -78,8 +78,16 @@ export function ErrorAnalysisCard({
     };
 
     const baseOptions = buildChartOptions({ period, labels, isMobile });
+    const axis = buildStaticAxisTheme(isMobile ? 10 : 11);
     const trendOptions: ChartOptions<'line'> = {
       ...baseOptions,
+      elements: {
+        ...baseOptions.elements,
+        point: {
+          ...baseOptions.elements?.point,
+          radius: sparsePointRadius(baseOptions.elements?.point?.radius),
+        },
+      },
       scales: {
         ...baseOptions.scales,
         y: {
@@ -152,12 +160,18 @@ export function ErrorAnalysisCard({
       scales: {
         x: {
           beginAtZero: true,
-          grid: { color: 'rgba(17, 24, 39, 0.06)' },
-          ticks: { color: 'rgba(17, 24, 39, 0.72)', font: { size: 11 } },
+          grid: { color: axis.gridColor },
+          border: { color: axis.axisBorderColor },
+          ticks: {
+            color: axis.tickColor,
+            font: axis.tickFont,
+            precision: 0,
+          },
         },
         y: {
-          grid: { drawTicks: false },
-          ticks: { color: 'rgba(17, 24, 39, 0.72)', font: { size: 11 } },
+          grid: { color: axis.gridColor, drawTicks: false },
+          border: { color: axis.axisBorderColor },
+          ticks: { color: axis.tickColor, font: axis.tickFont },
         },
       },
     };

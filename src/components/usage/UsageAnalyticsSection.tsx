@@ -75,7 +75,7 @@ export function UsageAnalyticsSection({
           isMobile={isMobile}
           timeWindow={timeWindow}
         />
-        <LatencyDistributionCard details={details} loading={idle} />
+        <LatencyDistributionCard details={details} loading={idle} isMobile={isMobile} />
         <ErrorAnalysisCard
           details={details}
           loading={idle}
@@ -83,7 +83,12 @@ export function UsageAnalyticsSection({
           timeWindow={timeWindow}
         />
       </div>
-      <ModelShareCard modelStats={modelStats} loading={loading} showPricing={showPricing} />
+      <ModelShareCard
+        modelStats={modelStats}
+        loading={loading}
+        showPricing={showPricing}
+        isMobile={isMobile}
+      />
     </section>
   );
 }

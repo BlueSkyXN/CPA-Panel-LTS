@@ -1589,7 +1589,10 @@
     "error_analysis_top_reasons": "主要失敗原因",
     "error_analysis_failures": "失敗數",
     "share_title": "模型份額",
-    "share_other_models": "其他（{{count}} 個模型）"
+    "share_other_models": "其他（{{count}} 個模型）",
+    "share_metric_requests": "請求數",
+    "share_metric_tokens": "Token 數",
+    "share_metric_cost": "費用"
   },
   "service_health": {
     "title": "服務健康監測",

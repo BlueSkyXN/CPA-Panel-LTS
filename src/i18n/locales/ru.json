@@ -1564,7 +1564,10 @@
     "error_analysis_top_reasons": "Основные причины ошибок",
     "error_analysis_failures": "Ошибки",
     "share_title": "Доля моделей",
-    "share_other_models": "Другие ({{count}})"
+    "share_other_models": "Другие ({{count}})",
+    "share_metric_requests": "Запросы",
+    "share_metric_tokens": "Токены",
+    "share_metric_cost": "Расходы"
   },
   "service_health": {
     "title": "Состояние сервиса",
