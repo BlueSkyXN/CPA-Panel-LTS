@@ -16,9 +16,11 @@ function guardConnection(generation: number): void {
     throw new Error('Configuration connection changed');
 }
 
-function assertConfigMapping(content: string): void {
+export function assertV8ConfigMapping(content: unknown): asserts content is string {
+  if (typeof content !== 'string') throw new Error('Invalid configuration response');
   const doc = parseDocument(content);
-  if (doc.errors.length || !isMap(doc.contents)) throw new Error('Invalid configuration mapping');
+  if (doc.errors.length || !isMap(doc.contents) || doc.get('config-version') !== 8)
+    throw new Error('Invalid v8 configuration mapping');
 }
 
 export const configFileApi = {
@@ -31,7 +33,7 @@ export const configFileApi = {
     guardConnection(generation);
     const data: unknown = response.data;
     if (typeof data !== 'string') throw new Error('Invalid configuration response');
-    assertConfigMapping(data);
+    assertV8ConfigMapping(data);
     return Object.freeze({ content: data, generation, revision: configRevision(response, true) });
   },
 
@@ -39,7 +41,7 @@ export const configFileApi = {
   async saveConfigYaml(content: string, snapshot: ConfigYamlSnapshot): Promise<void> {
     const { generation, revision } = snapshot;
     guardConnection(generation);
-    assertConfigMapping(content);
+    assertV8ConfigMapping(content);
     if (!revision) throw configRevisionUnavailable();
     await apiClient.put('/config.yaml', content, {
       headers: {

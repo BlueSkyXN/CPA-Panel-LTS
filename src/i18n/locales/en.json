@@ -1657,6 +1657,7 @@
     "upgrade_required_desc": "The current server version does not support the logs viewing feature. Please upgrade to the latest version of CPA to use this feature."
   },
   "config_management": {
+    "read_conflict": "Configuration changed while reading; reload and try again.",
     "save_target": "Target instance: {{name}}",
     "editor": {
       "guidance": {
@@ -2229,6 +2230,9 @@
     "card_idle_hint": "Use the top \"Refresh all credentials\" button to fetch the latest quota data."
   },
   "plugin_management": {
+    "yaml_required_title": "This plugin requires YAML editing",
+    "yaml_required_message": "This configuration contains YAML values that a JSON form cannot represent. Open the source editor to preserve the complete plugin configuration.",
+    "open_yaml": "Open YAML source",
     "inherit_config": "Inherit / unset",
     "manual_auth": "Manual auth import",
     "manage_accounts": "Manage accounts",
@@ -2607,6 +2611,17 @@
     "author": "Author"
   },
   "providersPage": {
+    "configGroup": {
+      "title": "Edit configuration group",
+      "name": "Group name",
+      "baseUrl": "Shared base URL",
+      "edit": "Edit configuration group",
+      "impact": "Group {{name}} · {{count}} credentials share its base URL and defaults.",
+      "editRequired": "This address belongs to the configuration group. Use “Edit configuration group” to change it.",
+      "policyHint": "Group defaults apply to keys that inherit them. Existing key overrides are preserved.",
+      "confirmTitle": "Apply group-wide changes?",
+      "confirmMessage": "This changes group {{name}}, containing {{count}} credentials. The shared base URL affects every key; defaults apply where inherited."
+    },
     "header": {
       "title": "AI Providers",
       "activeResources": "{{active}}/{{total}} active resources",

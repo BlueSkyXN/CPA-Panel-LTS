@@ -1,29 +1,83 @@
-/**
- * 配置相关 API（v8 原生配置树）
- */
-
+import i18n from 'i18next';
 import { apiClient } from './client';
-import type { Config } from '@/types';
-import { putConfigValue } from './configValue';
+import type { ApiError, Config } from '@/types';
+import { guardConfigConnection, putConfigValue, readConfigSnapshot } from './configValue';
+import { configRevisionFromHeaders } from './configRevision';
 import { normalizeConfigResponse } from './transformers';
 
+export const isConfigNotJSONCompatible = (error: unknown): boolean =>
+  typeof error === 'object' &&
+  error !== null &&
+  'status' in error &&
+  error.status === 422 &&
+  'apiCode' in error &&
+  error.apiCode === 'config_not_json_compatible';
+
+const projectionPaths = [
+  'observability/logs',
+  'observability/usage',
+  'requests/proxy-url',
+  'routing',
+  'access/api-keys',
+  'api-keys',
+  'quota-exceeded',
+  'oauth/providers/aistudio/ws-auth',
+  'oauth/providers/antigravity/antigravity-credits',
+  'oauth/excluded-models',
+  'ampcode',
+  'plugins/enabled',
+];
+
+async function readConfigProjection(revision: string): Promise<Config> {
+  const assertConnection = guardConfigConnection();
+  const snapshots = await Promise.all(
+    projectionPaths.map(async (path) => ({
+      path,
+      ...(await readConfigSnapshot<unknown>(`/config/${path}`, undefined)),
+    }))
+  );
+  assertConnection();
+  if (snapshots.some((snapshot) => snapshot.revision !== revision)) {
+    throw new Error(
+      i18n.t('config_management.read_conflict', {
+        defaultValue: 'Configuration changed while reading; reload and try again.',
+      })
+    );
+  }
+  const view: Record<string, unknown> = {};
+  for (const { path, value } of snapshots) {
+    if (value === undefined) continue;
+    const parts = path.split('/');
+    let parent = view;
+    for (const part of parts.slice(0, -1)) {
+      parent[part] ??= {};
+      parent = parent[part] as Record<string, unknown>;
+    }
+    parent[parts[parts.length - 1]] = value;
+  }
+  const config = normalizeConfigResponse(view);
+  // This view omits plugin-owned YAML and must never authorize a full-document write.
+  delete config.raw;
+  return config;
+}
+
 export const configApi = {
-  /**
-   * 获取配置（会进行字段规范化）。v8 JSON 视图已为 api-keys 注入 auth_index。
-   */
   async getConfig(): Promise<Config> {
-    const raw = await apiClient.get('/config');
-    return normalizeConfigResponse(raw);
+    const assertConnection = guardConfigConnection();
+    try {
+      const raw = await apiClient.get('/config');
+      assertConnection();
+      return normalizeConfigResponse(raw);
+    } catch (error) {
+      if (!isConfigNotJSONCompatible(error)) throw error;
+      assertConnection();
+      const revision = configRevisionFromHeaders((error as ApiError).headers, true);
+      return readConfigProjection(revision);
+    }
   },
 
-  /**
-   * 获取原始 v8 配置树（不做转换）
-   */
   getRawConfig: () => apiClient.get('/config'),
 
-  /**
-   * 请求日志开关：独立标量，写入前读取当前 revision 并以 If-Match 提交。
-   */
   updateRequestLog: (enabled: boolean) =>
     putConfigValue('/config/observability/logs/request-log', enabled),
 };

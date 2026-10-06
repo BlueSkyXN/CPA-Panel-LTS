@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useId, useImperativeHandle, useState, type Ref } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type Ref,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { Sheet } from '@/components/ui/Sheet';
 import { IconLoader2, IconPencil } from '@/components/ui/icons';
@@ -13,6 +21,8 @@ import { ResourceDetailView } from './ResourceDetailView';
 import { SponsorProviderForm } from './forms/SponsorProviderForm';
 import styles from './forms/sharedForm.module.scss';
 import { registerSessionBusyCheck, registerSessionLeaveCheck } from '@/services/connectionSession';
+import { resourceConfigGroups, type ConfigGroupTarget } from '../configGroups';
+import { ConfigGroupSheet, type ConfigGroupSheetHandle } from './ConfigGroupSheet';
 
 type SheetMode = 'detail' | 'create' | 'edit';
 
@@ -54,15 +64,21 @@ export function ProviderSheet({
   const { showConfirmation } = useNotificationStore();
   const formId = useId();
   const [submitting, setSubmitting] = useState(false);
+  const [editingGroup, setEditingGroup] = useState<ConfigGroupTarget | null>(null);
+  const groupRef = useRef<ConfigGroupSheetHandle>(null);
   useEffect(() => registerSessionBusyCheck(() => submitting), [submitting]);
   const [isDirty, setIsDirty] = useState(false);
-  useEffect(() => registerSessionLeaveCheck(() => state.open && (isDirty || submitting)), [state.open, isDirty, submitting]);
+  useEffect(
+    () => registerSessionLeaveCheck(() => state.open && (isDirty || submitting)),
+    [state.open, isDirty, submitting]
+  );
 
   // Reset dirty flag whenever the sheet is closed or the editing target
   // (brand / resource / mode) changes — the child form will re-mount and
   // re-report its own dirty state.
   useEffect(() => {
     setIsDirty(false);
+    setEditingGroup(null);
   }, [state.brand, state.mode, state.resource?.id, state.open]);
 
   const handleDirtyChange = useCallback((dirty: boolean) => {
@@ -91,7 +107,16 @@ export function ProviderSheet({
     });
   }, [isDirty, isEditingForm, showConfirmation, submitting, t]);
 
-  useImperativeHandle(ref, () => ({ confirmDiscardIfDirty }), [confirmDiscardIfDirty]);
+  useImperativeHandle(
+    ref,
+    () => ({
+      confirmDiscardIfDirty: () =>
+        editingGroup
+          ? (groupRef.current?.confirmDiscardIfDirty() ?? Promise.resolve(false))
+          : confirmDiscardIfDirty(),
+    }),
+    [confirmDiscardIfDirty, editingGroup]
+  );
 
   const handleCancelClick = useCallback(() => {
     void confirmDiscardIfDirty().then((ok) => {
@@ -228,6 +253,24 @@ export function ProviderSheet({
       </>
     );
 
+  if (editingGroup && state.open) {
+    return (
+      <ConfigGroupSheet
+        ref={groupRef}
+        target={editingGroup}
+        disabled={mutationDisabled}
+        onClose={() => {
+          setEditingGroup(null);
+          onClose();
+        }}
+        onSaved={async () => {
+          await workbench.refetch();
+        }}
+      />
+    );
+  }
+
+  const configGroups = state.resource ? resourceConfigGroups(state.resource) : [];
   return (
     <Sheet
       open={state.open}
@@ -259,6 +302,32 @@ export function ProviderSheet({
       closeDisabled={submitting}
       confirmClose={confirmDiscardIfDirty}
     >
+      {configGroups.map((target) => (
+        <div className={styles.section} key={`${target.family}:${target.source.groupIndex}`}>
+          <p className={styles.sectionDesc}>
+            {t('providersPage.configGroup.impact', {
+              name: String(target.source.group.name ?? target.family),
+              count: Array.isArray(target.source.group.keys) ? target.source.group.keys.length : 0,
+            })}
+          </p>
+          <button
+            type="button"
+            className={`${styles.footerBtn} ${styles.footerBtnGhost}`}
+            disabled={formMutating}
+            onClick={() => {
+              void confirmDiscardIfDirty().then((ok) => {
+                if (ok) {
+                  setIsDirty(false);
+                  setEditingGroup(target);
+                }
+              });
+            }}
+          >
+            {t('providersPage.configGroup.edit')}
+          </button>
+          <hr className={styles.divider} />
+        </div>
+      ))}
       {renderBody()}
     </Sheet>
   );

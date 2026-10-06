@@ -53,7 +53,7 @@ test('provider writes send If-Match from the same GET, strip auth indexes, and p
 
   assert.deepEqual(
     core.calls.map(({ method, url }) => `${method} ${url}`),
-    ['GET /config', 'PUT /config/api-keys/gemini']
+    ['GET /config/api-keys/gemini', 'PUT /config/api-keys/gemini']
   );
   const [read, write] = core.calls;
   assert.equal(write.base, 'https://core.invalid/v8/management');
@@ -76,10 +76,10 @@ test('every write re-reads the configuration: a cleared ETag is never reused', a
   await providersApi.updateGeminiKey(b.apiKey, b.baseUrl, { ...b, priority: 2 });
   const methods = core.calls.map(({ method, url }) => `${method} ${url}`);
   assert.deepEqual(methods, [
-    'GET /config',
+    'GET /config/api-keys/gemini',
     'PUT /config/api-keys/gemini',
     'GET /config',
-    'GET /config',
+    'GET /config/api-keys/gemini',
     'PUT /config/api-keys/gemini',
   ]);
   const puts = core.calls.filter((call) => call.method === 'PUT');
@@ -152,7 +152,7 @@ test('F24: changing provider B keeps provider A auth index for usage attribution
   // A single v8 read: no runtime list merge or snapshot gate.
   assert.deepEqual(
     core.calls.filter((call) => call.method === 'GET').map((call) => call.url),
-    ['/config', '/config', '/config']
+    ['/config', '/config/api-keys/gemini', '/config']
   );
 });
 
@@ -246,6 +246,99 @@ test('configPatch binds its first write to the caller revision and re-reads for 
     applyConfigPatch({ patch: {}, deletions: [['debug']] }, apiClient.getConnectionRevision(), revision),
     (error) => error.status === 412
   );
+});
+
+test('key edits cannot implicitly change a shared group endpoint', async () => {
+  const doc = geminiDoc();
+  doc['api-keys'].gemini[0].keys.push({ 'api-key': 'synthetic-sibling' });
+  core = installFakeV8Core(apiClient, doc);
+  const key = (await loadConfig()).geminiApiKeys[0];
+  await assert.rejects(
+    providersApi.updateGeminiKey(key.apiKey, key.baseUrl, { ...key, baseUrl: 'https://changed.invalid' }),
+    /group/i
+  );
+  assert.equal(core.writes.length, 0);
+  assert.equal(core.doc['api-keys'].gemini[0]['base-url'], 'https://gemini-a.invalid');
+});
+
+test('explicit group edits preserve keys and unknown fields and bind the current revision', async () => {
+  const doc = geminiDoc();
+  doc['api-keys'].gemini[0].keys.push({ 'api-key': 'synthetic-sibling', 'request-retry': 7 });
+  core = installFakeV8Core(apiClient, doc);
+  const key = (await loadConfig()).geminiApiKeys[0];
+  const originalKeys = structuredClone(core.doc['api-keys'].gemini[0].keys);
+  await providersApi.updateGroup('gemini', key.source, {
+    name: 'renamed', baseUrl: 'https://changed.invalid', requestRetry: 4,
+  });
+  const group = core.doc['api-keys'].gemini[0];
+  assert.deepEqual(group.keys, originalKeys);
+  assert.equal(group.name, 'renamed');
+  assert.equal(group['base-url'], 'https://changed.invalid');
+  assert.equal(group['request-retry'], 4);
+  assert.deepEqual(group['future-group-field'], { keep: true });
+  const writeIndex = core.calls.findIndex((call) => call.method === 'PUT');
+  assert.equal(core.calls[writeIndex].ifMatch, core.calls[writeIndex - 1].etag);
+  assert.equal(core.calls.at(-1).method, 'GET');
+});
+
+test('group editing refuses a changed member list even if the selected key is unchanged', async () => {
+  core = installFakeV8Core(apiClient, geminiDoc());
+  const key = (await loadConfig()).geminiApiKeys[0];
+  core.concurrentEdit((doc) => doc['api-keys'].gemini[0].keys.push({ 'api-key': 'new-sibling' }));
+  await assert.rejects(
+    providersApi.updateGroup('gemini', key.source, { name: 'gemini-1', baseUrl: 'https://changed.invalid' }),
+    /changed|ambiguous/
+  );
+  assert.equal(core.writes.length, 0);
+});
+
+test('group updates find the original group after sibling reordering', async () => {
+  core = installFakeV8Core(apiClient, geminiDoc());
+  const key = (await loadConfig()).geminiApiKeys[0];
+  core.concurrentEdit((doc) => doc['api-keys'].gemini.reverse());
+  await providersApi.updateGroup('gemini', key.source, { name: 'target', baseUrl: 'https://changed.invalid' });
+  assert.equal(core.doc['api-keys'].gemini[0].name, 'gemini-2');
+  assert.equal(core.doc['api-keys'].gemini[1].name, 'target');
+});
+
+test('group updates reject ambiguous duplicates and changes racing the write', async () => {
+  core = installFakeV8Core(apiClient, geminiDoc());
+  const key = (await loadConfig()).geminiApiKeys[0];
+  core.concurrentEdit((doc) => doc['api-keys'].gemini.push(structuredClone(doc['api-keys'].gemini[0])));
+  await assert.rejects(providersApi.updateGroup('gemini', key.source, { name: 'target', baseUrl: '' }), /ambiguous/);
+  assert.equal(core.writes.length, 0);
+  core.restore();
+  core = installFakeV8Core(apiClient, geminiDoc());
+  const current = (await loadConfig()).geminiApiKeys[0];
+  core.onBeforeWrite = (state) => state.concurrentEdit((doc) => { doc['api-keys'].gemini[0].keys.push({ 'api-key': 'late-key' }); });
+  await assert.rejects(providersApi.updateGroup('gemini', current.source, { name: 'target', baseUrl: '' }), (error) => error.status === 412);
+  assert.equal(core.writes.length, 0);
+});
+
+test('group inherit intent removes overrides without materializing null defaults', async () => {
+  const doc = geminiDoc();
+  Object.assign(doc['api-keys'].gemini[0], { 'base-url': null, 'request-retry': 3, 'disable-cooling': null });
+  core = installFakeV8Core(apiClient, doc);
+  const key = (await loadConfig()).geminiApiKeys[0];
+  await providersApi.updateGroup('gemini', key.source, {
+    name: 'renamed', baseUrl: '', inheritFields: ['request-retry', 'disable-cooling', 'request-scoped-errors'],
+  });
+  const group = core.doc['api-keys'].gemini[0];
+  assert.equal('request-retry' in group, false);
+  assert.equal(group['disable-cooling'], null);
+  assert.equal(group['base-url'], null);
+});
+
+test('a successful group PUT without matching readback is not reported as success', async () => {
+  core = installFakeV8Core(apiClient, geminiDoc());
+  const key = (await loadConfig()).geminiApiKeys[0];
+  const adapter = apiClient.instance.defaults.adapter;
+  apiClient.instance.defaults.adapter = async (config) => {
+    const result = await adapter(config);
+    if (config.method === 'put') core.concurrentEdit((doc) => { doc['api-keys'].gemini[0].name = 'changed-again'; });
+    return result;
+  };
+  await assert.rejects(providersApi.updateGroup('gemini', key.source, { name: 'target', baseUrl: key.baseUrl }), /changed|ambiguous/);
 });
 
 test('legacy display_name/displayName routing aliases are read as aliases and persisted canonically', async () => {

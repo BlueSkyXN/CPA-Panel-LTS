@@ -552,8 +552,13 @@ export function BaseProviderForm({
               value={form.baseUrl}
               onChange={(e) => updateField('baseUrl', e.target.value)}
               placeholder="https://api.example.com"
-              disabled={mutating}
+              disabled={mutating || (mode === 'edit' && brand !== 'openaiCompatibility')}
             />
+            {mode === 'edit' && brand !== 'openaiCompatibility' && (
+              <span className={styles.labelHint}>
+                {t('providersPage.configGroup.editRequired')}
+              </span>
+            )}
           </div>
         ) : null}
 

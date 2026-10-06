@@ -7,7 +7,8 @@
 ## 连接与客户端
 
 - `apiClient` 固定访问 `/v8/management`；`ltsExtensionClient` 只承载 Core 没有 v8 等价路由的 LTS 扩展（完整 usage、usage query、Flow、插件 readiness 与插件自有路由、单凭证模型刷新、Home `/nodes`），访问 `/v0/management`。两者共享同一 transport：base URL、management key、connection generation、session write freeze、能力响应头与 401 处理。
-- 登录时 `GET /v8/management/config` 返回 404 且同一凭据能读到 `/v0/management/config`，判定为仅 v0 的旧后端，提示升级 CPA-Core-LTS v8（`LegacyBackendError`）。v0 响应只用于诊断，绝不作为数据或登录回退。
+- 登录、恢复会话和连接测试以 `GET /v8/management/config.yaml` 的合法 V8 文档及 ETag 验证连接，不依赖插件私有配置能否转成 JSON。只有该 V8 路由返回 404 且同一凭据能读到 `/v0/management/config` 时才诊断旧后端（`LegacyBackendError`）；v0 响应绝不作为数据或登录回退。
+- 结构化配置保留 `/config` JSON 快路径。仅 `422 config_not_json_compatible` 启用所需配置子节点读取；所有响应（含缺失节点的 404）必须与原读取具有相同 ETag，且连接代际未变化。投影视图不带 `raw`，不能作为完整配置回写。其他错误仍由配置 store 保留并显示。
 
 ## 配置写入：ETag + If-Match
 
@@ -21,9 +22,10 @@ Core 对 `/v8/management/config*` 的每个 PUT/PATCH/DELETE 都要求恰好一�
 
 ## Provider（Workbench）
 
-- 读：`GET /v8/management/config`。Core 已在 `api-keys` 的组/key 上注入 `auth_index`（官方拼写为 `auth-index`，两者都读）。`useConfigStore.refreshProviders` 只读这一份 v8 配置，不再合并 vertex/openai 运行时列表，也没有快照门控；修改 provider B 不会让 provider A 的 auth index 丢失（F24）。
+- 读：页面使用结构化配置视图；写操作直接读 `GET /v8/management/config/api-keys/{family}`，sponsor 快照读 `/config/api-keys`。Core 在子节点 JSON 视图同样注入 `auth_index`（官方拼写为 `auth-index`，两者都读），不再合并独立运行时列表；插件非 JSON YAML 不阻断 provider 管理。
 - 写：`PUT /v8/management/config/api-keys/{family}`，按官方原生层（ee79a794）以持久化组快照（`ProviderSource`）和 `sourceIndex` 定位目标，只写变化字段，保留组名、共享策略、显式 null 继承、未知字段与模型元数据；模型改名按 `sourceIndex` 保留 force-mapping 等元数据（F23）。写前剥离 `auth_index`/`auth-index`。
 - 目标已被他人修改时，基于旧快照的更新/删除在写请求前拒绝；读取与 PUT 之间的并发写由 Core 412 拒绝（F22）。
+- 凭据编辑不能修改组级 `base-url`；从详情/编辑页的「编辑配置分组」入口修改组名、共享地址和重试/冷却/错误规则默认策略。提交前确认影响数量，写前核对整个组及成员快照，写后读回核对。分组重排可按唯一快照定位；成员变化、重复快照和 412 均拒绝继续。key 的已有覆盖值与未知字段保留，不自动拆组。OpenAI 原有整组编辑保持不变，sponsor 的非 OpenAI key 走相同组级边界。
 - 不再存在布局分类代码与 legacy 反向适配器（F21，`npm run check:lts` 守护）。
 
 ## 配置编辑器
@@ -38,11 +40,11 @@ Core 对 `/v8/management/config*` 的每个 PUT/PATCH/DELETE 都要求恰好一�
 ## 已知边界
 
 - 连接不提供 `/v8/management` 的 Home 控制面无法使用本 Panel。
-- v8 JSON 视图遇到非字符串 map key 返回 422；此时只能使用 YAML 编辑器。
+- 插件配置的非字符串 map key 返回 `422 config_not_json_compatible`；普通结构化页面读取所需子节点，插件 JSON 表单提示转到 YAML 源码编辑。YAML 保存保留原有节点语义，未将插件配置转成 JSON 后回写。
 - `configPatch.applyConfigPatch` 的多步计划只把第一步绑定调用方 revision，后续步骤复读 revision；需要原子性时使用单次 PUT。
 - 多协议 sponsor 操作不是整体事务，部分成功走既有恢复流程。
 - Core v8 对 provider/model/thinking 配置做严格 schema 解码：未知字段（如 `x-*` 扩展字段）会被 `400 invalid_config` 拒绝。Panel 的“保留未知字段”只对 Core 接受的字段有意义；高级 thinking JSON 中的自定义字段会在表单中显示 Core 的拒绝信息，不会落盘。
-- 已知 Core 缺陷（2026-10-06 smoke 发现，未在 Panel 规避）：整文档 `PUT /v8/management/config.yaml` 会丢弃与最后一个节点隔一空行的文档尾注释（`config_v8.go` 仅拷贝 `update.Content[0]`）。Panel 可视保存会以这种形式输出尾注释。
+- 整文档 YAML PUT 丢文档尾注释的问题已由 Core `4ce50920` 修复；仍由真实 Core smoke 保留回归覆盖。
 
 ## 验证
 

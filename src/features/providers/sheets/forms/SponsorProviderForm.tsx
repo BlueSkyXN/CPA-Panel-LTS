@@ -442,7 +442,12 @@ function SponsorKeyEntryCard({
                         value={option.baseUrl}
                         checked={checked}
                         onChange={() => updateEntry({ baseUrl: option.baseUrl })}
-                        disabled={mutating}
+                        disabled={
+                          mutating ||
+                          (mode === 'edit' &&
+                            Boolean(entry.existingApiKey) &&
+                            entry.protocol !== 'openai')
+                        }
                       />
                       <span className={styles.sponsorUrlOptionText}>
                         <span>{t(`providersPage.sponsor.urlOptions.${option.id}`)}</span>
@@ -459,7 +464,13 @@ function SponsorKeyEntryCard({
                   );
                 })}
               </div>
-              <span className={styles.labelHint}>{t('providersPage.sponsor.urlHint')}</span>
+              <span className={styles.labelHint}>
+                {t(
+                  mode === 'edit' && entry.existingApiKey && entry.protocol !== 'openai'
+                    ? 'providersPage.configGroup.editRequired'
+                    : 'providersPage.sponsor.urlHint'
+                )}
+              </span>
             </div>
           ) : null}
 

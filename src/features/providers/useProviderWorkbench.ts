@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { providersApi } from '@/services/api';
 import { apiClient } from '@/services/api/client';
 import { normalizeConfigResponse } from '@/services/api/transformers';
+import { readConfigSnapshot } from '@/services/api/configValue';
 import { getErrorMessage } from '@/utils/helpers';
 import { useAuthStore, useConfigStore } from '@/stores';
 import {
@@ -237,7 +238,7 @@ const buildClaudeApiConfig = (
     'claude',
     {
       ...input,
-      baseUrl: CLAUDE_API_BASE_URL,
+      baseUrl: existing ? existing.baseUrl ?? '' : CLAUDE_API_BASE_URL,
     },
     existing
   ) as ProviderKeyConfig;
@@ -336,7 +337,7 @@ const buildSponsorProviderKeyConfig = (
   return {
     ...(existing ?? {}),
     apiKey,
-    baseUrl: protocol === 'claude' ? urls.anthropic : urls.codex,
+    baseUrl: existing ? existing.baseUrl : protocol === 'claude' ? urls.anthropic : urls.codex,
     ...pickProviderBehavior(entry, protocol),
     proxyUrl: entry.proxyUrl.trim() || undefined,
     prefix: entry.prefix.trim() || undefined,
@@ -364,7 +365,7 @@ const buildSponsorGeminiConfig = (
   return {
     ...(existing ?? {}),
     apiKey,
-    baseUrl: urls.gemini,
+    baseUrl: existing ? existing.baseUrl : urls.gemini,
     proxyUrl: entry.proxyUrl.trim() || undefined,
     prefix: entry.prefix.trim() || undefined,
     priority: entry.priority,
@@ -386,7 +387,8 @@ const readSponsorSnapshot = async (
 ): Promise<SponsorProviderRaw> => {
   const generation = apiClient.getConnectionGeneration();
   const original = snapshot ? structuredClone(snapshot) : undefined;
-  const latest = normalizeConfigResponse(await apiClient.get('/config'));
+  const { value } = await readConfigSnapshot('/config/api-keys', {});
+  const latest = normalizeConfigResponse({ 'api-keys': value });
   if (!apiClient.isCurrentConnection(generation))
     throw new Error('Configuration connection changed');
   const raw =

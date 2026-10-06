@@ -79,6 +79,7 @@ export function ConfigPage() {
   } = useVisualConfig();
 
   const [activeTab, setActiveTab] = useState<ConfigEditorTab>(() => {
+    if (searchParams.get('tab') === 'source') return 'source';
     const saved = localStorage.getItem('config-management:tab');
     if (saved === 'visual' || saved === 'source') return saved;
     return 'visual';

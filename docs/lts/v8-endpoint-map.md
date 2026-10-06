@@ -20,8 +20,9 @@ re-reads before every write. Panel never writes configuration through `/v0/manag
 
 | Panel surface | v8 endpoint | Revision source |
 |---|---|---|
-| Config load / store | `GET /config` (JSON, `auth_index` injected into `api-keys`) | — |
-| Provider families (Workbench) | `PUT /config/api-keys/{family}` | ETag of the same `GET /config` used to read the groups |
+| Login / connection probe | `GET /config.yaml` | Validate V8 YAML and its ETag |
+| Config load / store | `GET /config`; on `422 config_not_json_compatible`, read required config nodes without plugin-owned YAML | All projection nodes must have the original ETag; projection is not a full writable document |
+| Provider families (Workbench) | `GET` / `PUT /config/api-keys/{family}` | ETag of the same family read; explicit group updates also read back |
 | Source / visual YAML editor, Flow page | `GET` / `PUT /config.yaml` | ETag of the editor's `GET /config.yaml` |
 | Client API keys | `GET` / `PUT /config/access/api-keys` | ETag of the same node read |
 | OAuth excluded models / model alias | `GET` / `PUT /config/oauth/excluded-models`, `/config/oauth/model-alias` | ETag of the same node read (writes serialized per map) |
@@ -66,12 +67,13 @@ Response-only `auth_index` / `auth-index` are stripped from groups and keys befo
 | Plugin-owned management routes | `/plugins/copilot/login-info`, `/plugins/{pat}/summary` | pluginhost serves only under `/v0/management` |
 | Per-credential model refresh | `POST /auth-files/models/refresh` | no v8 route |
 | Home runtime probe | `GET /nodes` | Home control-plane, not a Core v8 route |
-| Legacy-backend diagnosis | `GET /v0/management/config` via a bare axios call | only after v8 `/config` returns 404; never used as data |
+| Legacy-backend diagnosis | `GET /v0/management/config` via a bare axios call | only after v8 `/config.yaml` returns 404; never used as data |
 
 ## Known gaps / risks
 
 - A Home control plane that does not expose `/v8/management` cannot be used with this Panel.
 - `GET /v8/management/config` returns `422 config_not_json_compatible` when the requested subtree
-  has non-string map keys; the Panel surfaces this as a load error (the YAML editor still works).
+  has non-string map keys. Authentication uses YAML, ordinary pages use revision-consistent
+  config-node projections, and the affected plugin form offers the YAML source editor.
 - Plugin enable/config writes now go through v8 config (`plugins.configs.<id>`); runtime apply
   relies on Core's post-save reload, as for the v0 handler.

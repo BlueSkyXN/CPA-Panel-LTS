@@ -114,6 +114,24 @@ for (const [section, field, raw] of [
   });
 }
 
+test('opaque plugin YAML survives a real visual edit and source save preflight', async () => {
+  const { assertConfigListsUnchanged } = await vite.ssrLoadModule('/src/utils/configListConflict.ts');
+  for (const plugin of [
+    'table: {1: value}',
+    'table:\n        1: numeric\n        "1": string',
+    'table:\n        ? [a, b]\n        : pair',
+    'base: &base {1: numeric}\n      table: *base',
+  ]) {
+    const source = `config-version: 8\nserver: {port: 8317}\nplugins:\n  configs:\n    sample:\n      ${plugin}\n`;
+    const output = apply(source, () => ({ port: '8318' }));
+    assert.doesNotThrow(() => assertConfigListsUnchanged(source, output, source));
+    const before = parseDocument(source);
+    const after = parseDocument(output);
+    assert.equal(after.getIn(['server', 'port']), 8318);
+    assert.equal(String(after.getIn(['plugins', 'configs'], true)), String(before.getIn(['plugins', 'configs'], true)));
+  }
+});
+
 test('multi-key condition groups stay intact when another payload field is edited', () => {
   const source = `payload:
   override:

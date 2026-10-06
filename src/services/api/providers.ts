@@ -1,11 +1,12 @@
+import i18n from 'i18next';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { apiClient } from './client';
-import { guardConfigConnection, ifMatch } from './configValue';
-import { configRevision } from './configRevision';
+import { guardConfigConnection, ifMatch, readConfigSnapshot } from './configValue';
 import { isRecord } from '@/utils/helpers';
 import {
   normalizeApiKeyEntry,
   normalizeProviderGroups,
+  normalizeRuntimePolicy,
   stripProviderGroupResponseFields,
 } from './transformers';
 import { serializeModelOptions } from './providerModels';
@@ -255,7 +256,7 @@ export const readProviderGroups = (
 };
 interface FamilySnapshot {
   groups: Record<string, unknown>[];
-  /** ETag of the same GET /config response the groups were read from. */
+  /** ETag of the same provider subtree read. */
   revision: string;
 }
 /**
@@ -265,7 +266,7 @@ interface FamilySnapshot {
 const getGroups = async (family: ProviderFamily): Promise<FamilySnapshot> => {
   const assertConnection = guardConfigConnection();
   const session = useAuthStore.getState();
-  const response = await apiClient.getRaw('/config');
+  const { value, revision } = await readConfigSnapshot<unknown>(`/config/api-keys/${family}`, []);
   assertConnection();
   const current = useAuthStore.getState();
   if (
@@ -274,9 +275,8 @@ const getGroups = async (family: ProviderFamily): Promise<FamilySnapshot> => {
     session.isAuthenticated !== current.isAuthenticated
   )
     throw conflict();
-  const revision = configRevision(response, true);
   const groups = stripProviderGroupResponseFields(
-    readProviderGroups(response.data, family)
+    readProviderGroups({ 'api-keys': { [family]: value } }, family)
   ) as Record<string, unknown>[];
   return { groups, revision };
 };
@@ -423,7 +423,10 @@ const preserveModelMetadata = (
  * LTS compatibility: camel/snake display-name spellings were historically routing aliases and
  * Core v8 does not read them. When a model row is rewritten, persist the canonical `alias`.
  */
-const migrateLegacyModelAlias = (model: Record<string, unknown>, value: Record<string, unknown>) => {
+const migrateLegacyModelAlias = (
+  model: Record<string, unknown>,
+  value: Record<string, unknown>
+) => {
   if (!('display_name' in model) && !('displayName' in model)) return model;
   const next = { ...model };
   delete next.display_name;
@@ -485,10 +488,12 @@ const updateKey = async (
   const serialize = keySerializer(family);
   const before = serialize(original);
   const after = serialize(config);
-  const nextGroup = { ...group };
   if (!equal(before['base-url'], after['base-url'])) {
-    if (after['base-url'] === undefined) delete nextGroup['base-url'];
-    else nextGroup['base-url'] = after['base-url'];
+    throw new Error(
+      i18n.t('providersPage.configGroup.editRequired', {
+        defaultValue: 'Edit the configuration group to change its shared base URL.',
+      })
+    );
   }
   delete before['base-url'];
   delete after['base-url'];
@@ -509,7 +514,7 @@ const updateKey = async (
   delete keys[keyIndex]['auth-index'];
   // LTS: saving a Claude entry drops the deprecated no-op `experimental-cch-signing`.
   if (family === 'claude') delete keys[keyIndex]['experimental-cch-signing'];
-  groups[index] = { ...nextGroup, keys };
+  groups[index] = { ...group, keys };
   await putGroups(family, groups, revision);
 };
 const deleteKey = async (
@@ -537,7 +542,40 @@ const findOpenAISource = (groups: Record<string, unknown>[], source?: ProviderSo
   return locateProviderGroup(groups, source);
 };
 
+export interface ProviderGroupChanges extends ProviderRuntimePolicy {
+  name: string;
+  baseUrl: string;
+  disableCooling?: boolean;
+}
+
 export const providersApi = {
+  async updateGroup(family: ProviderFamily, source: ProviderSource, changes: ProviderGroupChanges) {
+    const assertConnection = guardConfigConnection();
+    const { groups, revision } = await getGroups(family);
+    assertConnection();
+    const index = locateProviderGroup(groups, { ...source, keyIndex: undefined });
+    const group = groups[index];
+    const before = serializeRuntimePolicy(normalizeRuntimePolicy(group));
+    if (typeof group['disable-cooling'] === 'boolean')
+      before['disable-cooling'] = group['disable-cooling'];
+    const after = { ...before, ...serializeRuntimePolicy(changes) };
+    if (changes.disableCooling !== undefined) after['disable-cooling'] = changes.disableCooling;
+    const next = applyProviderChanges(group, before, after);
+    applyPolicyIntent(next, group, changes, after);
+    next.name = changes.name.trim();
+    if (
+      changes.baseUrl.trim() !== (typeof group['base-url'] === 'string' ? group['base-url'] : '')
+    ) {
+      if (changes.baseUrl.trim()) next['base-url'] = changes.baseUrl.trim();
+      else delete next['base-url'];
+    }
+    groups[index] = next;
+    await putGroups(family, groups, revision);
+    assertConnection();
+    const readback = await getGroups(family);
+    assertConnection();
+    locateProviderGroup(readback.groups, { groupIndex: index, group: next, groups });
+  },
   createGeminiKey: (config: GeminiKeyConfig) => createKey('gemini', config),
   updateGeminiKey: (apiKey: string, baseUrl: string | undefined, config: GeminiKeyConfig) =>
     updateKey('gemini', apiKey, baseUrl, config),

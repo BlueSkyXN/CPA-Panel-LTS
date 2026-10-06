@@ -1655,6 +1655,7 @@
     "upgrade_required_desc": "当前服务器版本不支持日志查看功能，请升级到最新版本的 CPA 以使用此功能。"
   },
   "config_management": {
+    "read_conflict": "读取期间配置已变化，请重新加载后重试。",
     "save_target": "目标实例：{{name}}",
     "editor": {
       "guidance": {
@@ -2227,6 +2228,9 @@
     "card_idle_hint": "请使用顶部“刷新全部凭证”按钮获取最新额度。"
   },
   "plugin_management": {
+    "yaml_required_title": "此插件需要使用 YAML 编辑",
+    "yaml_required_message": "此配置包含 JSON 表单无法表达的 YAML 值。请打开源码编辑器，以保留完整的插件配置。",
+    "open_yaml": "打开 YAML 源码",
     "inherit_config": "继承 / 未设置",
     "manual_auth": "手动账号导入",
     "manage_accounts": "管理账号",
@@ -2605,6 +2609,17 @@
     "author": "作者"
   },
   "providersPage": {
+    "configGroup": {
+      "title": "编辑配置分组",
+      "name": "分组名称",
+      "baseUrl": "共享服务地址",
+      "edit": "编辑配置分组",
+      "impact": "分组 {{name}} · {{count}} 个凭据共享服务地址和默认设置。",
+      "editRequired": "此地址属于配置分组，请通过“编辑配置分组”修改。",
+      "policyHint": "分组默认设置用于选择继承的凭据；已有的凭据覆盖值保持不变。",
+      "confirmTitle": "应用整个分组的修改？",
+      "confirmMessage": "将修改包含 {{count}} 个凭据的分组 {{name}}。共享服务地址影响所有凭据，默认策略仅影响继承该设置的凭据。"
+    },
     "header": {
       "title": "AI 提供商",
       "activeResources": "{{active}}/{{total}} 个活跃资源",

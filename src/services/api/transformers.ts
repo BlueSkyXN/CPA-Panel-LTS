@@ -148,7 +148,9 @@ const normalizeApiKeyEntry = (entry: unknown): ApiKeyEntry | null => {
   return result;
 };
 
-const normalizeRuntimePolicy = (record: Record<string, unknown> | null): ProviderRuntimePolicy => {
+export const normalizeRuntimePolicy = (
+  record: Record<string, unknown> | null
+): ProviderRuntimePolicy => {
   const policy: ProviderRuntimePolicy = {};
   const retry = record?.['request-retry'];
   if (typeof retry === 'number' && Number.isSafeInteger(retry)) policy.requestRetry = retry;
