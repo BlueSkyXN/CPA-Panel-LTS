@@ -3,6 +3,7 @@ import test from 'node:test';
 import { AxiosError } from 'axios';
 import { createServer } from 'vite';
 import { installFakeV8Core } from './testing/fakeV8Core.mjs';
+import { localizedMessages } from './testing/localizedMessages.mjs';
 
 const previousWindow = globalThis.window;
 globalThis.window = new EventTarget();
@@ -78,7 +79,7 @@ test('projection fails closed when node reads span different revisions', async (
     if (config.url === '/config/routing') core.concurrentEdit((doc) => { doc.routing.strategy = 'fill-first'; });
     return adapter(config);
   };
-  await assert.rejects(configApi.getConfig(), /changed|revision/i);
+  await assert.rejects(configApi.getConfig(), localizedMessages('config_management.read_conflict'));
   assert.equal(useConfigStore.getState().config, null);
 });
 

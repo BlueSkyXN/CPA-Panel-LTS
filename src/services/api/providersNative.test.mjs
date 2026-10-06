@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createServer } from 'vite';
 import { installFakeV8Core, authIndexFor } from './testing/fakeV8Core.mjs';
+import { localizedMessages } from './testing/localizedMessages.mjs';
 
 const originalWindow = globalThis.window;
 globalThis.window = new EventTarget();
@@ -255,7 +256,7 @@ test('key edits cannot implicitly change a shared group endpoint', async () => {
   const key = (await loadConfig()).geminiApiKeys[0];
   await assert.rejects(
     providersApi.updateGeminiKey(key.apiKey, key.baseUrl, { ...key, baseUrl: 'https://changed.invalid' }),
-    /group/i
+    localizedMessages('providersPage.configGroup.editRequired')
   );
   assert.equal(core.writes.length, 0);
   assert.equal(core.doc['api-keys'].gemini[0]['base-url'], 'https://gemini-a.invalid');
