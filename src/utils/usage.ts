@@ -196,6 +196,8 @@ export interface UsageDetail {
   ttfa_ms?: number;
   tokens: UsageTokenStats;
   failed: boolean;
+  failure_status?: number | null;
+  failure_reason?: string | null;
   /** Parent key from usage.apis; may be a caller key, endpoint, provider, or unknown fallback. */
   __apiBucket?: string;
   __modelName?: string;
@@ -271,6 +273,47 @@ export type {
   UsageTimeRangeSelection,
   UsageTimeWindow,
 } from './usage/timeRange';
+
+export { percentileFromSorted, sortValidSamples, summarizeSamples } from './usage/percentiles';
+export type { PercentileSummary } from './usage/percentiles';
+export type { AnalyticsGrain, AnalyticsTimeWindow } from './usage/latencyAnalysis';
+export {
+  LATENCY_HISTOGRAM_EDGE_MS,
+  buildLatencyHistogram,
+  buildLatencyPercentileSeries,
+  collectLatencyAnalysisRows,
+  summarizeLatencyRows,
+} from './usage/latencyAnalysis';
+export type {
+  LatencyAnalysisRow,
+  LatencyHistogram,
+  LatencyPercentileSeries,
+  LatencyTimingSummaries,
+} from './usage/latencyAnalysis';
+export {
+  buildCacheTrendSeries,
+  collectCacheAnalysisRows,
+  summarizeCacheAnalytics,
+} from './usage/cacheAnalytics';
+export type {
+  CacheAnalysisRow,
+  CacheAnalyticsSummary,
+  CacheTrendPoint,
+} from './usage/cacheAnalytics';
+export {
+  buildFailureTrendSeries,
+  classifyFailureStatus,
+  collectErrorAnalysisRows,
+  summarizeErrorAnalytics,
+} from './usage/errorAnalytics';
+export type {
+  ErrorAnalysisRow,
+  ErrorAnalyticsSummary,
+  ErrorFamily,
+  ErrorReasonGroup,
+  ErrorStatusGroup,
+  FailureTrendPoint,
+} from './usage/errorAnalytics';
 
 const USAGE_ENDPOINT_METHOD_REGEX = /^(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\s+(\S+)/i;
 
@@ -460,6 +503,24 @@ const extractReasoningEffort = (detail: Record<string, unknown>): string | null 
 
 const extractUpstreamModel = (detail: Record<string, unknown>): string | null =>
   typeof detail.upstream_model === 'string' ? detail.upstream_model : null;
+
+const extractFailureStatus = (detail: Record<string, unknown>): number | null => {
+  const raw = detail.failure_status ?? detail.failureStatus ?? detail.FailureStatus;
+  if (raw === null || raw === undefined) return null;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 100 || parsed > 599) return null;
+  return Math.floor(parsed);
+};
+
+const FAILURE_REASON_MAX_LENGTH = 200;
+
+const extractFailureReason = (detail: Record<string, unknown>): string | null => {
+  const raw = detail.failure_reason ?? detail.failureReason ?? detail.FailureReason;
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  return trimmed.slice(0, FAILURE_REASON_MAX_LENGTH);
+};
 
 const USAGE_SOURCE_PREFIX_KEY = 'k:';
 const USAGE_SOURCE_PREFIX_MASKED = 'm:';
@@ -782,6 +843,8 @@ export function collectUsageDetails(usageData: unknown): UsageDetail[] {
           ttfa_ms: ttfaMs ?? undefined,
           tokens: normalizeUsageDetailTokens(tokensRaw),
           failed: detailRaw.failed === true,
+          failure_status: extractFailureStatus(detailRaw),
+          failure_reason: extractFailureReason(detailRaw),
           __apiBucket: apiBucket,
           __modelName: modelName,
           __timestampMs: Number.isNaN(timestampMs) ? 0 : timestampMs,
@@ -875,6 +938,8 @@ export function collectUsageDetailsWithEndpoint(usageData: unknown): UsageDetail
           ttfa_ms: ttfaMs ?? undefined,
           tokens: normalizeUsageDetailTokens(tokensRaw),
           failed: detailRaw.failed === true,
+          failure_status: extractFailureStatus(detailRaw),
+          failure_reason: extractFailureReason(detailRaw),
           __apiBucket: endpoint,
           __modelName: modelName,
           __endpoint: endpoint,
