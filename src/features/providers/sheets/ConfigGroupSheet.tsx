@@ -29,6 +29,7 @@ export function ConfigGroupSheet({ ref, target, disabled, onClose, onSaved }: Pr
   const { showConfirmation, showNotification } = useNotificationStore();
   const id = useId();
   const group = target.source.group;
+  const supportsErrors = target.family !== 'vertex';
   const initialName = typeof group.name === 'string' ? group.name : '';
   const initialURL = typeof group['base-url'] === 'string' ? group['base-url'] : '';
   const [name, setName] = useState(initialName);
@@ -73,7 +74,7 @@ export function ConfigGroupSheet({ ref, target, disabled, onClose, onSaved }: Pr
 
   const save = async () => {
     if (disabled || submitting || !dirty) return;
-    const validation = validateRuntimePolicy(policy);
+    const validation = validateRuntimePolicy(policy, supportsErrors);
     if (validation) {
       setError(t(validation));
       return;
@@ -102,7 +103,7 @@ export function ConfigGroupSheet({ ref, target, disabled, onClose, onSaved }: Pr
       await providersApi.updateGroup(target.family, target.source, {
         name,
         baseUrl,
-        ...buildRuntimePolicy(policy),
+        ...buildRuntimePolicy(policy, supportsErrors),
       });
       await onSaved();
       if (!apiClient.isCurrentConnection(generation)) return;
@@ -178,6 +179,7 @@ export function ConfigGroupSheet({ ref, target, disabled, onClose, onSaved }: Pr
           value={policy}
           onChange={setPolicy}
           disabled={disabled || submitting}
+          supportsErrors={supportsErrors}
         />
         {error && (
           <div role="alert" className={styles.errorBox}>

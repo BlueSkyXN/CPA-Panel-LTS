@@ -26,6 +26,7 @@ Core 对 `/v8/management/config*` 的每个 PUT/PATCH/DELETE 都要求恰好一�
 - 写：`PUT /v8/management/config/api-keys/{family}`，按官方原生层（ee79a794）以持久化组快照（`ProviderSource`）和 `sourceIndex` 定位目标，只写变化字段，保留组名、共享策略、显式 null 继承、未知字段与模型元数据；模型改名按 `sourceIndex` 保留 force-mapping 等元数据（F23）。写前剥离 `auth_index`/`auth-index`。
 - 目标已被他人修改时，基于旧快照的更新/删除在写请求前拒绝；读取与 PUT 之间的并发写由 Core 412 拒绝（F22）。
 - 凭据编辑不能修改组级 `base-url`；从详情/编辑页的「编辑配置分组」入口修改组名、共享地址和重试/冷却/错误规则默认策略。提交前确认影响数量，写前核对整个组及成员快照，写后读回核对。分组重排可按唯一快照定位；成员变化、重复快照和 412 均拒绝继续。key 的已有覆盖值与未知字段保留，不自动拆组。OpenAI 原有整组编辑保持不变，sponsor 的非 OpenAI key 走相同组级边界。
+- 分组运行策略遵循 provider 能力：Vertex 可编辑重试和冷却，但不提供 `request-scoped-errors` 控件；表单校验、字段构造与 API 序列化均关闭该能力。Codex 等支持错误规则的分组仍可保存空覆盖或具体规则。
 - 不再存在布局分类代码与 legacy 反向适配器（F21，`npm run check:lts` 守护）。
 
 ## 配置编辑器

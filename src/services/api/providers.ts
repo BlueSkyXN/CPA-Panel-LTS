@@ -555,10 +555,11 @@ export const providersApi = {
     assertConnection();
     const index = locateProviderGroup(groups, { ...source, keyIndex: undefined });
     const group = groups[index];
-    const before = serializeRuntimePolicy(normalizeRuntimePolicy(group));
+    const supportsErrors = family !== 'vertex';
+    const before = serializeRuntimePolicy(normalizeRuntimePolicy(group), supportsErrors);
     if (typeof group['disable-cooling'] === 'boolean')
       before['disable-cooling'] = group['disable-cooling'];
-    const after = { ...before, ...serializeRuntimePolicy(changes) };
+    const after = { ...before, ...serializeRuntimePolicy(changes, supportsErrors) };
     if (changes.disableCooling !== undefined) after['disable-cooling'] = changes.disableCooling;
     const next = applyProviderChanges(group, before, after);
     applyPolicyIntent(next, group, changes, after);

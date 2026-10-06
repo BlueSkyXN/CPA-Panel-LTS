@@ -282,6 +282,67 @@ test('explicit group edits preserve keys and unknown fields and bind the current
   assert.equal(core.calls.at(-1).method, 'GET');
 });
 
+for (const family of ['vertex', 'codex']) {
+  for (const rules of [[], [{ status: 429, match: ['synthetic limit'], action: 'continue' }]]) {
+    test(`${family} group edits enforce error-rule capability with ${rules.length} rules`, async () => {
+      core = installFakeV8Core(apiClient, {
+        'config-version': 8,
+        'api-keys': {
+          [family]: [{
+            name: 'original', 'base-url': 'https://original.invalid',
+            keys: [{ 'api-key': 'synthetic-key', 'request-retry': 7 }],
+            'future-group-field': { keep: true },
+          }],
+        },
+      });
+      const key = (await loadConfig())[family === 'vertex' ? 'vertexApiKeys' : 'codexApiKeys'][0];
+      const originalKeys = structuredClone(core.doc['api-keys'][family][0].keys);
+      await providersApi.updateGroup(family, key.source, {
+        name: 'updated', baseUrl: 'https://updated.invalid', requestRetry: 2,
+        disableCooling: true, requestScopedErrors: rules,
+      });
+      const group = core.writes[0].data[0];
+      assert.equal(group.name, 'updated');
+      assert.equal(group['base-url'], 'https://updated.invalid');
+      assert.equal(group['request-retry'], 2);
+      assert.equal(group['disable-cooling'], true);
+      assert.deepEqual(group.keys, originalKeys);
+      assert.deepEqual(group['future-group-field'], { keep: true });
+      if (family === 'vertex') assert.equal('request-scoped-errors' in group, false);
+      else assert.deepEqual(group['request-scoped-errors'], rules);
+      assert.equal(core.calls.at(-1).method, 'GET');
+      const writeIndex = core.calls.findIndex((call) => call.method === 'PUT');
+      assert.equal(core.calls[writeIndex].ifMatch, core.calls[writeIndex - 1].etag);
+    });
+  }
+}
+
+test('configuration group sheets hide unsupported Vertex error-rule controls', async () => {
+  const { Children, createElement } = await import('react');
+  const { renderToStaticMarkup } = await import('react-dom/server');
+  const { ConfigGroupSheet } = await vite.ssrLoadModule('/src/features/providers/sheets/ConfigGroupSheet.tsx');
+  const { RuntimePolicyEditor } = await vite.ssrLoadModule('/src/features/providers/sheets/forms/RuntimePolicyEditor.tsx');
+  for (const family of ['vertex', 'codex']) {
+    let editorProps;
+    function Harness() {
+      const tree = ConfigGroupSheet({
+        target: { family, source: { groupIndex: 0, group: { name: 'synthetic', keys: [{ 'api-key': 'synthetic-key' }] } } },
+        disabled: false, onClose() {}, async onSaved() {},
+      });
+      const visit = (node) => Children.forEach(node, (child) => {
+        if (!child || typeof child !== 'object') return;
+        if (child.type === RuntimePolicyEditor) editorProps = child.props;
+        else visit(child.props?.children);
+      });
+      visit(tree);
+      return null;
+    }
+    renderToStaticMarkup(createElement(Harness));
+    assert.ok(editorProps);
+    assert.equal(editorProps.supportsErrors ?? true, family !== 'vertex');
+  }
+});
+
 test('group editing refuses a changed member list even if the selected key is unchanged', async () => {
   core = installFakeV8Core(apiClient, geminiDoc());
   const key = (await loadConfig()).geminiApiKeys[0];
