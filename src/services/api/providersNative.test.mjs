@@ -66,6 +66,51 @@ test('provider writes send If-Match from the same GET, strip auth indexes, and p
   assert.equal(write.data[1].keys[0].priority, 3);
 });
 
+test('provider display getters retain auth indexes without putting them into source snapshots or writes', async () => {
+  core = installFakeV8Core(apiClient, {
+    'config-version': 8,
+    'api-keys': {
+      meta: [{ name: 'meta', keys: [{ 'api-key': 'synthetic-meta' }] }],
+      vertex: [{ name: 'vertex', keys: [{ 'api-key': 'synthetic-vertex' }] }],
+      'openai-compatibility': ['first', 'second'].map((name) => ({
+        name, 'base-url': `https://${name}.invalid/v1`,
+        keys: [{ 'api-key': 'synthetic-shared-key' }],
+      })),
+    },
+  });
+  const adapter = apiClient.instance.defaults.adapter;
+  apiClient.instance.defaults.adapter = async (config) => {
+    const response = await adapter(config);
+    if (config.method === 'get' && config.url === '/config/api-keys/openai-compatibility') {
+      response.data.forEach((group, index) => {
+        group.keys[0].auth_index = `synthetic-openai-${index}`;
+      });
+    }
+    return response;
+  };
+  const [meta] = await providersApi.getMetaConfigs();
+  const [vertex] = await providersApi.getVertexConfigs();
+  const providers = await providersApi.getOpenAIProviders();
+  assert.equal(meta.authIndex, 'meta:synthetic-meta');
+  assert.equal(vertex.authIndex, 'vertex:synthetic-vertex');
+  assert.deepEqual(providers.map((p) => p.apiKeyEntries[0].authIndex), [
+    'synthetic-openai-0', 'synthetic-openai-1',
+  ]);
+  for (const config of [meta, vertex, ...providers]) {
+    assert.doesNotMatch(JSON.stringify(config.source), /auth_index|auth-index/);
+  }
+  const { buildSourceInfoMap, resolveSourceDisplay } = await vite.ssrLoadModule('/src/utils/sourceResolver.ts');
+  const { buildCandidateUsageSourceIds } = await vite.ssrLoadModule('/src/utils/usage.ts');
+  const map = buildSourceInfoMap({ openaiCompatibility: providers });
+  const source = buildCandidateUsageSourceIds({ apiKey: 'synthetic-shared-key' })[0];
+  assert.deepEqual(providers.map((p) => resolveSourceDisplay(
+    source, p.apiKeyEntries[0].authIndex, map, new Map()
+  ).identityKey), ['openai:0', 'openai:1']);
+  await providersApi.updateOpenAIProvider(providers[0].name, 0, { ...providers[0], priority: 3 });
+  assert.equal(core.writes[0].data[0].priority, 3);
+  assert.doesNotMatch(JSON.stringify(core.writes[0].data), /auth_index|auth-index/);
+});
+
 test('every write re-reads the configuration: a cleared ETag is never reused', async () => {
   core = installFakeV8Core(apiClient, geminiDoc());
   let config = await loadConfig();

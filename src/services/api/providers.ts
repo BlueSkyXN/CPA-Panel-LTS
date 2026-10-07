@@ -263,7 +263,7 @@ interface FamilySnapshot {
  * Every mutation re-reads the family: Core clears the ETag after a write, so a revision is
  * never reused. Groups are compared and written without injected auth indexes.
  */
-const getGroups = async (family: ProviderFamily): Promise<FamilySnapshot> => {
+const readGroups = async (family: ProviderFamily): Promise<FamilySnapshot> => {
   const assertConnection = guardConfigConnection();
   const session = useAuthStore.getState();
   const { value, revision } = await readConfigSnapshot<unknown>(`/config/api-keys/${family}`, []);
@@ -275,10 +275,11 @@ const getGroups = async (family: ProviderFamily): Promise<FamilySnapshot> => {
     session.isAuthenticated !== current.isAuthenticated
   )
     throw conflict();
-  const groups = stripProviderGroupResponseFields(
-    readProviderGroups({ 'api-keys': { [family]: value } }, family)
-  ) as Record<string, unknown>[];
-  return { groups, revision };
+  return { groups: readProviderGroups({ 'api-keys': { [family]: value } }, family), revision };
+};
+const getGroups = async (family: ProviderFamily): Promise<FamilySnapshot> => {
+  const { groups, revision } = await readGroups(family);
+  return { groups: stripProviderGroupResponseFields(groups) as Record<string, unknown>[], revision };
 };
 /** 412/428 (stale or missing revision) propagate to the caller; never retried blindly. */
 const putGroups = (family: ProviderFamily, groups: Record<string, unknown>[], revision: string) =>
@@ -613,14 +614,14 @@ export const providersApi = {
   deleteVertexConfig: (apiKey: string, baseUrl?: string, source?: ProviderSource) =>
     deleteKey('vertex', apiKey, baseUrl, source),
   async getMetaConfigs() {
-    return normalizeProviderGroups((await getGroups('meta')).groups) as ProviderKeyConfig[];
+    return normalizeProviderGroups((await readGroups('meta')).groups) as ProviderKeyConfig[];
   },
   async getVertexConfigs() {
-    return normalizeProviderGroups((await getGroups('vertex')).groups) as ProviderKeyConfig[];
+    return normalizeProviderGroups((await readGroups('vertex')).groups) as ProviderKeyConfig[];
   },
   async getOpenAIProviders() {
     return normalizeProviderGroups(
-      (await getGroups('openai-compatibility')).groups,
+      (await readGroups('openai-compatibility')).groups,
       true
     ) as OpenAIProviderConfig[];
   },
