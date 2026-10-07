@@ -3,7 +3,7 @@
  * 并给出逐桶失败率趋势。状态码读取口径与 usage.ts extractFailureStatus 一致。
  */
 
-import type { AnalyticsGrain, AnalyticsTimeWindow } from './latencyAnalysis';
+import { buildAnalyticsBuckets, type AnalyticsGrain, type AnalyticsTimeWindow } from './analyticsBuckets';
 
 export type ErrorFamily = '429' | '4xx' | '5xx' | 'other';
 
@@ -14,9 +14,6 @@ export interface ErrorAnalysisRow {
   failureReason: string | null;
 }
 
-const HOUR_MS = 3_600_000;
-const DAY_MS = 86_400_000;
-const MAX_PADDED_BUCKETS = 24 * 90 + 1;
 const FAILURE_REASON_MAX_LENGTH = 200;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -171,53 +168,16 @@ export interface FailureTrendPoint {
   failureRate: number | null;
 }
 
-const grainMs = (grain: AnalyticsGrain): number => (grain === 'day' ? DAY_MS : HOUR_MS);
-
-const floorToGrain = (timestampMs: number, grain: AnalyticsGrain): number => {
-  const date = new Date(timestampMs);
-  if (grain === 'day') {
-    date.setHours(0, 0, 0, 0);
-  } else {
-    date.setMinutes(0, 0, 0);
-  }
-  return date.getTime();
-};
-
 export function buildFailureTrendSeries(
   rows: readonly ErrorAnalysisRow[],
   grain: AnalyticsGrain,
   window?: AnalyticsTimeWindow | null
 ): FailureTrendPoint[] {
-  const inWindow = (timestampMs: number): boolean =>
-    Number.isFinite(timestampMs) &&
-    timestampMs > 0 &&
-    (!window || (timestampMs >= window.startMs && timestampMs <= window.endMs));
-  const valid = rows.filter((row) => inWindow(row.timestampMs));
-  if (!valid.length && !window) return [];
-  const end = floorToGrain(
-    window ? window.endMs : Math.max(...valid.map((row) => row.timestampMs)),
-    grain
-  );
-  const start = floorToGrain(
-    window ? window.startMs : Math.min(...valid.map((row) => row.timestampMs)),
-    grain
-  );
-  const count = Math.floor((end - start) / grainMs(grain)) + 1;
-  let times: number[];
-  if (!Number.isFinite(count) || count <= 0) {
-    times = [];
-  } else if (count <= MAX_PADDED_BUCKETS) {
-    times = Array.from({ length: count }, (_, index) => start + index * grainMs(grain));
-  } else {
-    times = Array.from(
-      new Set([start, end, ...valid.map((row) => floorToGrain(row.timestampMs, grain))])
-    ).sort((a, b) => a - b);
-  }
-  const indexes = new Map(times.map((timestampMs, index) => [timestampMs, index]));
+  const { times, indexOf } = buildAnalyticsBuckets(rows, grain, window);
   const buckets = times.map(() => ({ requests: 0, failures: 0 }));
-  for (const row of valid) {
-    const index = indexes.get(floorToGrain(row.timestampMs, grain));
-    if (index === undefined) continue;
+  for (const row of rows) {
+    const index = indexOf(row.timestampMs);
+    if (index < 0) continue;
     buckets[index].requests += 1;
     if (row.failed) buckets[index].failures += 1;
   }

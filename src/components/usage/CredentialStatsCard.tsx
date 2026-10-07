@@ -88,8 +88,8 @@ const collectCredentialEntries = (usage: UsagePayload | null): CredentialEntry[]
       tokens: extractTotalTokens(d, d.__modelName),
       inputTokens,
       cacheReadTokens,
-      latencyTotalMs: d.failed || latencyMs === null ? 0 : latencyMs,
-      latencySamples: d.failed || latencyMs === null ? 0 : 1,
+      latencyTotalMs: latencyMs ?? 0,
+      latencySamples: latencyMs === null ? 0 : 1,
     };
   });
 };

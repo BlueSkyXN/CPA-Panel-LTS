@@ -6,7 +6,7 @@
  * cached_requests 统计 cache_read_tokens > 0 的请求数。
  */
 
-import type { AnalyticsGrain, AnalyticsTimeWindow } from './latencyAnalysis';
+import { buildAnalyticsBuckets, type AnalyticsGrain, type AnalyticsTimeWindow } from './analyticsBuckets';
 
 export interface CacheAnalysisRow {
   timestampMs: number;
@@ -14,10 +14,6 @@ export interface CacheAnalysisRow {
   cacheReadTokens: number;
   cacheWriteTokens: number;
 }
-
-const HOUR_MS = 3_600_000;
-const DAY_MS = 86_400_000;
-const MAX_PADDED_BUCKETS = 24 * 90 + 1;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -72,18 +68,6 @@ export interface CacheTrendPoint {
   cacheRate: number | null;
 }
 
-const grainMs = (grain: AnalyticsGrain): number => (grain === 'day' ? DAY_MS : HOUR_MS);
-
-const floorToGrain = (timestampMs: number, grain: AnalyticsGrain): number => {
-  const date = new Date(timestampMs);
-  if (grain === 'day') {
-    date.setHours(0, 0, 0, 0);
-  } else {
-    date.setMinutes(0, 0, 0);
-  }
-  return date.getTime();
-};
-
 interface CacheBucketAccumulator {
   requests: number;
   cachedRequests: number;
@@ -107,29 +91,7 @@ export function buildCacheTrendSeries(
   grain: AnalyticsGrain,
   window?: AnalyticsTimeWindow | null
 ): CacheTrendPoint[] {
-  const inWindow = (timestampMs: number): boolean =>
-    Number.isFinite(timestampMs) &&
-    timestampMs > 0 &&
-    (!window || (timestampMs >= window.startMs && timestampMs <= window.endMs));
-  const valid = rows.filter((row) => inWindow(row.timestampMs));
-  if (!valid.length && !window) return [];
-  const end = floorToGrain(window ? window.endMs : Math.max(...valid.map((r) => r.timestampMs)), grain);
-  const start = floorToGrain(
-    window ? window.startMs : Math.min(...valid.map((r) => r.timestampMs)),
-    grain
-  );
-  const count = Math.floor((end - start) / grainMs(grain)) + 1;
-  let times: number[];
-  if (!Number.isFinite(count) || count <= 0) {
-    times = [];
-  } else if (count <= MAX_PADDED_BUCKETS) {
-    times = Array.from({ length: count }, (_, index) => start + index * grainMs(grain));
-  } else {
-    times = Array.from(
-      new Set([start, end, ...valid.map((row) => floorToGrain(row.timestampMs, grain))])
-    ).sort((a, b) => a - b);
-  }
-  const indexes = new Map(times.map((timestampMs, index) => [timestampMs, index]));
+  const { times, indexOf } = buildAnalyticsBuckets(rows, grain, window);
   const accumulators = times.map((): CacheBucketAccumulator => ({
     requests: 0,
     cachedRequests: 0,
@@ -137,9 +99,9 @@ export function buildCacheTrendSeries(
     cacheReadTokens: 0,
     cacheWriteTokens: 0,
   }));
-  for (const row of valid) {
-    const index = indexes.get(floorToGrain(row.timestampMs, grain));
-    if (index === undefined) continue;
+  for (const row of rows) {
+    const index = indexOf(row.timestampMs);
+    if (index < 0) continue;
     const accumulator = accumulators[index];
     accumulator.requests += 1;
     if (row.cacheReadTokens > 0) accumulator.cachedRequests += 1;

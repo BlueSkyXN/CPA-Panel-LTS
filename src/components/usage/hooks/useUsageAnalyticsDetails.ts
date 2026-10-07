@@ -52,20 +52,24 @@ export function useUsageAnalyticsDetails(
       JSON.stringify([
         scope,
         querySession?.bound ?? null,
-        timeWindow ? Math.floor(timeWindow.startMs / 1000) : null,
-        timeWindow ? Math.floor(timeWindow.endMs / 1000) : null,
+        timeWindow?.startMs ?? null,
+        timeWindow?.endMs ?? null,
       ]),
     [scope, querySession, timeWindow]
   );
 
-  const [manualEpoch, setManualEpoch] = useState(0);
+  const [manualLoad, setManualLoad] = useState<{ key: string; epoch: number } | null>(null);
+  const manualEpoch = manualLoad?.key === baseKey ? manualLoad.epoch : 0;
   const [state, setState] = useState<AnalyticsDetailsState | null>(null);
   const inFlight = useRef<AbortController | null>(null);
   const stateKey = `${baseKey}#${manualEpoch}`;
 
   const load = useCallback(() => {
-    setManualEpoch((epoch) => epoch + 1);
-  }, []);
+    setManualLoad((current) => ({
+      key: baseKey,
+      epoch: current?.key === baseKey ? current.epoch + 1 : 1,
+    }));
+  }, [baseKey]);
 
   useEffect(() => {
     if (querySession === null) {

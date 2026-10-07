@@ -1,18 +1,10 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import ts from 'typescript';
+import { createServer } from 'vite';
 
-const source = await readFile(new URL('./latencyAnalysis.ts', import.meta.url), 'utf8');
-const compiled = ts.transpileModule(source, {
-  compilerOptions: {
-    module: ts.ModuleKind.ES2022,
-    target: ts.ScriptTarget.ES2020,
-  },
-}).outputText;
-const analysis = await import(
-  `data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`
-);
+const vite = await createServer({ appType: 'custom', logLevel: 'silent', server: { middlewareMode: true } });
+const analysis = await vite.ssrLoadModule('/src/utils/usage/latencyAnalysis.ts');
+test.after(() => vite.close());
 
 const at = (year, month, day, hour, minute = 0) =>
   new Date(year, month - 1, day, hour, minute).getTime();

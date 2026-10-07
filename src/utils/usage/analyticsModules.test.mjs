@@ -1,21 +1,13 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import ts from 'typescript';
+import { createServer } from 'vite';
 
-const compile = async (relativeUrl) => {
-  const source = await readFile(new URL(relativeUrl, import.meta.url), 'utf8');
-  const compiled = ts.transpileModule(source, {
-    compilerOptions: {
-      module: ts.ModuleKind.ES2022,
-      target: ts.ScriptTarget.ES2020,
-    },
-  }).outputText;
-  return import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
-};
-
-const cache = await compile('./cacheAnalytics.ts');
-const error = await compile('./errorAnalytics.ts');
+const vite = await createServer({ appType: 'custom', logLevel: 'silent', server: { middlewareMode: true } });
+const [cache, error] = await Promise.all([
+  vite.ssrLoadModule('/src/utils/usage/cacheAnalytics.ts'),
+  vite.ssrLoadModule('/src/utils/usage/errorAnalytics.ts'),
+]);
+test.after(() => vite.close());
 
 const at = (year, month, day, hour, minute = 0) =>
   new Date(year, month - 1, day, hour, minute).getTime();

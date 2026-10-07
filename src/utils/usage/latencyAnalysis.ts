@@ -1,13 +1,12 @@
 /**
  * 延迟分析聚合：按小时/天分桶的分位数序列、延迟直方图、TTFT/TTFA 摘要。
  *
- * 依赖说明：本模块保持自包含（不相对 import），与 latency.ts/performance.ts
- * 的仓库约定一致，便于 node --test 以 transpile + data URL 方式加载。
- * 分位数语义与 ./percentiles.ts 的 nearest-rank 实现保持一致。
- *
  * 口径：延迟/首内容分位数只统计成功请求（生成延迟语义）；失败请求的
  * 时序归 errorAnalytics 负责。
  */
+
+import { buildAnalyticsBuckets, type AnalyticsGrain, type AnalyticsTimeWindow } from './analyticsBuckets';
+export type { AnalyticsGrain, AnalyticsTimeWindow } from './analyticsBuckets';
 
 export interface PercentileSummary {
   p50: number | null;
@@ -26,18 +25,6 @@ export interface LatencyAnalysisRow {
   ttfaMs: number | null;
   failed: boolean;
 }
-
-export interface AnalyticsTimeWindow {
-  startMs: number;
-  endMs: number;
-}
-
-export type AnalyticsGrain = 'hour' | 'day';
-
-const HOUR_MS = 3_600_000;
-const DAY_MS = 86_400_000;
-/** 与 usage.ts buildHourlyBuckets 的空桶补齐上限一致：90 天逐小时。 */
-const MAX_PADDED_BUCKETS = 24 * 90 + 1;
 
 const SEMANTIC_TIMING_VERSION = 1;
 
@@ -174,59 +161,6 @@ export function buildLatencyHistogram(rows: readonly LatencyAnalysisRow[]): Late
   return { counts, sampleCount };
 }
 
-// ---- 时间分桶 ----
-
-interface BucketIndex {
-  times: number[];
-  indexOf: (timestampMs: number) => number;
-}
-
-const grainMs = (grain: AnalyticsGrain): number => (grain === 'day' ? DAY_MS : HOUR_MS);
-
-const floorToGrain = (timestampMs: number, grain: AnalyticsGrain): number => {
-  const date = new Date(timestampMs);
-  if (grain === 'day') {
-    date.setHours(0, 0, 0, 0);
-  } else {
-    date.setMinutes(0, 0, 0);
-  }
-  return date.getTime();
-};
-
-const buildBuckets = (
-  rows: readonly { timestampMs: number }[],
-  grain: AnalyticsGrain,
-  window: AnalyticsTimeWindow | null | undefined
-): BucketIndex => {
-  const inWindow = (timestampMs: number): boolean =>
-    Number.isFinite(timestampMs) &&
-    timestampMs > 0 &&
-    (!window || (timestampMs >= window.startMs && timestampMs <= window.endMs));
-  const valid = rows.map((row) => row.timestampMs).filter(inWindow);
-  if (!valid.length && !window) {
-    return { times: [], indexOf: () => -1 };
-  }
-  const end = floorToGrain(window ? window.endMs : Math.max(...valid), grain);
-  const start = floorToGrain(window ? window.startMs : Math.min(...valid), grain);
-  const count = Math.floor((end - start) / grainMs(grain)) + 1;
-  let times: number[];
-  if (!Number.isFinite(count) || count <= 0) {
-    times = [];
-  } else if (count <= MAX_PADDED_BUCKETS) {
-    times = Array.from({ length: count }, (_, index) => start + index * grainMs(grain));
-  } else {
-    times = Array.from(
-      new Set([start, end, ...valid.map((timestampMs) => floorToGrain(timestampMs, grain))])
-    ).sort((a, b) => a - b);
-  }
-  const indexes = new Map(times.map((timestampMs, index) => [timestampMs, index]));
-  return {
-    times,
-    indexOf: (timestampMs: number) =>
-      inWindow(timestampMs) ? (indexes.get(floorToGrain(timestampMs, grain)) ?? -1) : -1,
-  };
-};
-
 // ---- 分桶分位数序列 ----
 
 export interface LatencyPercentileSeries {
@@ -244,7 +178,7 @@ export function buildLatencyPercentileSeries(
   grain: AnalyticsGrain,
   window?: AnalyticsTimeWindow | null
 ): LatencyPercentileSeries {
-  const buckets = buildBuckets(rows, grain, window);
+  const buckets = buildAnalyticsBuckets(rows, grain, window);
   const samplesPerBucket = Array.from({ length: buckets.times.length }, () => [] as number[]);
   for (const row of rows) {
     if (row.failed || row.latencyMs === null) continue;

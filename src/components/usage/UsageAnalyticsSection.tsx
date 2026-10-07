@@ -34,7 +34,7 @@ export function UsageAnalyticsSection({
   const { details, loading: samplesLoading, error, loadedCount, needsManualLoad, load } =
     useUsageAnalyticsDetails(querySession, legacyUsage, timeWindow);
 
-  const idle = loading && details.length === 0;
+  const idle = (loading || (samplesLoading && !needsManualLoad)) && details.length === 0;
 
   return (
     <section className={styles.analyticsSection} aria-label={t('usage_stats.analytics_section_title')}>
