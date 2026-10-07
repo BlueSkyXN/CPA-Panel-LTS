@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         Codex Quota Compass
 // @namespace    https://github.com/BlueSkyXN/CPA-Panel-LTS
-// @version      0.1.20
-// @description  在 ChatGPT Codex Cloud 页面直接查看 Codex 额度窗口、周额度估算和 daily analytics 汇总。
+// @version      0.1.21
+// @description  在 ChatGPT 用量页面查看 Codex 额度窗口、周额度估算和 daily analytics 汇总。
 // @author       BlueSkyXN
-// @match        https://chatgpt.com/codex/cloud*
+// @match        https://chatgpt.com/*
 // @homepageURL  https://github.com/BlueSkyXN/CPA-Panel-LTS/blob/main/scripts/codex-quota-compass.user.js
 // @supportURL   https://github.com/BlueSkyXN/CPA-Panel-LTS/issues
 // @downloadURL  https://raw.githubusercontent.com/BlueSkyXN/CPA-Panel-LTS/main/scripts/codex-quota-compass.user.js
@@ -37,14 +37,14 @@
   };
 
   // 与 metadata 的 @version 保持同步；userscript 在 @grant none 下没有 GM_info。
-  const APP_VERSION = '0.1.20';
+  const APP_VERSION = '0.1.21';
 
   const DAY_MS = 24 * 60 * 60 * 1000;
   const FIVE_HOUR_SECONDS = 5 * 60 * 60;
   const WEEK_SECONDS = 7 * 24 * 60 * 60;
   const TOP_CLIENT_LIMIT = 5;
   const HOST_ID = 'codex-quota-compass-host';
-  const CODEX_CLOUD_PATH_PREFIX = '/codex/cloud';
+  const QUOTA_PAGE_PATHS = ['/settings/usage', '/codex/cloud'];
 
   const state = {
     loading: false,
@@ -53,10 +53,11 @@
     error: '',
   };
 
-  const isCodexCloudPath = () =>
+  const isQuotaPage = () =>
     location.hostname === 'chatgpt.com' &&
-    (location.pathname === CODEX_CLOUD_PATH_PREFIX ||
-      location.pathname.startsWith(`${CODEX_CLOUD_PATH_PREFIX}/`));
+    QUOTA_PAGE_PATHS.some(
+      (path) => location.pathname === path || location.pathname.startsWith(`${path}/`)
+    );
 
   const num = (value) => {
     if (value === null || value === undefined) return 0;
@@ -3604,8 +3605,8 @@
     document.getElementById(HOST_ID)?.remove();
   };
 
-  const runOnCodexCloudPath = () => {
-    if (!isCodexCloudPath()) {
+  const runOnQuotaPage = () => {
+    if (!isQuotaPage()) {
       removeUi();
       return;
     }
@@ -3613,14 +3614,14 @@
     const shadow = ensureUi();
     if (CONFIG.AUTO_LOAD && !state.result && !state.loading) {
       window.setTimeout(() => {
-        if (!isCodexCloudPath()) return;
+        if (!isQuotaPage()) return;
         void refresh(shadow);
       }, 800);
     }
   };
 
   const installRouteObserver = () => {
-    const notifyRouteChange = () => window.setTimeout(runOnCodexCloudPath, 0);
+    const notifyRouteChange = () => window.setTimeout(runOnQuotaPage, 0);
     const patchHistoryMethod = (methodName) => {
       const original = window.history[methodName];
       if (typeof original !== 'function') return;
@@ -3638,7 +3639,7 @@
 
   const boot = () => {
     installRouteObserver();
-    runOnCodexCloudPath();
+    runOnQuotaPage();
   };
 
   if (document.body) {
