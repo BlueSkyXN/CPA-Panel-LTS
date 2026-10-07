@@ -530,8 +530,8 @@ export function MainLayout() {
     children: [
       {
         kind: 'link',
-        path: '/ai-providers/legacy',
-        label: t('nav.provider_legacy'),
+        path: '/ai-providers/ampcode',
+        label: t('ai_providers.ampcode_title'),
         icon: <span className="nav-sub-dot" aria-hidden="true" />,
         end: true,
       },
@@ -720,21 +720,9 @@ export function MainLayout() {
         return aiProvidersIndex;
       }
 
-      const legacyProvidersIndex = navOrder.indexOf('/ai-providers/legacy');
-      const legacyBaseIndex =
-        legacyProvidersIndex === -1 ? aiProvidersIndex + 0.05 : legacyProvidersIndex;
-      const legacyPrefix = normalizedPath.startsWith('/ai-providers/legacy')
-        ? '/ai-providers/legacy'
-        : '/ai-providers';
-      if (normalizedPath.startsWith(`${legacyPrefix}/`) || normalizedPath === legacyPrefix) {
-        const legacyRoute = normalizedPath.slice(legacyPrefix.length);
-        if (legacyRoute.startsWith('/gemini')) return legacyBaseIndex + 0.1;
-        if (legacyRoute.startsWith('/codex')) return legacyBaseIndex + 0.2;
-        if (legacyRoute.startsWith('/claude')) return legacyBaseIndex + 0.3;
-        if (legacyRoute.startsWith('/vertex')) return legacyBaseIndex + 0.4;
-        if (legacyRoute.startsWith('/ampcode')) return legacyBaseIndex + 0.5;
-        if (legacyRoute.startsWith('/openai')) return legacyBaseIndex + 0.6;
-        return legacyBaseIndex;
+      if (normalizedPath.startsWith('/ai-providers/')) {
+        const ampcodeIndex = navOrder.indexOf('/ai-providers/ampcode');
+        return ampcodeIndex === -1 ? aiProvidersIndex + 0.5 : ampcodeIndex;
       }
     }
 

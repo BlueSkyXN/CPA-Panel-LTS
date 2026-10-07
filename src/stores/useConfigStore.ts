@@ -7,6 +7,7 @@ import { create } from 'zustand';
 import type { Config } from '@/types';
 import type { RawConfigSection } from '@/types/config';
 import { configApi } from '@/services/api/config';
+import { apiClient } from '@/services/api/client';
 import { CACHE_EXPIRY_MS } from '@/utils/constants';
 
 interface ConfigCache {
@@ -25,6 +26,7 @@ interface ConfigState {
     (section?: undefined, forceRefresh?: boolean): Promise<Config>;
     (section: RawConfigSection, forceRefresh?: boolean): Promise<unknown>;
   };
+  refreshProviders: () => Promise<Config | null>;
   updateConfigValue: (section: RawConfigSection, value: unknown) => void;
   clearCache: (section?: RawConfigSection) => void;
   isCacheValid: (section?: RawConfigSection) => boolean;
@@ -53,7 +55,7 @@ const SECTION_KEYS: RawConfigSection[] = [
   'claude-api-key',
   'vertex-api-key',
   'openai-compatibility',
-  'oauth-excluded-models'
+  'oauth-excluded-models',
 ];
 
 const extractSectionValue = (config: Config | null, section?: RawConfigSection) => {
@@ -91,6 +93,10 @@ const extractSectionValue = (config: Config | null, section?: RawConfigSection) 
       return config.interactionsApiKeys;
     case 'codex-api-key':
       return config.codexApiKeys;
+    case 'meta-api-key':
+      return config.metaApiKeys;
+    case 'xai-api-key':
+      return config.xaiApiKeys;
     case 'claude-api-key':
       return config.claudeApiKeys;
     case 'vertex-api-key':
@@ -165,17 +171,21 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
       set({
         config: data,
         cache: newCache,
-        loading: false
+        loading: false,
       });
 
       return section ? extractSectionValue(data, section) : data;
     } catch (error: unknown) {
       const message =
-        error instanceof Error ? error.message : typeof error === 'string' ? error : 'Failed to fetch config';
+        error instanceof Error
+          ? error.message
+          : typeof error === 'string'
+            ? error
+            : 'Failed to fetch config';
       if (requestId === configRequestToken) {
         set({
           error: message || 'Failed to fetch config',
-          loading: false
+          loading: false,
         });
       }
       throw error;
@@ -186,11 +196,34 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
     }
   }) as ConfigState['fetchConfig'],
 
+  // v8 GET /config is the single provider source: Core injects auth_index into every
+  // api-keys group/key, so no runtime list merge (and no snapshot gate) is needed.
+  refreshProviders: async () => {
+    const generation = apiClient.getConnectionGeneration();
+    const requestId = ++configRequestToken;
+    inFlightConfigRequest = null;
+    set({ cache: new Map(), loading: true, error: null });
+    try {
+      const data = await configApi.getConfig();
+      if (requestId !== configRequestToken || !apiClient.isCurrentConnection(generation))
+        return null;
+      set({ config: data, cache: new Map(), loading: false, error: null });
+      return data;
+    } catch (error) {
+      if (requestId === configRequestToken && apiClient.isCurrentConnection(generation))
+        set({
+          loading: false,
+          error: error instanceof Error ? error.message : 'Failed to fetch config',
+        });
+      throw error;
+    }
+  },
+
   updateConfigValue: (section, value) => {
     set((state) => {
-      const raw = { ...(state.config?.raw || {}) };
-      raw[section] = value;
-      const nextConfig: Config = { ...(state.config || {}), raw };
+      // Optimistic values are UI models, not serialized v8 config nodes. Keep the last
+      // server document (`raw`) intact until the invalidated cache is fetched again.
+      const nextConfig: Config = { ...(state.config || {}) };
 
       switch (section) {
         case 'debug':
@@ -240,6 +273,9 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
           break;
         case 'codex-api-key':
           nextConfig.codexApiKeys = value as Config['codexApiKeys'];
+          break;
+        case 'meta-api-key':
+          nextConfig.metaApiKeys = value as Config['metaApiKeys'];
           break;
         case 'xai-api-key':
           nextConfig.xaiApiKeys = value as Config['xaiApiKeys'];
@@ -302,5 +338,5 @@ export const useConfigStore = create<ConfigState>((set, get) => ({
     if (!cached) return false;
 
     return Date.now() - cached.timestamp < CACHE_EXPIRY_MS;
-  }
+  },
 }));

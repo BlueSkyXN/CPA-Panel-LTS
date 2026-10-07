@@ -21,6 +21,12 @@ import {
   resolveInfistarBaseUrl,
 } from './infistar';
 import {
+  KIMI_DISPLAY_NAME,
+  KIMI_PROTOCOL_LABELS,
+  getKimiProtocolUrls,
+  resolveKimiBaseUrl,
+} from './kimi';
+import {
   QINIU_CLOUD_DISPLAY_NAME,
   QINIU_CLOUD_PROTOCOL_LABELS,
   getQiniuCloudProtocolUrls,
@@ -352,5 +358,14 @@ export function infistarToResource(raw: SponsorProviderRaw): ProviderResource | 
     protocolLabels: INFISTAR_PROTOCOL_LABELS,
     resolveBaseUrl: resolveInfistarBaseUrl,
     getProtocolUrls: getInfistarProtocolUrls,
+  });
+}
+
+export function kimiToResource(raw: SponsorProviderRaw): ProviderResource | null {
+  return sponsorRawToResource('kimi', raw, {
+    displayName: KIMI_DISPLAY_NAME,
+    protocolLabels: KIMI_PROTOCOL_LABELS,
+    resolveBaseUrl: resolveKimiBaseUrl,
+    getProtocolUrls: getKimiProtocolUrls,
   });
 }

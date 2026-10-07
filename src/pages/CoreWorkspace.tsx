@@ -343,7 +343,7 @@ export function CoreWorkspace() {
         { path: '/ai-providers', label: t('core_workspace.action_all_pools') },
         { path: '/ai-providers?provider=vertex', label: 'Vertex' },
         { path: '/ai-providers?provider=openaiCompatibility', label: 'OpenAI Compatible' },
-        { path: '/ai-providers/legacy/ampcode', label: 'Ampcode' },
+        { path: '/ai-providers/ampcode', label: 'Ampcode' },
       ],
     },
   ];

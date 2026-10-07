@@ -1,9 +1,9 @@
-import { DEFAULT_API_PORT, MANAGEMENT_API_PREFIX } from './constants';
+import { DEFAULT_API_PORT, LTS_EXTENSION_API_PREFIX, MANAGEMENT_API_PREFIX } from './constants';
 
 export const normalizeApiBase = (input: string): string => {
   let base = (input || '').trim();
   if (!base) return '';
-  base = base.replace(/\/?v0\/management\/?$/i, '');
+  base = base.replace(/\/?v[08]\/management\/?$/i, '');
   base = base.replace(/\/+$/i, '');
   if (!/^https?:\/\//i.test(base)) {
     base = `http://${base}`;
@@ -15,6 +15,13 @@ export const computeApiUrl = (base: string): string => {
   const normalized = normalizeApiBase(base);
   if (!normalized) return '';
   return `${normalized}${MANAGEMENT_API_PREFIX}`;
+};
+
+/** Raw fetches (e.g. the Flow SSE stream) to LTS extensions that Core serves only under v0. */
+export const computeLtsExtensionApiUrl = (base: string): string => {
+  const normalized = normalizeApiBase(base);
+  if (!normalized) return '';
+  return `${normalized}${LTS_EXTENSION_API_PREFIX}`;
 };
 
 export const detectApiBaseFromLocation = (): string => {

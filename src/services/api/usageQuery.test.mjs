@@ -18,7 +18,7 @@ const vite = await createServer({
   server: { middlewareMode: true },
 });
 const api = await vite.ssrLoadModule('/src/services/api/usageQuery.ts');
-const { apiClient } = await vite.ssrLoadModule('/src/services/api/client.ts');
+const { ltsExtensionClient: apiClient } = await vite.ssrLoadModule('/src/services/api/client.ts');
 const { useAuthStore } = await vite.ssrLoadModule('/src/stores/useAuthStore.ts');
 const { useUsageQueryStore } = await vite.ssrLoadModule('/src/stores/useUsageQueryStore.ts');
 const get = apiClient.get;

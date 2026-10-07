@@ -47,7 +47,21 @@
     "api_key_label": "API-ключ",
     "device_id_label": "Идентификатор устройства",
     "device_id_hint": "Необязательно. Оставьте пустым, чтобы сохранить текущее значение или сгенерировать новое.",
-    "hint_zcode-coding-plan": "API-ключ Zhipu GLM Coding Plan. Хранится прямо в файле аккаунта, как и PAT-учётные данные."
+    "hint_zcode-coding-plan": "API-ключ Zhipu GLM Coding Plan. Хранится прямо в файле аккаунта, как и PAT-учётные данные.",
+    "local_credentials": {
+      "title": "Получить данные из локального ZCode (macOS)",
+      "instructions": "Выполняйте команды в терминале Mac, где установлен ZCode. Сначала скопируйте и выполните команду API-ключа, вставьте результат выше, затем выполните команду идентификатора устройства. Panel только копирует команды, не читает локальные файлы и не выполняет команды.",
+      "region": "Регион локального аккаунта ZCode",
+      "bigmodel": "Китай · bigmodel",
+      "zai": "Международный · z.ai",
+      "region_hint": "Выбор меняет только команду извлечения, а не настройки сервера. Он должен соответствовать настройке upstream плагина: bigmodel / zai.",
+      "copy": "Копировать команду",
+      "copy_label": "Копировать команду извлечения: {{field}}",
+      "copy_success": "Команда скопирована. Выполните её в терминале Mac.",
+      "copy_failed": "Не удалось скопировать. Выделите и скопируйте команду выше вручную.",
+      "warning": "При выполнении полные учётные данные появятся в терминале и заменят содержимое буфера обмена. Не записывайте экран, не делитесь снимками и не используйте общий терминал.",
+      "troubleshooting": "Команды только читают стандартный каталог ~/.zcode/v2/ и не требуют дополнительных программ. При отсутствии файла, пустом поле или зашифрованном значении enc: копирование не выполняется. Проверьте каталог данных клиента и регион аккаунта; не используйте текст ошибки как ключ. Извлечение не проверяет действительность ключа или подписки."
+    }
   },
   "common": {
     "login": "Войти",
@@ -142,7 +156,8 @@
     "error_timeout": "Время ожидания истекло, сервер не отвечает",
     "error_unauthorized": "Аутентификация не удалась, ключ управления отсутствует или неверен",
     "error_forbidden": "Доступ запрещён: удалённое управление отключено, ключ управления не настроен или IP временно заблокирован",
-    "error_not_found": "Management API не найден, проверьте, что адрес указывает на backend CLIProxyAPI",
+    "error_not_found": "Management API v8 не найден. Проверьте адрес сервера и обновите CPA-Core-LTS до линии v8; серверы только с v0 не поддерживаются.",
+    "error_legacy_backend": "Этот сервер предоставляет только устаревший Management API v0. Обновите CPA-Core-LTS до линии v8 и перенастройте его по руководству v8, чтобы использовать эту панель.",
     "error_server": "Backend не смог обработать запрос управления, проверьте журналы сервера",
     "error_cors": "Блокировка CORS, проверьте конфигурацию сервера",
     "error_ssl": "Ошибка проверки SSL/TLS сертификата"
@@ -167,7 +182,6 @@
     "api_keys": "API ключи",
     "ai_providers": "Поставщики AI",
     "provider_workbench": "Рабочая область поставщиков",
-    "provider_legacy": "Статус провайдеров LTS",
     "auth_files": "Файлы аутентификации",
     "oauth": "OAuth вход",
     "quota_management": "Управление квотами",
@@ -734,7 +748,7 @@
     "priority_placeholder": "например: 10 или -1",
     "priority_hint": "Только целые числа. Некорректные значения игнорируются. Чем больше число, тем выше приоритет.",
     "weight_label": "Вес планирования (weight)",
-    "weight_hint": "По умолчанию 1. Значения ≤ 0 исключают эти учётные данные из взвешенного планирования; максимум 1 000 000.",
+    "weight_hint": "По умолчанию 1. Значения ≤ 0 исключают эти учётные данные из взвешенного планирования; максимум 1 000 000. После ввода значения включите взвешенный круговой алгоритм, чтобы настройка вступила в силу.",
     "weight_invalid_integer": "Вес должен быть целым числом.",
     "weight_invalid_max": "Вес не может превышать 1 000 000.",
     "websockets_label": "WebSockets (websockets)",
@@ -766,7 +780,40 @@
     "quota_refresh_single": "Обновить квоту",
     "quota_refresh_hint": "Обновить квоту только для этих учётных данных",
     "quota_refresh_success": "Квота для \"{{name}}\" обновлена",
-    "quota_refresh_failed": "Не удалось обновить квоту для \"{{name}}\": {{message}}"
+    "quota_refresh_failed": "Не удалось обновить квоту для \"{{name}}\": {{message}}",
+    "cooldown_unknown": "Состояние задержки неизвестно",
+    "cooldown_models_one": "{{count}} модель на паузе",
+    "cooldown_models_few": "{{count}} модели на паузе",
+    "cooldown_models_many": "{{count}} моделей на паузе",
+    "cooldown_models_other": "{{count}} модели на паузе",
+    "cooldown_credential": "Задержка всего файла",
+    "cooldown_credential_and_models_one": "Файл и {{count}} модель на паузе",
+    "cooldown_credential_and_models_few": "Файл и {{count}} модели на паузе",
+    "cooldown_credential_and_models_many": "Файл и {{count}} моделей на паузе",
+    "cooldown_credential_and_models_other": "Файл и {{count}} модели на паузе",
+    "cooldown_scope_credential": "Весь файл авторизации",
+    "cooldown_earliest": "Ближайшее окончание через ~{{time}}",
+    "cooldown_elapsed": "Таймеры задержки истекли",
+    "cooldown_timer_elapsed": "Таймер истёк",
+    "cooldown_refresh_hint": "Обновите список для проверки",
+    "cooldown_seconds": "{{count}} с",
+    "cooldown_minutes": "{{count}} мин",
+    "cooldown_hours": "{{count}} ч",
+    "cooldown_http_status": "HTTP сервиса {{status}}",
+    "cooldown_backoff": "Уровень задержки {{level}}",
+    "cooldown_deadline": "Окончание таймера",
+    "cooldown_observed": "Время снимка",
+    "cooldown_note": "Снимок локального планировщика; оставшееся время приблизительное. Истечение таймера не гарантирует доступность, восстановление квоты или автоматический повтор. Названия моделей — внутренние ключи; уровень задержки — не число ошибок.",
+    "cooldown_reason_quota": "Ограничение квоты",
+    "cooldown_reason_credential_quota": "Ограничение квоты файла",
+    "cooldown_reason_cloudflare_challenge": "Проверка Cloudflare",
+    "cooldown_reason_invalid_grant": "Недействительное разрешение",
+    "cooldown_reason_unauthorized": "Нет авторизации",
+    "cooldown_reason_payment_required": "Доступ ограничен (402/403; не подтверждает проблему оплаты)",
+    "cooldown_reason_not_found": "Ресурс не найден",
+    "cooldown_reason_model_not_supported": "Модель не поддерживается",
+    "cooldown_reason_transient_error": "Временная ошибка сервиса",
+    "cooldown_reason_unknown": "Другая или неизвестная причина"
   },
   "antigravity_quota": {
     "title": "Квота Antigravity",
@@ -856,6 +903,7 @@
     "credit_amount": "{{count}} кредитов"
   },
   "kimi_quota": {
+    "monthly_limit": "Месячный лимит",
     "title": "Квота Kimi",
     "empty_title": "Файлы авторизации Kimi отсутствуют",
     "empty_desc": "Загрузите учётные данные Kimi, чтобы увидеть оставшуюся квоту.",
@@ -873,6 +921,7 @@
     "reset_at": "Сброс {{time}}"
   },
   "xai_quota": {
+    "usage_unavailable": "Данные об использовании недоступны от xAI",
     "title": "Квота Grok",
     "empty_title": "Файлы авторизации xAI/Grok отсутствуют",
     "empty_desc": "Войдите через xAI OAuth, чтобы увидеть квоту Grok.",
@@ -1035,6 +1084,8 @@
     "upgrade_required_desc": "Текущая версия сервера не поддерживает API псевдонимов моделей OAuth. Обновите CPA до последней версии."
   },
   "auth_login": {
+    "kimi_ai_oauth_hint": "Войдите в международный аккаунт kimi.ai через авторизацию устройства. Отдельный файл kimi-ai сохраняется автоматически. Аккаунты китайского и международного сайтов не взаимозаменяемы.",
+    "kimi_ai_oauth_title": "Kimi — международный сайт (kimi.ai)",
     "codex_oauth_title": "Codex OAuth",
     "codex_oauth_button": "Начать вход Codex",
     "codex_oauth_hint": "Выполните вход в сервис Codex через OAuth и автоматически получите/сохраните файлы авторизации.",
@@ -1340,7 +1391,7 @@
     "pricing_standard_api": "API Standard",
     "pricing_fast": "Fast",
     "pricing_fast_policies": "Правила Fast",
-    "pricing_fast_policy_title": "API Priority и ChatGPT Standard/Fast используют отдельные официальные множители.",
+    "pricing_fast_policy_title": "Fast/Priority использует отдельные тарифы API или настроенный множитель Standard, а не цены подписки ChatGPT.",
     "pricing_api_priority_multiplier": "API ×{{multiplier}}",
     "pricing_api_priority_multiplier_official": "Официальный API ×{{multiplier}}",
     "pricing_api_priority_multiplier_custom": "Пользовательский API ×{{multiplier}}",
@@ -1374,6 +1425,9 @@
     "pricing_alias_canonical_hint": "Эта модель уже точно совпадает с предустановкой, поэтому псевдоним не требуется.",
     "pricing_standard_rates": "Тарифы Standard · USD / 1 млн",
     "pricing_fast_rates": "Тарифы Fast · USD / 1 млн",
+    "pricing_fast_long_rates": "Тарифы Fast для длинного контекста · USD / 1 млн",
+    "pricing_fast_long_rates_enable": "Отдельные тарифы Fast для длинного контекста",
+    "pricing_fast_long_rates_hint": "Используется порог входных токенов Standard. Если выключено, явные тарифы Fast для короткого контекста применяются и к длинному контексту.",
     "pricing_rate_input": "Вход",
     "pricing_rate_cached_input": "Кэшированный вход",
     "pricing_rate_cache_write": "Запись в кэш",
@@ -1535,7 +1589,36 @@
     "request_events_pagination": "Страницы запросов",
     "request_events_page_status": "{{start}}–{{end}} из {{total}} запросов. Экспорт включает все отфильтрованные запросы.",
     "request_events_previous_page": "Предыдущая страница",
-    "request_events_next_page": "Следующая страница"
+    "request_events_next_page": "Следующая страница",
+    "analytics_section_title": "Производительность и надёжность",
+    "analytics_section_hint": "Перцентили задержки, эффективность кэша и распределение ошибок рассчитываются по выборке запросов за выбранный период.",
+    "analytics_samples_loaded": "Загружено образцов: {{count}}",
+    "analytics_samples_loading": "Загрузка образцов… загружено {{count}}",
+    "analytics_load_samples": "Загрузить образцы",
+    "analytics_samples_in_bucket": "Образцов в интервале: {{count}}",
+    "analytics_success_only_note": "Перцентили задержки рассчитываются только по успешным запросам.",
+    "latency_trend_title": "Динамика задержки",
+    "latency_trend_avg": "Средн.",
+    "latency_distribution_title": "Распределение задержки",
+    "latency_distribution_series": "Запросы",
+    "latency_distribution_latency": "Задержка",
+    "cache_analytics_title": "Эффективность кэша",
+    "cache_analytics_rate_series": "Доля чтения кэша",
+    "cache_analytics_read_rate": "Доля чтения кэша",
+    "cache_analytics_hit_requests": "Запросы с кэшем",
+    "error_analysis_title": "Анализ ошибок",
+    "error_analysis_rate_series": "Доля ошибок",
+    "error_analysis_failure_rate": "Доля ошибок",
+    "error_analysis_failed_requests": "Ошибки / всего",
+    "error_analysis_by_status": "Ошибки по кодам состояния",
+    "error_analysis_unknown_status": "неизвестно",
+    "error_analysis_top_reasons": "Основные причины ошибок",
+    "error_analysis_failures": "Ошибки",
+    "share_title": "Доля моделей",
+    "share_other_models": "Другие ({{count}})",
+    "share_metric_requests": "Запросы",
+    "share_metric_tokens": "Токены",
+    "share_metric_cost": "Расходы"
   },
   "service_health": {
     "title": "Состояние сервиса",
@@ -1622,6 +1705,7 @@
     "upgrade_required_desc": "Текущая версия сервера не поддерживает просмотр журналов. Обновите CPA до последней версии, чтобы использовать эту функцию."
   },
   "config_management": {
+    "read_conflict": "Конфигурация изменилась во время чтения. Обновите данные и повторите попытку.",
     "save_target": "Целевой экземпляр: {{name}}",
     "editor": {
       "guidance": {
@@ -1766,6 +1850,7 @@
     "status_saved": "Конфигурация сохранена",
     "status_save_failed": "Не удалось сохранить",
     "save_success": "Конфигурация успешно сохранена",
+    "revision_unavailable": "Версия конфигурации недоступна. Обновите Core и перезагрузите конфигурацию перед сохранением.",
     "error_yaml_not_supported": "Сервер не вернул YAML. Убедитесь, что доступна конечная точка /config.yaml.",
     "visual_mode_unavailable": "Визуальный редактор недоступен, пока не исправлен синтаксис YAML",
     "visual_mode_unavailable_short": "Ошибка YAML",
@@ -2193,6 +2278,9 @@
     "card_idle_hint": "Используйте кнопку «Обновить все учётные данные» сверху, чтобы загрузить актуальные данные по квотам."
   },
   "plugin_management": {
+    "yaml_required_title": "Для этого плагина нужен редактор YAML",
+    "yaml_required_message": "Конфигурация содержит значения YAML, которые нельзя представить в форме JSON. Откройте редактор исходного текста, чтобы сохранить всю конфигурацию плагина.",
+    "open_yaml": "Открыть исходный YAML",
     "inherit_config": "Наследовать / не задано",
     "manual_auth": "Ручной импорт учётной записи",
     "manage_accounts": "Управление аккаунтами",
@@ -2564,6 +2652,17 @@
     "author": "Автор"
   },
   "providersPage": {
+    "configGroup": {
+      "title": "Изменить группу конфигурации",
+      "name": "Имя группы",
+      "baseUrl": "Общий базовый URL",
+      "edit": "Изменить группу конфигурации",
+      "impact": "Группа {{name}} · {{count}} учётных данных используют общий URL и настройки по умолчанию.",
+      "editRequired": "Этот адрес принадлежит группе. Измените его через «Изменить группу конфигурации».",
+      "policyHint": "Настройки группы применяются при наследовании. Переопределения отдельных ключей сохраняются.",
+      "confirmTitle": "Применить изменения ко всей группе?",
+      "confirmMessage": "Изменяется группа {{name}} с {{count}} учётными данными. Общий URL влияет на все ключи; настройки по умолчанию — только на наследующие их ключи."
+    },
     "header": {
       "title": "AI Провайдеры",
       "activeResources": "{{active}}/{{total}} активных",
@@ -2601,7 +2700,8 @@
       "code0": "Code0",
       "fennoAI": "FennoAI",
       "qiniuCloud": "Qiniu Cloud",
-      "infistar": "Infistar"
+      "infistar": "Infistar",
+      "kimi": "Kimi"
     },
     "table": {
       "key": "Ключ",
@@ -2856,6 +2956,90 @@
         "gemini": "Gemini",
         "codexResponses": "Codex API (Responses)"
       }
+    },
+    "behavior": {
+      "title": "Поведение, специфичное для провайдера",
+      "alphaSearch": "Включить Alpha Search",
+      "alphaSearchHint": "Разрешить использование этого ключа Codex для Alpha Search. Вышестоящий сервис должен поддерживать эту функцию.",
+      "codexCloaking": "Маскировка запросов Codex",
+      "codexCloakingHint": "Переопределить настройки заголовков идентификации официального Codex для этого API-ключа. Выбор значения по умолчанию удаляет переопределение для этих учётных данных; настройки, предназначенные только для OAuth, здесь не применяются.",
+      "useDefault": "Использовать настройки сервера по умолчанию",
+      "cloakingEnabled": "Включить маскировку",
+      "cloakingDisabled": "Отключить маскировку",
+      "rebuildMidSystemMessage": "Перестроить системные сообщения",
+      "rebuildMidSystemMessageHint": "Перемещать сообщения Claude с ролью system в поле system верхнего уровня.",
+      "supportPromptCacheKey": "Внедрять ключ кэша промпта",
+      "supportPromptCacheKeyHint": "Формировать и внедрять prompt_cache_key для совместимых запросов. Включайте только при поддержке этого поля вышестоящим сервисом."
+    },
+    "errorRules": {
+      "hint": "Применяется первое совпавшее правило по порядку; при совпадении кода статуса достаточно любого условия.",
+      "empty": "Правил нет. Можно сохранить пустой список.",
+      "rule": "Правило {{number}}",
+      "status": "Код статуса",
+      "action": "Действие",
+      "selectAction": "Выберите действие",
+      "moveUp": "Переместить правило вверх",
+      "moveDown": "Переместить правило вниз",
+      "removeRule": "Удалить правило",
+      "matchType": "Тип совпадения",
+      "text": "Содержит текст",
+      "regex": "Регулярное выражение",
+      "matchValue": "Условие",
+      "regexHint": "Регулярное выражение Go",
+      "removeMatch": "Удалить условие",
+      "addMatch": "Добавить условие",
+      "addRule": "Добавить правило",
+      "invalidStatus": "Код статуса должен быть положительным целым числом в безопасном диапазоне.",
+      "invalidAction": "Выберите допустимое действие.",
+      "invalidMatch": "Условия совпадения не могут быть пустыми.",
+      "missingMatch": "Добавьте хотя бы одно условие совпадения.",
+      "actions": {
+        "stop": "Остановить",
+        "stop-and-cooldown": "Остановить и охладить",
+        "continue": "Продолжить",
+        "continue-and-cooldown": "Продолжить и охладить"
+      }
+    },
+    "runtimePolicy": {
+      "title": "Расширенная политика выполнения",
+      "description": "Наследование использует политику родительской группы, затем настройки сервера по умолчанию. Переопределения действуют только для этой записи.",
+      "cooling": "Охлаждение",
+      "inherit": "Наследовать",
+      "coolingEnabled": "Включить охлаждение",
+      "coolingDisabled": "Отключить охлаждение",
+      "retry": "Повторные запросы",
+      "retryHint": "Пустое поле наследует настройку группы. Введите целое число: 0 отключает повторы; отрицательное значение использует глобальную политику вместо политики группы.",
+      "errorsMode": "Правила ошибок запросов",
+      "override": "Переопределить",
+      "errorsHint": "Наследование использует родительскую политику. Переопределение заменяет весь список, который может быть пустым. При смене режима черновик правил сохраняется.",
+      "invalidRetry": "Число повторов должно быть безопасным целым числом; пустое поле означает наследование."
+    },
+    "modelOptions": {
+      "displayName": "Отображаемое имя",
+      "maxContextLength": "Размер контекста",
+      "contextHint": "Неотрицательное безопасное целое число; пустое поле — значение по умолчанию.",
+      "forceMapping": "Заменять имя модели в ответе на псевдоним",
+      "isCompat": "Режим совместимости",
+      "supportConfigurationUpdate": "Разрешить обновление конфигурации",
+      "inputModalitiesText": "Входные модальности",
+      "outputModalitiesText": "Выходные модальности",
+      "modalitiesHint": "Разделяйте запятыми или пробелами. Произвольные названия сохраняются.",
+      "useMaxCompletionTokens": "Использовать max_completion_tokens",
+      "thinkingMode": "Переопределение рассуждений",
+      "useDefault": "По умолчанию",
+      "custom": "Свои настройки",
+      "thinkingHint": "По умолчанию используются настройки сервера; пустое переопределение — явный объект {}. Бюджет и уровни можно задать одновременно. Числовой диапазон не задан, только если обе границы равны 0 или пусты. При положительном минимуме задайте максимум не меньше него.",
+      "thinkingMin": "Минимальный бюджет рассуждений",
+      "thinkingMax": "Максимальный бюджет рассуждений",
+      "thinkingZeroAllowed": "Разрешить нулевой бюджет",
+      "thinkingDynamicAllowed": "Разрешить динамический бюджет",
+      "invalidContext": "Размер контекста должен быть неотрицательным безопасным целым числом.",
+      "invalidThinking": "Настройки рассуждений должны быть корректным объектом JSON.",
+      "invalidBudget": "Бюджет рассуждений должен быть неотрицательным безопасным целым числом.",
+      "invalidRange": "Минимальный бюджет не должен превышать максимальный. Пустые границы считаются равными 0.",
+      "removeModel": "Удалить модель",
+      "modelName": "Имя модели",
+      "modelAlias": "Псевдоним (необязательно)"
     }
   },
   "command_palette": {

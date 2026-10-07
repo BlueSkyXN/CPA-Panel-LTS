@@ -1,118 +1,83 @@
-/**
- * 配置相关 API
- */
-
+import i18n from 'i18next';
 import { apiClient } from './client';
-import type { Config } from '@/types';
+import type { ApiError, Config } from '@/types';
+import { guardConfigConnection, putConfigValue, readConfigSnapshot } from './configValue';
+import { configRevisionFromHeaders } from './configRevision';
 import { normalizeConfigResponse } from './transformers';
 
+export const isConfigNotJSONCompatible = (error: unknown): boolean =>
+  typeof error === 'object' &&
+  error !== null &&
+  'status' in error &&
+  error.status === 422 &&
+  'apiCode' in error &&
+  error.apiCode === 'config_not_json_compatible';
+
+const projectionPaths = [
+  'observability/logs',
+  'observability/usage',
+  'requests/proxy-url',
+  'routing',
+  'access/api-keys',
+  'api-keys',
+  'quota-exceeded',
+  'oauth/providers/aistudio/ws-auth',
+  'oauth/providers/antigravity/antigravity-credits',
+  'oauth/excluded-models',
+  'ampcode',
+  'plugins/enabled',
+];
+
+async function readConfigProjection(revision: string): Promise<Config> {
+  const assertConnection = guardConfigConnection();
+  const snapshots = await Promise.all(
+    projectionPaths.map(async (path) => ({
+      path,
+      ...(await readConfigSnapshot<unknown>(`/config/${path}`, undefined)),
+    }))
+  );
+  assertConnection();
+  if (snapshots.some((snapshot) => snapshot.revision !== revision)) {
+    throw new Error(
+      i18n.t('config_management.read_conflict', {
+        defaultValue: 'Configuration changed while reading; reload and try again.',
+      })
+    );
+  }
+  const view: Record<string, unknown> = {};
+  for (const { path, value } of snapshots) {
+    if (value === undefined) continue;
+    const parts = path.split('/');
+    let parent = view;
+    for (const part of parts.slice(0, -1)) {
+      parent[part] ??= {};
+      parent = parent[part] as Record<string, unknown>;
+    }
+    parent[parts[parts.length - 1]] = value;
+  }
+  const config = normalizeConfigResponse(view);
+  // This view omits plugin-owned YAML and must never authorize a full-document write.
+  delete config.raw;
+  return config;
+}
+
 export const configApi = {
-  /**
-   * 获取配置（会进行字段规范化）
-   */
   async getConfig(): Promise<Config> {
-    const raw = await apiClient.get('/config');
-    return normalizeConfigResponse(raw);
+    const assertConnection = guardConfigConnection();
+    try {
+      const raw = await apiClient.get('/config');
+      assertConnection();
+      return normalizeConfigResponse(raw);
+    } catch (error) {
+      if (!isConfigNotJSONCompatible(error)) throw error;
+      assertConnection();
+      const revision = configRevisionFromHeaders((error as ApiError).headers, true);
+      return readConfigProjection(revision);
+    }
   },
 
-  /**
-   * 获取原始配置（不做转换）
-   */
   getRawConfig: () => apiClient.get('/config'),
 
-  /**
-   * 更新 Debug 模式
-   */
-  updateDebug: (enabled: boolean) => apiClient.put('/debug', { value: enabled }),
-
-  /**
-   * 更新代理 URL
-   */
-  updateProxyUrl: (proxyUrl: string) => apiClient.put('/proxy-url', { value: proxyUrl }),
-
-  /**
-   * 清除代理 URL
-   */
-  clearProxyUrl: () => apiClient.delete('/proxy-url'),
-
-  /**
-   * 更新重试次数
-   */
-  updateRequestRetry: (retryCount: number) => apiClient.put('/request-retry', { value: retryCount }),
-
-  /**
-   * 配额回退：切换项目
-   */
-  updateSwitchProject: (enabled: boolean) =>
-    apiClient.put('/quota-exceeded/switch-project', { value: enabled }),
-
-  /**
-   * 配额回退：切换预览模型
-   */
-  updateSwitchPreviewModel: (enabled: boolean) =>
-    apiClient.put('/quota-exceeded/switch-preview-model', { value: enabled }),
-
-  /**
-   * 使用统计开关
-   */
-  updateUsageStatistics: (enabled: boolean) =>
-    apiClient.put('/usage-statistics-enabled', { value: enabled }),
-
-  /**
-   * 请求日志开关
-   */
-  updateRequestLog: (enabled: boolean) => apiClient.put('/request-log', { value: enabled }),
-
-  /**
-   * 写日志到文件开关
-   */
-  updateLoggingToFile: (enabled: boolean) => apiClient.put('/logging-to-file', { value: enabled }),
-
-  /**
-   * 获取日志总大小上限（MB）
-   */
-  async getLogsMaxTotalSizeMb(): Promise<number> {
-    const data = await apiClient.get<Record<string, unknown>>('/logs-max-total-size-mb');
-    const value = data?.['logs-max-total-size-mb'] ?? data?.logsMaxTotalSizeMb ?? 0;
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  },
-
-  /**
-   * 更新日志总大小上限（MB）
-   */
-  updateLogsMaxTotalSizeMb: (value: number) =>
-    apiClient.put('/logs-max-total-size-mb', { value }),
-
-  /**
-   * WebSocket 鉴权开关
-   */
-  updateWsAuth: (enabled: boolean) => apiClient.put('/ws-auth', { value: enabled }),
-
-  /**
-   * 获取强制模型前缀开关
-   */
-  async getForceModelPrefix(): Promise<boolean> {
-    const data = await apiClient.get<Record<string, unknown>>('/force-model-prefix');
-    return Boolean(data?.['force-model-prefix'] ?? data?.forceModelPrefix ?? false);
-  },
-
-  /**
-   * 更新强制模型前缀开关
-   */
-  updateForceModelPrefix: (enabled: boolean) => apiClient.put('/force-model-prefix', { value: enabled }),
-
-  /**
-   * 获取路由策略
-   */
-  async getRoutingStrategy(): Promise<string> {
-    const data = await apiClient.get<Record<string, unknown>>('/routing/strategy');
-    const strategy = data?.strategy ?? data?.['routing-strategy'] ?? data?.routingStrategy;
-    return typeof strategy === 'string' ? strategy : 'round-robin';
-  },
-
-  /**
-   * 更新路由策略
-   */
-  updateRoutingStrategy: (strategy: string) => apiClient.put('/routing/strategy', { value: strategy }),
+  updateRequestLog: (enabled: boolean) =>
+    putConfigValue('/config/observability/logs/request-log', enabled),
 };

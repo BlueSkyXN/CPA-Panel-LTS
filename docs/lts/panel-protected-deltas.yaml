@@ -53,7 +53,9 @@ protected_deltas:
       - /v0/management/usage/export
       - /v0/management/usage/import
       - usage-statistics-enabled config visibility
-      - auth file/provider status surfaces backed by complete usage details
+      - auth file/provider status surfaces backed by complete usage details (Workbench resource table, auth-index attribution)
+      - v8-only pairing - apiClient on /v8/management with If-Match from the same read for every config write; LTS extensions on /v0/management via the shared ltsExtensionClient
+      - auth_index/auth-index injected by Core v8 GET /config are read for attribution and stripped before writes
   - id: panel-release-contract
     reason: CPA-Core-LTS downloads the latest panel release asset by exact name.
     must_keep:

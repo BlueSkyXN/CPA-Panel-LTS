@@ -47,7 +47,21 @@
     "api_key_label": "API key",
     "device_id_label": "裝置識別（device ID）",
     "device_id_hint": "可選。留空時保留原有值，新增帳號時自動產生。",
-    "hint_zcode-coding-plan": "智譜 GLM Coding Plan 的 API key，隨本帳號檔案內聯儲存，與 PAT 憑證相同。"
+    "hint_zcode-coding-plan": "智譜 GLM Coding Plan 的 API key，隨本帳號檔案內聯儲存，與 PAT 憑證相同。",
+    "local_credentials": {
+      "title": "從本機 ZCode 取得（macOS）",
+      "instructions": "請在安裝了 ZCode 的 Mac 終端機執行。先複製並執行 API key 命令，將結果貼到上方，再執行裝置識別命令。Panel 只複製命令，不讀取本機檔案或自動執行。",
+      "region": "本機 ZCode 帳號區域",
+      "bigmodel": "中國區 · bigmodel",
+      "zai": "國際區 · z.ai",
+      "region_hint": "此選擇只切換擷取命令，不修改伺服器設定；應與外掛 upstream 的 bigmodel / zai 設定一致。",
+      "copy": "複製命令",
+      "copy_label": "複製 {{field}} 擷取命令",
+      "copy_success": "命令已複製；請在 Mac 終端機執行。",
+      "copy_failed": "複製失敗，請手動選取並複製上方命令。",
+      "warning": "執行後會在終端機顯示完整憑據，並覆寫剪貼簿。請勿錄影、分享螢幕截圖或在共用終端機執行。",
+      "troubleshooting": "命令只讀取預設 ~/.zcode/v2/ 路徑，不需安裝額外工具。檔案不存在、欄位為空或為 enc: 加密內容時不會複製；請確認用戶端資料目錄與帳號區域，勿將錯誤訊息當作 key。擷取成功不代表憑據或方案有效。"
+    }
   },
   "common": {
     "login": "登入",
@@ -142,7 +156,8 @@
     "error_timeout": "連線逾時，伺服器無回應",
     "error_unauthorized": "驗證失敗，管理金鑰缺失或無效",
     "error_forbidden": "存取被拒絕，遠端管理未啟用、管理金鑰未設定或 IP 被暫時封鎖",
-    "error_not_found": "找不到 Management API，請確認服務位址指向 CLIProxyAPI 後端",
+    "error_not_found": "找不到 v8 Management API，請檢查服務位址並將 CPA-Core-LTS 升級至 v8 版本線；不再支援僅提供 v0 的後端。",
+    "error_legacy_backend": "目前後端僅提供舊版 v0 管理介面。請將 CPA-Core-LTS 升級至 v8 版本線，並依 v8 教學重新設定後再使用此面板。",
     "error_server": "後端處理管理介面時發生錯誤，請查看服務日誌",
     "error_cors": "跨域請求被阻擋，請檢查伺服器設定",
     "error_ssl": "SSL/TLS 憑證驗證失敗"
@@ -167,7 +182,6 @@
     "api_keys": "API 金鑰",
     "ai_providers": "AI 供應商",
     "provider_workbench": "供應商工作台",
-    "provider_legacy": "LTS 提供商狀態",
     "auth_files": "驗證檔案",
     "oauth": "OAuth 登入",
     "quota_management": "配額管理",
@@ -734,7 +748,7 @@
     "priority_placeholder": "例如: 10 或 -1",
     "priority_hint": "僅支援整數；無效值會被忽略。數值越大優先順序越高。",
     "weight_label": "調度權重（weight）",
-    "weight_hint": "預設值為 1；小於或等於 0 時不參與加權調度；最大值為 1,000,000。",
+    "weight_hint": "預設值為 1；小於或等於 0 時不參與加權調度；最大值為 1,000,000。填入後開啟加權輪詢設定即可生效。",
     "weight_invalid_integer": "權重必須是整數。",
     "weight_invalid_max": "權重不能超過 1,000,000。",
     "websockets_label": "WebSockets（websockets）",
@@ -765,7 +779,34 @@
     "quota_refresh_single": "重新整理配額",
     "quota_refresh_hint": "僅重新整理該驗證檔案的配額",
     "quota_refresh_success": "已重新整理「{{name}}」的配額",
-    "quota_refresh_failed": "重新整理「{{name}}」的配額失敗：{{message}}"
+    "quota_refresh_failed": "重新整理「{{name}}」的配額失敗：{{message}}",
+    "cooldown_unknown": "冷卻狀態未知",
+    "cooldown_models": "{{count}} 個模型冷卻",
+    "cooldown_credential": "憑證級冷卻",
+    "cooldown_credential_and_models": "憑證及 {{count}} 個模型冷卻",
+    "cooldown_scope_credential": "整個憑證",
+    "cooldown_earliest": "最早結束約 {{time}}",
+    "cooldown_elapsed": "冷卻計時已到期",
+    "cooldown_timer_elapsed": "計時已到期",
+    "cooldown_refresh_hint": "重新整理清單確認",
+    "cooldown_seconds": "{{count}} 秒",
+    "cooldown_minutes": "{{count}} 分鐘",
+    "cooldown_hours": "{{count}} 小時",
+    "cooldown_http_status": "上游 HTTP {{status}}",
+    "cooldown_backoff": "退避等級 {{level}}",
+    "cooldown_deadline": "計時截止",
+    "cooldown_observed": "快照時間",
+    "cooldown_note": "本機排程快照，剩餘時間為估算；到期不代表憑證可用、額度恢復或自動重試。模型名稱為內部狀態鍵，退避等級不是失敗次數。",
+    "cooldown_reason_quota": "額度限制",
+    "cooldown_reason_credential_quota": "憑證額度限制",
+    "cooldown_reason_cloudflare_challenge": "Cloudflare 驗證",
+    "cooldown_reason_invalid_grant": "授權無效",
+    "cooldown_reason_unauthorized": "未獲授權",
+    "cooldown_reason_payment_required": "存取受限（402/403，非帳單結論）",
+    "cooldown_reason_not_found": "找不到資源",
+    "cooldown_reason_model_not_supported": "不支援此模型",
+    "cooldown_reason_transient_error": "上游暫時出錯",
+    "cooldown_reason_unknown": "其他或未知原因"
   },
   "antigravity_quota": {
     "title": "Antigravity 配額",
@@ -855,6 +896,7 @@
     "credit_amount": "{{count}} 點數"
   },
   "kimi_quota": {
+    "monthly_limit": "月限額",
     "title": "Kimi 配額",
     "empty_title": "暫無 Kimi 驗證",
     "empty_desc": "上傳 Kimi 驗證檔案後即可查看配額。",
@@ -872,6 +914,7 @@
     "reset_at": "{{time}} 重置"
   },
   "xai_quota": {
+    "usage_unavailable": "xAI 用量暫不可用",
     "title": "Grok 配額",
     "empty_title": "暫無 xAI/Grok 驗證",
     "empty_desc": "使用 xAI OAuth 登入後即可查看 Grok 配額。",
@@ -1034,6 +1077,8 @@
     "upgrade_required_desc": "目前伺服器版本不支援 OAuth 模型別名功能，請升級到最新版本的 CPA 後重試。"
   },
   "auth_login": {
+    "kimi_ai_oauth_hint": "透過裝置授權登入 kimi.ai 國際站，自動儲存獨立的 kimi-ai 驗證檔案。中國站與國際站帳號不互通。",
+    "kimi_ai_oauth_title": "Kimi 國際站（kimi.ai）",
     "codex_oauth_title": "Codex OAuth",
     "codex_oauth_button": "開始 Codex 登入",
     "codex_oauth_hint": "透過 OAuth 流程登入 Codex 服務，自動取得並儲存驗證檔案。",
@@ -1365,7 +1410,7 @@
     "pricing_standard_api": "API Standard",
     "pricing_fast": "Fast",
     "pricing_fast_policies": "Fast 計費規則",
-    "pricing_fast_policy_title": "API Priority 與 ChatGPT Standard/Fast 使用各自獨立的官方倍率。",
+    "pricing_fast_policy_title": "Fast/Priority 使用獨立 API 費率表或設定的 Standard 倍率，不是 ChatGPT 訂閱價格。",
     "pricing_api_priority_multiplier": "API ×{{multiplier}}",
     "pricing_api_priority_multiplier_official": "官方 API ×{{multiplier}}",
     "pricing_api_priority_multiplier_custom": "自訂 API ×{{multiplier}}",
@@ -1399,6 +1444,9 @@
     "pricing_alias_canonical_hint": "目前模型已精確命中預設，不需要設定別名。",
     "pricing_standard_rates": "Standard 費率 · USD / 1M",
     "pricing_fast_rates": "Fast 費率 · USD / 1M",
+    "pricing_fast_long_rates": "Fast 長上下文費率 · USD / 1M",
+    "pricing_fast_long_rates_enable": "使用獨立 Fast 長上下文費率",
+    "pricing_fast_long_rates_hint": "共用 Standard 的輸入 Token 門檻。關閉後，明確 Fast 短上下文費率也用於長上下文。",
     "pricing_rate_input": "輸入",
     "pricing_rate_cached_input": "快取輸入",
     "pricing_rate_cache_write": "快取寫入",
@@ -1560,7 +1608,36 @@
     "request_events_pagination": "請求明細分頁",
     "request_events_page_status": "第 {{start}}–{{end}} 筆，共 {{total}} 筆；匯出包含全部篩選結果。",
     "request_events_previous_page": "上一頁",
-    "request_events_next_page": "下一頁"
+    "request_events_next_page": "下一頁",
+    "analytics_section_title": "效能與可靠性",
+    "analytics_section_hint": "基於所選時間範圍的請求樣本計算延遲分位數、快取效率與錯誤分佈。",
+    "analytics_samples_loaded": "已載入 {{count}} 筆樣本",
+    "analytics_samples_loading": "樣本載入中… 已載入 {{count}} 筆",
+    "analytics_load_samples": "載入樣本",
+    "analytics_samples_in_bucket": "該時段 {{count}} 筆樣本",
+    "analytics_success_only_note": "延遲分位數僅統計成功請求。",
+    "latency_trend_title": "延遲趨勢",
+    "latency_trend_avg": "平均",
+    "latency_distribution_title": "延遲分佈",
+    "latency_distribution_series": "請求數",
+    "latency_distribution_latency": "總延遲",
+    "cache_analytics_title": "快取效率",
+    "cache_analytics_rate_series": "快取讀取率",
+    "cache_analytics_read_rate": "快取讀取率",
+    "cache_analytics_hit_requests": "命中快取的請求",
+    "error_analysis_title": "錯誤分析",
+    "error_analysis_rate_series": "失敗率",
+    "error_analysis_failure_rate": "失敗率",
+    "error_analysis_failed_requests": "失敗 / 總數",
+    "error_analysis_by_status": "按狀態碼統計失敗",
+    "error_analysis_unknown_status": "未知",
+    "error_analysis_top_reasons": "主要失敗原因",
+    "error_analysis_failures": "失敗數",
+    "share_title": "模型份額",
+    "share_other_models": "其他（{{count}} 個模型）",
+    "share_metric_requests": "請求數",
+    "share_metric_tokens": "Token 數",
+    "share_metric_cost": "費用"
   },
   "service_health": {
     "title": "服務健康監測",
@@ -1647,6 +1724,7 @@
     "upgrade_required_desc": "目前伺服器版本不支援記錄檢視功能，請升級到最新版本的 CPA 以使用此功能。"
   },
   "config_management": {
+    "read_conflict": "讀取期間設定已變更，請重新載入後再試。",
     "save_target": "目標實例：{{name}}",
     "editor": {
       "guidance": {
@@ -1791,6 +1869,7 @@
     "status_saved": "設定儲存完成",
     "status_save_failed": "儲存失敗",
     "save_success": "設定已儲存",
+    "revision_unavailable": "無法取得設定版本，請升級 Core 並重新載入後再儲存。",
     "error_yaml_not_supported": "伺服器未回傳 YAML 格式，請確認 /config.yaml 介面可用",
     "visual_mode_unavailable": "YAML 語法修復前無法使用視覺化編輯",
     "visual_mode_unavailable_short": "YAML 錯誤",
@@ -2218,6 +2297,9 @@
     "card_idle_hint": "請使用頂部「重新整理全部憑證」按鈕取得最新配額。"
   },
   "plugin_management": {
+    "yaml_required_title": "此外掛需要使用 YAML 編輯",
+    "yaml_required_message": "此設定包含 JSON 表單無法表示的 YAML 值。請開啟原始碼編輯器，以保留完整的外掛設定。",
+    "open_yaml": "開啟 YAML 原始碼",
     "inherit_config": "繼承 / 未設定",
     "manual_auth": "手動帳號匯入",
     "manage_accounts": "管理帳號",
@@ -2596,6 +2678,17 @@
     "author": "作者"
   },
   "providersPage": {
+    "configGroup": {
+      "title": "編輯設定群組",
+      "name": "群組名稱",
+      "baseUrl": "共用服務位址",
+      "edit": "編輯設定群組",
+      "impact": "群組 {{name}} · {{count}} 個憑證共用服務位址與預設設定。",
+      "editRequired": "此位址屬於設定群組，請透過「編輯設定群組」修改。",
+      "policyHint": "群組預設設定套用至選擇繼承的憑證；既有憑證覆寫值保持不變。",
+      "confirmTitle": "套用整個群組的變更？",
+      "confirmMessage": "將修改包含 {{count}} 個憑證的群組 {{name}}。共用服務位址影響所有憑證，預設策略僅影響繼承該設定的憑證。"
+    },
     "header": {
       "title": "AI 提供商",
       "activeResources": "{{active}}/{{total}} 個活躍資源",
@@ -2633,7 +2726,8 @@
       "code0": "Code0",
       "fennoAI": "FennoAI",
       "qiniuCloud": "七牛雲",
-      "infistar": "無限星河"
+      "infistar": "無限星河",
+      "kimi": "Kimi"
     },
     "table": {
       "key": "金鑰",
@@ -2888,6 +2982,90 @@
         "gemini": "Gemini",
         "codexResponses": "Codex API (Responses)"
       }
+    },
+    "behavior": {
+      "title": "提供商專屬行為",
+      "alphaSearch": "啟用 Alpha Search",
+      "alphaSearchHint": "允許此 Codex 金鑰用於 Alpha Search。上游必須支援此功能。",
+      "codexCloaking": "Codex 請求偽裝",
+      "codexCloakingHint": "為此 API 金鑰覆寫官方 Codex 身分請求標頭設定。選擇預設值會移除此憑證的覆寫設定；僅適用於 OAuth 的設定在此不生效。",
+      "useDefault": "使用後端預設值",
+      "cloakingEnabled": "啟用偽裝",
+      "cloakingDisabled": "停用偽裝",
+      "rebuildMidSystemMessage": "重建系統訊息",
+      "rebuildMidSystemMessageHint": "將 Claude 中 role 為 system 的訊息移至頂層 system 欄位。",
+      "supportPromptCacheKey": "注入提示詞快取鍵",
+      "supportPromptCacheKeyHint": "為相容的請求衍生並注入 prompt_cache_key。僅在上游支援此欄位時啟用。"
+    },
+    "errorRules": {
+      "hint": "依序採用首個命中規則；狀態碼相同，任一條件命中即可。",
+      "empty": "尚無規則，可儲存為空清單。",
+      "rule": "規則 {{number}}",
+      "status": "狀態碼",
+      "action": "動作",
+      "selectAction": "選擇動作",
+      "moveUp": "上移規則",
+      "moveDown": "下移規則",
+      "removeRule": "刪除規則",
+      "matchType": "比對類型",
+      "text": "包含文字",
+      "regex": "正規表示式",
+      "matchValue": "比對條件",
+      "regexHint": "Go 正規表示式",
+      "removeMatch": "刪除條件",
+      "addMatch": "新增條件",
+      "addRule": "新增規則",
+      "invalidStatus": "狀態碼必須是安全範圍內的正整數。",
+      "invalidAction": "請選擇有效動作。",
+      "invalidMatch": "比對條件不可為空。",
+      "missingMatch": "至少需要一個比對條件。",
+      "actions": {
+        "stop": "停止",
+        "stop-and-cooldown": "停止並冷卻",
+        "continue": "繼續",
+        "continue-and-cooldown": "繼續並冷卻"
+      }
+    },
+    "runtimePolicy": {
+      "title": "進階執行策略",
+      "description": "繼承使用所屬群組策略，再回退至後端預設值。覆寫僅套用於目前項目。",
+      "cooling": "冷卻策略",
+      "inherit": "繼承",
+      "coolingEnabled": "啟用冷卻",
+      "coolingDisabled": "停用冷卻",
+      "retry": "請求重試次數",
+      "retryHint": "留空繼承群組設定。請輸入整數：0 表示不重試；負數使用全域重試策略，而非群組策略。",
+      "errorsMode": "請求錯誤規則",
+      "override": "覆寫",
+      "errorsHint": "繼承使用上層策略。覆寫會取代整個清單，可儲存為空。切換模式會保留規則草稿。",
+      "invalidRetry": "重試次數必須是安全範圍內的整數，或留空以繼承。"
+    },
+    "modelOptions": {
+      "displayName": "顯示名稱",
+      "maxContextLength": "上下文長度",
+      "contextHint": "非負安全整數；留空使用預設值。",
+      "forceMapping": "將回應模型名稱改寫為別名",
+      "isCompat": "相容模式",
+      "supportConfigurationUpdate": "允許設定更新",
+      "inputModalitiesText": "輸入模態",
+      "outputModalitiesText": "輸出模態",
+      "modalitiesHint": "使用逗號或空白分隔；保留自訂模態名稱。",
+      "useMaxCompletionTokens": "使用 max_completion_tokens",
+      "thinkingMode": "思考設定覆寫",
+      "useDefault": "使用預設",
+      "custom": "自訂",
+      "thinkingHint": "預設繼承後端行為；空的自訂覆寫是明確的 {}。預算和思考等級可以同時設定。僅當最小值和最大值均為 0 或留空時，才不指定數值範圍。最小值大於 0 時須設定不小於它的最大值。",
+      "thinkingMin": "最小思考預算",
+      "thinkingMax": "最大思考預算",
+      "thinkingZeroAllowed": "允許零預算",
+      "thinkingDynamicAllowed": "允許動態預算",
+      "invalidContext": "上下文長度必須是非負安全整數。",
+      "invalidThinking": "思考設定必須是有效的 JSON 物件。",
+      "invalidBudget": "思考預算必須是非負安全整數。",
+      "invalidRange": "最小思考預算不能大於最大值，留空的邊界按 0 處理。",
+      "removeModel": "移除模型",
+      "modelName": "模型名稱",
+      "modelAlias": "別名（選填）"
     }
   },
   "command_palette": {

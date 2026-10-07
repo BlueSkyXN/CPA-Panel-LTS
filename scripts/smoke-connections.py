@@ -1,4 +1,5 @@
 """Two independent mock Cores; never connects to a live deployment."""
+from panel_browser import launch_chromium
 import importlib.util
 import argparse
 import re
@@ -25,7 +26,7 @@ class AuthenticatedCore(baseline.MockCoreHandler):
         if self.path in ['/v0/management/flow-control', '/v0/management/flow-control/events']:
             config_smoke.ConfigCore.do_GET(self)
             return
-        if urlparse(self.path).path == '/v0/management/config' and getattr(self.state, 'reject_config', False):
+        if urlparse(self.path).path == '/v8/management/config' and getattr(self.state, 'reject_config', False):
             self._send_json({'error': 'temporarily unavailable'}, status=503)
             return
         if urlparse(self.path).path == '/v0/management/usage/query/capabilities' and getattr(self.state, 'query_mode', False):
@@ -40,7 +41,7 @@ class AuthenticatedCore(baseline.MockCoreHandler):
         if self.headers.get('Authorization') != 'Bearer ' + self.state.expected_key:
             self._send_json({'error': 'unauthorized'}, status=401)
             return
-        if urlparse(self.path).path == '/v0/management/config.yaml' and getattr(self.state, 'hold_write', False):
+        if urlparse(self.path).path == '/v8/management/config.yaml' and getattr(self.state, 'hold_write', False):
             self.state.write_started.set()
             self.state.write_release.wait(timeout=20)
         super().do_PUT()
@@ -73,7 +74,7 @@ def run(file_mode=False, flow_only=False):
     b.plugin_endpoint_available = False
     b.plugins_config_enabled = False
     with baseline.run_server(baseline.StaticPanelHandler, app_port), baseline.run_server(AuthenticatedCore, a_port, a), baseline.run_server(AuthenticatedCore, b_port, b), sync_playwright() as p:
-        browser = p.chromium.launch()
+        browser = launch_chromium(p)
         context = browser.new_context(locale='en-US', viewport={'width': 1440, 'height': 1000})
         context.add_init_script("localStorage.setItem('cli-proxy-language', JSON.stringify({state:{language:'en'},version:0}));")
         context.add_init_script("""

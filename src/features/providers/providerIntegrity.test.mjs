@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createServer } from 'vite';
+import { installFakeV8Core } from '../../services/api/testing/fakeV8Core.mjs';
 
 const originalWindow = globalThis.window;
 globalThis.window = new EventTarget();
@@ -45,6 +46,12 @@ const [
   vite.ssrLoadModule('/src/components/providers/utils.ts'),
 ]);
 
+let core;
+test.afterEach(() => core?.restore());
+const readConfig = async () =>
+  transformers.normalizeConfigResponse(await client.apiClient.get('/config'));
+const stripSource = ({ source, ...rest }) => rest;
+
 test.after(async () => {
   await vite.close();
   if (originalWindow === undefined) {
@@ -56,36 +63,41 @@ test.after(async () => {
 
 test('preserves backend indices and keeps custom branded endpoints in the generic group', () => {
   const config = transformers.normalizeConfigResponse({
-    'openai-compatibility': [
-      { name: 'invalid-without-base-url' },
-      {
-        name: 'Code0 official',
-        'base-url': 'https://code0.ai/v1',
-        'api-key-entries': [{ 'api-key': 'official-code0-key' }],
-      },
-      {
-        name: 'code0',
-        'base-url': 'https://custom-code0.example.test/v1',
-        'api-key-entries': [{ 'api-key': 'custom-code0-key' }],
-      },
-      {
-        name: 'qiniuCloud',
-        'base-url': 'https://custom-qiniu.example.test/v1',
-        'api-key-entries': [{ 'api-key': 'custom-qiniu-key' }],
-      },
-      {
-        name: 'fennoAI',
-        'base-url': 'https://api.fenno.ai/v1',
-        'api-key-entries': [{ 'api-key': 'fenno-openai-key' }],
-      },
-    ],
+    'api-keys': {
+      'openai-compatibility': [
+        { name: 'invalid-without-base-url', keys: [] },
+        {
+          name: 'Code0 official',
+          'base-url': 'https://code0.ai/v1',
+          keys: [{ 'api-key': 'official-code0-key' }],
+        },
+        {
+          name: 'code0',
+          'base-url': 'https://custom-code0.example.test/v1',
+          keys: [{ 'api-key': 'custom-code0-key' }],
+        },
+        {
+          name: 'qiniuCloud',
+          'base-url': 'https://custom-qiniu.example.test/v1',
+          keys: [{ 'api-key': 'custom-qiniu-key' }],
+        },
+        {
+          name: 'fennoAI',
+          'base-url': 'https://api.fenno.ai/v1',
+          keys: [{ 'api-key': 'fenno-openai-key' }],
+        },
+      ],
+    },
   });
 
   assert.deepEqual(
     config.openaiCompatibility.map((item) => item.sourceIndex),
     [1, 2, 3, 4]
   );
-  assert.equal(providers.getOpenAIProviderMutationIndex(config.openaiCompatibility[0], 0), 1);
+  assert.deepEqual(
+    config.openaiCompatibility.map((item) => item.source.groupIndex),
+    [1, 2, 3, 4]
+  );
 
   const code0Raw = code0.buildCode0Raw(config);
   assert.deepEqual(
@@ -168,8 +180,37 @@ test('adapts configured Infistar endpoints without promotional metadata', () => 
     Object.keys(infistar).some((key) => key.toLowerCase().includes('affiliate')),
     false
   );
-  assert.equal(descriptors.PROVIDER_BRAND_ORDER.at(-1), 'infistar');
+  assert.deepEqual(descriptors.PROVIDER_BRAND_ORDER.slice(-2), ['infistar', 'kimi']);
   assert.match(brandLogos.PROVIDER_LOGOS.infistar.src, /infistar\.png/);
+});
+
+test('adapts configured Kimi endpoints as a config-detected group without affiliate links', async () => {
+  const kimi = await vite.ssrLoadModule('/src/features/providers/kimi.ts');
+  assert.equal(
+    Object.keys(kimi).some((key) => /affiliate/i.test(key)),
+    false
+  );
+  const config = transformers.normalizeConfigResponse({
+    'api-keys': {
+      'openai-compatibility': [
+        { name: 'kimi', 'base-url': 'https://api.moonshot.cn/v1', keys: [{ 'api-key': 'synthetic-kimi' }] },
+      ],
+      claude: [
+        {
+          name: 'claude-kimi',
+          'base-url': 'https://api.moonshot.cn/anthropic',
+          keys: [{ 'api-key': 'synthetic-kimi-claude' }],
+        },
+      ],
+    },
+  });
+  const raw = kimi.buildKimiRaw(config);
+  assert.equal(raw.openai.length, 1);
+  assert.equal(raw.claude.length, 1);
+  const resource = adapters.kimiToResource(raw);
+  assert.equal(resource.brand, 'kimi');
+  assert.equal(sponsorDefinitions.isMultiProtocolSponsorBrand('kimi'), true);
+  assert.ok(brandLogos.PROVIDER_LOGOS.kimi.src);
 });
 
 test('deletes sponsor OpenAI entries by unique descending source index', () => {
@@ -205,22 +246,22 @@ test('recognizes the current and legacy ClaudeAPI gateways without affiliate met
 
 test('round-trips the Claude fingerprint profile without dropping unknown fields', async () => {
   const config = transformers.normalizeConfigResponse({
-    'claude-api-key': [
-      {
-        'api-key': 'claude-secret',
-        'base-url': 'https://api.anthropic.com',
-        'fingerprint-profile': 'claude-code-cli',
-      },
-    ],
+    'api-keys': {
+      claude: [
+        {
+          name: 'claude-1',
+          'base-url': 'https://api.anthropic.com',
+          keys: [{ 'api-key': 'claude-secret', 'fingerprint-profile': 'claude-code-cli' }],
+        },
+      ],
+    },
   });
 
-  assert.deepEqual(config.claudeApiKeys, [
-    {
-      apiKey: 'claude-secret',
-      baseUrl: 'https://api.anthropic.com',
-      fingerprintProfile: 'claude-code-cli',
-    },
-  ]);
+  assert.deepEqual(stripSource(config.claudeApiKeys[0]), {
+    apiKey: 'claude-secret',
+    baseUrl: 'https://api.anthropic.com',
+    fingerprintProfile: 'claude-code-cli',
+  });
   assert.equal(
     adapters.claudeToResource(config.claudeApiKeys[0], 0).flags.claudeCodeCliProfile,
     true
@@ -230,200 +271,131 @@ test('round-trips the Claude fingerprint profile without dropping unknown fields
     true
   );
 
-  const originalGet = client.apiClient.get;
-  const originalPut = client.apiClient.put;
-  const calls = [];
-  let configRead = 0;
-  client.apiClient.get = async (url) => {
-    calls.push({ method: 'GET', url });
-    configRead += 1;
-    return configRead === 1
-      ? { 'claude-api-key': [] }
-      : {
-          'claude-api-key': [
+  core = installFakeV8Core(client.apiClient, {
+    'api-keys': {
+      claude: [
+        {
+          name: 'claude-1',
+          'base-url': 'https://api.anthropic.com',
+          keys: [
             {
               'api-key': 'claude-secret',
-              'base-url': 'https://api.anthropic.com',
               'fingerprint-profile': 'claude-code-cli',
               'experimental-cch-signing': true,
               'future-field': 'preserved',
-              'auth-index': 'response-only',
             },
           ],
-        };
-  };
-  client.apiClient.put = async (url, data) => {
-    calls.push({ method: 'PUT', url, data });
-  };
-
-  try {
-    await providers.providersApi.createClaudeConfig({
-      apiKey: 'new-claude-secret',
-      baseUrl: 'https://api.anthropic.com',
-      fingerprintProfile: 'claude-code-cli',
-    });
-    await providers.providersApi.updateClaudeConfig('claude-secret', 'https://api.anthropic.com', {
-      apiKey: 'claude-secret',
-      baseUrl: 'https://api.anthropic.com',
-      fingerprintProfile: '',
-    });
-  } finally {
-    client.apiClient.get = originalGet;
-    client.apiClient.put = originalPut;
-  }
-
-  assert.deepEqual(calls, [
-    { method: 'GET', url: '/config' },
-    {
-      method: 'PUT',
-      url: '/claude-api-key',
-      data: [
-        {
-          'api-key': 'new-claude-secret',
-          'base-url': 'https://api.anthropic.com',
-          'fingerprint-profile': 'claude-code-cli',
         },
       ],
     },
-    { method: 'GET', url: '/config' },
-    {
-      method: 'PUT',
-      url: '/claude-api-key',
-      data: [
-        {
-          'future-field': 'preserved',
-          'api-key': 'claude-secret',
-          'base-url': 'https://api.anthropic.com',
-        },
-      ],
-    },
-  ]);
+  });
+  await providers.providersApi.createClaudeConfig({
+    apiKey: 'new-claude-secret',
+    baseUrl: 'https://api.anthropic.com',
+    fingerprintProfile: 'claude-code-cli',
+  });
+  const current = (await readConfig()).claudeApiKeys.find((item) => item.apiKey === 'claude-secret');
+  await providers.providersApi.updateClaudeConfig(current.apiKey, current.baseUrl, {
+    ...current,
+    fingerprintProfile: '',
+  });
+
+  assert.deepEqual(core.writes[0].data[1], {
+    name: 'claude-2',
+    'base-url': 'https://api.anthropic.com',
+    keys: [{ 'api-key': 'new-claude-secret', 'fingerprint-profile': 'claude-code-cli' }],
+  });
+  assert.deepEqual(core.writes[1].data[0].keys[0], {
+    'api-key': 'claude-secret',
+    'future-field': 'preserved',
+  });
+});
+
+test('an untouched default cloak section does not materialize a Claude cloak override', async () => {
+  const { buildCloakConfig } = await vite.ssrLoadModule(
+    '/src/features/providers/useProviderWorkbench.ts'
+  );
+  const defaults = { mode: '', strictMode: false, sensitiveWordsText: '', cacheUserId: false };
+  assert.equal(buildCloakConfig(defaults, undefined), undefined);
+  assert.deepEqual(buildCloakConfig({ ...defaults, strictMode: true }, undefined), {
+    mode: undefined,
+    strictMode: true,
+    sensitiveWords: [],
+    cacheUserId: false,
+  });
+  // An existing cloak node stays editable, including clearing it back to defaults.
+  assert.deepEqual(buildCloakConfig(defaults, { strictMode: true }), {
+    mode: undefined,
+    strictMode: false,
+    sensitiveWords: [],
+    cacheUserId: false,
+  });
 });
 
 test('round-trips credential weights without dropping provider fields', async () => {
-  const config = transformers.normalizeConfigResponse({
-    'gemini-api-key': [{ 'api-key': 'gemini-secret', weight: '5' }],
-    'openai-compatibility': [
-      {
-        name: 'custom',
-        'base-url': 'https://openai.example.test/v1',
-        'api-key-entries': [{ 'api-key': 'openai-secret', weight: '0' }],
-      },
-    ],
-  });
-  assert.equal(config.geminiApiKeys[0]?.weight, 5);
-  assert.equal(config.openaiCompatibility[0]?.apiKeyEntries[0]?.weight, 0);
-
-  const originalGet = client.apiClient.get;
-  const originalPut = client.apiClient.put;
-  const calls = [];
-  let configRead = 0;
-  client.apiClient.get = async (url) => {
-    calls.push({ method: 'GET', url });
-    configRead += 1;
-    if (configRead === 1) {
-      return {
-        'gemini-api-key': [
-          {
-            'api-key': 'gemini-secret',
-            'base-url': 'https://gemini.example.test',
-            weight: 2,
-            'future-field': { keep: true },
-            'auth-index': 'response-only',
-          },
-        ],
-      };
-    }
-    return {
+  core = installFakeV8Core(client.apiClient, {
+    'api-keys': {
+      gemini: [
+        {
+          name: 'gemini-1',
+          'base-url': 'https://gemini.example.test',
+          keys: [{ 'api-key': 'gemini-secret', weight: 2, 'future-field': { keep: true } }],
+        },
+      ],
       'openai-compatibility': [
         {
           name: 'custom',
           'base-url': 'https://openai.example.test/v1',
           'future-provider-field': 'keep',
-          'api-key-entries': [
-            {
-              'api-key': 'openai-secret',
-              weight: 3,
-              'future-entry-field': 'keep',
-            },
-          ],
-        },
-      ],
-    };
-  };
-  client.apiClient.put = async (url, data) => {
-    calls.push({ method: 'PUT', url, data });
-  };
-
-  try {
-    await providers.providersApi.updateGeminiKey(
-      'gemini-secret',
-      'https://gemini.example.test',
-      {
-        apiKey: 'gemini-secret',
-        baseUrl: 'https://gemini.example.test',
-        weight: 7,
-      }
-    );
-    await providers.providersApi.updateOpenAIProvider('custom', 0, {
-      name: 'custom',
-      baseUrl: 'https://openai.example.test/v1',
-      apiKeyEntries: [{ apiKey: 'openai-secret', weight: 0 }],
-    });
-  } finally {
-    client.apiClient.get = originalGet;
-    client.apiClient.put = originalPut;
-  }
-
-  assert.deepEqual(calls, [
-    { method: 'GET', url: '/config' },
-    {
-      method: 'PUT',
-      url: '/gemini-api-key',
-      data: [
-        {
-          'future-field': { keep: true },
-          'api-key': 'gemini-secret',
-          weight: 7,
-          'base-url': 'https://gemini.example.test',
+          keys: [{ 'api-key': 'openai-secret', weight: 3, 'future-entry-field': 'keep' }],
         },
       ],
     },
-    { method: 'GET', url: '/config' },
-    {
-      method: 'PUT',
-      url: '/openai-compatibility',
-      data: [
-        {
-          'future-provider-field': 'keep',
-          name: 'custom',
-          'base-url': 'https://openai.example.test/v1',
-          'api-key-entries': [
-            {
-              'future-entry-field': 'keep',
-              'api-key': 'openai-secret',
-              weight: 0,
-            },
-          ],
-        },
-      ],
-    },
-  ]);
+  });
+  const config = await readConfig();
+  assert.equal(config.geminiApiKeys[0]?.weight, 2);
+  assert.equal(config.openaiCompatibility[0]?.apiKeyEntries[0]?.weight, 3);
+  assert.equal(config.openaiCompatibility[0]?.apiKeyEntries[0]?.sourceIndex, 0);
+
+  const gemini = config.geminiApiKeys[0];
+  await providers.providersApi.updateGeminiKey(gemini.apiKey, gemini.baseUrl, {
+    ...gemini,
+    weight: 7,
+  });
+  const openai = (await readConfig()).openaiCompatibility[0];
+  await providers.providersApi.updateOpenAIProvider(openai.name, 0, {
+    ...openai,
+    apiKeyEntries: openai.apiKeyEntries.map((entry) => ({ ...entry, weight: 0 })),
+  });
+
+  assert.deepEqual(core.writes[0].data[0].keys[0], {
+    'api-key': 'gemini-secret',
+    weight: 7,
+    'future-field': { keep: true },
+  });
+  assert.deepEqual(core.writes[1].data[0], {
+    name: 'custom',
+    'base-url': 'https://openai.example.test/v1',
+    'future-provider-field': 'keep',
+    keys: [{ 'api-key': 'openai-secret', weight: 0, 'future-entry-field': 'keep' }],
+  });
 });
 
 test('manages Interactions API resources through the Core contract', async () => {
-  const config = transformers.normalizeConfigResponse({
-    'interactions-api-key': [
-      {
-        'api-key': 'interaction-secret',
-        'base-url': 'https://generativelanguage.googleapis.com',
-        weight: '4',
-      },
-    ],
+  const parsed = transformers.normalizeConfigResponse({
+    'api-keys': {
+      interactions: [
+        {
+          name: 'interactions-1',
+          'base-url': 'https://generativelanguage.googleapis.com',
+          keys: [{ 'api-key': 'interaction-secret', weight: 4 }],
+        },
+      ],
+    },
   });
-  assert.equal(config.interactionsApiKeys[0]?.weight, 4);
+  assert.equal(parsed.interactionsApiKeys[0]?.weight, 4);
 
-  const resource = adapters.interactionsToResource(config.interactionsApiKeys[0], 0);
+  const resource = adapters.interactionsToResource(parsed.interactionsApiKeys[0], 0);
   assert.equal(resource.brand, 'interactions');
   assert.deepEqual(resource.selector, {
     brand: 'interactions',
@@ -447,84 +419,40 @@ test('manages Interactions API resources through the Core contract', async () =>
   assert.equal(providerUtils.INTERACTIONS_API_REVISION, '2026-05-20');
   assert.equal(providerUtils.getProviderUsageKey('interactions'), 'gemini-interactions');
 
-  const originalGet = client.apiClient.get;
-  const originalPut = client.apiClient.put;
-  const originalDelete = client.apiClient.delete;
-  const calls = [];
-  let configRead = 0;
-  client.apiClient.get = async (url) => {
-    calls.push({ method: 'GET', url });
-    configRead += 1;
-    return configRead === 1
-      ? { 'interactions-api-key': [] }
-      : {
-          'interactions-api-key': [
-            {
-              'api-key': 'interaction-secret',
-              'base-url': 'https://generativelanguage.googleapis.com',
-              weight: 4,
-              'future-field': { keep: true },
-              'auth-index': 'response-only',
-            },
-          ],
-        };
-  };
-  client.apiClient.put = async (url, data) => {
-    calls.push({ method: 'PUT', url, data });
-  };
-  client.apiClient.delete = async (url) => {
-    calls.push({ method: 'DELETE', url });
-  };
-
-  try {
-    await providers.providersApi.createInteractionsKey({
-      apiKey: 'new-interaction-secret',
-      weight: 2,
-    });
-    await providers.providersApi.updateInteractionsKey(
-      'interaction-secret',
-      'https://generativelanguage.googleapis.com',
-      {
-        apiKey: 'interaction-secret',
-        baseUrl: 'https://generativelanguage.googleapis.com',
-        weight: 6,
-      }
-    );
-    await providers.providersApi.deleteInteractionsKey(
-      'interaction-secret',
-      'https://generativelanguage.googleapis.com'
-    );
-  } finally {
-    client.apiClient.get = originalGet;
-    client.apiClient.put = originalPut;
-    client.apiClient.delete = originalDelete;
-  }
-
-  assert.deepEqual(calls, [
-    { method: 'GET', url: '/config' },
-    {
-      method: 'PUT',
-      url: '/interactions-api-key',
-      data: [{ 'api-key': 'new-interaction-secret', weight: 2 }],
-    },
-    { method: 'GET', url: '/config' },
-    {
-      method: 'PUT',
-      url: '/interactions-api-key',
-      data: [
+  core = installFakeV8Core(client.apiClient, {
+    'api-keys': {
+      interactions: [
         {
-          'future-field': { keep: true },
-          'api-key': 'interaction-secret',
-          weight: 6,
+          name: 'interactions-1',
           'base-url': 'https://generativelanguage.googleapis.com',
+          keys: [{ 'api-key': 'interaction-secret', weight: 4, 'future-field': { keep: true } }],
         },
       ],
     },
-    {
-      method: 'DELETE',
-      url: '/interactions-api-key?api-key=interaction-secret&base-url=https%3A%2F%2Fgenerativelanguage.googleapis.com',
-    },
-  ]);
+  });
+  await providers.providersApi.createInteractionsKey({ apiKey: 'new-interaction-secret', weight: 2 });
+  let current = (await readConfig()).interactionsApiKeys[0];
+  await providers.providersApi.updateInteractionsKey(current.apiKey, current.baseUrl, {
+    ...current,
+    weight: 6,
+  });
+  current = (await readConfig()).interactionsApiKeys[0];
+  await providers.providersApi.deleteInteractionsKey(current.apiKey, current.baseUrl, current.source);
+
+  assert.deepEqual(
+    core.writes.map((write) => write.url),
+    Array(3).fill('/config/api-keys/interactions')
+  );
+  assert.deepEqual(core.writes[0].data[1], {
+    name: 'interactions-2',
+    keys: [{ 'api-key': 'new-interaction-secret', weight: 2 }],
+  });
+  assert.deepEqual(core.writes[1].data[0].keys[0], {
+    'api-key': 'interaction-secret',
+    weight: 6,
+    'future-field': { keep: true },
+  });
+  assert.deepEqual(core.doc['api-keys'].interactions[0].keys, []);
 });
 
 test('updates standard thinking levels without dropping advanced config', () => {

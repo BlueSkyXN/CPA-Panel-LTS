@@ -6,7 +6,16 @@ import type { GeminiKeyConfig, OpenAIProviderConfig, ProviderKeyConfig } from '@
 import type { AuthFileItem } from '@/types/authFile';
 import type { CredentialInfo } from '@/types/sourceInfo';
 import { buildSourceInfoMap, resolveSourceDisplay } from '@/utils/sourceResolver';
-import { collectUsageDetails, formatCompactNumber, normalizeAuthIndex, normalizeUsageSourceId } from '@/utils/usage';
+import {
+  collectUsageDetails,
+  extractLatencyMs,
+  extractTotalTokens,
+  formatCompactNumber,
+  formatDurationMs,
+  normalizeAuthIndex,
+  normalizeUsageSourceId,
+} from '@/utils/usage';
+import { getUsageCacheTokenCounts } from '@/utils/usage/cacheTokens';
 import { isUsageQueryView } from '@/utils/usage/queryView';
 import type { UsagePayload } from './hooks/useUsageData';
 import styles from '@/pages/UsagePage.module.scss';
@@ -29,7 +38,61 @@ interface CredentialRow {
   failure: number;
   total: number;
   successRate: number;
+  tokens: number;
+  inputTokens: number;
+  cacheReadTokens: number;
+  latencyTotalMs: number;
+  latencySamples: number;
 }
+
+interface CredentialEntry {
+  source: string;
+  auth_index: string | number | null;
+  success: number;
+  failure: number;
+  tokens: number;
+  inputTokens: number;
+  cacheReadTokens: number;
+  latencyTotalMs: number;
+  latencySamples: number;
+}
+
+const collectCredentialEntries = (usage: UsagePayload | null): CredentialEntry[] => {
+  if (!usage) return [];
+  if (isUsageQueryView(usage)) {
+    return (usage.summary.groups.credentials ?? []).map((g) => {
+      const latencySamples = Math.max(g.metrics.latency_samples ?? 0, 0);
+      return {
+        source: normalizeUsageSourceId(g.source ?? ''),
+        auth_index: g.auth_index ?? '',
+        success: g.metrics.success,
+        failure: g.metrics.failure,
+        tokens: g.metrics.tokens,
+        inputTokens: g.metrics.input,
+        cacheReadTokens: g.metrics.cache_read,
+        latencyTotalMs: latencySamples > 0 ? g.metrics.latency_ms : 0,
+        latencySamples,
+      };
+    });
+  }
+  return collectUsageDetails(usage).map((d) => {
+    const { cacheReadTokens } = getUsageCacheTokenCounts(d.tokens);
+    const inputTokens =
+      typeof d.tokens.input_tokens === 'number' ? Math.max(d.tokens.input_tokens, 0) : 0;
+    const latencyMs = extractLatencyMs(d);
+    return {
+      source: d.source,
+      auth_index: d.auth_index,
+      success: d.failed ? 0 : 1,
+      failure: d.failed ? 1 : 0,
+      tokens: extractTotalTokens(d, d.__modelName),
+      inputTokens,
+      cacheReadTokens,
+      latencyTotalMs: latencyMs ?? 0,
+      latencySamples: latencyMs === null ? 0 : 1,
+    };
+  });
+};
 
 export function CredentialStatsCard({
   usage,
@@ -40,7 +103,7 @@ export function CredentialStatsCard({
   vertexConfigs,
   openaiProviders,
 }: CredentialStatsCardProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [authFileMap, setAuthFileMap] = useState<Map<string, CredentialInfo>>(new Map());
 
   useEffect(() => {
@@ -85,18 +148,25 @@ export function CredentialStatsCard({
     [claudeConfigs, codexConfigs, geminiKeys, openaiProviders, vertexConfigs]
   );
 
+  const cacheRateFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat(i18n.language, {
+        style: 'percent',
+        maximumFractionDigits: 1,
+      }),
+    [i18n.language]
+  );
+  const cacheRateHint = t('usage_stats.model_cache_rate_hint');
+
   const rows = useMemo((): CredentialRow[] => {
     if (!usage) return [];
 
     const rowMap = new Map<string, CredentialRow>();
 
-    const entries = isUsageQueryView(usage)
-      ? (usage.summary.groups.credentials ?? []).map((g) => ({ source: normalizeUsageSourceId(g.source ?? ''), auth_index: g.auth_index ?? '', success: g.metrics.success, failure: g.metrics.failure }))
-      : collectUsageDetails(usage).map((d) => ({ source: d.source, auth_index: d.auth_index, success: d.failed ? 0 : 1, failure: d.failed ? 1 : 0 }));
-    entries.forEach((detail) => {
+    collectCredentialEntries(usage).forEach((entry) => {
       const sourceInfo = resolveSourceDisplay(
-        detail.source ?? '',
-        detail.auth_index,
+        entry.source ?? '',
+        entry.auth_index,
         sourceInfoMap,
         authFileMap
       );
@@ -111,13 +181,22 @@ export function CredentialStatsCard({
           failure: 0,
           total: 0,
           successRate: 100,
+          tokens: 0,
+          inputTokens: 0,
+          cacheReadTokens: 0,
+          latencyTotalMs: 0,
+          latencySamples: 0,
         } satisfies CredentialRow);
 
-      row.failure += detail.failure;
-      row.success += detail.success;
-
+      row.failure += entry.failure;
+      row.success += entry.success;
       row.total = row.success + row.failure;
       row.successRate = row.total > 0 ? (row.success / row.total) * 100 : 100;
+      row.tokens += entry.tokens;
+      row.inputTokens += entry.inputTokens;
+      row.cacheReadTokens += entry.cacheReadTokens;
+      row.latencyTotalMs += entry.latencyTotalMs;
+      row.latencySamples += entry.latencySamples;
       rowMap.set(key, row);
     });
 
@@ -136,6 +215,9 @@ export function CredentialStatsCard({
                 <tr>
                   <th>{t('usage_stats.credential_name')}</th>
                   <th>{t('usage_stats.requests_count')}</th>
+                  <th>{t('usage_stats.total_tokens')}</th>
+                  <th title={cacheRateHint}>{t('usage_stats.model_cache_rate')}</th>
+                  <th>{t('usage_stats.avg_time')}</th>
                   <th>{t('usage_stats.success_rate')}</th>
                 </tr>
               </thead>
@@ -160,6 +242,17 @@ export function CredentialStatsCard({
                           )
                         </span>
                       </span>
+                    </td>
+                    <td>{formatCompactNumber(row.tokens)}</td>
+                    <td title={cacheRateHint}>
+                      {row.inputTokens > 0
+                        ? cacheRateFormatter.format(row.cacheReadTokens / row.inputTokens)
+                        : '--'}
+                    </td>
+                    <td>
+                      {formatDurationMs(
+                        row.latencySamples > 0 ? row.latencyTotalMs / row.latencySamples : null
+                      )}
                     </td>
                     <td>
                       <span

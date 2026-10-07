@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { useAuthStore } from './useAuthStore';
-import { apiClient } from '@/services/api/client';
+import { ltsExtensionClient } from '@/services/api/client';
 import { usageQueryApi } from '@/services/api/usageQuery';
 import type { UsageQuerySession } from '@/types/usageQuery';
 import { isRecord } from '@/utils/helpers';
@@ -46,7 +46,7 @@ export const useUsageQueryStore = create<State>((set, get) => ({
         } catch (error) {
           if (!isRecord(error) || error.status !== 404) throw error;
           // 确认同一前缀下的旧管理接口正常，才认定为旧 Core；其他失败不拉全量。
-          const legacy = await apiClient.get<unknown>('/usage-statistics-enabled');
+          const legacy = await ltsExtensionClient.get<unknown>('/usage-statistics-enabled');
           if (!isRecord(legacy) || typeof legacy['usage-statistics-enabled'] !== 'boolean')
             throw error;
         }

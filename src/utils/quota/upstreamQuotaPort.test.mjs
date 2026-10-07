@@ -223,8 +223,7 @@ test('parses current xAI billing supplements without breaking legacy fields', ()
 });
 
 test('uses the current official Grok Shell identity for xAI billing requests', () => {
-  const { XAI_GROK_CLIENT_VERSION, buildXaiGrokUserAgent, buildXaiRequestHeaders } =
-    quotaConstants;
+  const { XAI_GROK_CLIENT_VERSION, buildXaiGrokUserAgent, buildXaiRequestHeaders } = quotaConstants;
 
   assert.equal(XAI_GROK_CLIENT_VERSION, '1.0.3');
   assert.equal(
@@ -236,11 +235,7 @@ test('uses the current official Grok Shell identity for xAI billing requests', (
     'grok-pager/1.0.3 grok-shell/1.0.3 (macos; x86_64)'
   );
   assert.equal(
-    buildXaiGrokUserAgent(
-      'MacIntel',
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
-      'macOS'
-    ),
+    buildXaiGrokUserAgent('MacIntel', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', 'macOS'),
     'grok-pager/1.0.3 grok-shell/1.0.3 (macos; x86_64)'
   );
   assert.equal(
@@ -351,9 +346,7 @@ test('loads Antigravity project metadata and keeps subscription lookup best-effo
         groups: [
           {
             displayName: 'Gemini models',
-            buckets: [
-              { bucketId: 'weekly', displayName: 'Weekly limit', remainingFraction: 0.5 },
-            ],
+            buckets: [{ bucketId: 'weekly', displayName: 'Weekly limit', remainingFraction: 0.5 }],
           },
         ],
       },
@@ -402,14 +395,10 @@ test('does not render a pseudo monthly row for weekly xAI credits with prepaid b
   assert.ok(billing);
 
   const markup = renderToStaticMarkup(
-    XAI_CONFIG.renderQuotaItems(
-      { status: 'success', billing },
-      i18n.t.bind(i18n),
-      {
-        styles: new Proxy({}, { get: (_target, key) => String(key) }),
-        QuotaProgressBar: () => null,
-      }
-    )
+    XAI_CONFIG.renderQuotaItems({ status: 'success', billing }, i18n.t.bind(i18n), {
+      styles: new Proxy({}, { get: (_target, key) => String(key) }),
+      QuotaProgressBar: () => null,
+    })
   );
 
   assert.match(markup, new RegExp(i18n.t('xai_quota.weekly_limit')));
@@ -477,6 +466,7 @@ test('invalidates model and quota caches together after auth-file mutation', () 
     'auth.json': { status: 'idle', rows: [] },
   });
   const before = useQuotaStore.getState().cacheGeneration;
+  const fileBefore = useQuotaStore.getState().fileGenerations['auth.json'] ?? 0;
 
   invalidateAuthFileDerivedCaches(
     (names) => {
@@ -486,7 +476,8 @@ test('invalidates model and quota caches together after auth-file mutation', () 
   );
 
   assert.deepEqual(invalidatedNames, ['auth.json']);
-  assert.equal(useQuotaStore.getState().cacheGeneration, before + 1);
+  assert.equal(useQuotaStore.getState().cacheGeneration, before);
+  assert.equal(useQuotaStore.getState().fileGenerations['auth.json'], fileBefore + 1);
   assert.deepEqual(useQuotaStore.getState().kimiQuota, {});
 });
 

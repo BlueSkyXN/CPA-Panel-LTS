@@ -12,19 +12,30 @@ import {
   CPA_VERSION_HEADER_KEYS,
   HOME_BUILD_DATE_HEADER_KEYS,
   HOME_VERSION_HEADER_KEYS,
+  LTS_EXTENSION_API_PREFIX,
+  MANAGEMENT_API_PREFIX,
   REQUEST_TIMEOUT_MS,
-  VERSION_HEADER_KEYS
+  VERSION_HEADER_KEYS,
 } from '@/utils/constants';
-import { computeApiUrl } from '@/utils/connection';
+import { normalizeApiBase } from '@/utils/connection';
 import { normalizeReportedVersion } from '@/utils/version';
 import type { ServerRuntimeKind } from '@/types';
 import { parseApiErrorResponse } from './apiError';
 import { beginSessionWrite, isSessionFrozen } from '@/services/connectionSession';
 
+/**
+ * v8 是 Core 的原生管理协议；lts 前缀仅承载 Core 尚无 v8 等价路由的 LTS 扩展
+ * （完整 usage、Flow、插件 readiness、插件自有路由等）。两者共享同一份连接状态。
+ */
+export type ManagementApiScope = 'v8' | 'lts';
+
 type ConnectionScopedRequestConfig = AxiosRequestConfig & {
   __cpaConnectionGeneration?: number;
+  __cpaApiScope?: ManagementApiScope;
   __finishSessionWrite?: () => void;
 };
+
+type RequestConfig = AxiosRequestConfig;
 
 // 这些 Management POST 仅查询统计，不属于需要阻止实例切换的写操作。
 const READ_ONLY_USAGE_POSTS = new Set([
@@ -35,13 +46,15 @@ const READ_ONLY_USAGE_POSTS = new Set([
 
 function isMutationRequest(config: AxiosRequestConfig): boolean {
   const method = (config.method || 'get').toLowerCase();
-  return !['get', 'head', 'options'].includes(method) &&
-    !(method === 'post' && READ_ONLY_USAGE_POSTS.has(config.url || ''));
+  return (
+    !['get', 'head', 'options'].includes(method) &&
+    !(method === 'post' && READ_ONLY_USAGE_POSTS.has(config.url || ''))
+  );
 }
 
-class ApiClient {
-  private instance: AxiosInstance;
-  private apiBase: string = '';
+class ManagementTransport {
+  readonly instance: AxiosInstance;
+  private apiRoot: string = '';
   private managementKey: string = '';
   private connectionGeneration = 0;
 
@@ -49,8 +62,8 @@ class ApiClient {
     this.instance = axios.create({
       timeout: REQUEST_TIMEOUT_MS,
       headers: {
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     });
 
     this.setupInterceptors();
@@ -61,7 +74,7 @@ class ApiClient {
    */
   setConfig(config: ApiClientConfig): number {
     this.connectionGeneration += 1;
-    this.apiBase = computeApiUrl(config.apiBase);
+    this.apiRoot = normalizeApiBase(config.apiBase);
     this.managementKey = config.managementKey;
 
     if (config.timeout) {
@@ -75,13 +88,22 @@ class ApiClient {
 
   clearConfig(): void {
     this.connectionGeneration += 1;
-    this.apiBase = '';
+    this.apiRoot = '';
     this.managementKey = '';
     this.instance.defaults.timeout = REQUEST_TIMEOUT_MS;
   }
 
+  getConnectionGeneration(): number {
+    return this.connectionGeneration;
+  }
+
   isCurrentConnection(generation: number): boolean {
     return generation === this.connectionGeneration;
+  }
+
+  baseUrl(scope: ManagementApiScope): string {
+    if (!this.apiRoot) return '';
+    return `${this.apiRoot}${scope === 'lts' ? LTS_EXTENSION_API_PREFIX : MANAGEMENT_API_PREFIX}`;
   }
 
   private isCurrentRequest(config: unknown): boolean {
@@ -89,16 +111,15 @@ class ApiClient {
     return scopedConfig?.__cpaConnectionGeneration === this.connectionGeneration;
   }
 
-  private readHeader(
-    headers: Record<string, unknown> | undefined,
-    keys: string[]
-  ): string | null {
+  private readHeader(headers: Record<string, unknown> | undefined, keys: string[]): string | null {
     if (!headers) return null;
 
     const normalizeValue = (value: unknown): string | null => {
       if (value === undefined || value === null) return null;
       if (Array.isArray(value)) {
-        const first = value.find((entry) => entry !== undefined && entry !== null && String(entry).trim());
+        const first = value.find(
+          (entry) => entry !== undefined && entry !== null && String(entry).trim()
+        );
         return first !== undefined ? String(first) : null;
       }
       const text = String(value);
@@ -154,12 +175,8 @@ class ApiClient {
         scopedConfig.__cpaConnectionGeneration = this.connectionGeneration;
         if (mutation) scopedConfig.__finishSessionWrite = beginSessionWrite();
 
-        // 设置 baseURL
-        config.baseURL = this.apiBase;
-        if (config.url) {
-          // Normalize deprecated Gemini endpoint to the current path.
-          config.url = config.url.replace(/\/generative-language-api-key\b/g, '/gemini-api-key');
-        }
+        // 设置 baseURL：默认 v8 原生协议，LTS 扩展客户端显式声明 lts scope。
+        config.baseURL = this.baseUrl(scopedConfig.__cpaApiScope ?? 'v8');
 
         // 添加认证头
         if (this.managementKey) {
@@ -205,14 +222,14 @@ class ApiClient {
         if (version || buildDate || runtimeKind) {
           window.dispatchEvent(
             new CustomEvent('server-version-update', {
-              detail: { version: version || null, buildDate: buildDate || null, runtimeKind }
+              detail: { version: version || null, buildDate: buildDate || null, runtimeKind },
             })
           );
         }
         if (supportsPlugin !== null) {
           window.dispatchEvent(
             new CustomEvent('server-plugin-support-update', {
-              detail: { supportsPlugin }
+              detail: { supportsPlugin },
             })
           );
         }
@@ -220,7 +237,8 @@ class ApiClient {
         return response;
       },
       (error) => {
-        if (axios.isAxiosError(error)) (error.config as ConnectionScopedRequestConfig | undefined)?.__finishSessionWrite?.();
+        if (axios.isAxiosError(error))
+          (error.config as ConnectionScopedRequestConfig | undefined)?.__finishSessionWrite?.();
         return Promise.reject(this.handleError(error));
       }
     );
@@ -240,6 +258,8 @@ class ApiClient {
       apiError.apiCode = parsedError.apiCode;
       apiError.details = responseData;
       apiError.data = responseData;
+      // 保留响应头：v8 配置读取在 404 时同样返回当前 ETag。
+      apiError.headers = error.response?.headers as Record<string, unknown> | undefined;
 
       // 401 未授权 - 触发登出事件
       if (error.response?.status === 401 && this.isCurrentRequest(error.config)) {
@@ -250,84 +270,104 @@ class ApiClient {
     }
 
     const fallbackMessage =
-      error instanceof Error ? error.message : typeof error === 'string' ? error : 'Unknown error occurred';
+      error instanceof Error
+        ? error.message
+        : typeof error === 'string'
+          ? error
+          : 'Unknown error occurred';
     const fallback = new Error(fallbackMessage) as ApiError;
     fallback.name = 'ApiError';
     return fallback;
   }
+}
 
-  /**
-   * GET 请求
-   */
-  async get<T = unknown>(url: string, config?: AxiosRequestConfig): Promise<T> {
-    const response = await this.instance.get<T>(url, config);
+/** 共享连接状态的 Management API 客户端；scope 只决定协议前缀。 */
+class ApiClient {
+  constructor(
+    private readonly transport: ManagementTransport,
+    private readonly scope: ManagementApiScope
+  ) {}
+
+  /** Shared axios instance (tests install adapters here; both scopes use it). */
+  get instance(): AxiosInstance {
+    return this.transport.instance;
+  }
+
+  setConfig(config: ApiClientConfig): number {
+    return this.transport.setConfig(config);
+  }
+
+  clearConfig(): void {
+    this.transport.clearConfig();
+  }
+
+  getConnectionGeneration(): number {
+    return this.transport.getConnectionGeneration();
+  }
+
+  /** Upstream 名称：读-改-写操作在连接切换（含 ABA）后必须放弃。 */
+  getConnectionRevision(): number {
+    return this.transport.getConnectionGeneration();
+  }
+
+  isCurrentConnection(generation: number): boolean {
+    return this.transport.isCurrentConnection(generation);
+  }
+
+  private scoped(config?: RequestConfig): ConnectionScopedRequestConfig {
+    return { ...config, __cpaApiScope: this.scope };
+  }
+
+  async get<T = unknown>(url: string, config?: RequestConfig): Promise<T> {
+    const response = await this.transport.instance.get<T>(url, this.scoped(config));
     return response.data;
   }
 
-  /**
-   * POST 请求
-   */
-  async post<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
-    const response = await this.instance.post<T>(url, data, config);
+  async post<T = unknown>(url: string, data?: unknown, config?: RequestConfig): Promise<T> {
+    const response = await this.transport.instance.post<T>(url, data, this.scoped(config));
     return response.data;
   }
 
-  /**
-   * PUT 请求
-   */
-  async put<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
-    const response = await this.instance.put<T>(url, data, config);
+  async put<T = unknown>(url: string, data?: unknown, config?: RequestConfig): Promise<T> {
+    const response = await this.transport.instance.put<T>(url, data, this.scoped(config));
     return response.data;
   }
 
-  /**
-   * PATCH 请求
-   */
-  async patch<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
-    const response = await this.instance.patch<T>(url, data, config);
+  async patch<T = unknown>(url: string, data?: unknown, config?: RequestConfig): Promise<T> {
+    const response = await this.transport.instance.patch<T>(url, data, this.scoped(config));
     return response.data;
   }
 
-  /**
-   * DELETE 请求
-   */
-  async delete<T = unknown>(url: string, config?: AxiosRequestConfig): Promise<T> {
-    const response = await this.instance.delete<T>(url, config);
+  async delete<T = unknown>(url: string, config?: RequestConfig): Promise<T> {
+    const response = await this.transport.instance.delete<T>(url, this.scoped(config));
     return response.data;
   }
 
-  /**
-   * 获取原始响应（用于下载等场景）
-   */
-  async getRaw(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse> {
-    return this.instance.get(url, config);
+  /** 获取原始响应（用于下载、ETag 等需要响应头的场景） */
+  async getRaw(url: string, config?: RequestConfig): Promise<AxiosResponse> {
+    return this.transport.instance.get(url, this.scoped(config));
   }
 
-  /**
-   * 发送 FormData
-   */
-  async postForm<T = unknown>(
-    url: string,
-    formData: FormData,
-    config?: AxiosRequestConfig
-  ): Promise<T> {
-    const response = await this.instance.post<T>(url, formData, {
-      ...config,
-      headers: {
-        ...(config?.headers || {}),
-        'Content-Type': 'multipart/form-data'
-      }
-    });
+  async postForm<T = unknown>(url: string, formData: FormData, config?: RequestConfig): Promise<T> {
+    const response = await this.transport.instance.post<T>(
+      url,
+      formData,
+      this.scoped({
+        ...config,
+        headers: { ...(config?.headers || {}), 'Content-Type': 'multipart/form-data' },
+      })
+    );
     return response.data;
   }
 
-  /**
-   * 保留对 axios.request 的访问，便于下载等场景
-   */
-  async requestRaw(config: AxiosRequestConfig): Promise<AxiosResponse> {
-    return this.instance.request(config);
+  async requestRaw(config: RequestConfig): Promise<AxiosResponse> {
+    return this.transport.instance.request(this.scoped(config));
   }
 }
 
 // 导出单例
-export const apiClient = new ApiClient();
+const transport = new ManagementTransport();
+/** v8 原生 Management API（`/v8/management`）。 */
+export const apiClient = new ApiClient(transport, 'v8');
+/** LTS 扩展 Management API（`/v0/management`），与 apiClient 共享认证与连接代际。 */
+export const ltsExtensionClient = new ApiClient(transport, 'lts');

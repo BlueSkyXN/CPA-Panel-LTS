@@ -1,3 +1,5 @@
+> **v8 开发候选：** 仅配套 CPA-Core-LTS v8 版本线（请按 v8 教程重新配置 Core）。详见 [v8 配置契约](docs/lts/v8-config-compatibility.md) 与 [端点映射](docs/lts/v8-endpoint-map.md)；本分支不代表已发布升级。
+
 # CPA Panel LTS
 
 CPA Panel LTS 是 `CPA-Core-LTS` 的长期维护版 Web 管理面板。
@@ -46,7 +48,7 @@ CPA Panel LTS 是 `CPA-Core-LTS` 的长期维护版 Web 管理面板。
 
 ## 这是什么（以及不是什么）
 
-- 本仓库只包含 Web 管理界面本身，通过 CPA Core LTS / CLI Proxy API 的 **Management API**（`/v0/management`）读取/修改配置、上传凭据、查看日志与使用统计。
+- 本仓库只包含 Web 管理界面本身，通过 CPA Core LTS / CLI Proxy API 的 **Management API**（`/v8/management`；完整使用统计等 LTS 扩展仍走 `/v0/management`）读取/修改配置、上传凭据、查看日志与使用统计。
 - 它 **不是** 代理本体，不参与流量转发。
 
 ## 快速开始
@@ -97,7 +99,7 @@ npm run build
 - `localhost:8317`
 - `http://192.168.1.10:8317`
 - `https://example.com:8317`
-- `http://example.com:8317/v0/management`（也可填写，后缀会被自动去除）
+- `http://example.com:8317/v8/management`（也可填写，后缀会被自动去除）
 
 ### 管理密钥（注意：不是 API Keys）
 
@@ -190,9 +192,11 @@ npm run type-check # tsc --noEmit
 npm run check:feature-contract # feature contract 检查
 npm run check:lts  # LTS 统计/发布/provider/plugin 契约检查
 npm run validate:lts # check:lts + type-check + lint + build
-npm run smoke:lts  # 可选：用 Python Playwright + mock Core API 做浏览器 smoke
-npm run smoke:lts:core # 可选：对本地 CPA-Core-LTS checkout 做带鉴权 smoke
+npm run smoke:lts  # 可选：用 Python Playwright + mock v8 Core API 做浏览器 smoke
+npm run smoke:lts:core # 可选：对本地 CPA-Core-LTS v8 checkout 做真实 Core smoke
 ```
+
+真实 Core smoke 会把 Core checkout（`-- --core-dir <path>`，默认 `../CPA-Core-LTS`）构建到临时目录，并以只含合成管理密钥与合成 client key 的全新纯 v8 配置启动。设置 `CPA_SMOKE_BROWSER_CHANNEL=chrome` 可改用本机已安装的 Chrome，而不是 Playwright 自带 Chromium。
 
 ## 贡献
 

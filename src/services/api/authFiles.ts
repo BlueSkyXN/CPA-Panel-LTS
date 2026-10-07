@@ -1,8 +1,16 @@
+import { normalizeAuthFileCooldowns, normalizeCooldownTimestamp } from './authFileCooldowns';
 /**
  * 认证文件与 OAuth 排除模型相关 API
  */
 
-import { apiClient } from './client';
+import { apiClient, ltsExtensionClient } from './client';
+import {
+  getConfigValue,
+  guardConfigConnection,
+  putConfigValue,
+  readConfigSnapshot,
+} from './configValue';
+import { isRecord } from '@/utils/helpers';
 import type { AuthFilesResponse } from '@/types/authFile';
 import type { OAuthModelAliasEntry } from '@/types';
 import { normalizeOAuthProviderKey } from '@/utils/providerKeys';
@@ -14,7 +22,6 @@ import {
 import { parseTimestampMs } from '@/utils/timestamp';
 import { readCredentialWeight } from '@/utils/credentialWeight';
 
-type StatusError = { status?: number };
 type AuthFileStatusResponse = { status: string; disabled: boolean };
 type AuthFileEntry = AuthFilesResponse['files'][number];
 export type AuthFileFieldsPatch = {
@@ -54,12 +61,6 @@ type AuthFileBatchDeleteResult = {
 };
 
 export const AUTH_FILE_INVALID_JSON_OBJECT_ERROR = 'AUTH_FILE_INVALID_JSON_OBJECT';
-
-const getStatusCode = (err: unknown): number | undefined => {
-  if (!err || typeof err !== 'object') return undefined;
-  if ('status' in err) return (err as StatusError).status;
-  return undefined;
-};
 
 const normalizeRequestedAuthFileNames = (names: string[]): string[] => {
   const seen = new Set<string>();
@@ -210,6 +211,7 @@ const mergeAuthFileEntries = (entries: AuthFileEntry[]): AuthFileEntry => {
 
   rest.forEach((entry) => {
     Object.entries(entry).forEach(([key, value]) => {
+      if (key === 'cooldowns' && Object.prototype.hasOwnProperty.call(merged, key)) return;
       if (!hasMeaningfulValue(merged[key]) && hasMeaningfulValue(value)) {
         merged[key] = value;
       }
@@ -231,7 +233,11 @@ const readIntegerField = (value: unknown): number | undefined => {
 };
 
 /** Preserve raw provider fields while exposing stable camelCase fields to the UI. */
-const normalizeAuthFileEntry = (entry: AuthFileEntry): AuthFileEntry => {
+const normalizeAuthFileEntry = (
+  entry: AuthFileEntry,
+  observedAt: string | undefined,
+  receivedAtMs: number
+): AuthFileEntry => {
   const declaredStatusMessage =
     typeof entry.statusMessage === 'string' ? entry.statusMessage.trim() : '';
   const statusMessage = readTextField(entry, 'status_message') || declaredStatusMessage;
@@ -242,6 +248,7 @@ const normalizeAuthFileEntry = (entry: AuthFileEntry): AuthFileEntry => {
 
   return {
     ...entry,
+    cooldownSnapshot: normalizeAuthFileCooldowns(entry.cooldowns, observedAt, receivedAtMs),
     runtimeOnly: isRuntimeOnlyEntry(entry),
     authIndex: normalizeRecentRequestAuthIndex(entry['auth_index'] ?? entry.authIndex),
     recentRequests: normalizeRecentRequestBuckets(entry.recent_requests ?? entry.recentRequests),
@@ -255,7 +262,11 @@ const normalizeAuthFileEntry = (entry: AuthFileEntry): AuthFileEntry => {
   };
 };
 
-export const normalizeAuthFilesResponse = (payload: AuthFilesResponse): AuthFilesResponse => {
+export const normalizeAuthFilesResponse = (
+  payload: AuthFilesResponse,
+  receivedAtMs = Date.now()
+): AuthFilesResponse => {
+  const observedAt = normalizeCooldownTimestamp(payload?.observed_at);
   const files = Array.isArray(payload?.files) ? payload.files : [];
   const grouped = new Map<string, AuthFileEntry[]>();
 
@@ -271,7 +282,7 @@ export const normalizeAuthFilesResponse = (payload: AuthFilesResponse): AuthFile
   });
 
   const normalizedFiles = Array.from(grouped.values()).map((entries) =>
-    normalizeAuthFileEntry(mergeAuthFileEntries(entries))
+    normalizeAuthFileEntry(mergeAuthFileEntries(entries), observedAt, receivedAtMs)
   );
   normalizedFiles.sort((left, right) =>
     readTextField(left, 'name').localeCompare(readTextField(right, 'name'), undefined, {
@@ -281,6 +292,7 @@ export const normalizeAuthFilesResponse = (payload: AuthFilesResponse): AuthFile
 
   return {
     ...payload,
+    observedAt,
     files: normalizedFiles,
     total: normalizedFiles.length,
   };
@@ -413,17 +425,71 @@ export const serializeOauthModelAliases = (
     return payload;
   });
 
-const OAUTH_MODEL_ALIAS_ENDPOINT = '/oauth-model-alias';
+const OAUTH_MODEL_ALIAS_ENDPOINT = '/config/oauth/model-alias';
+const OAUTH_EXCLUDED_MODELS_ENDPOINT = '/config/oauth/excluded-models';
+
+const oauthMapWrites = new Map<string, Promise<void>>();
+
+// v8 replaces a whole provider map. Serialize local read/modify/write operations
+// so a batch cannot overwrite another provider's changes with an older snapshot.
+function queueOauthMapWrite(path: string, write: () => Promise<void>): Promise<void> {
+  const assertConnection = guardConfigConnection();
+  const queueKey = `${apiClient.getConnectionRevision()}:${path}`;
+  const previous = oauthMapWrites.get(queueKey) ?? Promise.resolve();
+  const pending = previous.then(async () => {
+    assertConnection();
+    await write();
+  });
+  const settled = pending.then(
+    () => undefined,
+    () => undefined
+  );
+  oauthMapWrites.set(queueKey, settled);
+  void settled.then(() => {
+    if (oauthMapWrites.get(queueKey) === settled) oauthMapWrites.delete(queueKey);
+  });
+  return pending;
+}
+
+/** Each map write is derived from one read and sent with that read's revision (If-Match). */
+async function updateOauthProviderMap(path: string, provider: string, value?: unknown) {
+  const key = normalizeOAuthProviderKey(provider);
+  if (!key) throw new Error('Invalid OAuth provider');
+  return queueOauthMapWrite(path, async () => {
+    const assertConnection = guardConfigConnection();
+    const { value: current, revision } = await readConfigSnapshot<unknown>(path, {});
+    assertConnection();
+    if (current != null && !isRecord(current)) throw new Error('Invalid OAuth configuration map');
+    // v8 reads preserve YAML key spelling. The UI groups normalized providers, so
+    // remove every spelling of this provider, preserving unrelated entries verbatim.
+    const next = Object.fromEntries(
+      Object.entries(current ?? {}).filter(([name]) => normalizeOAuthProviderKey(name) !== key)
+    );
+    if (value !== undefined) {
+      Object.defineProperty(next, key, {
+        value,
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
+    }
+    await putConfigValue(path, next, revision);
+  });
+}
 
 export const authFilesApi = {
   list: async () =>
-    normalizeAuthFilesResponse(await apiClient.get<AuthFilesResponse>('/auth-files')),
+    normalizeAuthFilesResponse(await apiClient.get<AuthFilesResponse>('/credentials')),
 
-  setStatus: (name: string, disabled: boolean) =>
-    apiClient.patch<AuthFileStatusResponse>('/auth-files/status', { name, disabled }),
+  setStatus: (name: string, disabled: boolean, authIndex?: string) =>
+    apiClient.patch<AuthFileStatusResponse>('/credentials/status', {
+      name,
+      disabled,
+      ...(authIndex ? { auth_index: authIndex } : {}),
+    }),
 
   patchFields: (name: string, fields: AuthFileFieldsPatch) =>
-    apiClient.patch('/auth-files/fields', { name, ...fields }),
+    apiClient.patch('/credentials/fields', { name, ...fields }),
 
   uploadFiles: async (files: File[]): Promise<AuthFileBatchUploadResult> => {
     const requestedNames = files.map((file) => file.name);
@@ -435,7 +501,7 @@ export const authFilesApi = {
     files.forEach((file) => {
       formData.append('file', file, file.name);
     });
-    const payload = await apiClient.postForm<AuthFileBatchUploadResponse>('/auth-files', formData);
+    const payload = await apiClient.postForm<AuthFileBatchUploadResponse>('/credentials', formData);
     return normalizeBatchUploadResponse(payload, requestedNames);
   },
 
@@ -447,7 +513,7 @@ export const authFilesApi = {
       return { status: 'ok', deleted: 0, files: [], failed: [] };
     }
 
-    const payload = await apiClient.delete<AuthFileBatchDeleteResponse>('/auth-files', {
+    const payload = await apiClient.delete<AuthFileBatchDeleteResponse>('/credentials', {
       data: { names: requestedNames },
     });
     return normalizeBatchDeleteResponse(payload, requestedNames);
@@ -455,11 +521,11 @@ export const authFilesApi = {
 
   deleteFile: (name: string) => authFilesApi.deleteFiles([name]),
 
-  deleteAll: () => apiClient.delete('/auth-files', { params: { all: true } }),
+  deleteAll: () => apiClient.delete('/credentials', { params: { all: true } }),
 
   download: async (name: string): Promise<Blob> => {
     const response = await apiClient.getRaw(
-      `/auth-files/download?name=${encodeURIComponent(name)}`,
+      `/credentials/download?name=${encodeURIComponent(name)}`,
       {
         responseType: 'blob',
       }
@@ -484,27 +550,25 @@ export const authFilesApi = {
 
   // OAuth 排除模型
   async getOauthExcludedModels(): Promise<Record<string, string[]>> {
-    const data = await apiClient.get('/oauth-excluded-models');
+    const data = await getConfigValue(OAUTH_EXCLUDED_MODELS_ENDPOINT, {});
     return normalizeOauthExcludedModels(data);
   },
 
   saveOauthExcludedModels: (provider: string, models: string[]) =>
-    apiClient.patch('/oauth-excluded-models', {
-      provider: normalizeOAuthProviderKey(provider),
-      models,
-    }),
+    updateOauthProviderMap(OAUTH_EXCLUDED_MODELS_ENDPOINT, provider, models),
 
   deleteOauthExcludedEntry: (provider: string) =>
-    apiClient.delete(
-      `/oauth-excluded-models?provider=${encodeURIComponent(normalizeOAuthProviderKey(provider))}`
-    ),
+    updateOauthProviderMap(OAUTH_EXCLUDED_MODELS_ENDPOINT, provider),
 
   replaceOauthExcludedModels: (map: Record<string, string[]>) =>
-    apiClient.put('/oauth-excluded-models', normalizeOauthExcludedModels(map)),
+    queueOauthMapWrite(OAUTH_EXCLUDED_MODELS_ENDPOINT, async () => {
+      // Whole-map replacement is an explicit user intent; bind it to the current revision.
+      await putConfigValue(OAUTH_EXCLUDED_MODELS_ENDPOINT, normalizeOauthExcludedModels(map));
+    }),
 
   // OAuth 模型别名
   async getOauthModelAlias(): Promise<Record<string, OAuthModelAliasEntry[]>> {
-    const data = await apiClient.get(OAUTH_MODEL_ALIAS_ENDPOINT);
+    const data = await getConfigValue(OAUTH_MODEL_ALIAS_ENDPOINT, {});
     return normalizeOauthModelAlias(data);
   },
 
@@ -512,27 +576,16 @@ export const authFilesApi = {
     const normalizedChannel = normalizeOAuthProviderKey(String(channel ?? ''));
     const normalizedAliases =
       normalizeOauthModelAlias({ [normalizedChannel]: aliases })[normalizedChannel] ?? [];
-    await apiClient.patch(OAUTH_MODEL_ALIAS_ENDPOINT, {
-      channel: normalizedChannel,
-      aliases: serializeOauthModelAliases(normalizedAliases),
-    });
+    await updateOauthProviderMap(
+      OAUTH_MODEL_ALIAS_ENDPOINT,
+      normalizedChannel,
+      serializeOauthModelAliases(normalizedAliases)
+    );
   },
 
   deleteOauthModelAlias: async (channel: string) => {
     const normalizedChannel = normalizeOAuthProviderKey(String(channel ?? ''));
-
-    try {
-      await apiClient.patch(OAUTH_MODEL_ALIAS_ENDPOINT, {
-        channel: normalizedChannel,
-        aliases: [],
-      });
-    } catch (err: unknown) {
-      const status = getStatusCode(err);
-      if (status !== 405) throw err;
-      await apiClient.delete(
-        `${OAUTH_MODEL_ALIAS_ENDPOINT}?channel=${encodeURIComponent(normalizedChannel)}`
-      );
-    }
+    await updateOauthProviderMap(OAUTH_MODEL_ALIAS_ENDPOINT, normalizedChannel);
   },
 
   // 获取认证凭证支持的模型
@@ -540,7 +593,7 @@ export const authFilesApi = {
     name: string
   ): Promise<{ id: string; display_name?: string; type?: string; owned_by?: string }[]> {
     const data = await apiClient.get<Record<string, unknown>>(
-      `/auth-files/models?name=${encodeURIComponent(name)}`
+      `/credentials/models?name=${encodeURIComponent(name)}`
     );
     const models = data.models ?? data['models'];
     return Array.isArray(models)
@@ -552,7 +605,8 @@ export const authFilesApi = {
   async refreshModelsForAuthFile(
     name: string
   ): Promise<{ id: string; display_name?: string; type?: string; owned_by?: string }[]> {
-    const data = await apiClient.post<{ models?: unknown }>(
+    // LTS extension: Core has no v8 equivalent for per-credential model rediscovery.
+    const data = await ltsExtensionClient.post<{ models?: unknown }>(
       `/auth-files/models/refresh?name=${encodeURIComponent(name)}`,
       undefined,
       { timeout: 45_000 }
@@ -569,7 +623,7 @@ export const authFilesApi = {
     const normalizedChannel = normalizeOAuthProviderKey(String(channel ?? ''));
     if (!normalizedChannel) return [];
     const data = await apiClient.get<Record<string, unknown>>(
-      `/model-definitions/${encodeURIComponent(normalizedChannel)}`
+      `/routing/model-definitions/${encodeURIComponent(normalizedChannel)}`
     );
     const models = data.models ?? data['models'];
     return Array.isArray(models)

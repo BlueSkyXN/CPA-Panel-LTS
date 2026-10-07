@@ -1,3 +1,4 @@
+import { apiClient } from '@/services/api/client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
@@ -92,7 +93,7 @@ export function FlowControlPage() {
     setSaved(false);
     setError('');
     try {
-      const data = await configFileApi.fetchConfigYaml();
+      const { content: data } = await configFileApi.fetchConfigYaml();
       setServerYaml(data);
       setMergedYaml(data);
       setPreviewServerYaml(data);
@@ -126,13 +127,16 @@ export function FlowControlPage() {
   };
 
   const handleSave = async () => {
+    const generation = apiClient.getConnectionGeneration();
     if (visualParseError) {
       showNotification(t('config_management.visual_mode_save_blocked'), 'error');
       return;
     }
     setSaving(true);
     try {
-      const latestServerYaml = await configFileApi.fetchConfigYaml();
+      const snapshot = await configFileApi.fetchConfigYaml();
+      const latestServerYaml = snapshot.content;
+      if (!apiClient.isCurrentConnection(generation)) return;
       const latestDocument = parseDocument(latestServerYaml);
       if (latestDocument.errors.length > 0) {
         showNotification(
@@ -166,9 +170,12 @@ export function FlowControlPage() {
   };
 
   const handleConfirmSave = async () => {
+    const generation = apiClient.getConnectionGeneration();
     setSaving(true);
     try {
-      const latestServerYaml = await configFileApi.fetchConfigYaml();
+      const snapshot = await configFileApi.fetchConfigYaml();
+      const latestServerYaml = snapshot.content;
+      if (!apiClient.isCurrentConnection(generation)) return;
       if (latestServerYaml !== previewServerYaml) {
         // Server config changed since the preview: re-merge the flow draft and
         // let the diff reflect the newer baseline instead of writing stale YAML.
@@ -185,8 +192,10 @@ export function FlowControlPage() {
         return;
       }
 
-      await configFileApi.saveConfigYaml(mergedYaml);
-      const latestContent = await configFileApi.fetchConfigYaml();
+      if (!apiClient.isCurrentConnection(generation)) return;
+      await configFileApi.saveConfigYaml(mergedYaml, snapshot);
+      const { content: latestContent } = await configFileApi.fetchConfigYaml();
+      if (!apiClient.isCurrentConnection(generation)) return;
       setSaved(true);
       setDiffModalOpen(false);
       setServerYaml(latestContent);

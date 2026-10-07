@@ -4,6 +4,7 @@ import type { ProviderRecentUsageMap } from '@/components/providers/utils';
 import { PROVIDER_LOGOS } from '../brandLogos';
 import type { ProviderGroup, ProviderResource } from '../types';
 import { ProviderResourceTable } from './ProviderResourceTable';
+import type { ProviderFullUsage } from '../fullUsageStatus';
 import { ProviderResourceToolbar } from './ProviderResourceToolbar';
 import type { ProviderSortBy, SortDir } from '../types';
 import styles from './ProviderResourcePanel.module.scss';
@@ -26,6 +27,7 @@ interface ProviderResourcePanelProps {
   selectedId: string | null;
   disableMutations?: boolean;
   usageByProvider?: ProviderRecentUsageMap;
+  fullUsage?: ProviderFullUsage;
   toolbarControls?: ProviderPanelControls;
   onView: (resource: ProviderResource) => void;
   onEdit: (resource: ProviderResource) => void;
@@ -42,6 +44,7 @@ export function ProviderResourcePanel({
   selectedId,
   disableMutations,
   usageByProvider,
+  fullUsage,
   toolbarControls,
   onView,
   onEdit,
@@ -115,6 +118,7 @@ export function ProviderResourcePanel({
           selectedId={selectedId}
           disableMutations={disableMutations}
           usageByProvider={usageByProvider}
+          fullUsage={fullUsage}
           onView={onView}
           onEdit={onEdit}
           onDelete={onDelete}

@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { FLOW_CONTROL_ENDPOINTS } from '@/services/api/flowControl';
-import { apiClient } from '@/services/api/client';
+import { ltsExtensionClient } from '@/services/api/client';
 import {
   identityForModel,
   modelOptionsForStage,
@@ -40,7 +40,7 @@ export function RuleInspector({ values, data }: Props) {
     setBusy(true);
     setError(false);
     try {
-      const raw = await apiClient.post<unknown>(FLOW_CONTROL_ENDPOINTS.preview, {
+      const raw = await ltsExtensionClient.post<unknown>(FLOW_CONTROL_ENDPOINTS.preview, {
         ...(draft ? { config: policyFromValues(values) } : {}),
         targets: models.map((model) => identityForModel(identity, model)),
       });

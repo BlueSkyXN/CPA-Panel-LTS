@@ -232,7 +232,9 @@ export function Modal({
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        if (closeDisabled) return;
+        // An inner control that already handled Escape (preventDefault) owns the
+        // key; the modal must not close on top of it.
+        if (closeDisabled || event.defaultPrevented) return;
         event.preventDefault();
         handleClose();
         return;

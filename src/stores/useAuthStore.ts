@@ -14,6 +14,7 @@ import {
   writeResidentLock,
 } from '@/services/storage/connectionProfiles';
 import { apiClient } from '@/services/api/client';
+import { configFileApi } from '@/services/api/configFile';
 import { versionApi } from '@/services/api/version';
 import { pluginsApi } from '@/services/api/plugins';
 import { flowControlApi } from '@/services/api/flowControl';
@@ -23,6 +24,7 @@ import { useUsageStatsStore } from './useUsageStatsStore';
 import { useModelsStore } from './useModelsStore';
 import { useQuotaStore } from './useQuotaStore';
 import { detectApiBaseFromLocation, normalizeApiBase } from '@/utils/connection';
+import { LegacyBackendError, probeLegacyBackend } from '@/services/api/legacyBackendProbe';
 import { generateId } from '@/utils/helpers';
 import {
   getManagedConnection,
@@ -167,7 +169,7 @@ export const useAuthStore = create<AuthStoreState>()(
           set({
             apiBase: resolvedBase,
             managementKey: resolvedKey,
-            rememberPassword: resolvedRememberPassword
+            rememberPassword: resolvedRememberPassword,
           });
           apiClient.setConfig({ apiBase: resolvedBase, managementKey: resolvedKey });
 
@@ -176,7 +178,7 @@ export const useAuthStore = create<AuthStoreState>()(
               return await get().login({
                 apiBase: resolvedBase,
                 managementKey: resolvedKey,
-                rememberPassword: resolvedRememberPassword
+                rememberPassword: resolvedRememberPassword,
               });
             } catch (error) {
               console.warn('Auto login failed:', error);
@@ -197,7 +199,7 @@ export const useAuthStore = create<AuthStoreState>()(
         const rememberPassword = credentials.rememberPassword ?? get().rememberPassword ?? false;
         const connectionGeneration = apiClient.setConfig({
           apiBase,
-          managementKey
+          managementKey,
         });
 
         try {
@@ -210,17 +212,36 @@ export const useAuthStore = create<AuthStoreState>()(
             pluginSupportKnown: false,
             pluginSupportSource: 'unknown',
             supportsFlowControl: false,
-            flowSupportKnown: false
+            flowSupportKnown: false,
           });
           useConfigStore.getState().clearCache();
           useModelsStore.getState().clearCache();
           useQuotaStore.getState().clearQuotaCache();
 
-          // 测试连接 - 获取配置
-          await useConfigStore.getState().fetchConfig(undefined, true);
+          // Opaque plugin YAML must not make a valid management session look unauthenticated.
+          try {
+            await configFileApi.fetchConfigYaml();
+          } catch (error) {
+            if (
+              (error as { status?: number })?.status === 404 &&
+              apiClient.isCurrentConnection(connectionGeneration) &&
+              (await probeLegacyBackend(apiBase, managementKey)) &&
+              apiClient.isCurrentConnection(connectionGeneration)
+            ) {
+              throw new LegacyBackendError();
+            }
+            throw error;
+          }
           if (!apiClient.isCurrentConnection(connectionGeneration)) {
             return false;
           }
+          await useConfigStore
+            .getState()
+            .fetchConfig(undefined, true)
+            .catch((error) => {
+              if ((error as { status?: number })?.status === 401) throw error;
+            });
+          if (!apiClient.isCurrentConnection(connectionGeneration)) return false;
           const runtimeKind = await detectRuntimeKind(get().serverRuntimeKind);
           if (!apiClient.isCurrentConnection(connectionGeneration)) {
             return false;
@@ -260,7 +281,7 @@ export const useAuthStore = create<AuthStoreState>()(
             connectionError: null,
             ...pluginSupport,
             ...flowSupport,
-            ...(runtimeKind !== 'unknown' ? { serverRuntimeKind: runtimeKind } : {})
+            ...(runtimeKind !== 'unknown' ? { serverRuntimeKind: runtimeKind } : {}),
           });
           setSessionLoggedIn(rememberPassword);
           return true;
@@ -276,7 +297,7 @@ export const useAuthStore = create<AuthStoreState>()(
                 : 'Connection failed';
           set({
             connectionStatus: 'error',
-            connectionError: message || 'Connection failed'
+            connectionError: message || 'Connection failed',
           });
           throw error;
         }
@@ -314,7 +335,7 @@ export const useAuthStore = create<AuthStoreState>()(
           supportsFlowControl: false,
           flowSupportKnown: false,
           connectionStatus: reason === 'unauthorized' ? 'error' : 'disconnected',
-          connectionError: null
+          connectionError: null,
         });
         setSessionLoggedIn(false);
         // 同上：仅显式退出上锁，401 保持自动进入以自愈瞬时拒答。
@@ -337,14 +358,20 @@ export const useAuthStore = create<AuthStoreState>()(
             pluginSupportKnown: false,
             pluginSupportSource: 'unknown',
             supportsFlowControl: false,
-            flowSupportKnown: false
+            flowSupportKnown: false,
           });
 
-          // 验证连接
-          await useConfigStore.getState().fetchConfig();
+          await configFileApi.fetchConfigYaml();
           if (!apiClient.isCurrentConnection(connectionGeneration)) {
             return false;
           }
+          await useConfigStore
+            .getState()
+            .fetchConfig(undefined, true)
+            .catch((error) => {
+              if ((error as { status?: number })?.status === 401) throw error;
+            });
+          if (!apiClient.isCurrentConnection(connectionGeneration)) return false;
           const runtimeKind = await detectRuntimeKind(get().serverRuntimeKind);
           if (!apiClient.isCurrentConnection(connectionGeneration)) {
             return false;
@@ -371,7 +398,7 @@ export const useAuthStore = create<AuthStoreState>()(
             connectionStatus: 'connected',
             ...pluginSupport,
             ...flowSupport,
-            ...(runtimeKind !== 'unknown' ? { serverRuntimeKind: runtimeKind } : {})
+            ...(runtimeKind !== 'unknown' ? { serverRuntimeKind: runtimeKind } : {}),
           });
 
           return true;
@@ -386,7 +413,7 @@ export const useAuthStore = create<AuthStoreState>()(
             pluginSupportKnown: false,
             pluginSupportSource: 'unknown',
             supportsFlowControl: false,
-            flowSupportKnown: false
+            flowSupportKnown: false,
           });
           return false;
         }
@@ -397,7 +424,7 @@ export const useAuthStore = create<AuthStoreState>()(
         set((state) => ({
           serverVersion: version || null,
           serverBuildDate: buildDate || null,
-          serverRuntimeKind: runtimeKind || state.serverRuntimeKind
+          serverRuntimeKind: runtimeKind || state.serverRuntimeKind,
         }));
       },
 
@@ -413,9 +440,9 @@ export const useAuthStore = create<AuthStoreState>()(
       updateConnectionStatus: (status, error = null) => {
         set({
           connectionStatus: status,
-          connectionError: error
+          connectionError: error,
         });
-      }
+      },
     }),
     {
       name: STORAGE_KEY_AUTH,
@@ -426,7 +453,7 @@ export const useAuthStore = create<AuthStoreState>()(
         rememberPassword: state.rememberPassword,
         serverVersion: state.serverVersion,
         serverBuildDate: state.serverBuildDate,
-        serverRuntimeKind: state.serverRuntimeKind
+        serverRuntimeKind: state.serverRuntimeKind,
       }),
       version: 1,
       migrate: (persistedState) => {
@@ -440,7 +467,7 @@ export const useAuthStore = create<AuthStoreState>()(
         delete nextState.supportsFlowControl;
         delete nextState.flowSupportKnown;
         return nextState as unknown as AuthStoreState;
-      }
+      },
     }
   )
 );

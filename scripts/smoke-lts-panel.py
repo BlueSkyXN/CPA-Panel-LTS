@@ -7,11 +7,12 @@ the single-file dist first.
 """
 
 from __future__ import annotations
-from panel_browser import PanelBrowser
+from panel_browser import PanelBrowser, launch_chromium
 
 import argparse
 import csv
 import contextlib
+import hashlib
 import json
 import mimetypes
 import os
@@ -93,6 +94,24 @@ class MockCoreState:
         self.delayed_config_status = 200
         self.delayed_config_started = threading.Event()
         self.release_delayed_config = threading.Event()
+        # v8 config revision: every accepted config write advances it (Core: sha256 ETag).
+        self.config_revision = 1
+        self.config_write_checks: list[tuple[str, str, str, int]] = []
+        self.plugin_config: dict[str, Any] = {
+            "priority": 7,
+            "label": "original-label",
+            "advanced": {"mode": "safe"},
+            "untouched-server-field": {"keep": True},
+        }
+
+    def etag(self) -> str:
+        # Like Core's sha256 of the persisted file: direct fixture edits also change the ETag.
+        material = f"{self.config_revision}\n{self.config_yaml}".encode()
+        return f'"{hashlib.sha256(material).hexdigest()}"'
+
+    def concurrent_config_edit(self) -> None:
+        """Simulate another editor saving the file between a Panel read and its write."""
+        self.config_revision += 1
 
     def record(self, method: str, path: str, query: str = "") -> None:
         suffix = f"?{query}" if query else ""
@@ -307,6 +326,130 @@ def build_config_payload(
     }
 
 
+V8_MANAGEMENT = "/v8/management"
+LTS_EXTENSION = "/v0/management"
+# Flat fixture families -> canonical v8 `api-keys.<family>` groups.
+V8_PROVIDER_FAMILIES = {
+    "gemini-api-key": "gemini",
+    "codex-api-key": "codex",
+    "xai-api-key": "xai",
+    "claude-api-key": "claude",
+    "vertex-api-key": "vertex",
+    "openai-compatibility": "openai-compatibility",
+}
+# Mirrors CPA-Core-LTS internal/config/config_v8.go sharedKeyFields: group-level policy fields.
+V8_SHARED_GROUP_FIELDS = {
+    "priority",
+    "prefix",
+    "proxy-url",
+    "headers",
+    "models",
+    "excluded-models",
+    "disable-cooling",
+    "request-retry",
+    "request-scoped-errors",
+}
+
+
+def v8_yaml_thinking(value: Any) -> Any:
+    """The v8 JSON view is rendered from YAML, so thinking flags use their YAML tags."""
+    if isinstance(value, list):
+        return [v8_yaml_thinking(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+    result = {key: v8_yaml_thinking(item) for key, item in value.items()}
+    thinking = result.get("thinking")
+    if isinstance(thinking, dict):
+        result["thinking"] = {
+            {"zero_allowed": "zero-allowed", "dynamic_allowed": "dynamic-allowed"}.get(key, key): item
+            for key, item in thinking.items()
+        }
+    return result
+
+
+def legacy_entries_to_v8_groups(family: str, entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One group per fixture entry (Core groupLegacyKeys), with GET-only `auth_index` injected."""
+    groups: list[dict[str, Any]] = []
+    for index, entry in enumerate(entries):
+        entry = v8_yaml_thinking(json.loads(json.dumps(entry)))
+        group: dict[str, Any]
+        if family == "openai-compatibility":
+            group = {key: value for key, value in entry.items() if key != "api-key-entries"}
+            keys = entry.get("api-key-entries", [])
+        else:
+            group = {"name": f"{family}-{index + 1}"}
+            key = {}
+            for field, value in entry.items():
+                if field == "base-url" or field in V8_SHARED_GROUP_FIELDS:
+                    group[field] = value
+                else:
+                    key[field] = value
+            keys = [key]
+        for key_index, key in enumerate(keys):
+            auth_index = key.pop("auth-index", None)
+            key["auth_index"] = auth_index or f"{family}-{index + 1}-{key_index + 1}"
+        group["keys"] = keys
+        groups.append(group)
+    return groups
+
+
+def to_v8_config(legacy: dict[str, Any]) -> dict[str, Any]:
+    """Render the flat smoke fixture as the canonical v8 `GET /config` JSON view."""
+    return {
+        "config-version": 8,
+        "observability": {
+            "logs": {
+                "debug": legacy["debug"],
+                "request-log": legacy["request-log"],
+                "logging-to-file": legacy["logging-to-file"],
+            },
+            "usage": {"usage-statistics-enabled": legacy["usage-statistics-enabled"]},
+        },
+        "routing": {
+            **legacy["routing"],
+            "cooldown": {
+                "transient-error-cooldown-seconds": legacy["transient-error-cooldown-seconds"]
+            },
+        },
+        "access": {"api-keys": legacy["api-keys"]},
+        "oauth": {
+            "excluded-models": {"codex": ["gpt-5-disabled"]},
+            "model-alias": {"codex": [{"name": "gpt-5", "alias": "codex-gpt-5"}]},
+        },
+        "api-keys": {
+            family: legacy_entries_to_v8_groups(family, legacy[flat])
+            for flat, family in V8_PROVIDER_FAMILIES.items()
+            if flat in legacy
+        },
+        "ampcode": legacy["ampcode"],
+        "plugins": legacy["plugins"],
+    }
+
+
+def v8_config_node(document: Any, path: str) -> tuple[bool, Any]:
+    node = document
+    for part in [unquote(part) for part in path.split("/") if part]:
+        if not isinstance(node, dict) or part not in node:
+            return False, None
+        node = node[part]
+    return True, node
+
+
+def flatten_provider_groups(payload: Any) -> list[dict[str, Any]]:
+    """Expand written v8 groups into effective per-key entries for payload assertions."""
+    entries: list[dict[str, Any]] = []
+    if not isinstance(payload, list):
+        return entries
+    for group in payload:
+        if not isinstance(group, dict) or not isinstance(group.get("keys"), list):
+            continue
+        shared = {key: value for key, value in group.items() if key not in ("keys", "name")}
+        for key in group["keys"]:
+            if isinstance(key, dict):
+                entries.append({**shared, **key})
+    return entries
+
+
 def build_usage_payload() -> dict[str, Any]:
     now = datetime.now(timezone.utc)
 
@@ -367,6 +510,8 @@ def build_usage_payload() -> dict[str, Any]:
             "AuthIndex": "codex-smoke-auth",
             "reasoning_effort": "none",
             "latency": 130,
+            "failure_status": 429,
+            "failure_reason": "rate_limited",
             "tokens": {
                 "input_tokens": 9,
                 "output_tokens": 3,
@@ -631,17 +776,25 @@ def build_auth_files_payload() -> dict[str, Any]:
 
 
 def build_config_yaml() -> str:
-    return """debug: false
-usage-statistics-enabled: true
-request-log: true
-logging-to-file: true
-transient-error-cooldown-seconds: 30
-disable-image-generation: chat
+    """Canonical v8 YAML, as returned by `GET /v8/management/config.yaml`."""
+    return """config-version: 8
 unmanaged-lts-smoke: keep-me
+observability:
+  logs:
+    debug: false
+    request-log: true
+    logging-to-file: true
+  usage:
+    usage-statistics-enabled: true
 routing:
   strategy: round-robin
-api-keys:
-  - mgmt-key-1
+  cooldown:
+    transient-error-cooldown-seconds: 30
+multimedia:
+  disable-image-generation: chat
+access:
+  api-keys:
+    - mgmt-key-1
 plugins:
   enabled: true
   store-sources:
@@ -659,10 +812,11 @@ ampcode:
   upstream-url: https://amp.example.test
   upstream-api-key: sk-amp-smoke
   force-model-mappings: true
-codex:
-  abnormal-reasoning-retry:
-    hedged-retry:
-      require-distinct-auth: false
+upstream:
+  codex:
+    abnormal-reasoning-retry:
+      hedged-retry:
+        require-distinct-auth: false
 """
 
 
@@ -1042,17 +1196,27 @@ class MockCoreHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self) -> None:
         self._send_empty(204)
 
+    def _v8_config_payload(self) -> dict[str, Any]:
+        payload = to_v8_config(
+            build_config_payload(
+                include_branded_providers=self.state.include_branded_providers,
+                plugins_enabled=self.state.plugins_config_enabled,
+                logging_to_file=self.state.logging_to_file,
+            )
+        )
+        payload["plugins"]["configs"] = {
+            "mock-plugin": {"enabled": self.state.plugin_enabled, **self.state.plugin_config}
+        }
+        return payload
+
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path
         self.state.record("GET", path, parsed.query)
-        config_payload = build_config_payload(
-            include_branded_providers=self.state.include_branded_providers,
-            plugins_enabled=self.state.plugins_config_enabled,
-            logging_to_file=self.state.logging_to_file,
-        )
+        config_payload = self._v8_config_payload()
+        revision = {"ETag": self.state.etag()}
 
-        if path == "/v0/management/config" and self.state.delay_next_config_response:
+        if path == f"{V8_MANAGEMENT}/config" and self.state.delay_next_config_response:
             self.state.delay_next_config_response = False
             plugin_support = self.state.supports_plugin
             self.state.delayed_config_started.set()
@@ -1066,72 +1230,60 @@ class MockCoreHandler(BaseHTTPRequestHandler):
                     plugin_support_override=plugin_support,
                 )
                 return
-            self._send_json(config_payload, plugin_support_override=plugin_support)
+            self._send_json(
+                config_payload, plugin_support_override=plugin_support, headers=revision
+            )
             return
 
-        if path == "/v0/management/plugins" and not self.state.plugin_endpoint_available:
+        if path == f"{V8_MANAGEMENT}/plugins" and not self.state.plugin_endpoint_available:
             self._send_json({"error": "plugin endpoint unavailable"}, status=404)
             return
 
-        if (
-            path == "/v0/management/oauth-excluded-models"
-            and self.state.oauth_excluded_status != 200
+        for failing_path, status in (
+            (f"{V8_MANAGEMENT}/config/oauth/excluded-models", self.state.oauth_excluded_status),
+            (f"{V8_MANAGEMENT}/config/oauth/model-alias", self.state.oauth_model_alias_status),
         ):
-            self._send_json(
-                {"error": "oauth excluded models unavailable"},
-                status=self.state.oauth_excluded_status,
+            if path == failing_path and status != 200:
+                self._send_json({"error": "oauth config unavailable"}, status=status)
+                return
+
+        if path == f"{V8_MANAGEMENT}/config":
+            self._send_json(config_payload, headers=revision)
+            return
+
+        if path == f"{V8_MANAGEMENT}/config.yaml":
+            self._send_bytes(
+                self.state.config_yaml.encode("utf-8"),
+                content_type="application/yaml; charset=utf-8",
+                headers=revision,
             )
             return
 
-        if (
-            path == "/v0/management/oauth-model-alias"
-            and self.state.oauth_model_alias_status != 200
-        ):
-            self._send_json(
-                {"error": "oauth model aliases unavailable"},
-                status=self.state.oauth_model_alias_status,
-            )
+        if path.startswith(f"{V8_MANAGEMENT}/config/"):
+            found, node = v8_config_node(config_payload, path[len(f"{V8_MANAGEMENT}/config/") :])
+            if not found:
+                # Core sets the ETag before reporting an absent field.
+                self._send_json({"error": "not_found"}, status=404, headers=revision)
+                return
+            self._send_json(node, headers=revision)
             return
 
         routes: dict[str, Any] = {
-            "/v0/management/config": config_payload,
-            "/v0/management/auth-files": build_auth_files_payload(),
-            "/v0/management/usage": self.state.usage_payload,
-            "/v0/management/usage-statistics-enabled": {"usage-statistics-enabled": True},
-            "/v0/management/usage/export": {
+            f"{V8_MANAGEMENT}/credentials": build_auth_files_payload(),
+            f"{LTS_EXTENSION}/usage": self.state.usage_payload,
+            f"{LTS_EXTENSION}/usage-statistics-enabled": {"usage-statistics-enabled": True},
+            f"{LTS_EXTENSION}/usage/export": {
                 "version": 3,
                 "usage": self.state.usage_payload["usage"],
             },
-            "/v0/management/api-key-usage": build_api_key_usage_payload(),
-            "/v0/management/ampcode": {"ampcode": config_payload["ampcode"]},
-            "/v0/management/vertex-api-key": {
-                "vertex-api-key": config_payload["vertex-api-key"]
-            },
-            "/v0/management/openai-compatibility": {
-                "openai-compatibility": config_payload["openai-compatibility"]
-            },
-            "/v0/management/xai-api-key": {
-                "xai-api-key": config_payload["xai-api-key"]
-            },
-            "/v0/management/ampcode/upstream-api-keys": {
-                "upstream-api-keys": config_payload["ampcode"]["upstream-api-keys"]
-            },
-            "/v0/management/ampcode/model-mappings": {
-                "model-mappings": config_payload["ampcode"]["model-mappings"]
-            },
-            "/v0/management/oauth-excluded-models": {
-                "oauth-excluded-models": {"codex": ["gpt-5-disabled"]}
-            },
-            "/v0/management/oauth-model-alias": {
-                "oauth-model-alias": {"codex": [{"name": "gpt-5", "alias": "codex-gpt-5"}]}
-            },
-            "/v0/management/model-definitions/codex": {
+            f"{V8_MANAGEMENT}/observability/usage/api-keys": build_api_key_usage_payload(),
+            f"{V8_MANAGEMENT}/routing/model-definitions/codex": {
                 "models": [{"id": "gpt-5", "display_name": "GPT-5"}]
             },
-            "/v0/management/plugins": build_plugin_list_payload(self.state.plugin_enabled),
-            "/v0/management/plugin-store": build_plugin_store_payload(),
-            "/v0/management/logs": self._mock_logs_response(parsed.query),
-            "/v0/management/request-error-logs": {
+            f"{V8_MANAGEMENT}/plugins": build_plugin_list_payload(self.state.plugin_enabled),
+            f"{V8_MANAGEMENT}/plugins/store": build_plugin_store_payload(),
+            f"{V8_MANAGEMENT}/observability/logs": self._mock_logs_response(parsed.query),
+            f"{V8_MANAGEMENT}/observability/logs/errors": {
                 "files": [
                     {
                         "name": "error-smoke.log",
@@ -1157,14 +1309,7 @@ class MockCoreHandler(BaseHTTPRequestHandler):
             )
             return
 
-        if path == "/v0/management/config.yaml":
-            self._send_bytes(
-                self.state.config_yaml.encode("utf-8"),
-                content_type="application/yaml; charset=utf-8",
-            )
-            return
-
-        if path == "/v0/management/auth-files/download":
+        if path == f"{V8_MANAGEMENT}/credentials/download":
             name = parse_qs(parsed.query).get("name", [""])[0]
             auth_files = {
                 "codex-smoke.json": {
@@ -1186,25 +1331,25 @@ class MockCoreHandler(BaseHTTPRequestHandler):
             self._send_json(payload)
             return
 
-        if path == "/v0/management/nodes":
+        if path == f"{LTS_EXTENSION}/nodes":
             self._send_json({"error": "not found"}, status=404)
             return
 
-        if path == "/v0/management/request-error-logs/error-smoke.log":
+        if path == f"{V8_MANAGEMENT}/observability/logs/errors/error-smoke.log":
             self._send_bytes(
                 b"mock error log body request_id=req-error",
                 content_type="text/plain; charset=utf-8",
             )
             return
 
-        if path == "/v0/management/request-log-by-id/req-smoke":
+        if path == f"{V8_MANAGEMENT}/observability/logs/requests/req-smoke":
             self._send_bytes(
                 b"mock request log body request_id=req-smoke",
                 content_type="text/plain; charset=utf-8",
             )
             return
 
-        if path == "/v0/management/request-log-by-id/home-req-smoke":
+        if path == f"{V8_MANAGEMENT}/observability/logs/requests/home-req-smoke":
             self._send_bytes(
                 b"mock home request log body request_id=home-req-smoke home_ip=10.99.0.7",
                 content_type="text/plain; charset=utf-8",
@@ -1215,18 +1360,6 @@ class MockCoreHandler(BaseHTTPRequestHandler):
             self._send_json(routes[path])
             return
 
-        if re.match(r"^/v0/management/plugins/[^/]+/config$", path):
-            self._send_json(
-                {
-                    "enabled": True,
-                    "priority": 7,
-                    "label": "original-label",
-                    "advanced": {"mode": "safe"},
-                    "untouched-server-field": {"keep": True},
-                }
-            )
-            return
-
         self._send_json({"error": f"unhandled mock route: {path}"}, status=404)
 
     def do_POST(self) -> None:
@@ -1234,10 +1367,10 @@ class MockCoreHandler(BaseHTTPRequestHandler):
         self.state.record("POST", parsed.path, parsed.query)
         body = self._read_body_text()
         self.state.record_body("POST", parsed.path, body)
-        if parsed.path == "/v0/management/api-call":
+        if parsed.path == f"{V8_MANAGEMENT}/requests/api-call":
             self._send_json(self._mock_api_call_response(body))
             return
-        if parsed.path == "/v0/management/usage/import":
+        if parsed.path == f"{LTS_EXTENSION}/usage/import":
             if self.state.usage_contract_code:
                 self._send_json(
                     {
@@ -1361,13 +1494,52 @@ class MockCoreHandler(BaseHTTPRequestHandler):
             "next-cursor": "cursor-smoke-1",
         }
 
+    def _check_config_revision(self, method: str, path: str) -> bool:
+        """Core v8 contract: exactly one strong If-Match equal to the current ETag."""
+        if not path.startswith(f"{V8_MANAGEMENT}/config"):
+            return True
+        if_match = self.headers.get_all("If-Match") or []
+        current = self.state.etag()
+        if not if_match:
+            status, error = 428, "config_revision_required"
+        elif len(if_match) != 1 or if_match[0] != current:
+            status, error = 412, "config_revision_conflict"
+        else:
+            status, error = 200, ""
+        self.state.config_write_checks.append((method, path, ",".join(if_match), status))
+        if status != 200:
+            self._send_json({"error": error}, status=status, headers={"ETag": current})
+            return False
+        return True
+
+    def _accept_config_write(self) -> None:
+        self.state.config_revision += 1
+        self._send_json({"status": "ok", "config-version": 8}, headers={"ETag": ""})
+
     def do_PUT(self) -> None:
         parsed = urlparse(self.path)
         self.state.record("PUT", parsed.path, parsed.query)
         body = self._read_body_text()
         self.state.record_body("PUT", parsed.path, body)
-        if parsed.path == "/v0/management/config.yaml":
+        if not self._check_config_revision("PUT", parsed.path):
+            return
+        if parsed.path == f"{V8_MANAGEMENT}/config.yaml":
             self.state.save_config_yaml(body)
+        elif parsed.path.startswith(f"{V8_MANAGEMENT}/config/plugins/configs/mock-plugin"):
+            try:
+                payload = json.loads(body) if body.strip() else None
+            except json.JSONDecodeError:
+                payload = None
+            if parsed.path.endswith("/mock-plugin/enabled"):
+                self.state.plugin_enabled = payload is True
+            elif isinstance(payload, dict):
+                self.state.plugin_enabled = payload.get("enabled", True) is True
+                self.state.plugin_config = {
+                    key: value for key, value in payload.items() if key != "enabled"
+                }
+        if parsed.path.startswith(f"{V8_MANAGEMENT}/config"):
+            self._accept_config_write()
+            return
         self._send_json({"status": "ok"})
 
     def do_PATCH(self) -> None:
@@ -1375,17 +1547,21 @@ class MockCoreHandler(BaseHTTPRequestHandler):
         self.state.record("PATCH", parsed.path, parsed.query)
         body = self._read_body_text()
         self.state.record_body("PATCH", parsed.path, body)
-        if parsed.path == "/v0/management/plugins/mock-plugin/enabled":
-            try:
-                payload = json.loads(body) if body.strip() else {}
-            except json.JSONDecodeError:
-                payload = {}
-            self.state.plugin_enabled = payload.get("enabled") is True
+        if not self._check_config_revision("PATCH", parsed.path):
+            return
+        if parsed.path.startswith(f"{V8_MANAGEMENT}/config"):
+            self._accept_config_write()
+            return
         self._send_json({"status": "ok"})
 
     def do_DELETE(self) -> None:
         parsed = urlparse(self.path)
         self.state.record("DELETE", parsed.path, parsed.query)
+        if not self._check_config_revision("DELETE", parsed.path):
+            return
+        if parsed.path.startswith(f"{V8_MANAGEMENT}/config"):
+            self._accept_config_write()
+            return
         self._send_json({"status": "ok"})
 
     def _send_empty(self, status: int) -> None:
@@ -1398,6 +1574,7 @@ class MockCoreHandler(BaseHTTPRequestHandler):
         payload: Any,
         status: int = 200,
         plugin_support_override: bool | None = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         body = json.dumps(payload).encode("utf-8")
         self._send_bytes(
@@ -1405,6 +1582,7 @@ class MockCoreHandler(BaseHTTPRequestHandler):
             status=status,
             content_type="application/json; charset=utf-8",
             plugin_support_override=plugin_support_override,
+            headers=headers,
         )
 
     def _send_bytes(
@@ -1413,9 +1591,12 @@ class MockCoreHandler(BaseHTTPRequestHandler):
         status: int = 200,
         content_type: str = "application/octet-stream",
         plugin_support_override: bool | None = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         self.send_response(status)
         self._send_cors_headers(plugin_support_override=plugin_support_override)
+        for name, value in (headers or {}).items():
+            self.send_header(name, value)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
@@ -1424,11 +1605,11 @@ class MockCoreHandler(BaseHTTPRequestHandler):
     def _send_cors_headers(self, plugin_support_override: bool | None = None) -> None:
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "authorization,content-type")
+        self.send_header("Access-Control-Allow-Headers", "authorization,content-type,if-match")
         self.send_header(
             "Access-Control-Expose-Headers",
             (
-                "x-cpa-version,x-cpa-build-date,x-cpa-home-version,"
+                "etag,x-cpa-version,x-cpa-build-date,x-cpa-home-version,"
                 "x-cpa-home-build-date,x-cpa-support-plugin"
             ),
         )
@@ -1608,7 +1789,7 @@ def assert_payload_match(
 
 
 def assert_api_call_url_seen(state: MockCoreState, needle: str, description: str) -> None:
-    payloads = parse_json_bodies(state, "POST", "/v0/management/api-call")
+    payloads = parse_json_bodies(state, "POST", "/v8/management/requests/api-call")
     if not any(
         isinstance(payload, dict) and needle in str(payload.get("url") or "")
         for payload in payloads
@@ -1620,7 +1801,7 @@ def assert_api_call_url_seen(state: MockCoreState, needle: str, description: str
 
 
 def codex_daily_workspace_api_call_payloads(state: MockCoreState) -> list[dict[str, Any]]:
-    payloads = parse_json_bodies(state, "POST", "/v0/management/api-call")
+    payloads = parse_json_bodies(state, "POST", "/v8/management/requests/api-call")
     return [
         payload
         for payload in payloads
@@ -1630,7 +1811,7 @@ def codex_daily_workspace_api_call_payloads(state: MockCoreState) -> list[dict[s
 
 
 def codex_team_leaderboard_api_call_payloads(state: MockCoreState) -> list[dict[str, Any]]:
-    payloads = parse_json_bodies(state, "POST", "/v0/management/api-call")
+    payloads = parse_json_bodies(state, "POST", "/v8/management/requests/api-call")
     return [
         payload
         for payload in payloads
@@ -1655,7 +1836,7 @@ def assert_codex_daily_workspace_fetch(
 
 
 def assert_api_call_exact_url_seen(state: MockCoreState, url: str, description: str) -> None:
-    payloads = parse_json_bodies(state, "POST", "/v0/management/api-call")
+    payloads = parse_json_bodies(state, "POST", "/v8/management/requests/api-call")
     if not any(isinstance(payload, dict) and payload.get("url") == url for payload in payloads):
         raise AssertionError(
             f"Expected /api-call URL for {description} to equal {url!r}; "
@@ -1669,7 +1850,7 @@ def assert_api_call_auth_seen(
     auth_index: str,
     description: str,
 ) -> None:
-    payloads = parse_json_bodies(state, "POST", "/v0/management/api-call")
+    payloads = parse_json_bodies(state, "POST", "/v8/management/requests/api-call")
     if not any(
         isinstance(payload, dict)
         and url_needle in str(payload.get("url") or "")
@@ -1688,7 +1869,7 @@ def assert_api_call_exact_url_auth_seen(
     auth_index: str,
     description: str,
 ) -> None:
-    payloads = parse_json_bodies(state, "POST", "/v0/management/api-call")
+    payloads = parse_json_bodies(state, "POST", "/v8/management/requests/api-call")
     if not any(
         isinstance(payload, dict)
         and payload.get("url") == url
@@ -1706,7 +1887,7 @@ def assert_xai_billing_identity(
     url: str,
     description: str,
 ) -> None:
-    payloads = parse_json_bodies(state, "POST", "/v0/management/api-call")
+    payloads = parse_json_bodies(state, "POST", "/v8/management/requests/api-call")
     matching = [
         payload
         for payload in payloads
@@ -1743,7 +1924,7 @@ def assert_xai_billing_identity(
 
 
 def assert_xai_user_identity_lookup(state: MockCoreState) -> None:
-    payloads = parse_json_bodies(state, "POST", "/v0/management/api-call")
+    payloads = parse_json_bodies(state, "POST", "/v8/management/requests/api-call")
     matching = [
         payload for payload in payloads
         if isinstance(payload, dict)
@@ -1764,12 +1945,34 @@ def assert_xai_auto_topup_identity(state: MockCoreState) -> None:
     )
 
 
+def assert_provider_entries_match(
+    state: MockCoreState,
+    family: str,
+    predicate: Any,
+    description: str,
+) -> None:
+    """Match v8 `PUT /config/api-keys/<family>` bodies.
+
+    Single-key families are flattened to effective per-key entries (group fields merged), so
+    the predicate sees one item per credential; OpenAI Compatibility groups are providers.
+    """
+    path = f"/v8/management/config/api-keys/{family}"
+    payloads = parse_json_bodies(state, "PUT", path)
+    views = [
+        payload if family == "openai-compatibility" else flatten_provider_groups(payload)
+        for payload in payloads
+    ]
+    if not any(predicate(view) for view in views):
+        raise AssertionError(
+            f"Expected PUT {path} payload matching {description}; saw {payloads!r}"
+        )
+
+
 def assert_provider_mutation_payloads(state: MockCoreState) -> None:
-    assert_request_count_at_least(state, "PUT", "/v0/management/codex-api-key", 2)
-    assert_payload_match(
+    assert_request_count_at_least(state, "PUT", "/v8/management/config/api-keys/codex", 2)
+    assert_provider_entries_match(
         state,
-        "PUT",
-        "/v0/management/codex-api-key",
+        "codex",
         lambda payload: any(
             item.get("api-key") == "codex-smoke-new"
             and item.get("base-url") == "https://codex.new.example/v1"
@@ -1783,8 +1986,8 @@ def assert_provider_mutation_payloads(state: MockCoreState) -> None:
                     "levels": ["max"],
                     "min": 128,
                     "max": 32768,
-                    "zero_allowed": True,
-                    "dynamic_allowed": True,
+                    "zero-allowed": True,
+                    "dynamic-allowed": True,
                 }
                 for model in item.get("models", [])
             )
@@ -1793,10 +1996,9 @@ def assert_provider_mutation_payloads(state: MockCoreState) -> None:
         ),
         "created Codex resource with websocket and thinking capability preserved",
     )
-    assert_payload_match(
+    assert_provider_entries_match(
         state,
-        "PUT",
-        "/v0/management/codex-api-key",
+        "codex",
         lambda payload: any(
             item.get("api-key") == "codex-key-1"
             and item.get("base-url") == "https://codex.updated.example/v1"
@@ -1805,12 +2007,16 @@ def assert_provider_mutation_payloads(state: MockCoreState) -> None:
         ),
         "updated Codex resource keeping the original key via edit fallback",
     )
-    assert_request_seen(state, "DELETE", "/v0/management/codex-api-key")
-    assert_request_count_at_least(state, "PUT", "/v0/management/xai-api-key", 2)
-    assert_payload_match(
+    assert_provider_entries_match(
         state,
-        "PUT",
-        "/v0/management/xai-api-key",
+        "codex",
+        lambda payload: not any(item.get("api-key") == "codex-key-1" for item in payload),
+        "deleted Codex resource as a family PUT without that key",
+    )
+    assert_request_count_at_least(state, "PUT", "/v8/management/config/api-keys/xai", 2)
+    assert_provider_entries_match(
+        state,
+        "xai",
         lambda payload: any(
             item.get("api-key") == "xai-smoke-new"
             and item.get("base-url") == "https://api.x.ai/v1"
@@ -1826,10 +2032,9 @@ def assert_provider_mutation_payloads(state: MockCoreState) -> None:
         ),
         "created xAI resource using the Core contract",
     )
-    assert_payload_match(
+    assert_provider_entries_match(
         state,
-        "PUT",
-        "/v0/management/xai-api-key",
+        "xai",
         lambda payload: any(
             item.get("api-key") == "xai-key-1"
             and item.get("base-url") == "https://xai.updated.example/v1"
@@ -1844,14 +2049,27 @@ def assert_provider_mutation_payloads(state: MockCoreState) -> None:
         ),
         "updated xAI resource while preserving unknown fields",
     )
-    assert_request_seen(state, "DELETE", "/v0/management/xai-api-key")
-    for payload in parse_json_bodies(state, "PUT", "/v0/management/xai-api-key"):
-        if json_contains_key(payload, "auth-index") or json_contains_key(payload, "authIndex"):
-            raise AssertionError("xAI provider payload wrote response-only auth-index")
-    assert_payload_match(
+    assert_provider_entries_match(
         state,
-        "PUT",
-        "/v0/management/openai-compatibility",
+        "xai",
+        lambda payload: not any(item.get("api-key") == "xai-key-1" for item in payload),
+        "deleted xAI resource as a family PUT without that key",
+    )
+    # GET /config injects `auth_index` on groups/keys; it must never be written back.
+    for family in ("gemini", "codex", "xai", "claude", "openai-compatibility"):
+        for payload in parse_json_bodies(state, "PUT", f"/v8/management/config/api-keys/{family}"):
+            for group in payload if isinstance(payload, list) else []:
+                nodes = [group, *(group.get("keys") or [])] if isinstance(group, dict) else []
+                for node in nodes:
+                    if isinstance(node, dict) and any(
+                        key in node for key in ("auth_index", "auth-index", "authIndex")
+                    ):
+                        raise AssertionError(
+                            f"{family} provider payload wrote response-only auth index: {payload!r}"
+                        )
+    assert_provider_entries_match(
+        state,
+        "openai-compatibility",
         lambda payload: any(
             item.get("name") == "OpenRouter" and item.get("prefix") == "oa-smoke"
             for item in payload
@@ -1859,10 +2077,9 @@ def assert_provider_mutation_payloads(state: MockCoreState) -> None:
         ),
         "updated OpenAI Compatibility provider prefix",
     )
-    assert_payload_match(
+    assert_provider_entries_match(
         state,
-        "PUT",
-        "/v0/management/openai-compatibility",
+        "openai-compatibility",
         lambda payload: any(
             item.get("name") == "OpenRouter"
             and any(
@@ -1874,10 +2091,9 @@ def assert_provider_mutation_payloads(state: MockCoreState) -> None:
         ),
         "saved OpenAI Compatibility discovered model",
     )
-    assert_payload_match(
+    assert_provider_entries_match(
         state,
-        "PUT",
-        "/v0/management/openai-compatibility",
+        "openai-compatibility",
         lambda payload: any(
             item.get("name") == "OpenRouter"
             and any(
@@ -1891,10 +2107,9 @@ def assert_provider_mutation_payloads(state: MockCoreState) -> None:
         ),
         "updated model display-name",
     )
-    assert_payload_match(
+    assert_provider_entries_match(
         state,
-        "PUT",
-        "/v0/management/openai-compatibility",
+        "openai-compatibility",
         lambda payload: any(
             item.get("name") == "OpenRouter"
             and any(
@@ -1905,8 +2120,8 @@ def assert_provider_mutation_payloads(state: MockCoreState) -> None:
                     "levels": ["low", "high", "max", "vendor-custom"],
                     "min": 256,
                     "max": 32768,
-                    "zero_allowed": True,
-                    "dynamic_allowed": True,
+                    "zero-allowed": True,
+                    "dynamic-allowed": True,
                     "x-lts-thinking-note": "keep-thinking",
                 }
                 for model in item.get("models", [])
@@ -1916,10 +2131,9 @@ def assert_provider_mutation_payloads(state: MockCoreState) -> None:
         ),
         "updated standard thinking levels without dropping advanced config",
     )
-    assert_payload_match(
+    assert_provider_entries_match(
         state,
-        "PUT",
-        "/v0/management/openai-compatibility",
+        "openai-compatibility",
         lambda payload: any(
             item.get("name") == "OpenRouter"
             and any(
@@ -1933,10 +2147,9 @@ def assert_provider_mutation_payloads(state: MockCoreState) -> None:
         ),
         "new model display-name",
     )
-    assert_payload_match(
+    assert_provider_entries_match(
         state,
-        "PUT",
-        "/v0/management/openai-compatibility",
+        "openai-compatibility",
         lambda payload: any(
             item.get("name") == "OpenRouter"
             and all(
@@ -1959,10 +2172,9 @@ def assert_provider_mutation_payloads(state: MockCoreState) -> None:
         ),
         "preserved legacy model routing aliases",
     )
-    assert_payload_match(
+    assert_provider_entries_match(
         state,
-        "PUT",
-        "/v0/management/openai-compatibility",
+        "openai-compatibility",
         lambda payload: any(
             item.get("name") == "OpenRouter"
             and any(
@@ -1977,10 +2189,9 @@ def assert_provider_mutation_payloads(state: MockCoreState) -> None:
         ),
         "cleared model display-name without dropping unknown fields",
     )
-    assert_payload_match(
+    assert_provider_entries_match(
         state,
-        "PUT",
-        "/v0/management/openai-compatibility",
+        "openai-compatibility",
         lambda payload: any(
             item.get("name") == "code0"
             and any(
@@ -1996,7 +2207,7 @@ def assert_provider_mutation_payloads(state: MockCoreState) -> None:
         ),
         "updated sponsor model display-name",
     )
-    for payload in parse_json_bodies(state, "PUT", "/v0/management/openai-compatibility"):
+    for payload in parse_json_bodies(state, "PUT", "/v8/management/config/api-keys/openai-compatibility"):
         for provider in payload:
             if not isinstance(provider, dict):
                 continue
@@ -2005,7 +2216,7 @@ def assert_provider_mutation_payloads(state: MockCoreState) -> None:
                     "OpenAI Compatibility provider payload wrote response-only auth-index: "
                     f"{payload!r}"
                 )
-            for entry in provider.get("api-key-entries", []):
+            for entry in provider.get("keys", []):
                 if isinstance(entry, dict) and any(
                     key in entry for key in ("auth-index", "authIndex", "auth_index")
                 ):
@@ -2033,7 +2244,7 @@ def assert_provider_mutation_payloads(state: MockCoreState) -> None:
             )
         entries = [
             entry
-            for entry in openrouter.get("api-key-entries", [])
+            for entry in openrouter.get("keys", [])
             if isinstance(entry, dict)
         ]
         if not any(
@@ -2081,7 +2292,7 @@ def assert_provider_mutation_payloads(state: MockCoreState) -> None:
                 None,
             )
             branded_entries = (
-                branded_provider.get("api-key-entries", [])
+                branded_provider.get("keys", [])
                 if isinstance(branded_provider, dict)
                 else []
             )
@@ -2223,11 +2434,11 @@ def run_plugin_config_patch_smoke(page: Any, app_url: str) -> None:
     enabled_toggle = config_dialog.get_by_label("Enabled", exact=True)
     enabled_toggle.evaluate("(element) => { if (element.checked) element.click(); }")
     with page.expect_response(
-        lambda response: response.request.method == "PATCH"
-        and response.url.endswith("/v0/management/plugins/mock-plugin/config")
+        lambda response: response.request.method == "PUT"
+        and response.url.endswith("/v8/management/config/plugins/configs/mock-plugin")
     ), page.expect_response(
-        lambda response: response.request.method == "PATCH"
-        and response.url.endswith("/v0/management/plugins/mock-plugin/enabled")
+        lambda response: response.request.method == "PUT"
+        and response.url.endswith("/v8/management/config/plugins/configs/mock-plugin/enabled")
     ):
         config_dialog.get_by_role("button", name="Save", exact=True).click()
     page.get_by_text("Plugin config saved", exact=False).first.wait_for()
@@ -2250,10 +2461,24 @@ def run_oauth_attempt_smoke(page: Any, app_url: str) -> None:
         pending_callbacks.append(route)
 
     routes = [
-        ("**/v0/management/codex-auth-url*", start),
-        ("**/v0/management/get-auth-status*", poll),
-        ("**/v0/management/oauth-callback", callback),
+        ("**/v8/management/oauth/auth-url*", start),
+        ("**/v8/management/oauth/status*", poll),
+        ("**/v8/management/oauth/callback", callback),
     ]
+    # The late callback either settles with the injected failure or, once polling succeeded
+    # and invalidated the attempt, is aborted by the Panel; both must leave success intact.
+    callback_outcomes: list[str] = []
+
+    def on_callback_response(response: Any) -> None:
+        if response.url.endswith("/oauth/callback"):
+            callback_outcomes.append("response")
+
+    def on_callback_failed(request: Any) -> None:
+        if request.url.endswith("/oauth/callback"):
+            callback_outcomes.append("aborted")
+
+    page.raw.on("response", on_callback_response)
+    page.raw.on("requestfailed", on_callback_failed)
     for pattern, handler in routes:
         context.route(pattern, handler)
     try:
@@ -2264,8 +2489,14 @@ def run_oauth_attempt_smoke(page: Any, app_url: str) -> None:
         page.locator('.status-badge.success').filter(has_text="Authentication successful!").wait_for()
         assert len(polls) == 2
         assert len(pending_callbacks) == 1
-        with page.expect_response(lambda response: response.url.endswith('/oauth-callback')):
+        with contextlib.suppress(Exception):
             pending_callbacks.pop().fulfill(status=500, json={"message": "late callback failure"})
+        for _ in range(50):
+            if callback_outcomes:
+                break
+            page.wait_for_timeout(100)
+        if not callback_outcomes:
+            raise AssertionError("Late OAuth callback neither settled nor was aborted")
         # Give the rejected promise and React update a rendering turn.
         page.evaluate("() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
         assert page.locator('.status-badge.success').filter(has_text="Authentication successful!").is_visible()
@@ -2275,6 +2506,8 @@ def run_oauth_attempt_smoke(page: Any, app_url: str) -> None:
             route.abort()
         for pattern, handler in routes:
             context.unroute(pattern, handler)
+        page.raw.remove_listener("response", on_callback_response)
+        page.raw.remove_listener("requestfailed", on_callback_failed)
 
 
 def run_oauth_editor_smoke(page: Any, app_url: str) -> None:
@@ -2319,8 +2552,8 @@ def run_oauth_editor_smoke(page: Any, app_url: str) -> None:
     unsaved_dialog.wait_for(state="hidden")
 
     with page.expect_response(
-        lambda response: response.request.method == "PATCH"
-        and response.url.endswith("/v0/management/oauth-excluded-models")
+        lambda response: response.request.method == "PUT"
+        and response.url.endswith("/v8/management/config/oauth/excluded-models")
     ):
         page.get_by_role("button", name="Save/Update", exact=True).click()
     page.get_by_text("Model disablement updated", exact=False).first.wait_for()
@@ -2334,18 +2567,23 @@ def run_oauth_plugin_model_refresh_smoke(page: Any, app_url: str) -> None:
 
     def observe_model_response(response: Any) -> None:
         path = urlparse(response.url).path
-        if "model-definitions" in path or "/auth-files/models" in path or "oauth-excluded" in path:
+        if (
+            "model-definitions" in path
+            or "/credentials/models" in path
+            or "/auth-files/models" in path
+            or "excluded-models" in path
+        ):
             model_responses.append(f"{response.status} {path}")
 
     def auth_files_route(route: Any) -> None:
         parsed = urlparse(route.request.url)
         intercepted.append(f"{route.request.method} {parsed.path}?{parsed.query}")
-        if parsed.path == "/v0/management/auth-files":
+        if parsed.path == "/v8/management/credentials":
             payload = build_auth_files_payload()
             payload["files"].append(
                 {"name": "qoder-smoke.json", "type": "qoder", "provider": "qoder", "disabled": False}
             )
-        elif parsed.path == "/v0/management/auth-files/models":
+        elif parsed.path == "/v8/management/credentials/models":
             payload = {"models": []}
         elif parsed.path == "/v0/management/auth-files/models/refresh":
             refreshes.append(parse_qs(parsed.query).get("name", [""])[0])
@@ -2355,9 +2593,11 @@ def run_oauth_plugin_model_refresh_smoke(page: Any, app_url: str) -> None:
             return
         route.fulfill(status=200, content_type="application/json", body=json.dumps(payload))
 
-    pattern = "**/v0/management/auth-files**"
-    definitions_pattern = "**/v0/management/model-definitions/qoder"
-    page.raw.context.route(pattern, auth_files_route)
+    # Credential list/models moved to v8; the per-credential refresh stays an LTS extension.
+    patterns = ("**/v8/management/credentials**", "**/v0/management/auth-files/models/refresh*")
+    definitions_pattern = "**/v8/management/routing/model-definitions/qoder"
+    for pattern in patterns:
+        page.raw.context.route(pattern, auth_files_route)
     page.raw.context.on("response", observe_model_response)
     page.raw.context.route(
         definitions_pattern,
@@ -2384,7 +2624,8 @@ def run_oauth_plugin_model_refresh_smoke(page: Any, app_url: str) -> None:
         if refreshes != ["qoder-smoke.json"]:
             raise AssertionError(f"Qoder model refresh requests = {refreshes!r}")
     finally:
-        page.raw.context.unroute(pattern, auth_files_route)
+        for pattern in patterns:
+            page.raw.context.unroute(pattern, auth_files_route)
         page.raw.context.unroute(definitions_pattern)
         page.raw.context.remove_listener("response", observe_model_response)
 
@@ -2393,8 +2634,8 @@ def run_oauth_load_failure_smoke(
     page: Any, app_url: str, state: MockCoreState
 ) -> None:
     write_paths = (
-        "/v0/management/oauth-excluded-models",
-        "/v0/management/oauth-model-alias",
+        "/v8/management/config/oauth/excluded-models",
+        "/v8/management/config/oauth/model-alias",
     )
     writes_before = sum(
         1
@@ -2455,7 +2696,7 @@ def run_auth_file_using_api_smoke(page: Any, app_url: str) -> None:
     )
     with page.expect_response(
         lambda response: response.request.method == "GET"
-        and "/v0/management/auth-files/download" in response.url
+        and "/v8/management/credentials/download" in response.url
         and "codex-smoke.json" in response.url
     ):
         codex_card.locator('button[title="Auth File Details / Edit"]').click()
@@ -2475,7 +2716,7 @@ def run_auth_file_using_api_smoke(page: Any, app_url: str) -> None:
     )
     with page.expect_response(
         lambda response: response.request.method == "GET"
-        and "/v0/management/auth-files/download" in response.url
+        and "/v8/management/credentials/download" in response.url
         and "xai-smoke.json" in response.url
     ):
         xai_card.locator('button[title="Auth File Details / Edit"]').click()
@@ -2496,7 +2737,7 @@ def run_auth_file_using_api_smoke(page: Any, app_url: str) -> None:
     ).wait_for()
     with page.expect_response(
         lambda response: response.request.method == "PATCH"
-        and response.url.endswith("/v0/management/auth-files/fields")
+        and response.url.endswith("/v8/management/credentials/fields")
     ):
         xai_dialog.get_by_role("button", name="Save", exact=True).click()
     page.get_by_text('Updated auth file "xai-smoke.json" successfully', exact=True).wait_for()
@@ -2606,7 +2847,7 @@ def run_quota_runtime_smoke(page: Any, app_url: str, state: MockCoreState) -> No
     daily_before_refresh = len(codex_daily_workspace_api_call_payloads(state))
     with page.expect_response(
         lambda response: response.request.method == "POST"
-        and response.url.endswith("/v0/management/api-call")
+        and response.url.endswith("/v8/management/requests/api-call")
     ):
         codex_card.get_by_role("button", name="Click here to refresh quota").click()
     codex_card.get_by_text("Plus", exact=True).wait_for()
@@ -2666,7 +2907,7 @@ def run_quota_runtime_smoke(page: Any, app_url: str, state: MockCoreState) -> No
     second_confirm.get_by_text("codex-smoke.json", exact=False).wait_for()
     with page.expect_response(
         lambda response: response.request.method == "POST"
-        and response.url.endswith("/v0/management/api-call")
+        and response.url.endswith("/v8/management/requests/api-call")
     ):
         second_confirm.get_by_role("button", name="Reset quota now").click()
     page.wait_for_function("() => document.querySelectorAll('[role=\"dialog\"]').length === 0")
@@ -2689,7 +2930,7 @@ def run_quota_runtime_smoke(page: Any, app_url: str, state: MockCoreState) -> No
     team_leaderboard_before = len(codex_team_leaderboard_api_call_payloads(state))
     with page.expect_response(
         lambda response: response.request.method == "POST"
-        and response.url.endswith("/v0/management/api-call")
+        and response.url.endswith("/v8/management/requests/api-call")
     ):
         team_card.get_by_role("button", name="Click here to refresh quota").click()
     team_card.get_by_text("Team", exact=True).wait_for()
@@ -2730,7 +2971,7 @@ def run_quota_runtime_smoke(page: Any, app_url: str, state: MockCoreState) -> No
     xai_card.wait_for()
     with page.expect_response(
         lambda response: response.request.method == "POST"
-        and response.url.endswith("/v0/management/api-call")
+        and response.url.endswith("/v8/management/requests/api-call")
     ):
         xai_card.get_by_role("button", name="Click here to refresh quota").click()
     xai_card.get_by_text("Weekly limit", exact=True).wait_for()
@@ -2772,7 +3013,7 @@ def run_remote_cloud_connect_runtime_smoke(page: Any, app_url: str) -> None:
     action.wait_for()
     with page.expect_response(
         lambda response: response.request.method == "POST"
-        and response.url.endswith("/v0/management/api-call")
+        and response.url.endswith("/v8/management/requests/api-call")
     ):
         action.click()
 
@@ -2806,6 +3047,28 @@ def run_remote_cloud_connect_runtime_smoke(page: Any, app_url: str) -> None:
 
     page.keyboard.press("Escape")
     page.wait_for_function("() => document.querySelectorAll('[role=\"dialog\"]').length === 0")
+
+
+def run_usage_analytics_smoke(page: Any) -> None:
+    section = page.locator('[aria-label="Performance & Reliability"]')
+    section.wait_for()
+    for expected_heading in [
+        "Latency Trend",
+        "Latency Distribution",
+        "Cache Efficiency",
+        "Error Analysis",
+        "Model Share",
+    ]:
+        section.get_by_text(expected_heading, exact=True).first.wait_for()
+    if section.locator("canvas").count() < 5:
+        raise AssertionError("Usage analytics section did not render its chart canvases")
+    # 分位数 chips 存在且带有样本数说明。
+    if section.get_by_text("P50", exact=True).count() == 0:
+        raise AssertionError("Latency distribution card is missing percentile chips")
+    if section.get_by_text("samples loaded", exact=False).count() == 0:
+        raise AssertionError("Analytics section does not disclose its sample count")
+    # 错误分析展示 mock 的脱敏 failure_reason。
+    section.get_by_text("rate_limited", exact=True).wait_for()
 
 
 def run_usage_pricing_entry_smoke(page: Any) -> None:
@@ -2890,6 +3153,7 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
             raise AssertionError("Empty usage unexpectedly produced usage-backed pricing rows")
 
         for model_name in [
+            "gpt-6.1-sol",
             "gpt-5.6-sol",
             "gpt-5.6-terra",
             "gpt-5.6-luna",
@@ -3241,8 +3505,26 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
                 if actual != expected_rate:
                     raise AssertionError(f"Sol {band} {label}: {actual!r}, expected {expected_rate!r}")
             fast_text = sol_row.locator('td[data-label="Fast policies"]').inner_text()
-            if "Official API ×2.00" not in fast_text or "unsupported" in fast_text.lower():
+            if "API explicit rates" not in fast_text or "unsupported" in fast_text.lower():
                 raise AssertionError(f"Sol {band} lost its supported Fast pricing: {fast_text!r}")
+
+        sol61_model = catalog.locator(
+            '[data-testid="preset-pricing-model"][data-model="gpt-6.1-sol"]'
+        )
+        for band, expected_rates, expected_fast in [
+            ("short", {"Input": "$2", "Cached input": "$0.1", "Cache write": "$2.5", "Output": "$10"},
+             "In $4 · Cached $0.2 · Write $5 · Out $20"),
+            ("long", {"Input": "$4", "Cached input": "$0.2", "Cache write": "$5", "Output": "$15"},
+             "In $8 · Cached $0.4 · Write $10 · Out $30"),
+        ]:
+            sol61_row = sol61_model.locator(f'tr[data-context-band="{band}"]')
+            for label, expected_rate in expected_rates.items():
+                actual = sol61_row.locator(f'td[data-label="{label}"] strong').inner_text()
+                if actual != expected_rate:
+                    raise AssertionError(f"GPT-6.1 Sol {band} {label}: {actual!r}")
+            fast_text = sol61_row.locator('td[data-label="Fast policies"]').inner_text()
+            if "API explicit rates" not in fast_text or expected_fast not in fast_text:
+                raise AssertionError(f"GPT-6.1 Sol {band} lost exact Fast prices: {fast_text!r}")
 
         long_context_cell_text = (
             catalog.locator(
@@ -3516,11 +3798,30 @@ def run_usage_pricing_smoke(page: Any) -> None:
     if storage_after_restore["v3"]["overrides"]:
         raise AssertionError("Restoring a preset did not clear the migrated override")
     restored_gpt56_text = gpt56_row.inner_text()
-    for expected in ["Official API ×2.00"]:
+    for expected in ["API explicit rates"]:
         if expected not in restored_gpt56_text:
             raise AssertionError(
                 f"Restored GPT-5.6 row lost separate Fast policies: {restored_gpt56_text!r}"
             )
+
+    fast_long_section = editor.get_by_role("group", name="Fast long-context rates · USD / 1M", exact=True)
+    fast_long_section.get_by_label("Cached input", exact=True).fill("0.07")
+    editor.get_by_role("button", name="Save", exact=True).click()
+    page.get_by_text("Pricing profile saved", exact=True).last.wait_for()
+    stored_fast = page.evaluate(
+        """() => JSON.parse(localStorage.getItem('cli-proxy-model-prices-v3'))
+          .overrides['gpt-5.6-sol'].fast"""
+    )
+    if stored_fast.get("long") != {"input": 16, "cachedInput": 0.07, "cacheWrite": 20, "output": 60}:
+        raise AssertionError(f"Editor lost independent Fast long prices: {stored_fast!r}")
+    if stored_fast.get("short") != {"input": 8, "cachedInput": 0.8, "cacheWrite": 10, "output": 40}:
+        raise AssertionError(f"Editing Fast long prices changed short rates: {stored_fast!r}")
+    with page.expect_download() as explicit_download:
+        page.get_by_role("button", name="Export profile", exact=True).click()
+    explicit_path = explicit_download.value.path()
+    explicit_profile = json.loads(Path(explicit_path).read_text(encoding="utf-8"))
+    if explicit_profile["overrides"]["gpt-5.6-sol"]["fast"] != stored_fast:
+        raise AssertionError("Export lost independent Fast long rates")
 
     fast_mode = editor.get_by_label("Fast rates · USD / 1M", exact=True)
     fast_mode.click()
@@ -3706,7 +4007,7 @@ def run_usage_pricing_smoke(page: Any) -> None:
             "Preset-equivalent v3 recovery removed real custom data or kept the matching override: "
             f"{recovered_profile!r}"
         )
-    if "Official API ×2.00" not in gpt56_row.inner_text():
+    if "API explicit rates" not in gpt56_row.inner_text():
         raise AssertionError("Recovered GPT-5.6 pricing did not inherit the official Fast policy")
 
     page.set_viewport_size({"width": 1024, "height": 768})
@@ -4152,7 +4453,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
             "Non-cache Token value cells still expose disruptive hover explanations: "
             f"{unexpected_value_tooltips!r}"
         )
-    for expected_label in ["Fast", "Std", "none", "low", "high", "xhigh", "max"]:
+    for expected_label in ["Fast ?", "Std ?", "none", "low", "high", "xhigh", "max"]:
         card.get_by_text(expected_label, exact=True).first.wait_for()
     resolved_fast_flows = card.locator('[data-service-tier-flow="resolved"]').filter(
         has_text="Fast"
@@ -4168,9 +4469,9 @@ def run_usage_service_tier_smoke(page: Any) -> None:
             f"Expected three compact request-to-effective tier flows, found {combined_flows.count()}"
         )
     for index in range(combined_flows.count()):
-        if combined_flows.nth(index).inner_text().replace("\n", "").replace(" ", "") != "Fast→Std":
+        if combined_flows.nth(index).inner_text().replace("\n", "").replace(" ", "") != "Fast→Std?":
             raise AssertionError(
-                "Combined tier flow did not render Fast → Std with existing badges: "
+                "Combined tier flow must keep the unknown response-program marker: "
                 f"{combined_flows.nth(index).inner_text()!r}"
             )
     outbound_flow = card.locator(
@@ -5342,7 +5643,7 @@ def run_branded_provider_visibility_smoke(
     code0_display_name.fill("Code0 Model Updated")
     with page.expect_response(
         lambda response: response.request.method == "PUT"
-        and response.url.endswith("/v0/management/openai-compatibility")
+        and response.url.endswith("/v8/management/config/api-keys/openai-compatibility")
     ):
         code0_sheet.get_by_role("button", name="Save", exact=True).click()
     code0_sheet.wait_for(state="detached")
@@ -5945,7 +6246,7 @@ def run_sidebar_navigation_smoke(page: Any, state: MockCoreState) -> None:
     try:
         with page.expect_response(
             lambda response: response.request.method == "GET"
-            and response.url.endswith("/v0/management/config")
+            and response.url.endswith("/v8/management/config")
         ):
             page.reload(wait_until="domcontentloaded")
         page.wait_for_url(re.compile(r".*/#/$"), timeout=20_000)
@@ -5960,7 +6261,7 @@ def run_sidebar_navigation_smoke(page: Any, state: MockCoreState) -> None:
         state.logging_to_file = True
         with page.expect_response(
             lambda response: response.request.method == "GET"
-            and response.url.endswith("/v0/management/config")
+            and response.url.endswith("/v8/management/config")
         ):
             page.reload(wait_until="domcontentloaded")
         page.wait_for_url(re.compile(r".*/#/$"), timeout=20_000)
@@ -5974,12 +6275,16 @@ def run_sidebar_navigation_smoke(page: Any, state: MockCoreState) -> None:
     if providers_drawer.get_attribute("aria-expanded") != "false":
         raise AssertionError("AI Providers drawer must start collapsed away from Provider routes")
     providers_drawer.click()
-    legacy_link = navigation.get_by_role("link", name="LTS Provider Status", exact=True)
-    legacy_link.wait_for()
-    legacy_link.click()
-    page.wait_for_function("() => window.location.hash.endsWith('/ai-providers/legacy')")
+    if navigation.get_by_role("link", name="LTS Provider Status", exact=True).count() != 0:
+        raise AssertionError("Removed legacy provider page is still linked from navigation")
+    ampcode_link = navigation.get_by_role(
+        "link", name="Amp CLI Integration (ampcode)", exact=True
+    )
+    ampcode_link.wait_for()
+    ampcode_link.click()
+    page.wait_for_function("() => window.location.hash.endsWith('/ai-providers/ampcode')")
     if providers_drawer.get_attribute("aria-expanded") != "true":
-        raise AssertionError("Active legacy provider status did not keep its drawer open")
+        raise AssertionError("Active Ampcode child did not keep its drawer open")
     providers_drawer.click()
     if providers_drawer.get_attribute("aria-expanded") != "false":
         raise AssertionError("Active AI Providers drawer could not be manually collapsed")
@@ -6058,7 +6363,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
         ) from exc
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=not headed)
+        browser = launch_chromium(playwright, headless=not headed)
         context = browser.new_context(locale="en-US", accept_downloads=True)
         context.add_init_script(
             """
@@ -6137,16 +6442,13 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
                 ("/auth-files/oauth-model-alias", "OAuth Model Aliases", None),
                 ("/ai-providers", "AI Providers", None),
                 ("/ai-providers/workbench", "AI Providers", "/ai-providers"),
-                ("/ai-providers/legacy", "AI Providers Configuration", None),
-                ("/ai-providers/legacy/ampcode", "Configure Ampcode", None),
-                ("/lts/providers", "AI Providers Configuration", "/ai-providers/legacy"),
-                ("/lts/ampcode", "Configure Ampcode", "/ai-providers/legacy/ampcode"),
-                ("/ai-providers/gemini/new", "AI Providers", "/ai-providers/legacy/gemini/new"),
-                ("/ai-providers/codex/new", "AI Providers", "/ai-providers/legacy/codex/new"),
-                ("/ai-providers/claude/new", "AI Providers", "/ai-providers/legacy/claude/new"),
-                ("/ai-providers/vertex/new", "AI Providers", "/ai-providers/legacy/vertex/new"),
-                ("/ai-providers/openai/new", "AI Providers", "/ai-providers/legacy/openai/new"),
-                ("/ai-providers/ampcode", "Configure Ampcode", "/ai-providers/legacy/ampcode"),
+                ("/ai-providers/ampcode", "Configure Ampcode", None),
+                # V8-only: the legacy provider editors are gone; old links land on the Workbench.
+                ("/lts/providers", "AI Providers", "/ai-providers"),
+                ("/lts/ampcode", "Configure Ampcode", "/ai-providers/ampcode"),
+                ("/ai-providers/legacy", "AI Providers", "/ai-providers"),
+                ("/ai-providers/legacy/ampcode", "AI Providers", "/ai-providers"),
+                ("/ai-providers/codex/new", "AI Providers", "/ai-providers"),
                 ("/plugins", "Mock Resource Plugin", None),
                 ("/plugin-store", "Plugin Store", None),
                 ("/plugin-pages/mock-plugin/0", "Mock", None),
@@ -6167,6 +6469,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
                     )
                 page.get_by_text(expected_text, exact=False).first.wait_for()
                 if route == "/usage":
+                    run_usage_analytics_smoke(page)
                     run_usage_pricing_entry_smoke(page)
                     run_usage_service_tier_smoke(page)
                     page.evaluate(
@@ -6213,7 +6516,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             page.get_by_text("AI Providers", exact=False).first.wait_for()
             with page.expect_response(
                 lambda response: response.request.method == "PUT"
-                and response.url.endswith("/v0/management/gemini-api-key")
+                and response.url.endswith("/v8/management/config/api-keys/gemini")
             ):
                 page.get_by_label("Disable").first.evaluate("(element) => element.click()")
             page.wait_for_timeout(500)
@@ -6253,27 +6556,53 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             codex_model.get_by_label("Maximum token budget").fill("32768")
             with page.expect_response(
                 lambda response: response.request.method == "PUT"
-                and response.url.endswith("/v0/management/codex-api-key")
+                and response.url.endswith("/v8/management/config/api-keys/codex")
             ):
                 sheet.get_by_role("button", name="Create").click()
             wait_for_no_dialog()
 
             page.get_by_role("button", name="Edit").first.click()
             sheet = page.get_by_role("dialog").last
-            sheet.get_by_label("Base URL").fill("https://codex.updated.example/v1")
+            # The base URL is group-owned in v8; key edits must route it through the group sheet.
+            if not sheet.get_by_label("Base URL").is_disabled():
+                raise AssertionError("codex key edit allowed changing the shared group base URL")
+            sheet.get_by_role("button", name="Edit configuration group").click()
+            group_sheet = page.get_by_role("dialog", name="Edit configuration group")
+            group_sheet.get_by_label("Shared base URL").fill("https://codex.updated.example/v1")
+            group_sheet.get_by_role("button", name="Save").click()
             with page.expect_response(
                 lambda response: response.request.method == "PUT"
-                and response.url.endswith("/v0/management/codex-api-key")
-            ):
-                sheet.get_by_role("button", name="Save").click()
+                and response.url.endswith("/v8/management/config/api-keys/codex")
+            ) as group_put:
+                page.get_by_role("dialog", name="Apply group-wide changes?").get_by_role(
+                    "button", name="Save"
+                ).click()
+            group_payload = json.loads(group_put.value.request.post_data or "null")
+            if not group_put.value.request.header_value("if-match") or not any(
+                isinstance(group, dict)
+                and group.get("base-url") == "https://codex.updated.example/v1"
+                and isinstance(group.get("keys"), list)
+                and group["keys"]
+                for group in (group_payload if isinstance(group_payload, list) else [])
+            ) or "auth_index" in json.dumps(group_payload):
+                raise AssertionError(f"codex group edit sent an unexpected PUT: {group_payload!r}")
+            # This mock records config writes without persisting them, so the post-write
+            # readback must fail closed instead of reporting success.
+            group_sheet.get_by_role("alert").get_by_text(
+                "refresh and try again", exact=False
+            ).wait_for()
+            group_sheet.get_by_role("button", name="Cancel").click()
+            page.get_by_role("dialog", name="Discard unsaved changes?").get_by_role(
+                "button", name="Discard changes"
+            ).click()
             wait_for_no_dialog()
 
             page.get_by_role("button", name="Delete").first.click()
             confirm = page.get_by_role("dialog", name="Delete resource")
             confirm.get_by_text("This action cannot be undone", exact=False).first.wait_for()
             with page.expect_response(
-                lambda response: response.request.method == "DELETE"
-                and "/v0/management/codex-api-key" in response.url
+                lambda response: response.request.method == "PUT"
+                and response.url.endswith("/v8/management/config/api-keys/codex")
             ):
                 confirm.get_by_role("button", name="Delete").click()
             wait_for_no_dialog()
@@ -6295,27 +6624,53 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             sheet.get_by_label("Display name (optional)").fill("Grok Browser Model")
             with page.expect_response(
                 lambda response: response.request.method == "PUT"
-                and response.url.endswith("/v0/management/xai-api-key")
+                and response.url.endswith("/v8/management/config/api-keys/xai")
             ):
                 sheet.get_by_role("button", name="Create").click()
             wait_for_no_dialog()
 
             page.get_by_role("button", name="Edit").first.click()
             sheet = page.get_by_role("dialog").last
-            sheet.get_by_label("Base URL").fill("https://xai.updated.example/v1")
+            # The base URL is group-owned in v8; key edits must route it through the group sheet.
+            if not sheet.get_by_label("Base URL").is_disabled():
+                raise AssertionError("xai key edit allowed changing the shared group base URL")
+            sheet.get_by_role("button", name="Edit configuration group").click()
+            group_sheet = page.get_by_role("dialog", name="Edit configuration group")
+            group_sheet.get_by_label("Shared base URL").fill("https://xai.updated.example/v1")
+            group_sheet.get_by_role("button", name="Save").click()
             with page.expect_response(
                 lambda response: response.request.method == "PUT"
-                and response.url.endswith("/v0/management/xai-api-key")
-            ):
-                sheet.get_by_role("button", name="Save").click()
+                and response.url.endswith("/v8/management/config/api-keys/xai")
+            ) as group_put:
+                page.get_by_role("dialog", name="Apply group-wide changes?").get_by_role(
+                    "button", name="Save"
+                ).click()
+            group_payload = json.loads(group_put.value.request.post_data or "null")
+            if not group_put.value.request.header_value("if-match") or not any(
+                isinstance(group, dict)
+                and group.get("base-url") == "https://xai.updated.example/v1"
+                and isinstance(group.get("keys"), list)
+                and group["keys"]
+                for group in (group_payload if isinstance(group_payload, list) else [])
+            ) or "auth_index" in json.dumps(group_payload):
+                raise AssertionError(f"xai group edit sent an unexpected PUT: {group_payload!r}")
+            # This mock records config writes without persisting them, so the post-write
+            # readback must fail closed instead of reporting success.
+            group_sheet.get_by_role("alert").get_by_text(
+                "refresh and try again", exact=False
+            ).wait_for()
+            group_sheet.get_by_role("button", name="Cancel").click()
+            page.get_by_role("dialog", name="Discard unsaved changes?").get_by_role(
+                "button", name="Discard changes"
+            ).click()
             wait_for_no_dialog()
 
             page.get_by_role("button", name="Delete").first.click()
             confirm = page.get_by_role("dialog", name="Delete resource")
             confirm.get_by_text("This action cannot be undone", exact=False).first.wait_for()
             with page.expect_response(
-                lambda response: response.request.method == "DELETE"
-                and "/v0/management/xai-api-key" in response.url
+                lambda response: response.request.method == "PUT"
+                and response.url.endswith("/v8/management/config/api-keys/xai")
             ):
                 confirm.get_by_role("button", name="Delete").click()
             wait_for_no_dialog()
@@ -6332,14 +6687,13 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             page.get_by_role("option", name="Default (caller-owned)", exact=True).click()
             with page.expect_response(
                 lambda response: response.request.method == "PUT"
-                and response.url.endswith("/v0/management/claude-api-key")
+                and response.url.endswith("/v8/management/config/api-keys/claude")
             ):
                 sheet.get_by_role("button", name="Save").click()
             wait_for_no_dialog()
-            assert_payload_match(
+            assert_provider_entries_match(
                 state,
-                "PUT",
-                "/v0/management/claude-api-key",
+                "claude",
                 lambda payload: any(
                     isinstance(item, dict)
                     and item.get("api-key") == "claude-key-1"
@@ -6369,12 +6723,12 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             key2_card.wait_for()
             with page.expect_response(
                 lambda response: response.request.method == "POST"
-                and response.url.endswith("/v0/management/api-call")
+                and response.url.endswith("/v8/management/requests/api-call")
             ):
                 key2_card.get_by_role("button", name="Test").click()
             with page.expect_response(
                 lambda response: response.request.method == "POST"
-                and response.url.endswith("/v0/management/api-call")
+                and response.url.endswith("/v8/management/requests/api-call")
             ):
                 sheet.get_by_role("button", name="Test all").click()
             page.wait_for_timeout(500)
@@ -6482,7 +6836,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             display_name_inputs.nth(1).fill("")
             with page.expect_response(
                 lambda response: response.request.method == "POST"
-                and response.url.endswith("/v0/management/api-call")
+                and response.url.endswith("/v8/management/requests/api-call")
             ):
                 sheet.get_by_role("button", name="Fetch from endpoint").click()
             sheet.get_by_text("openai/smoke-discovered", exact=True).wait_for()
@@ -6514,7 +6868,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             sheet.get_by_label("Prefix").fill("oa-smoke")
             with page.expect_response(
                 lambda response: response.request.method == "PUT"
-                and response.url.endswith("/v0/management/openai-compatibility")
+                and response.url.endswith("/v8/management/config/api-keys/openai-compatibility")
             ):
                 sheet.get_by_role("button", name="Save").click()
             wait_for_no_dialog()
@@ -6533,7 +6887,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             page.locator('button[aria-label="Save"]').click()
             with page.expect_response(
                 lambda response: response.request.method == "PUT"
-                and response.url.endswith("/v0/management/config.yaml")
+                and response.url.endswith("/v8/management/config.yaml")
             ):
                 page.get_by_role("button", name="Confirm Save").click()
             page.get_by_text("Configuration saved successfully", exact=False).first.wait_for()
@@ -6599,10 +6953,11 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             state.config_yaml = (
                 f"{state.config_yaml.rstrip()}\nconcurrent-managed-smoke: keep-me\n"
             )
+            state.concurrent_config_edit()
             page.locator('button[aria-label="Save"]').click()
             with page.expect_response(
                 lambda response: response.request.method == "PUT"
-                and response.url.endswith("/v0/management/config.yaml")
+                and response.url.endswith("/v8/management/config.yaml")
             ):
                 page.get_by_role("button", name="Confirm Save").click()
             page.get_by_text("Configuration saved successfully", exact=False).first.wait_for()
@@ -6638,140 +6993,118 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             browser.close()
 
     for method, path in [
-        ("GET", "/v0/management/config"),
-        ("GET", "/v0/management/config.yaml"),
-        ("GET", "/v0/management/auth-files"),
-        ("GET", "/v0/management/oauth-excluded-models"),
-        ("GET", "/v0/management/oauth-model-alias"),
+        ("GET", "/v8/management/config"),
+        ("GET", "/v8/management/config.yaml"),
+        ("GET", "/v8/management/credentials"),
+        ("GET", "/v8/management/config/oauth/excluded-models"),
+        ("GET", "/v8/management/config/oauth/model-alias"),
         ("GET", "/v1/models"),
         ("GET", "/v0/management/usage"),
-        ("GET", "/v0/management/api-key-usage"),
-        ("GET", "/v0/management/ampcode"),
-        ("GET", "/v0/management/plugins"),
-        ("GET", "/v0/management/plugin-store"),
-        ("GET", "/v0/management/logs"),
-        ("GET", "/v0/management/request-error-logs"),
-        ("GET", "/v0/management/request-error-logs/error-smoke.log"),
-        ("GET", "/v0/management/request-log-by-id/req-smoke"),
-        ("GET", "/v0/management/request-log-by-id/home-req-smoke"),
-        ("POST", "/v0/management/api-call"),
-        ("GET", "/v0/management/auth-files/download"),
-        ("PATCH", "/v0/management/auth-files/fields"),
-        ("PATCH", "/v0/management/plugins/mock-plugin/config"),
-        ("PATCH", "/v0/management/plugins/mock-plugin/enabled"),
-        ("PATCH", "/v0/management/oauth-excluded-models"),
-        ("PUT", "/v0/management/gemini-api-key"),
-        ("PUT", "/v0/management/codex-api-key"),
-        ("DELETE", "/v0/management/codex-api-key"),
-        ("PUT", "/v0/management/xai-api-key"),
-        ("DELETE", "/v0/management/xai-api-key"),
-        ("PUT", "/v0/management/openai-compatibility"),
-        ("PUT", "/v0/management/config.yaml"),
+        ("GET", "/v8/management/observability/usage/api-keys"),
+        ("GET", "/v8/management/config/ampcode"),
+        ("GET", "/v8/management/plugins"),
+        ("GET", "/v8/management/plugins/store"),
+        ("GET", "/v8/management/observability/logs"),
+        ("GET", "/v8/management/observability/logs/errors"),
+        ("GET", "/v8/management/observability/logs/errors/error-smoke.log"),
+        ("GET", "/v8/management/observability/logs/requests/req-smoke"),
+        ("GET", "/v8/management/observability/logs/requests/home-req-smoke"),
+        ("POST", "/v8/management/requests/api-call"),
+        ("GET", "/v8/management/credentials/download"),
+        ("PATCH", "/v8/management/credentials/fields"),
+        ("GET", "/v8/management/config/plugins/configs/mock-plugin"),
+        ("PUT", "/v8/management/config/plugins/configs/mock-plugin"),
+        ("PUT", "/v8/management/config/plugins/configs/mock-plugin/enabled"),
+        ("PUT", "/v8/management/config/oauth/excluded-models"),
+        ("PUT", "/v8/management/config/api-keys/gemini"),
+        ("PUT", "/v8/management/config/api-keys/codex"),
+        ("PUT", "/v8/management/config/api-keys/xai"),
+        ("PUT", "/v8/management/config/api-keys/claude"),
+        ("PUT", "/v8/management/config/api-keys/openai-compatibility"),
+        ("PUT", "/v8/management/config.yaml"),
     ]:
         assert_request_seen(state, method, path)
-    assert_request_seen_after(
-        state,
-        "PUT",
-        "/v0/management/gemini-api-key",
-        "GET",
-        "/v0/management/config",
-    )
+    # V8-only: no configuration is read or written through the legacy flat v0 routes.
+    for request in state.requests:
+        method, _, target = request.partition(" ")
+        target_path = target.split("?", 1)[0]
+        if not target_path.startswith(LTS_EXTENSION):
+            continue
+        suffix = target_path[len(LTS_EXTENSION) :]
+        allowed = suffix.startswith(("/usage", "/nodes", "/flow-control", "/auth-files/models/refresh"))
+        allowed = allowed or bool(re.match(r"^/plugins/[^/]+/(readiness|summary|login-info)$", suffix))
+        if not allowed:
+            raise AssertionError(f"Panel used a non-extension v0 route: {request}")
+    # Every v8 config write carried the ETag of the read it was derived from.
+    rejected = [check for check in state.config_write_checks if check[3] != 200]
+    if rejected:
+        raise AssertionError(f"Panel config writes were rejected by If-Match checks: {rejected!r}")
+    if not state.config_write_checks:
+        raise AssertionError("No v8 config writes were observed")
     for provider_path in [
-        "/v0/management/gemini-api-key",
-        "/v0/management/codex-api-key",
-        "/v0/management/xai-api-key",
-        "/v0/management/openai-compatibility",
+        "/v8/management/config/api-keys/gemini",
+        "/v8/management/config/api-keys/codex",
+        "/v8/management/config/api-keys/xai",
+        "/v8/management/config/api-keys/claude",
+        "/v8/management/config/api-keys/openai-compatibility",
     ]:
+        # The provider write is bound to the ETag of the provider-subtree GET it was derived from.
         assert_each_request_immediately_preceded_by(
             state,
             "PUT",
             provider_path,
             "GET",
-            "/v0/management/config",
+            provider_path,
         )
-    assert_request_seen_after(
-        state,
-        "PUT",
-        "/v0/management/codex-api-key",
-        "GET",
-        "/v0/management/config",
-    )
-    assert_request_seen_after(
-        state,
-        "DELETE",
-        "/v0/management/codex-api-key",
-        "GET",
-        "/v0/management/config",
-    )
-    assert_request_seen_after(
-        state,
-        "PUT",
-        "/v0/management/xai-api-key",
-        "GET",
-        "/v0/management/config",
-    )
-    assert_request_seen_after(
-        state,
-        "DELETE",
-        "/v0/management/xai-api-key",
-        "GET",
-        "/v0/management/config",
-    )
-    assert_request_query_contains(
-        state,
-        "DELETE",
-        "/v0/management/xai-api-key",
-        "base-url=https%3A%2F%2Fapi.x.ai%2Fv1",
-    )
-    assert_request_seen_after(
-        state,
-        "PUT",
-        "/v0/management/openai-compatibility",
-        "GET",
-        "/v0/management/config",
-    )
     assert_request_query_contains(
         state,
         "GET",
-        "/v0/management/logs",
+        "/v8/management/observability/logs",
         "offset=1",
     )
     assert_request_query_contains(
         state,
         "GET",
-        "/v0/management/request-log-by-id/home-req-smoke",
+        "/v8/management/observability/logs/requests/home-req-smoke",
         "home_ip=10.99.0.7",
     )
     assert_provider_mutation_payloads(state)
     assert_payload_match(
         state,
         "PATCH",
-        "/v0/management/auth-files/fields",
+        "/v8/management/credentials/fields",
         lambda payload: payload == {"name": "xai-smoke.json", "using_api": True},
         "only the touched xAI using_api field",
     )
+    # v8 replaces only this plugin instance: the touched field merged into the latest object.
     assert_payload_match(
         state,
-        "PATCH",
-        "/v0/management/plugins/mock-plugin/config",
-        lambda payload: payload == {"label": "updated-label"},
+        "PUT",
+        "/v8/management/config/plugins/configs/mock-plugin",
+        lambda payload: payload
+        == {
+            "enabled": True,
+            "priority": 7,
+            "label": "updated-label",
+            "advanced": {"mode": "safe"},
+            "untouched-server-field": {"keep": True},
+        },
         "only the touched plugin config field",
     )
     assert_payload_match(
         state,
-        "PATCH",
-        "/v0/management/plugins/mock-plugin/enabled",
-        lambda payload: payload == {"enabled": False},
+        "PUT",
+        "/v8/management/config/plugins/configs/mock-plugin/enabled",
+        lambda payload: payload is False,
         "the dedicated plugin enabled update",
     )
     assert_payload_match(
         state,
-        "PATCH",
-        "/v0/management/oauth-excluded-models",
+        "PUT",
+        "/v8/management/config/oauth/excluded-models",
         lambda payload: isinstance(payload, dict)
-        and payload.get("provider") == "codex"
-        and "gpt-5-disabled" in payload.get("models", [])
-        and "gpt-*" in payload.get("models", []),
+        and "gpt-5-disabled" in payload.get("codex", [])
+        and "gpt-*" in payload.get("codex", []),
         "the pending custom OAuth exclusion rule",
     )
     assert_config_yaml_roundtrip(state)

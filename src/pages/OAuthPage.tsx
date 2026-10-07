@@ -57,14 +57,69 @@ function getErrorStatus(error: unknown): number | undefined {
   return typeof error.status === 'number' ? error.status : undefined;
 }
 
-const PROVIDERS: { id: OAuthProvider; titleKey: string; hintKey: string; urlLabelKey: string; icon: string }[] = [
-  { id: 'codex', titleKey: 'auth_login.codex_oauth_title', hintKey: 'auth_login.codex_oauth_hint', urlLabelKey: 'auth_login.codex_oauth_url_label', icon: iconCodex },
-  { id: 'anthropic', titleKey: 'auth_login.anthropic_oauth_title', hintKey: 'auth_login.anthropic_oauth_hint', urlLabelKey: 'auth_login.anthropic_oauth_url_label', icon: iconClaude },
-  { id: 'antigravity', titleKey: 'auth_login.antigravity_oauth_title', hintKey: 'auth_login.antigravity_oauth_hint', urlLabelKey: 'auth_login.antigravity_oauth_url_label', icon: iconAntigravity },
-  { id: 'gemini-cli', titleKey: 'auth_login.gemini_cli_oauth_title', hintKey: 'auth_login.gemini_cli_oauth_hint', urlLabelKey: 'auth_login.gemini_cli_oauth_url_label', icon: iconGemini },
-  { id: 'kimi', titleKey: 'auth_login.kimi_oauth_title', hintKey: 'auth_login.kimi_oauth_hint', urlLabelKey: 'auth_login.kimi_oauth_url_label', icon: iconKimiLight },
-  { id: 'xai', titleKey: 'auth_login.xai_oauth_title', hintKey: 'auth_login.xai_oauth_hint', urlLabelKey: 'auth_login.xai_oauth_url_label', icon: iconGrok },
-  { id: 'copilot', titleKey: 'auth_login.copilot_oauth_title', hintKey: 'auth_login.copilot_oauth_hint', urlLabelKey: 'auth_login.copilot_oauth_url_label', icon: iconCopilot }
+const PROVIDERS: {
+  id: OAuthProvider;
+  titleKey: string;
+  hintKey: string;
+  urlLabelKey: string;
+  icon: string;
+}[] = [
+  {
+    id: 'codex',
+    titleKey: 'auth_login.codex_oauth_title',
+    hintKey: 'auth_login.codex_oauth_hint',
+    urlLabelKey: 'auth_login.codex_oauth_url_label',
+    icon: iconCodex,
+  },
+  {
+    id: 'anthropic',
+    titleKey: 'auth_login.anthropic_oauth_title',
+    hintKey: 'auth_login.anthropic_oauth_hint',
+    urlLabelKey: 'auth_login.anthropic_oauth_url_label',
+    icon: iconClaude,
+  },
+  {
+    id: 'antigravity',
+    titleKey: 'auth_login.antigravity_oauth_title',
+    hintKey: 'auth_login.antigravity_oauth_hint',
+    urlLabelKey: 'auth_login.antigravity_oauth_url_label',
+    icon: iconAntigravity,
+  },
+  {
+    id: 'gemini-cli',
+    titleKey: 'auth_login.gemini_cli_oauth_title',
+    hintKey: 'auth_login.gemini_cli_oauth_hint',
+    urlLabelKey: 'auth_login.gemini_cli_oauth_url_label',
+    icon: iconGemini,
+  },
+  {
+    id: 'kimi',
+    titleKey: 'auth_login.kimi_oauth_title',
+    hintKey: 'auth_login.kimi_oauth_hint',
+    urlLabelKey: 'auth_login.kimi_oauth_url_label',
+    icon: iconKimiLight,
+  },
+  {
+    id: 'kimi-ai',
+    titleKey: 'auth_login.kimi_ai_oauth_title',
+    hintKey: 'auth_login.kimi_ai_oauth_hint',
+    urlLabelKey: 'auth_login.kimi_oauth_url_label',
+    icon: iconKimiLight,
+  },
+  {
+    id: 'xai',
+    titleKey: 'auth_login.xai_oauth_title',
+    hintKey: 'auth_login.xai_oauth_hint',
+    urlLabelKey: 'auth_login.xai_oauth_url_label',
+    icon: iconGrok,
+  },
+  {
+    id: 'copilot',
+    titleKey: 'auth_login.copilot_oauth_title',
+    hintKey: 'auth_login.copilot_oauth_hint',
+    urlLabelKey: 'auth_login.copilot_oauth_url_label',
+    icon: iconCopilot,
+  },
 ];
 
 const CALLBACK_SUPPORTED: OAuthProvider[] = [
@@ -72,11 +127,12 @@ const CALLBACK_SUPPORTED: OAuthProvider[] = [
   'anthropic',
   'antigravity',
   'gemini-cli',
-  'xai'
+  'xai',
 ];
 const XAI_CALLBACK_URL = 'http://127.0.0.1:56121/callback';
 const SUCCESS_RESET_DELAY_MS = 5000;
-const getProviderI18nPrefix = (provider: OAuthProvider) => provider.replace('-', '_');
+const getProviderI18nPrefix = (provider: OAuthProvider) =>
+  (provider === 'kimi-ai' ? 'kimi' : provider).replace('-', '_');
 const getAuthKey = (provider: OAuthProvider, suffix: string) =>
   `auth_login.${getProviderI18nPrefix(provider)}_${suffix}`;
 
@@ -156,26 +212,44 @@ export function OAuthPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { showNotification } = useNotificationStore();
-  const [states, setStates] = useState<Record<OAuthProvider, ProviderState>>({} as Record<OAuthProvider, ProviderState>);
-  useEffect(() => registerSessionLeaveCheck(() => Object.values(states).some((state) => state.polling || state.callbackSubmitting)), [states]);
+  const [states, setStates] = useState<Record<OAuthProvider, ProviderState>>(
+    {} as Record<OAuthProvider, ProviderState>
+  );
+  useEffect(
+    () =>
+      registerSessionLeaveCheck(() =>
+        Object.values(states).some((state) => state.polling || state.callbackSubmitting)
+      ),
+    [states]
+  );
   const [vertexState, setVertexState] = useState<VertexImportState>({
     fileName: '',
     location: '',
-    loading: false
+    loading: false,
   });
-  const attempts = useRef(createOAuthAttempts({
-    setTimeout: (callback, delay) => window.setTimeout(callback, delay),
-    clearTimeout: (timer) => window.clearTimeout(timer),
-  }));
-  useEffect(() => registerSessionBusyCheck(() => vertexState.loading || Object.values(states).some((state) => state.callbackSubmitting)), [states, vertexState.loading]);
+  const attempts = useRef(
+    createOAuthAttempts({
+      setTimeout: (callback, delay) => window.setTimeout(callback, delay),
+      clearTimeout: (timer) => window.clearTimeout(timer),
+    })
+  );
+  useEffect(
+    () =>
+      registerSessionBusyCheck(
+        () => vertexState.loading || Object.values(states).some((state) => state.callbackSubmitting)
+      ),
+    [states, vertexState.loading]
+  );
   const vertexFileInputRef = useRef<HTMLInputElement | null>(null);
   const providerCardRefs = useRef<Partial<Record<OAuthProvider, HTMLDivElement | null>>>({});
   const providerQuery = searchParams.get('provider')?.trim().toLowerCase() || '';
-  const focusedProvider = (providerQuery === 'claude'
-    ? 'anthropic'
-    : providerQuery === 'gemini'
-      ? 'gemini-cli'
-      : providerQuery) as OAuthProvider;
+  const focusedProvider = (
+    providerQuery === 'claude'
+      ? 'anthropic'
+      : providerQuery === 'gemini'
+        ? 'gemini-cli'
+        : providerQuery
+  ) as OAuthProvider;
   const hasFocusedProvider = PROVIDERS.some((provider) => provider.id === focusedProvider);
 
   const clearTimers = useCallback(() => {
@@ -184,8 +258,11 @@ export function OAuthPage() {
 
   useEffect(() => {
     const unsubscribe = useAuthStore.subscribe((next, previous) => {
-      if (next.apiBase !== previous.apiBase || next.managementKey !== previous.managementKey ||
-          next.connectionStatus !== previous.connectionStatus) {
+      if (
+        next.apiBase !== previous.apiBase ||
+        next.managementKey !== previous.managementKey ||
+        next.connectionStatus !== previous.connectionStatus
+      ) {
         clearTimers();
         setStates({} as Record<OAuthProvider, ProviderState>);
       }
@@ -210,7 +287,7 @@ export function OAuthPage() {
   const updateProviderState = (provider: OAuthProvider, next: Partial<ProviderState>) => {
     setStates((prev) => ({
       ...prev,
-      [provider]: { ...(prev[provider] ?? {}), ...next }
+      [provider]: { ...(prev[provider] ?? {}), ...next },
     }));
   };
 
@@ -224,7 +301,7 @@ export function OAuthPage() {
       }
       return {
         ...prev,
-        [provider]: next
+        [provider]: next,
       };
     });
   };
@@ -240,7 +317,7 @@ export function OAuthPage() {
       callbackUrl: '',
       callbackSubmitting: false,
       callbackStatus: undefined,
-      callbackError: undefined
+      callbackError: undefined,
     });
     resetAttempt.schedule(() => {
       resetProviderAttempt(provider);
@@ -249,7 +326,7 @@ export function OAuthPage() {
 
   const startPolling = (provider: OAuthProvider, state: string, attempt: OAuthAttempt) => {
     attempt.poll(
-      () => oauthApi.getAuthStatus(state),
+      () => oauthApi.getAuthStatus(state, attempt.signal),
       (res) => {
         if (res.status === 'ok') {
           completeProviderAuth(provider);
@@ -264,7 +341,11 @@ export function OAuthPage() {
         return res.status === 'wait';
       },
       (err) => {
-        updateProviderState(provider, { status: 'error', error: getErrorMessage(err), polling: false });
+        updateProviderState(provider, {
+          status: 'error',
+          error: getErrorMessage(err),
+          polling: false,
+        });
       },
       3000
     );
@@ -293,13 +374,13 @@ export function OAuthPage() {
       callbackError: undefined,
       callbackUrl: '',
       callbackSubmitting: false,
-      userCode: undefined
+      userCode: undefined,
     });
     try {
-      const res = await oauthApi.startAuth(
-        provider,
-        provider === 'gemini-cli' ? { projectId: projectId || undefined } : undefined
-      );
+      const res = await oauthApi.startAuth(provider, {
+        projectId: provider === 'gemini-cli' ? projectId : undefined,
+        signal: attempt.signal,
+      });
       if (!attempt.isCurrent()) return;
       if (!res.state) {
         const message = t('auth_login.missing_state');
@@ -308,17 +389,22 @@ export function OAuthPage() {
           state: undefined,
           status: 'error',
           error: message,
-          polling: false
+          polling: false,
         });
         showNotification(message, 'error');
         return;
       }
-      updateProviderState(provider, { url: res.url, state: res.state, status: 'waiting', polling: true });
+      updateProviderState(provider, {
+        url: res.url,
+        state: res.state,
+        status: 'waiting',
+        polling: true,
+      });
       if (provider === 'copilot') {
         // 设备码由插件 login-info 管理路由下发；拉取失败不阻塞状态轮询，
         // 用户可按提示直接打开授权链接重新获取。
         try {
-          const info = await oauthApi.copilotLoginInfo(res.state);
+          const info = await oauthApi.copilotLoginInfo(res.state, attempt.signal);
           if (attempt.isCurrent()) {
             updateProviderState(provider, { userCode: info.user_code || undefined });
           }
@@ -353,23 +439,32 @@ export function OAuthPage() {
     const callbackInput = (states[provider]?.callbackUrl || '').trim();
     if (!callbackInput) {
       showNotification(
-        t(provider === 'xai' ? 'auth_login.xai_callback_required' : 'auth_login.oauth_callback_required'),
+        t(
+          provider === 'xai'
+            ? 'auth_login.xai_callback_required'
+            : 'auth_login.oauth_callback_required'
+        ),
         'warning'
       );
       return;
     }
     const redirectUrl = resolveCallbackUrl(provider, callbackInput, states[provider]?.state);
     if (!redirectUrl) {
-      showNotification(t(provider === 'xai' ? 'auth_login.xai_callback_state_missing' : 'auth_login.missing_state'), 'warning');
+      showNotification(
+        t(
+          provider === 'xai' ? 'auth_login.xai_callback_state_missing' : 'auth_login.missing_state'
+        ),
+        'warning'
+      );
       return;
     }
     updateProviderState(provider, {
       callbackSubmitting: true,
       callbackStatus: undefined,
-      callbackError: undefined
+      callbackError: undefined,
     });
     try {
-      await oauthApi.submitCallback(provider, redirectUrl);
+      await oauthApi.submitCallback(provider, redirectUrl, attempt.signal);
       if (!attempt.isCurrent()) return;
       updateProviderState(provider, { callbackSubmitting: false, callbackStatus: 'success' });
       showNotification(t('auth_login.oauth_callback_success'), 'success');
@@ -380,13 +475,13 @@ export function OAuthPage() {
       const errorMessage =
         status === 404
           ? t('auth_login.oauth_callback_upgrade_hint', {
-              defaultValue: 'Please update CPA or check the connection.'
+              defaultValue: 'Please update CPA or check the connection.',
             })
           : message || undefined;
       updateProviderState(provider, {
         callbackSubmitting: false,
         callbackStatus: 'error',
-        callbackError: errorMessage
+        callbackError: errorMessage,
       });
       const notificationMessage = errorMessage
         ? `${t('auth_login.oauth_callback_error')} ${errorMessage}`
@@ -412,7 +507,7 @@ export function OAuthPage() {
       file,
       fileName: file.name,
       error: undefined,
-      result: undefined
+      result: undefined,
     }));
     event.target.value = '';
   };
@@ -435,7 +530,7 @@ export function OAuthPage() {
         projectId: res.project_id,
         email: res.email,
         location: res.location,
-        authFile: res['auth-file'] ?? res.auth_file
+        authFile: res['auth-file'] ?? res.auth_file,
       };
       setVertexState((prev) => ({ ...prev, loading: false, result }));
       showNotification(t('vertex_import.success'), 'success');
@@ -444,7 +539,7 @@ export function OAuthPage() {
       setVertexState((prev) => ({
         ...prev,
         loading: false,
-        error: message || t('notification.upload_failed')
+        error: message || t('notification.upload_failed'),
       }));
       const notification = message
         ? `${t('notification.upload_failed')}: ${message}`
@@ -468,7 +563,7 @@ export function OAuthPage() {
           const statusBadgeClassName = [
             'status-badge',
             state.status === 'success' ? 'success' : '',
-            state.status === 'error' ? 'error' : ''
+            state.status === 'error' ? 'error' : '',
           ]
             .filter(Boolean)
             .join(' ');
@@ -479,16 +574,14 @@ export function OAuthPage() {
                 providerCardRefs.current[provider.id] = element;
               }}
               className={styles.providerAnchor}
-              data-focused={hasFocusedProvider && focusedProvider === provider.id ? 'true' : undefined}
+              data-focused={
+                hasFocusedProvider && focusedProvider === provider.id ? 'true' : undefined
+              }
             >
               <Card
                 title={
                   <span className={styles.cardTitle}>
-                    <img
-                      src={provider.icon}
-                      alt=""
-                      className={styles.cardTitleIcon}
-                    />
+                    <img src={provider.icon} alt="" className={styles.cardTitleIcon} />
                     {t(provider.titleKey)}
                   </span>
                 }
@@ -511,7 +604,7 @@ export function OAuthPage() {
                         onChange={(e) =>
                           updateProviderState(provider.id, {
                             projectId: e.target.value,
-                            projectIdError: undefined
+                            projectIdError: undefined,
                           })
                         }
                         placeholder={t('auth_login.gemini_cli_project_id_placeholder')}
@@ -577,7 +670,7 @@ export function OAuthPage() {
                           updateProviderState(provider.id, {
                             callbackUrl: e.target.value,
                             callbackStatus: undefined,
-                            callbackError: undefined
+                            callbackError: undefined,
                           })
                         }
                         placeholder={t(
@@ -619,7 +712,15 @@ export function OAuthPage() {
                   )}
                   {state.status === 'success' && (
                     <div className={styles.successActions}>
-                      <Button variant="secondary" size="sm" onClick={() => navigate(`/auth-files?provider=${provider.id === 'anthropic' ? 'claude' : provider.id}`)}>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() =>
+                          navigate(
+                            `/auth-files?provider=${provider.id === 'anthropic' ? 'claude' : provider.id}`
+                          )
+                        }
+                      >
                         {t('auth_login.view_auth_files')}
                       </Button>
                     </div>
@@ -653,7 +754,7 @@ export function OAuthPage() {
               onChange={(e) =>
                 setVertexState((prev) => ({
                   ...prev,
-                  location: e.target.value
+                  location: e.target.value,
                 }))
               }
               placeholder={t('vertex_import.location_placeholder')}
@@ -681,18 +782,16 @@ export function OAuthPage() {
                 onChange={handleVertexFileChange}
               />
             </div>
-            {vertexState.error && (
-              <div className="status-badge error">
-                {vertexState.error}
-              </div>
-            )}
+            {vertexState.error && <div className="status-badge error">{vertexState.error}</div>}
             {vertexState.result && (
               <div className={styles.connectionBox}>
                 <div className={styles.connectionLabel}>{t('vertex_import.result_title')}</div>
                 <div className={styles.keyValueList}>
                   {vertexState.result.projectId && (
                     <div className={styles.keyValueItem}>
-                      <span className={styles.keyValueKey}>{t('vertex_import.result_project')}</span>
+                      <span className={styles.keyValueKey}>
+                        {t('vertex_import.result_project')}
+                      </span>
                       <span className={styles.keyValueValue}>{vertexState.result.projectId}</span>
                     </div>
                   )}
@@ -704,7 +803,9 @@ export function OAuthPage() {
                   )}
                   {vertexState.result.location && (
                     <div className={styles.keyValueItem}>
-                      <span className={styles.keyValueKey}>{t('vertex_import.result_location')}</span>
+                      <span className={styles.keyValueKey}>
+                        {t('vertex_import.result_location')}
+                      </span>
                       <span className={styles.keyValueValue}>{vertexState.result.location}</span>
                     </div>
                   )}

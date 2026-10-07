@@ -95,6 +95,44 @@ test('query price classes preserve dynamic prices, thresholds, Auto versus zero 
   });
 });
 
+test('query pricing preserves GPT-6.1 Sol and nonuniform Fast rates in both context bands', () => {
+  const profile = pricing.createDefaultPriceProfileV3();
+  profile.overrides['explicit-query-test'] = {
+    standard: pricing.findCatalogEntry('gpt-6.1-sol').standard,
+    fast: {
+      short: { input: 3, cachedInput: 0.02, cacheWrite: 0, output: 17 },
+      long: { input: 9, cachedInput: 0.07, cacheWrite: 13, output: 37 },
+      longSupported: true,
+    },
+  };
+  const groups = [];
+  const expected = [];
+  for (const model of ['gpt-6.1-sol', 'explicit-query-test']) {
+    for (const input of [272_000, 272_001]) {
+      for (const tier of ['std', 'fast']) {
+        const tokens = { input_tokens: input, cache_read_tokens: 30_000,
+          cache_creation_tokens: 40_000, output_tokens: 100_000 };
+        const estimate = pricing.estimateUsageCost(model, tokens, profile, {
+          tier, evidence: 'effective', rawRequest: null, rawOutbound: null,
+          rawResponse: null, rawEffective: null,
+        });
+        groups.push({ model, tier, evidence: 'effective', band: estimate.contextBand,
+          requests: 3, tokens: (input + 100_000) * 3, prompt: (input - 70_000) * 3,
+          cache_read: 90_000, cache_write: 120_000, output: 300_000 });
+        expected.push({ modelName: model, tokenCount: (input + 100_000) * 3,
+          requestCount: 3, estimate: { ...estimate, amount: estimate.amount * 3 } });
+      }
+    }
+  }
+  assert.deepEqual(query.buildQueryPriceRules(['gpt-6.1-sol', 'explicit-query-test'], profile), {
+    'gpt-6.1-sol': { long_threshold: 272_001 }, 'explicit-query-test': { long_threshold: 272_001 },
+  });
+  const actual = query.queryCoverage({ prices: groups }, profile);
+  const detail = pricing.aggregateCostEstimateCoverage(expected);
+  assert.ok(Math.abs(actual.estimatedAmount - detail.estimatedAmount) < 1e-12);
+  assert.deepEqual({ ...actual, estimatedAmount: 0 }, { ...detail, estimatedAmount: 0 });
+});
+
 test('prepared pricing is a separate immutable configuration with reusable per-model results', () => {
   const profile = pricing.createDefaultPriceProfileV3();
   const prepared = pricing.preparePriceProfile(profile);

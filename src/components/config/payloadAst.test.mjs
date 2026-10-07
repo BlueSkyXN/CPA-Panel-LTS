@@ -5,18 +5,55 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { parse, parseDocument } from 'yaml';
 import { createServer } from 'vite';
 
-const vite = await createServer({ appType: 'custom', logLevel: 'silent', server: { middlewareMode: true } });
+const vite = await createServer({
+  appType: 'custom',
+  logLevel: 'silent',
+  server: { middlewareMode: true },
+});
 const { useVisualConfig } = await vite.ssrLoadModule('/src/hooks/useVisualConfig.ts');
 test.after(() => vite.close());
 
-function apply(source, edit, target = source) {
+// Core v8 stores payload rules under requests.payload; fixtures are written in the editor's
+// flat spelling for readability and moved to the canonical location here.
+function toV8(yaml) {
+  const out = [];
+  let inPayload = false;
+  for (const line of yaml.split('\n')) {
+    if (/^payload:\s*$/.test(line)) {
+      out.push('requests:', '  payload:');
+      inPayload = true;
+      continue;
+    }
+    const inline = line.match(/^payload:\s*(.+)$/);
+    if (inline) {
+      out.push(`requests: {payload: ${inline[1]}}`);
+      inPayload = false;
+      continue;
+    }
+    if (inPayload && (line.startsWith(' ') || line === '')) {
+      out.push(line ? `  ${line}` : line);
+      continue;
+    }
+    inPayload = false;
+    out.push(line);
+  }
+  return out.join('\n');
+}
+
+function apply(rawSource, edit, rawTarget = rawSource) {
+  const source = toV8(rawSource);
+  const target = toV8(rawTarget);
   let output;
   function Harness() {
     const config = useVisualConfig();
     const [phase, setPhase] = useState(0);
-    if (phase === 0) { config.loadVisualValuesFromYaml(source); setPhase(1); }
-    else if (phase === 1) { config.setVisualValues(edit(config.visualValues)); setPhase(2); }
-    else output = config.applyVisualChangesToYaml(target);
+    if (phase === 0) {
+      config.loadVisualValuesFromYaml(source);
+      setPhase(1);
+    } else if (phase === 1) {
+      config.setVisualValues(edit(config.visualValues));
+      setPhase(2);
+    } else output = config.applyVisualChangesToYaml(target);
     return null;
   }
   renderToStaticMarkup(createElement(Harness));
@@ -24,8 +61,10 @@ function apply(source, edit, target = source) {
 }
 
 for (const [section, field, raw] of [
-  ['default', 'payloadDefaultRules', false], ['override', 'payloadOverrideRules', false],
-  ['default-raw', 'payloadDefaultRawRules', true], ['override-raw', 'payloadOverrideRawRules', true],
+  ['default', 'payloadDefaultRules', false],
+  ['override', 'payloadOverrideRules', false],
+  ['default-raw', 'payloadDefaultRawRules', true],
+  ['override-raw', 'payloadOverrideRawRules', true],
 ]) {
   test(`${section}: deletion/reordering keeps the right unknown fields, comments and LTS scope`, () => {
     const source = `payload:
@@ -49,21 +88,110 @@ for (const [section, field, raw] of [
 `;
     const edit = (values) => {
       const rule = values[field][1];
-      return { [field]: [{ ...rule, models: [{ ...rule.models[0], name: 'renamed', scope: 'requested' }],
-        params: [{ ...rule.params[1], value: '2', valueType: raw ? 'json' : 'number' }] }] };
+      return {
+        [field]: [
+          {
+            ...rule,
+            models: [{ ...rule.models[0], name: 'renamed', scope: 'requested' }],
+            params: [{ ...rule.params[1], value: '2', valueType: raw ? 'json' : 'number' }],
+          },
+        ],
+      };
     };
     const output = apply(source, edit, source + 'future-root: preserve\n');
     const parsed = parse(output);
     assert.equal(parsed['future-root'], 'preserve');
-    assert.equal(parsed.payload[section].length, 1);
-    const rule = parsed.payload[section][0];
-    assert.deepEqual(rule.models, [{ name: 'renamed', scope: 'requested', 'future-model': 'preserve' }]);
+    assert.equal(parsed.requests.payload[section].length, 1);
+    const rule = parsed.requests.payload[section][0];
+    assert.deepEqual(rule.models, [
+      { name: 'renamed', scope: 'requested', 'future-model': 'preserve' },
+    ]);
     assert.equal(rule['future-rule'], 'preserve');
     assert.deepEqual(rule.params, { temperature: raw ? '2' : 2 });
-    for (const comment of ['kept-rule', 'kept-model', 'kept-param']) assert.ok(output.includes(comment));
+    for (const comment of ['kept-rule', 'kept-model', 'kept-param'])
+      assert.ok(output.includes(comment));
     for (const comment of ['deleted-rule', 'deleted-param']) assert.ok(!output.includes(comment));
   });
 }
+
+test('opaque plugin YAML survives a real visual edit and source save preflight', async () => {
+  const { assertConfigListsUnchanged } = await vite.ssrLoadModule('/src/utils/configListConflict.ts');
+  for (const plugin of [
+    'table: {1: value}',
+    'table:\n        1: numeric\n        "1": string',
+    'table:\n        ? [a, b]\n        : pair',
+    'base: &base {1: numeric}\n      table: *base',
+  ]) {
+    const source = `config-version: 8\nserver: {port: 8317}\nplugins:\n  configs:\n    sample:\n      ${plugin}\n`;
+    const output = apply(source, () => ({ port: '8318' }));
+    assert.doesNotThrow(() => assertConfigListsUnchanged(source, output, source));
+    const before = parseDocument(source);
+    const after = parseDocument(output);
+    assert.equal(after.getIn(['server', 'port']), 8318);
+    assert.equal(String(after.getIn(['plugins', 'configs'], true)), String(before.getIn(['plugins', 'configs'], true)));
+  }
+});
+
+test('multi-key condition groups stay intact when another payload field is edited', () => {
+  const source = `payload:
+  override:
+    - models:
+        - name: keep
+          match:
+            # group-comment
+            - first: 1
+              second:
+                # nested-comment
+                value: 2
+      params: {temperature: 1}
+`;
+  const output = apply(source, (v) => ({
+    payloadOverrideRules: [
+      {
+        ...v.payloadOverrideRules[0],
+        params: [{ ...v.payloadOverrideRules[0].params[0], value: '2' }],
+      },
+    ],
+  }));
+  assert.deepEqual(
+    parse(output).requests.payload.override[0].models[0].match,
+    parse(source).payload.override[0].models[0].match
+  );
+  assert.ok(output.includes('group-comment'));
+  assert.ok(output.includes('nested-comment'));
+});
+
+test('editing and reordering multi-key conditions maps each field to its original AST node', () => {
+  const source = `payload:
+  override:
+    - models:
+        - name: keep
+          match:
+            - first: 1 # first-comment
+              second: 2 # second-comment
+            - third: 3 # third-comment
+      params: {temperature: 1}
+`;
+  const output = apply(source, (v) => {
+    const rule = v.payloadOverrideRules[0];
+    const model = rule.models[0];
+    return {
+      payloadOverrideRules: [
+        {
+          ...rule,
+          models: [{ ...model, match: [model.match[2], { ...model.match[1], value: '4' }] }],
+        },
+      ],
+    };
+  });
+  assert.deepEqual(parse(output).requests.payload.override[0].models[0].match, [
+    { third: 3 },
+    { second: 4 },
+  ]);
+  assert.ok(output.includes('second-comment'));
+  assert.ok(output.includes('third-comment'));
+  assert.ok(!output.includes('first-comment'));
+});
 
 test('filter sequence reorder keeps per-item comments and unknown model/rule fields', () => {
   const source = `payload:
@@ -78,8 +206,10 @@ test('filter sequence reorder keeps per-item comments and unknown model/rule fie
         - second.path
       future-rule: true
 `;
-  const output = apply(source, (v) => ({ payloadFilterRules: [{ ...v.payloadFilterRules[0], params: ['second.path', 'new.path'] }] }));
-  const rule = parse(output).payload.filter[0];
+  const output = apply(source, (v) => ({
+    payloadFilterRules: [{ ...v.payloadFilterRules[0], params: ['second.path', 'new.path'] }],
+  }));
+  const rule = parse(output).requests.payload.filter[0];
   assert.equal(rule['future-rule'], true);
   assert.equal(rule.models[0]['future-model'], true);
   assert.deepEqual(rule.params, ['second.path', 'new.path']);
@@ -88,23 +218,33 @@ test('filter sequence reorder keeps per-item comments and unknown model/rule fie
 });
 
 test('unrelated visual changes do not rewrite payload or remove anchors', () => {
-  const source = 'debug: false\npayload:\n  default:\n    - models: [{name: model}]\n      params:\n        limit: &limit 2 # preserve\n        other: *limit\n';
+  const source =
+    'debug: false\npayload:\n  default:\n    - models: [{name: model}]\n      params:\n        limit: &limit 2 # preserve\n        other: *limit\n';
   const output = apply(source, () => ({ debug: true }));
   assert.ok(output.includes('&limit'));
   assert.ok(output.includes('*limit'));
-  assert.deepEqual(parse(output).payload, parse(source).payload);
+  assert.deepEqual(parse(output).requests.payload, parse(source).payload);
 });
 
 const payloadSections = [
-  ['default', 'payloadDefaultRules'], ['default-raw', 'payloadDefaultRawRules'],
-  ['override', 'payloadOverrideRules'], ['override-raw', 'payloadOverrideRawRules'],
+  ['default', 'payloadDefaultRules'],
+  ['default-raw', 'payloadDefaultRawRules'],
+  ['override', 'payloadOverrideRules'],
+  ['override-raw', 'payloadOverrideRawRules'],
   ['filter', 'payloadFilterRules'],
 ];
-const conflict = error => error.code === 'visual_payload_conflict';
-const transformFailure = error => error.code === 'visual_apply_failed';
-const renameFirst = field => values => ({ [field]: values[field].map((rule, index) => index ? rule : {
-  ...rule, models: rule.models.map((model, i) => i ? model : { ...model, name: 'edited-a' }),
-}) });
+const conflict = (error) => error.code === 'visual_payload_conflict';
+const transformFailure = (error) => error.code === 'visual_apply_failed';
+const renameFirst = (field) => (values) => ({
+  [field]: values[field].map((rule, index) =>
+    index
+      ? rule
+      : {
+          ...rule,
+          models: rule.models.map((model, i) => (i ? model : { ...model, name: 'edited-a' })),
+        }
+  ),
+});
 
 for (const [section, field] of payloadSections) {
   const params = section === 'filter' ? '[remove.path]' : '{temperature: 1}';
@@ -113,16 +253,25 @@ for (const [section, field] of payloadSections) {
   const head = `payload:\n  ${section}:\n`;
   const source = head + a + b;
   test(`${section}: server reorder/insert/delete blocks positional merging`, () => {
-    for (const target of [head + b + a, source + a.replace('model-a', 'new-rule'), head + b, 'payload: {}\n']) {
+    for (const target of [
+      head + b + a,
+      source + a.replace('model-a', 'new-rule'),
+      head + b,
+      'payload: {}\n',
+    ]) {
       assert.throws(() => apply(source, renameFirst(field), target), conflict);
     }
   });
   test(`${section}: server model/condition/unknown-field changes are conflicts too`, () => {
     for (const target of [
       source.replace('models: [{name: model-a}]', 'models: [{name: model-b}, {name: model-a}]'),
-      source.replace('models: [{name: model-a}]', 'models: [{name: model-a, match: [{a: 1}, {b: 2}], not-match: [{c: 3}]}]'),
+      source.replace(
+        'models: [{name: model-a}]',
+        'models: [{name: model-a, match: [{a: 1}, {b: 2}], not-match: [{c: 3}]}]'
+      ),
       source.replace('belongs-to-a', 'server-update'),
-    ]) assert.throws(() => apply(source, renameFirst(field), target), conflict);
+    ])
+      assert.throws(() => apply(source, renameFirst(field), target), conflict);
   });
 }
 
@@ -135,11 +284,14 @@ test('nested condition reorder is detected even when outer rule/model order is u
 });
 
 test('only dirty sections conflict; unrelated server changes and repeated preview remain valid', () => {
-  const source = 'debug: false\npayload:\n  default:\n    - models: [{name: model-a}]\n      params: {temperature: 1}\n';
-  const target = source.replace('debug: false', 'debug: true') + '  override:\n    - models: [{name: server-rule}]\n      params: {other: 3}\n';
+  const source =
+    'observability: {logs: {debug: false}}\npayload:\n  default:\n    - models: [{name: model-a}]\n      params: {temperature: 1}\n';
+  const target =
+    source.replace('debug: false', 'debug: true') +
+    '  override:\n    - models: [{name: server-rule}]\n      params: {other: 3}\n';
   const first = apply(source, renameFirst('payloadDefaultRules'), target);
-  assert.equal(parse(first).payload.override[0].models[0].name, 'server-rule');
-  assert.equal(parse(first).debug, true);
+  assert.equal(parse(first).requests.payload.override[0].models[0].name, 'server-rule');
+  assert.equal(parse(first).observability.logs.debug, true);
   assert.equal(first, apply(source, renameFirst('payloadDefaultRules'), target));
   assert.doesNotThrow(() => apply(source, () => ({ debug: true }), target));
 });
@@ -157,37 +309,62 @@ const anchoredPayload = `payload:
       params:
         options: *options
 `;
-const changeTemperature = values => ({ payloadDefaultRules: values.payloadDefaultRules.map(rule => ({
-  ...rule, params: rule.params.map(param => param.path === 'temperature' ? { ...param, value: '2' } : param),
-})) });
+const changeTemperature = (values) => ({
+  payloadDefaultRules: values.payloadDefaultRules.map((rule) => ({
+    ...rule,
+    params: rule.params.map((param) =>
+      param.path === 'temperature' ? { ...param, value: '2' } : param
+    ),
+  })),
+});
 
 test('editing a sibling parameter retains cross-rule anchors, aliases and nested comments', () => {
   const output = apply(anchoredPayload, changeTemperature);
-  assert.equal(parse(output).payload.default[0].params.temperature, 2);
+  assert.equal(parse(output).requests.payload.default[0].params.temperature, 2);
   assert.match(output, /&options/);
   assert.match(output, /\*options/);
   assert.match(output, /nested-comment/);
-  assert.deepEqual(parse(output).payload.override[0].params.options, { limit: 1 });
+  assert.deepEqual(parse(output).requests.payload.override[0].params.options, { limit: 1 });
 });
 
 test('changing an anchored object retains its anchor and updates untouched aliases', () => {
-  const output = apply(anchoredPayload, values => ({ payloadDefaultRules: values.payloadDefaultRules.map(rule => ({
-    ...rule, params: rule.params.map(param => param.path === 'options' ? { ...param, value: '{"limit":2}' } : param),
-  })) }));
+  const output = apply(anchoredPayload, (values) => ({
+    payloadDefaultRules: values.payloadDefaultRules.map((rule) => ({
+      ...rule,
+      params: rule.params.map((param) =>
+        param.path === 'options' ? { ...param, value: '{"limit":2}' } : param
+      ),
+    })),
+  }));
   assert.match(output, /&options/);
   assert.match(output, /\*options/);
-  assert.deepEqual(parse(output).payload.override[0].params.options, { limit: 2 });
+  assert.deepEqual(parse(output).requests.payload.override[0].params.options, { limit: 2 });
 });
 
 test('deleting a referenced anchor reports conversion failure instead of returning unchanged YAML', () => {
-  assert.throws(() => apply(anchoredPayload, values => ({ payloadDefaultRules: values.payloadDefaultRules.map(rule => ({
-    ...rule, params: rule.params.filter(param => param.path !== 'options'),
-  })) })), transformFailure);
+  assert.throws(
+    () =>
+      apply(anchoredPayload, (values) => ({
+        payloadDefaultRules: values.payloadDefaultRules.map((rule) => ({
+          ...rule,
+          params: rule.params.filter((param) => param.path !== 'options'),
+        })),
+      })),
+    transformFailure
+  );
 });
 
 test('changes to an externally defined anchor used by the edited section count as a conflict', () => {
-  const source = 'shared: &options {limit: 1}\n' + anchoredPayload.replace('options: &options\n          # nested-comment\n          limit: 1', 'options: *options');
-  assert.throws(() => apply(source, changeTemperature, source.replace('limit: 1', 'limit: 2')), conflict);
+  const source =
+    'shared: &options {limit: 1}\n' +
+    anchoredPayload.replace(
+      'options: &options\n          # nested-comment\n          limit: 1',
+      'options: *options'
+    );
+  assert.throws(
+    () => apply(source, changeTemperature, source.replace('limit: 1', 'limit: 2')),
+    conflict
+  );
 });
 
 test('invalid target YAML is a failure and cannot masquerade as a no-op', () => {
@@ -197,7 +374,7 @@ test('invalid target YAML is a failure and cannot masquerade as a no-op', () => 
 test('formatting-only changes outside the edited subtree do not cause a conflict', () => {
   const target = '# another editor\n' + parseDocument(anchoredPayload).toString();
   const output = apply(anchoredPayload, changeTemperature, target);
-  assert.equal(parse(output).payload.default[0].params.temperature, 2);
+  assert.equal(parse(output).requests.payload.default[0].params.temperature, 2);
 });
 
 test('structural aliases fail explicitly rather than dropping fields while expanding them', () => {
@@ -205,5 +382,6 @@ test('structural aliases fail explicitly rather than dropping fields while expan
     'template: &rules [{models: [{name: model-a}], params: {temperature: 1}, future: keep}]\npayload:\n  default: *rules\n',
     'template: &model {name: model-a, future: keep}\npayload:\n  default:\n    - models: [*model]\n      params: {temperature: 1}\n',
   ];
-  for (const source of cases) assert.throws(() => apply(source, renameFirst('payloadDefaultRules')), transformFailure);
+  for (const source of cases)
+    assert.throws(() => apply(source, renameFirst('payloadDefaultRules')), transformFailure);
 });

@@ -4,8 +4,9 @@ import { useSearchParams } from 'react-router-dom';
 import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer';
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { useAuthStore, useNotificationStore } from '@/stores';
+import { useAuthStore, useConfigStore, useNotificationStore } from '@/stores';
 import { useProviderRecentRequests } from '@/components/providers/hooks/useProviderRecentRequests';
+import { useProviderFullUsage } from './useProviderFullUsage';
 import {
   getOpenAIProviderRecentWindowStats,
   getProviderRecentWindowStats,
@@ -123,10 +124,21 @@ export function ProvidersWorkbenchPage() {
   const { usageByProvider, refreshRecentRequests } = useProviderRecentRequests({
     enabled: connected,
   });
+  // LTS: complete usage statistics drive provider status bars unless usage is disabled.
+  const usageStatisticsEnabled = useConfigStore(
+    (state) => state.config?.usageStatisticsEnabled !== false
+  );
+  const { fullUsage, refreshFullUsage } = useProviderFullUsage(
+    connected && isCurrentLayer && usageStatisticsEnabled
+  );
 
   const handleRefresh = useCallback(async () => {
-    await Promise.allSettled([workbench.refetch(), refreshRecentRequests().catch(() => undefined)]);
-  }, [refreshRecentRequests, workbench]);
+    await Promise.allSettled([
+      workbench.refetch(),
+      refreshRecentRequests().catch(() => undefined),
+      refreshFullUsage().catch(() => undefined),
+    ]);
+  }, [refreshFullUsage, refreshRecentRequests, workbench]);
 
   useHeaderRefresh(handleRefresh, isCurrentLayer);
 
@@ -438,6 +450,7 @@ export function ProvidersWorkbenchPage() {
           selectedId={sheetState.open ? (sheetState.resource?.id ?? null) : null}
           disableMutations={disableMutations}
           usageByProvider={usageByProvider}
+          fullUsage={fullUsage}
           toolbarControls={toolbarControls}
           onView={openView}
           onEdit={openEdit}

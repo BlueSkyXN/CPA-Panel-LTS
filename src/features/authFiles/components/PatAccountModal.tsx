@@ -15,6 +15,7 @@ import {
   newPatAuthFileName,
   type AccountFormProvider,
 } from '../patProviders';
+import { CodingPlanLocalCredentialsHelp } from './CodingPlanLocalCredentialsHelp';
 import { parsePriorityValue } from '@/features/authFiles/constants';
 import {
   MAX_CREDENTIAL_WEIGHT,
@@ -219,6 +220,7 @@ export function PatAccountModal({ file, onClose, onSaved }: Props) {
           hint={t('pat_accounts.device_id_hint')}
         />
       )}
+      {provider === 'zcode-coding-plan' && <CodingPlanLocalCredentialsHelp />}
       {!file && (
         <details style={{ margin: '12px 0' }}>
           <summary style={{ cursor: 'pointer', fontWeight: 600 }}>

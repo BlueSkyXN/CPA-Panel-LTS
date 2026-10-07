@@ -47,7 +47,21 @@
     "api_key_label": "API key",
     "device_id_label": "设备标识（device ID）",
     "device_id_hint": "可选。留空时保留原有值，新建账号时自动生成。",
-    "hint_zcode-coding-plan": "智谱 GLM Coding Plan 的 API key，随本账号文件内联保存，与 PAT 凭据相同。"
+    "hint_zcode-coding-plan": "智谱 GLM Coding Plan 的 API key，随本账号文件内联保存，与 PAT 凭据相同。",
+    "local_credentials": {
+      "title": "从本机 ZCode 获取（macOS）",
+      "instructions": "在安装了 ZCode 的 Mac 终端执行。先复制并执行 API key 命令，粘贴结果到上方，再执行设备标识命令。Panel 只复制命令，不读取本机文件或自动执行。",
+      "region": "本机 ZCode 账号区域",
+      "bigmodel": "国内 · bigmodel",
+      "zai": "国际区 · z.ai",
+      "region_hint": "此选择只切换提取命令，不修改服务器配置；应与插件 upstream 的 bigmodel / zai 设置一致。",
+      "copy": "复制命令",
+      "copy_label": "复制 {{field}} 提取命令",
+      "copy_success": "命令已复制；请在 Mac 终端执行。",
+      "copy_failed": "复制失败，请手动选择并复制上方命令。",
+      "warning": "执行后会在终端显示完整凭据，并覆盖剪贴板。请勿录屏、截图外发或在共享终端执行。",
+      "troubleshooting": "命令只读默认 ~/.zcode/v2/ 路径，无需安装额外工具。文件缺失、字段为空或为 enc: 加密内容时不会复制；请核对客户端数据目录和账号区域，勿把错误信息当作 key。提取成功不代表凭据或套餐有效。"
+    }
   },
   "common": {
     "login": "登录",
@@ -142,7 +156,8 @@
     "error_timeout": "连接超时，服务器无响应",
     "error_unauthorized": "认证失败，管理密钥缺失或无效",
     "error_forbidden": "访问被拒绝，远程管理未启用、管理密钥未配置或 IP 被临时封禁",
-    "error_not_found": "未找到 Management API，请确认服务地址指向 CLIProxyAPI 后端",
+    "error_not_found": "未找到 v8 Management API，请检查服务地址并将 CPA-Core-LTS 升级至 v8 版本线；不再支持仅提供 v0 的后端。",
+    "error_legacy_backend": "当前后端仅提供旧版 v0 管理接口。请将 CPA-Core-LTS 升级至 v8 版本线，并按 v8 教程重新配置后再使用此面板。",
     "error_server": "后端处理管理接口时发生错误，请查看服务日志",
     "error_cors": "跨域请求被阻止，请检查服务器配置",
     "error_ssl": "SSL/TLS 证书验证失败"
@@ -167,7 +182,6 @@
     "api_keys": "API 密钥",
     "ai_providers": "AI 提供商",
     "provider_workbench": "提供商工作台",
-    "provider_legacy": "LTS 提供商状态",
     "auth_files": "认证文件",
     "oauth": "OAuth 登录",
     "quota_management": "配额管理",
@@ -734,7 +748,7 @@
     "priority_placeholder": "例如: 10 或 -1",
     "priority_hint": "仅支持整数；非法值会被忽略。数值越大优先级越高。",
     "weight_label": "调度权重（weight）",
-    "weight_hint": "默认值为 1；小于或等于 0 时不参与加权调度；最大值为 1,000,000。",
+    "weight_hint": "默认值为 1；小于或等于 0 时不参与加权调度；最大值为 1,000,000。填入后打开加权轮询设置即可生效。",
     "weight_invalid_integer": "权重必须是整数。",
     "weight_invalid_max": "权重不能超过 1,000,000。",
     "websockets_label": "WebSockets（websockets）",
@@ -765,7 +779,34 @@
     "quota_refresh_single": "刷新额度",
     "quota_refresh_hint": "仅刷新该认证文件的额度",
     "quota_refresh_success": "已刷新 \"{{name}}\" 的额度",
-    "quota_refresh_failed": "刷新 \"{{name}}\" 的额度失败：{{message}}"
+    "quota_refresh_failed": "刷新 \"{{name}}\" 的额度失败：{{message}}",
+    "cooldown_unknown": "冷却状态未知",
+    "cooldown_models": "{{count}} 个模型冷却",
+    "cooldown_credential": "凭证级冷却",
+    "cooldown_credential_and_models": "凭证及 {{count}} 个模型冷却",
+    "cooldown_scope_credential": "整个凭证",
+    "cooldown_earliest": "最早结束约 {{time}}",
+    "cooldown_elapsed": "冷却计时已到期",
+    "cooldown_timer_elapsed": "计时已到期",
+    "cooldown_refresh_hint": "刷新列表确认",
+    "cooldown_seconds": "{{count}} 秒",
+    "cooldown_minutes": "{{count}} 分钟",
+    "cooldown_hours": "{{count}} 小时",
+    "cooldown_http_status": "上游 HTTP {{status}}",
+    "cooldown_backoff": "退避等级 {{level}}",
+    "cooldown_deadline": "计时截止",
+    "cooldown_observed": "快照时间",
+    "cooldown_note": "本地调度快照，剩余时间为估算；到期不代表凭证可用、额度恢复或自动重试。模型名称为内部状态键，退避等级不是失败次数。",
+    "cooldown_reason_quota": "额度限制",
+    "cooldown_reason_credential_quota": "凭证额度限制",
+    "cooldown_reason_cloudflare_challenge": "Cloudflare 验证",
+    "cooldown_reason_invalid_grant": "授权无效",
+    "cooldown_reason_unauthorized": "未获授权",
+    "cooldown_reason_payment_required": "访问受限（402/403，非账单结论）",
+    "cooldown_reason_not_found": "资源未找到",
+    "cooldown_reason_model_not_supported": "模型不受支持",
+    "cooldown_reason_transient_error": "上游暂时出错",
+    "cooldown_reason_unknown": "其他或未知原因"
   },
   "antigravity_quota": {
     "title": "Antigravity 额度",
@@ -855,6 +896,7 @@
     "credit_amount": "{{count}} 积分"
   },
   "kimi_quota": {
+    "monthly_limit": "月限额",
     "title": "Kimi 额度",
     "empty_title": "暂无 Kimi 认证",
     "empty_desc": "上传 Kimi 认证文件后即可查看额度。",
@@ -872,6 +914,7 @@
     "reset_at": "{{time}} 重置"
   },
   "xai_quota": {
+    "usage_unavailable": "xAI 用量暂不可用",
     "title": "Grok 额度",
     "empty_title": "暂无 xAI/Grok 认证",
     "empty_desc": "使用 xAI OAuth 登录后即可查看 Grok 额度。",
@@ -1034,6 +1077,8 @@
     "upgrade_required_desc": "当前服务器版本不支持 OAuth 模型别名功能，请升级到最新版本的 CPA 后重试。"
   },
   "auth_login": {
+    "kimi_ai_oauth_hint": "通过设备授权登录 kimi.ai 国际站，自动保存独立的 kimi-ai 认证文件。国内站与国际站账号不互通。",
+    "kimi_ai_oauth_title": "Kimi 国际站（kimi.ai）",
     "codex_oauth_title": "Codex OAuth",
     "codex_oauth_button": "开始 Codex 登录",
     "codex_oauth_hint": "通过 OAuth 流程登录 Codex 服务，自动获取并保存认证文件。",
@@ -1339,7 +1384,7 @@
     "pricing_standard_api": "API Standard",
     "pricing_fast": "Fast",
     "pricing_fast_policies": "Fast 计费规则",
-    "pricing_fast_policy_title": "API Priority 与 ChatGPT Standard/Fast 使用各自独立的官方倍率。",
+    "pricing_fast_policy_title": "Fast/Priority 使用独立 API 费率表或配置的 Standard 倍率，不是 ChatGPT 订阅价格。",
     "pricing_api_priority_multiplier": "API ×{{multiplier}}",
     "pricing_api_priority_multiplier_official": "官方 API ×{{multiplier}}",
     "pricing_api_priority_multiplier_custom": "自定义 API ×{{multiplier}}",
@@ -1373,6 +1418,9 @@
     "pricing_alias_canonical_hint": "当前模型已精确命中预设，不需要设置别名。",
     "pricing_standard_rates": "Standard 费率 · USD / 1M",
     "pricing_fast_rates": "Fast 费率 · USD / 1M",
+    "pricing_fast_long_rates": "Fast 长上下文费率 · USD / 1M",
+    "pricing_fast_long_rates_enable": "使用独立 Fast 长上下文费率",
+    "pricing_fast_long_rates_hint": "共用 Standard 的输入 Token 阈值。关闭后，显式 Fast 短上下文费率也用于长上下文。",
     "pricing_rate_input": "输入",
     "pricing_rate_cached_input": "缓存输入",
     "pricing_rate_cache_write": "缓存写入",
@@ -1534,7 +1582,36 @@
     "request_events_pagination": "请求明细分页",
     "request_events_page_status": "第 {{start}}–{{end}} 条，共 {{total}} 条；导出包含全部筛选结果。",
     "request_events_previous_page": "上一页",
-    "request_events_next_page": "下一页"
+    "request_events_next_page": "下一页",
+    "analytics_section_title": "性能与可靠性",
+    "analytics_section_hint": "基于所选时间范围的请求样本计算延迟分位数、缓存效率与错误分布。",
+    "analytics_samples_loaded": "已加载 {{count}} 条样本",
+    "analytics_samples_loading": "样本加载中… 已加载 {{count}} 条",
+    "analytics_load_samples": "加载样本",
+    "analytics_samples_in_bucket": "该时段 {{count}} 条样本",
+    "analytics_success_only_note": "延迟分位数仅统计成功请求。",
+    "latency_trend_title": "延迟趋势",
+    "latency_trend_avg": "平均",
+    "latency_distribution_title": "延迟分布",
+    "latency_distribution_series": "请求数",
+    "latency_distribution_latency": "总延迟",
+    "cache_analytics_title": "缓存效率",
+    "cache_analytics_rate_series": "缓存读取率",
+    "cache_analytics_read_rate": "缓存读取率",
+    "cache_analytics_hit_requests": "命中缓存的请求",
+    "error_analysis_title": "错误分析",
+    "error_analysis_rate_series": "失败率",
+    "error_analysis_failure_rate": "失败率",
+    "error_analysis_failed_requests": "失败 / 总数",
+    "error_analysis_by_status": "按状态码统计失败",
+    "error_analysis_unknown_status": "未知",
+    "error_analysis_top_reasons": "主要失败原因",
+    "error_analysis_failures": "失败数",
+    "share_title": "模型份额",
+    "share_other_models": "其他（{{count}} 个模型）",
+    "share_metric_requests": "请求数",
+    "share_metric_tokens": "Token 数",
+    "share_metric_cost": "费用"
   },
   "service_health": {
     "title": "服务健康监测",
@@ -1621,6 +1698,7 @@
     "upgrade_required_desc": "当前服务器版本不支持日志查看功能，请升级到最新版本的 CPA 以使用此功能。"
   },
   "config_management": {
+    "read_conflict": "读取期间配置已变化，请重新加载后重试。",
     "save_target": "目标实例：{{name}}",
     "editor": {
       "guidance": {
@@ -1765,6 +1843,7 @@
     "status_saved": "配置保存完成",
     "status_save_failed": "保存失败",
     "save_success": "配置已保存",
+    "revision_unavailable": "无法获取配置版本，请升级 Core 并重新加载后再保存。",
     "error_yaml_not_supported": "服务器未返回 YAML 格式，请确认 /config.yaml 接口可用",
     "visual_mode_unavailable": "YAML 语法修复前无法使用可视化编辑",
     "visual_mode_unavailable_short": "YAML错误",
@@ -2192,6 +2271,9 @@
     "card_idle_hint": "请使用顶部“刷新全部凭证”按钮获取最新额度。"
   },
   "plugin_management": {
+    "yaml_required_title": "此插件需要使用 YAML 编辑",
+    "yaml_required_message": "此配置包含 JSON 表单无法表达的 YAML 值。请打开源码编辑器，以保留完整的插件配置。",
+    "open_yaml": "打开 YAML 源码",
     "inherit_config": "继承 / 未设置",
     "manual_auth": "手动账号导入",
     "manage_accounts": "管理账号",
@@ -2570,6 +2652,17 @@
     "author": "作者"
   },
   "providersPage": {
+    "configGroup": {
+      "title": "编辑配置分组",
+      "name": "分组名称",
+      "baseUrl": "共享服务地址",
+      "edit": "编辑配置分组",
+      "impact": "分组 {{name}} · {{count}} 个凭据共享服务地址和默认设置。",
+      "editRequired": "此地址属于配置分组，请通过“编辑配置分组”修改。",
+      "policyHint": "分组默认设置用于选择继承的凭据；已有的凭据覆盖值保持不变。",
+      "confirmTitle": "应用整个分组的修改？",
+      "confirmMessage": "将修改包含 {{count}} 个凭据的分组 {{name}}。共享服务地址影响所有凭据，默认策略仅影响继承该设置的凭据。"
+    },
     "header": {
       "title": "AI 提供商",
       "activeResources": "{{active}}/{{total}} 个活跃资源",
@@ -2607,7 +2700,8 @@
       "code0": "Code0",
       "fennoAI": "FennoAI",
       "qiniuCloud": "七牛云",
-      "infistar": "无限星河"
+      "infistar": "无限星河",
+      "kimi": "Kimi"
     },
     "table": {
       "key": "密钥",
@@ -2862,6 +2956,90 @@
         "gemini": "Gemini",
         "codexResponses": "Codex API (Responses)"
       }
+    },
+    "behavior": {
+      "title": "提供商专属行为",
+      "alphaSearch": "启用 Alpha Search",
+      "alphaSearchHint": "允许此 Codex 密钥用于 Alpha Search。上游必须支持此功能。",
+      "codexCloaking": "Codex 请求伪装",
+      "codexCloakingHint": "为此 API 密钥覆盖官方 Codex 身份请求头设置。选择默认值会移除此凭据的覆盖设置；仅适用于 OAuth 的设置在此不生效。",
+      "useDefault": "使用后端默认值",
+      "cloakingEnabled": "启用伪装",
+      "cloakingDisabled": "禁用伪装",
+      "rebuildMidSystemMessage": "重建系统消息",
+      "rebuildMidSystemMessageHint": "将 Claude 中 role 为 system 的消息移至顶层 system 字段。",
+      "supportPromptCacheKey": "注入提示词缓存键",
+      "supportPromptCacheKeyHint": "为兼容的请求派生并注入 prompt_cache_key。仅在上游支持此字段时启用。"
+    },
+    "errorRules": {
+      "hint": "按顺序采用首个命中规则；状态码相同，任意条件命中即可。",
+      "empty": "暂无规则，可保存为空列表。",
+      "rule": "规则 {{number}}",
+      "status": "状态码",
+      "action": "动作",
+      "selectAction": "选择动作",
+      "moveUp": "上移规则",
+      "moveDown": "下移规则",
+      "removeRule": "删除规则",
+      "matchType": "匹配类型",
+      "text": "包含文本",
+      "regex": "正则表达式",
+      "matchValue": "匹配条件",
+      "regexHint": "Go 正则",
+      "removeMatch": "删除条件",
+      "addMatch": "新增条件",
+      "addRule": "新增规则",
+      "invalidStatus": "状态码必须是安全范围内的正整数。",
+      "invalidAction": "请选择有效动作。",
+      "invalidMatch": "匹配条件不可为空。",
+      "missingMatch": "至少需要一个匹配条件。",
+      "actions": {
+        "stop": "停止",
+        "stop-and-cooldown": "停止并冷却",
+        "continue": "继续",
+        "continue-and-cooldown": "继续并冷却"
+      }
+    },
+    "runtimePolicy": {
+      "title": "高级运行策略",
+      "description": "继承使用所属分组策略，再回退到后端默认值。覆盖仅作用于当前条目。",
+      "cooling": "冷却策略",
+      "inherit": "继承",
+      "coolingEnabled": "启用冷却",
+      "coolingDisabled": "禁用冷却",
+      "retry": "请求重试次数",
+      "retryHint": "留空继承分组设置。请输入整数：0 表示不重试；负数使用全局重试策略，而非分组策略。",
+      "errorsMode": "请求错误规则",
+      "override": "覆盖",
+      "errorsHint": "继承使用上级策略。覆盖会替换整个列表，可保存为空。切换模式会保留规则草稿。",
+      "invalidRetry": "重试次数必须是安全范围内的整数，或留空以继承。"
+    },
+    "modelOptions": {
+      "displayName": "显示名称",
+      "maxContextLength": "上下文长度",
+      "contextHint": "非负安全整数；留空使用默认值。",
+      "forceMapping": "将响应模型名称改写为别名",
+      "isCompat": "兼容模式",
+      "supportConfigurationUpdate": "允许配置更新",
+      "inputModalitiesText": "输入模态",
+      "outputModalitiesText": "输出模态",
+      "modalitiesHint": "使用逗号或空白分隔；保留自定义模态名称。",
+      "useMaxCompletionTokens": "使用 max_completion_tokens",
+      "thinkingMode": "思考配置覆盖",
+      "useDefault": "使用默认",
+      "custom": "自定义",
+      "thinkingHint": "默认继承后端行为；空的自定义覆盖是显式的 {}。预算和思考档位可以同时设置。仅当最小值和最大值均为 0 或留空时，才不指定数值范围。最小值大于 0 时须设置不小于它的最大值。",
+      "thinkingMin": "最小思考预算",
+      "thinkingMax": "最大思考预算",
+      "thinkingZeroAllowed": "允许零预算",
+      "thinkingDynamicAllowed": "允许动态预算",
+      "invalidContext": "上下文长度必须是非负安全整数。",
+      "invalidThinking": "思考配置必须是有效的 JSON 对象。",
+      "invalidBudget": "思考预算必须是非负安全整数。",
+      "invalidRange": "最小思考预算不能大于最大值，留空的边界按 0 处理。",
+      "removeModel": "移除模型",
+      "modelName": "模型名称",
+      "modelAlias": "别名（可选）"
     }
   },
   "command_palette": {

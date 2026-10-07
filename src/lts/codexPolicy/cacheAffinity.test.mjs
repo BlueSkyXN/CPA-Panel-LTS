@@ -29,11 +29,13 @@ function editYaml(source, patch, target=source) {
 
 for(const strategy of ['client-aware','stable-id','legacy']) {
   test(`select ${strategy}: update only strategy, keep unknown fields and comments`,()=>{
-    const source='codex:\n  cache-affinity:\n    strategy: future-mode # retained-comment\n    future-limit: 7\n  unrelated: preserve\n';
+    // Core v8 canonical location: upstream.codex.cache-affinity.
+    const source='upstream:\n  codex:\n    cache-affinity:\n      strategy: future-mode # retained-comment\n      future-limit: 7\n    unrelated: preserve\n';
     const result=editYaml(source,{codexCacheAffinityStrategy:strategy});
-    assert.equal(parse(result.yaml).codex['cache-affinity'].strategy,strategy);
-    assert.equal(parse(result.yaml).codex['cache-affinity']['future-limit'],7);
-    assert.equal(parse(result.yaml).codex.unrelated,'preserve');
+    assert.equal(parse(result.yaml).upstream.codex['cache-affinity'].strategy,strategy);
+    assert.equal(parse(result.yaml).upstream.codex['cache-affinity']['future-limit'],7);
+    assert.equal(parse(result.yaml).upstream.codex.unrelated,'preserve');
+    assert.equal(parse(result.yaml).codex,undefined);
     assert.ok(result.yaml.includes('retained-comment'));
     assert.equal(editYaml(result.yaml,{}).values.codexCacheAffinityStrategy,strategy);
   });

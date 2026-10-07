@@ -7,11 +7,11 @@
 | Feature | 状态 | 主要入口 | 所有权与定位 |
 |---|---|---|---|
 | `full-usage-statistics` | `protected` | `/usage`、`/usage/pricing` | Panel LTS 的核心产品身份；依赖 Core 完整 usage API |
-| `provider-stable-lts-page` | `protected` | `/ai-providers/legacy`、provider detail routes | 保留 usage-backed status 和 LTS provider；不能被 Workbench 替代 |
-| `ampcode` | `lts-maintained` | `/ai-providers/legacy/ampcode` | 上游 Panel 已删除，Core LTS 仍提供配置和 Management API |
+| `provider-stable-lts-page` | `protected` | `/ai-providers`（Workbench 资源表）、`/lts/providers` 重定向 | 完整 usage 的 auth-index 归因状态条；V8-only 后 legacy 页面移除，状态条迁入 Workbench，recent requests 仅作回退 |
+| `ampcode` | `lts-maintained` | `/ai-providers/ampcode`（`/lts/ampcode` 重定向） | 上游 Panel 已删除；编辑 v8 顶层 `ampcode` 节点，单次带 If-Match 的 PUT |
 | `codex-abnormal-reasoning-retry-config` | `lts-maintained` | `/config` | Core LTS-owned runtime 策略的 visual config surface |
 | `local-flow-control-config` | `lts-maintained` | `/flow-control` | Core-owned Flow V3 编辑与只读观察；按 `supported` + `schema-version: 3` 能力门控 |
-| `provider-workbench` | `coexist` | `/ai-providers` | canonical provider 管理工作台；与 stable LTS provider 页面共存 |
+| `provider-workbench` | `coexist` | `/ai-providers` | v8-only 唯一 provider 管理面；原生 v8 family 写入（同源 ETag + If-Match），与完整 usage 共存 |
 | `plugin-management` | `coexist` | `/plugins`、`/plugin-store` | 由 Core capability gate 控制的 plugin 管理和资源页面 |
 | `recent-requests` | `coexist` | provider health surfaces | 短窗口运行健康证据；不能替代完整 usage |
 | `dashboard-overview` | `shared` | `/`、`/dashboard` | 使用 config/auth/model/recent request 数据的概览面 |
@@ -41,15 +41,15 @@ Core 依赖至少包括：
 - `GET /v0/management/usage`
 - `GET /v0/management/usage/export`
 - `POST /v0/management/usage/import`
-- Core compatibility routes for `/v0/management/usage-statistics-enabled`；Panel 当前从整体 config 读取，并以 `PUT` 执行直接 mutation
+- `observability.usage.usage-statistics-enabled`：Panel 从 v8 `/config` 读取；旧 Core 探测只读 `/v0/management/usage-statistics-enabled`，不再经 v0 写配置
 
-`recent-requests` 和 `/v0/management/api-key-usage` 可以提供短窗口健康信息，但不能取代上述链路。完整行为见 [usage-statistics.md](./usage-statistics.md)。
+`recent-requests` 和 `/v8/management/observability/usage/api-keys` 可以提供短窗口健康信息，但不能取代上述链路。完整行为见 [usage-statistics.md](./usage-statistics.md)。
 
 ### Stable provider LTS 页面
 
 `provider-stable-lts-page` 保留历史稳定 provider 页面及其完整 usage-backed status bar：
 
-- `/ai-providers/legacy` 是 stable provider 聚合入口。
+- V8-only 后 `/ai-providers/legacy/*` 已移除；完整 usage 驱动的 provider 状态条位于 Workbench 资源表。
 - provider detail routes 继续覆盖 Gemini、Codex、Claude、Vertex、OpenAI compatibility 和 Ampcode。
 - status 依赖完整 usage aggregation，不得改用 recent requests 作为唯一真相。
 - upstream Workbench 可以作为 canonical 配置入口，但不能删除 stable 页面或其 LTS-only provider。
@@ -114,7 +114,7 @@ Panel 只编辑 Core 已有 schema，不自行发明运行时语义。未知现�
 
 ### Provider Workbench
 
-`/ai-providers` 是 canonical provider 管理工作台，`/ai-providers/workbench` 是兼容 redirect；它与 `/ai-providers/legacy` 共存。
+`/ai-providers` 是唯一的 provider 管理工作台，`/ai-providers/workbench` 与旧编辑器书签都重定向到这里。
 
 必须保持的契约：
 
@@ -136,7 +136,7 @@ Plugin 页面依赖 Core runtime capability，不是静态 always-on 功能：
 - capability 不支持但存在 plugin 配置时，应显示明确的 runtime unavailable 状态；不能绕过 gate 直接调用 endpoint。
 - store install、version selection、auth、confirm token、config patch 和 enable/disable 使用 Core contract，不把未知状态当成功。
 
-主要 Management API 包括 `/v0/management/plugins`、plugin config/enabled routes、`/v0/management/plugin-store` 和 install route。CGO/build capability、当前配置、远程 release source 和成功安装是不同事实层。
+主要 Management API 包括 `/v8/management/plugins`、`/v8/management/plugins/store` 与 install route；插件 enabled/config 是 v8 配置节点 `plugins.configs.<id>`（If-Match 写入）；readiness 仍走 `/v0/management/plugins/:id/readiness`。CGO/build capability、当前配置、远程 release source 和成功安装是不同事实层。
 
 ### Recent requests
 
@@ -177,7 +177,7 @@ Plugin 页面依赖 Core runtime capability，不是静态 always-on 功能：
 ### Quota management
 
 - `/quota` 汇总多个 provider 的 quota、billing/analytics evidence，以及由用户显式触发的 reset-credit action。
-- Codex analytics、leaderboard、reset credits 与 xAI/Grok quota 都通过 Core `/v0/management/api-call` 代理读取外部数据。
+- Codex analytics、leaderboard、reset credits 与 xAI/Grok quota 都通过 Core `/v8/management/requests/api-call` 代理读取外部数据。
 - cache generation、connection identity 和 refresh race 必须隔离；过期请求不能覆盖新连接数据。
 - reset-credit consume 等有状态动作必须由用户明确触发并有确认/回读，不能混入普通 refresh。
 - companion userscript 是辅助材料，不是 Panel mainline 完成标准。

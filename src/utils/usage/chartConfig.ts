@@ -5,6 +5,44 @@
 
 import type { ChartOptions } from 'chart.js';
 
+export interface ChartThemeColors {
+  gridColor: string;
+  axisBorderColor: string;
+  tickColor: string;
+}
+
+let chartThemeColorsCache: { key: string; colors: ChartThemeColors } | null = null;
+
+const readCssVar = (name: string, fallback: string): string => {
+  if (typeof document === 'undefined') return fallback;
+  const value = document.documentElement ? getComputedStyle(document.documentElement).getPropertyValue(name).trim() : '';
+  return value || fallback;
+};
+
+const LIGHT_CHART_THEME: ChartThemeColors = {
+  gridColor: 'rgba(17, 24, 39, 0.06)',
+  axisBorderColor: 'rgba(17, 24, 39, 0.10)',
+  tickColor: 'rgba(17, 24, 39, 0.72)',
+};
+
+/**
+ * 图表文字/网格颜色跟随 data-theme 的 CSS 变量；浅色默认值与历史行为一致。
+ * 结果按主题名缓存，主题切换后的下一次构建自然生效。
+ */
+export function getChartThemeColors(): ChartThemeColors {
+  if (typeof document === 'undefined') return LIGHT_CHART_THEME;
+  const key = document.documentElement.getAttribute('data-theme') ?? '';
+  if (!key) return LIGHT_CHART_THEME;
+  if (chartThemeColorsCache?.key === key) return chartThemeColorsCache.colors;
+  const colors: ChartThemeColors = {
+    gridColor: readCssVar('--border-color', LIGHT_CHART_THEME.gridColor),
+    axisBorderColor: readCssVar('--border-color', LIGHT_CHART_THEME.axisBorderColor),
+    tickColor: readCssVar('--text-secondary', LIGHT_CHART_THEME.tickColor),
+  };
+  chartThemeColorsCache = { key, colors };
+  return colors;
+}
+
 /**
  * Static sparkline chart options (no dependencies on theme/mobile)
  */
@@ -33,9 +71,7 @@ export function buildChartOptions({
   const pointRadius = isMobile && period === 'hour' ? 0 : isMobile ? 2 : 4;
   const tickFontSize = isMobile ? 10 : 12;
   const maxTickLabelCount = isMobile ? (period === 'hour' ? 8 : 6) : period === 'hour' ? 12 : 10;
-  const gridColor = 'rgba(17, 24, 39, 0.06)';
-  const axisBorderColor = 'rgba(17, 24, 39, 0.10)';
-  const tickColor = 'rgba(17, 24, 39, 0.72)';
+  const theme = getChartThemeColors();
   const tooltipBg = 'rgba(255, 255, 255, 0.98)';
   const tooltipTitle = '#111827';
   const tooltipBody = '#374151';
@@ -64,14 +100,14 @@ export function buildChartOptions({
     scales: {
       x: {
         grid: {
-          color: gridColor,
+          color: theme.gridColor,
           drawTicks: false
         },
         border: {
-          color: axisBorderColor
+          color: theme.axisBorderColor
         },
         ticks: {
-          color: tickColor,
+          color: theme.tickColor,
           font: { size: tickFontSize },
           maxRotation: isMobile ? 0 : 45,
           minRotation: 0,
@@ -104,13 +140,13 @@ export function buildChartOptions({
       y: {
         beginAtZero: true,
         grid: {
-          color: gridColor
+          color: theme.gridColor
         },
         border: {
-          color: axisBorderColor
+          color: theme.axisBorderColor
         },
         ticks: {
-          color: tickColor,
+          color: theme.tickColor,
           font: { size: tickFontSize }
         }
       }
@@ -137,4 +173,31 @@ export function getHourChartMinWidth(labelCount: number, isMobile: boolean): str
   const perPoint = 56;
   const minWidth = Math.min(labelCount * perPoint, 3000);
   return `${minWidth}px`;
+}
+
+/**
+ * 供独立构建 Chart options 的卡片取当前主题的轴/网格颜色。
+ */
+export function buildStaticAxisTheme(fontSize = 11): {
+  gridColor: string;
+  axisBorderColor: string;
+  tickColor: string;
+  tickFont: { size: number };
+} {
+  const theme = getChartThemeColors();
+  return {
+    gridColor: theme.gridColor,
+    axisBorderColor: theme.axisBorderColor,
+    tickColor: theme.tickColor,
+    tickFont: { size: fontSize },
+  };
+}
+
+/**
+ * 稀疏序列（单点/少点）在移动端也保证可见的最小点半径。
+ * Chart.js 的 point radius 是 scriptable 值，这里只接受其中的数字形态。
+ */
+export function sparsePointRadius(baseRadius: unknown, minimum = 3): number {
+  const parsed = typeof baseRadius === 'number' ? baseRadius : Number(baseRadius);
+  return Number.isFinite(parsed) ? Math.max(parsed, minimum) : minimum;
 }

@@ -1,17 +1,15 @@
+import { projectConfigForVisual } from '@/utils/v8VisualProjection';
+import { apiClient } from '@/services/api/client';
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import { Navigate, useSearchParams } from 'react-router-dom';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
-import { parse as parseYaml, parseDocument } from 'yaml';
+import { parseDocument } from 'yaml';
 import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import {
-  IconChevronDown,
-  IconChevronUp,
-  IconSearch,
-} from '@/components/ui/icons';
+import { IconChevronDown, IconChevronUp, IconSearch } from '@/components/ui/icons';
 import { VisualConfigEditor } from '@/components/config/VisualConfigEditor';
 import {
   isConfigNavigationChange,
@@ -32,6 +30,8 @@ import { readProfiles } from '@/services/storage/connectionProfiles';
 import { useVisualConfig } from '@/hooks/useVisualConfig';
 import { useNotificationStore, useAuthStore, useConfigStore } from '@/stores';
 import { configFileApi } from '@/services/api/configFile';
+import { readConfigBoolean } from '@/utils/configBoolean';
+import { assertConfigListsUnchanged } from '@/utils/configListConflict';
 import styles from './ConfigPage.module.scss';
 
 type ConfigEditorTab = 'visual' | 'source';
@@ -40,9 +40,9 @@ const LazyConfigSourceEditor = lazy(() => import('@/components/config/ConfigSour
 
 function readCommercialModeFromYaml(yamlContent: string): boolean {
   try {
-    const parsed = parseYaml(yamlContent);
+    const parsed: unknown = projectConfigForVisual(yamlContent).toJS();
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
-    return Boolean((parsed as Record<string, unknown>)['commercial-mode']);
+    return readConfigBoolean((parsed as Record<string, unknown>)['commercial-mode']);
   } catch {
     return false;
   }
@@ -79,6 +79,7 @@ export function ConfigPage() {
   } = useVisualConfig();
 
   const [activeTab, setActiveTab] = useState<ConfigEditorTab>(() => {
+    if (searchParams.get('tab') === 'source') return 'source';
     const saved = localStorage.getItem('config-management:tab');
     if (saved === 'visual' || saved === 'source') return saved;
     return 'visual';
@@ -87,6 +88,7 @@ export function ConfigPage() {
   const effectiveTab: ConfigEditorTab = requestedSection ? 'visual' : activeTab;
 
   const [content, setContent] = useState('');
+  const loadedYamlRef = useRef('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -139,8 +141,9 @@ export function ConfigPage() {
     setSaved(false);
     setError('');
     try {
-      const data = await configFileApi.fetchConfigYaml();
+      const { content: data } = await configFileApi.fetchConfigYaml();
       setContent(data);
+      loadedYamlRef.current = data;
       setDirty(false);
       setDiffModalOpen(false);
       setServerYaml(data);
@@ -171,10 +174,14 @@ export function ConfigPage() {
   }, [effectiveTab, showNotification, t, visualParseError]);
 
   const handleConfirmSave = async () => {
+    const generation = apiClient.getConnectionGeneration();
     setSaving(true);
     try {
-      const latestServerYaml = await configFileApi.fetchConfigYaml();
+      const snapshot = await configFileApi.fetchConfigYaml();
+      const latestServerYaml = snapshot.content;
+      if (!apiClient.isCurrentConnection(generation)) return;
       if (latestServerYaml !== previewServerYaml) {
+        assertConfigListsUnchanged(previewServerYaml, mergedYaml, latestServerYaml);
         const nextMergedYaml =
           previewTab === 'visual' && !dirty
             ? applyVisualChangesToYaml(latestServerYaml)
@@ -200,12 +207,15 @@ export function ConfigPage() {
       const nextCommercialMode = readCommercialModeFromYaml(mergedYaml);
       const commercialModeChanged = previousCommercialMode !== nextCommercialMode;
 
-      await configFileApi.saveConfigYaml(mergedYaml);
-      const latestContent = await configFileApi.fetchConfigYaml();
+      if (!apiClient.isCurrentConnection(generation)) return;
+      await configFileApi.saveConfigYaml(mergedYaml, snapshot);
+      const { content: latestContent } = await configFileApi.fetchConfigYaml();
+      if (!apiClient.isCurrentConnection(generation)) return;
       setSaved(true);
       setDirty(false);
       setDiffModalOpen(false);
       setContent(latestContent);
+      loadedYamlRef.current = latestContent;
       setServerYaml(latestContent);
       setMergedYaml(latestContent);
       setPreviewServerYaml(latestContent);
@@ -247,8 +257,11 @@ export function ConfigPage() {
 
     setSaving(true);
     try {
-      const latestServerYaml = await configFileApi.fetchConfigYaml();
+      const snapshot = await configFileApi.fetchConfigYaml();
+      const latestServerYaml = snapshot.content;
 
+      const desired = dirty ? content : applyVisualChangesToYaml(loadedYamlRef.current);
+      assertConfigListsUnchanged(loadedYamlRef.current, desired, latestServerYaml);
       const visualBaseYaml = dirty ? content : latestServerYaml;
 
       if (effectiveTab === 'visual' || !dirty) {

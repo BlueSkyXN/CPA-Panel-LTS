@@ -11,7 +11,7 @@ test.after(() => vite.close());
 const { parsePluginReadiness, readinessAccounts } = await vite.ssrLoadModule(
   '/src/features/plugins/pluginReadiness.ts'
 );
-const { apiClient } = await vite.ssrLoadModule('/src/services/api/client.ts');
+const { apiClient, ltsExtensionClient } = await vite.ssrLoadModule('/src/services/api/client.ts');
 const { pluginsApi } = await vite.ssrLoadModule('/src/services/api/plugins.ts');
 const { buildPluginConfigDraft, buildPluginConfigPatch } = await vite.ssrLoadModule(
   '/src/features/plugins/pluginConfigDraft.ts'
@@ -91,10 +91,11 @@ test('list preserves additive capabilities and old hosts fail closed', async () 
   }
 });
 test('diagnostic request sends only account index and encodes plugin id', async () => {
-  const saved = apiClient.get;
+  // Readiness has no v8 route; it stays on the LTS extension client.
+  const saved = ltsExtensionClient.get;
   let call;
   try {
-    apiClient.get = async (...args) => {
+    ltsExtensionClient.get = async (...args) => {
       call = args;
       return { Ready: false };
     };
@@ -102,6 +103,6 @@ test('diagnostic request sends only account index and encodes plugin id', async 
     assert.equal(call[0], '/plugins/a%2Fb/readiness');
     assert.deepEqual(call[1].params, { auth_index: 'index' });
   } finally {
-    apiClient.get = saved;
+    ltsExtensionClient.get = saved;
   }
 });
