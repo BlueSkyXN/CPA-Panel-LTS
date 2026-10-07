@@ -244,7 +244,10 @@ export function Select({
         }
         case 'Escape':
           if (!isOpen) return;
+          // The open dropdown owns this Escape: close only the dropdown and keep
+          // the event from reaching document-level listeners (e.g. Modal close).
           event.preventDefault();
+          event.stopPropagation();
           setOpen(false);
           return;
         case 'Tab':

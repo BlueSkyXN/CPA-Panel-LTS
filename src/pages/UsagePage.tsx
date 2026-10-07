@@ -35,6 +35,7 @@ import {
   TokenBreakdownChart,
   CostTrendChart,
   ServiceHealthCard,
+  UsageAnalyticsSection,
   useUsageData,
   useSparklines,
   useChartData,
@@ -528,6 +529,17 @@ export function UsagePage() {
             priceProfile={priceProfile}
             onOpenPricing={openPricing}
             timeWindow={effectiveWindow}
+          />
+
+          {/* Performance & Reliability Analytics */}
+          <UsageAnalyticsSection
+            querySession={querySession}
+            legacyUsage={querySession ? null : legacyFilteredUsage}
+            timeWindow={effectiveWindow}
+            loading={loading}
+            isMobile={isMobile}
+            modelStats={modelStats}
+            showPricing={showPricing}
           />
 
           {/* Details Grid */}
