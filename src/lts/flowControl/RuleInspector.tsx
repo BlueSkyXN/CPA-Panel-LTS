@@ -18,18 +18,20 @@ import { ruleSentence } from './insights';
 import { SelectionField } from './SelectionField';
 import styles from './styles.module.scss';
 
-type Props = { values: FlowControlValues; data: FlowCapabilities | null };
+type Props = { values?: FlowControlValues; data: FlowCapabilities | null; runningOnly?: boolean };
 
-export function RuleInspector({ values, data }: Props) {
+export function RuleInspector({ values, data, runningOnly = false }: Props) {
   const { t, i18n } = useTranslation();
   const [identity, setIdentity] = useState<FlowIdentity>({ stage: 'attempt', key: '' });
   const [models, setModels] = useState<string[]>([]);
-  const [draft, setDraft] = useState(true);
+  const [useDraft, setDraft] = useState(true);
+  const draft = !runningOnly && values !== undefined && useDraft;
+  const policy = draft && values ? policyFromValues(values) : undefined;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const [result, setResult] = useState<{ signature: string; rows: FlowExplanation[] } | null>(null);
   const [selected, setSelected] = useState(0);
-  const signature = JSON.stringify({ identity, models, draft, policy: policyFromValues(values), process: data?.state['process-id'] });
+  const signature = JSON.stringify({ identity, models, draft, policy, process: data?.state['process-id'], revision: data?.state['policy-revision'] });
   const latest = useRef(signature);
   latest.current = signature;
   const serial = useRef(0);
@@ -41,7 +43,7 @@ export function RuleInspector({ values, data }: Props) {
     setError(false);
     try {
       const raw = await apiClient.post<unknown>(FLOW_CONTROL_ENDPOINTS.preview, {
-        ...(draft ? { config: policyFromValues(values) } : {}),
+        ...(policy ? { config: policy } : {}),
         targets: models.map((model) => identityForModel(identity, model)),
       });
       const rows = readExplanations(raw);
@@ -106,13 +108,15 @@ export function RuleInspector({ values, data }: Props) {
             </select>
           </label>
         )}
-        <label className={styles.field}>
-          <span>{t('flow_control.v3_policy_source')}</span>
-          <select value={draft ? 'draft' : 'running'} onChange={(event) => setDraft(event.target.value === 'draft')}>
-            <option value="draft">{t('flow_control.v3_draft')}</option>
-            <option value="running">{t('flow_control.v3_running')}</option>
-          </select>
-        </label>
+        {runningOnly ? <p>{t('flow_control.v3_policy_source')}: {t('flow_control.v3_running')}</p> : (
+          <label className={styles.field}>
+            <span>{t('flow_control.v3_policy_source')}</span>
+            <select value={draft ? 'draft' : 'running'} onChange={(event) => setDraft(event.target.value === 'draft')}>
+              <option value="draft">{t('flow_control.v3_draft')}</option>
+              <option value="running">{t('flow_control.v3_running')}</option>
+            </select>
+          </label>
+        )}
       </div>
       <SelectionField label={t('flow_control.v3_preview_models')} value={models} options={options}
         allowAll={false} allowCustom onChange={(value) => setModels(value ?? [])} />

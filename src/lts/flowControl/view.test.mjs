@@ -56,3 +56,18 @@ test('malformed disabled draft renders without crashing the configuration page',
  assert(html.includes('flow-control-settings'));
  assert(html.includes('规则格式无法编辑'));
 });
+
+
+test('configuration view never mounts runtime observation or activity loaders',()=>{
+ const html=render({state:'ready',data});
+ assert(!html.includes(i18nModule.default.t('flow_control.start_live')));
+ assert(!html.includes(i18nModule.default.t('flow_control.v3_load_details')));
+ assert(html.includes(i18nModule.default.t('analytics.configured_policy')));
+});
+
+test('dashboard inspector is running-only and does not require a YAML draft',async()=>{
+ const {RuleInspector}=await vite.ssrLoadModule('/src/lts/flowControl/RuleInspector.tsx');
+ const html=renderToStaticMarkup(createElement(RuleInspector,{data,runningOnly:true}));
+ assert(!html.includes('value="draft"'));
+ assert(html.includes(i18nModule.default.t('flow_control.v3_running')));
+});

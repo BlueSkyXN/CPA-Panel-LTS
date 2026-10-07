@@ -160,7 +160,7 @@ export function LatencyDistributionCard({ details, loading, isMobile = false }: 
           <p className={styles.analyticsNote}>{t('usage_stats.analytics_success_only_note')}</p>
         </div>
       ) : (
-        <div className={styles.hint}>{t('usage_stats.no_data')}</div>
+        <div className={styles.hint}>{t('analytics.no_measurements')}</div>
       )}
     </Card>
   );

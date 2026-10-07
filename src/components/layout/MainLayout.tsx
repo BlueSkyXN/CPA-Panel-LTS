@@ -633,18 +633,24 @@ export function MainLayout() {
     meta: t('nav_meta.system_info'),
     icon: sidebarIcons.system,
   };
-  // Same capability gate as the route: a Core without the flow-control status
-  // API must not advertise the page in navigation.
-  const flowControlItem: SidebarNavItem | null =
-    flowSupportKnown && supportsFlowControl
-      ? {
-          kind: 'link',
-          path: '/flow-control',
-          label: t('nav.flow_control'),
-          meta: t('nav_meta.flow_control'),
-          icon: sidebarIcons.flowControl,
-        }
-      : null;
+  const analyticsItem: SidebarNavItem = {
+    kind: 'drawer',
+    id: 'analytics',
+    path: '/analytics',
+    label: t('analytics.title'),
+    meta: t('analytics.navigation_hint'),
+    icon: sidebarIcons.flowControl,
+    children: [
+      { kind: 'link', path: '/analytics/observability', label: t('analytics.observability'),
+        icon: <span className="nav-sub-dot" aria-hidden="true" />, end: true },
+      ...(flowSupportKnown && supportsFlowControl ? [
+        { kind: 'link' as const, path: '/analytics/flow', label: t('analytics.flow_dashboard'),
+          icon: <span className="nav-sub-dot" aria-hidden="true" />, end: true },
+        { kind: 'link' as const, path: '/analytics/flow/config', label: t('analytics.flow_config'),
+          icon: <span className="nav-sub-dot" aria-hidden="true" />, end: true },
+      ] : []),
+    ],
+  };
 
   const groupsByLayout: Record<WorkspaceLayout, SidebarNavGroup[]> = {
     tower: [
@@ -657,7 +663,7 @@ export function MainLayout() {
       {
         id: 'observe',
         label: t('workspace.group_observe'),
-        items: [quotaItem, usageItem, ...(flowControlItem ? [flowControlItem] : []), logsItem],
+        items: [quotaItem, usageItem, analyticsItem, logsItem],
       },
       {
         id: 'runtime',
