@@ -114,6 +114,20 @@ features:
       - src/utils/usage/
       - src/utils/usage/performance.ts
       - src/utils/usage/performance.test.mjs
+      - src/utils/usage/percentiles.ts
+      - src/utils/usage/percentiles.test.mjs
+      - src/utils/usage/latencyAnalysis.ts
+      - src/utils/usage/latencyAnalysis.test.mjs
+      - src/utils/usage/cacheAnalytics.ts
+      - src/utils/usage/errorAnalytics.ts
+      - src/utils/usage/analyticsModules.test.mjs
+      - src/components/usage/UsageAnalyticsSection.tsx
+      - src/components/usage/LatencyTrendChart.tsx
+      - src/components/usage/LatencyDistributionCard.tsx
+      - src/components/usage/CacheEfficiencyCard.tsx
+      - src/components/usage/ErrorAnalysisCard.tsx
+      - src/components/usage/ModelShareCard.tsx
+      - src/components/usage/hooks/useUsageAnalyticsDetails.ts
       - src/utils/usage/cacheTokens.test.mjs
       - src/utils/usage/modelPrices.ts
       - src/utils/usage/modelPrices.test.mjs
@@ -272,6 +286,7 @@ features:
       - npm run test:usage-pricing-storage
       - npm run test:usage-performance
       - npm run test:usage-pricing-integration
+      - npm run test:usage-analytics
       - npm run test:usage
       - npm run smoke:lts
       - npm run smoke:lts:core -- --no-write-smoke

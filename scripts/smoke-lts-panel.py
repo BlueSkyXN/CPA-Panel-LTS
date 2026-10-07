@@ -367,6 +367,8 @@ def build_usage_payload() -> dict[str, Any]:
             "AuthIndex": "codex-smoke-auth",
             "reasoning_effort": "none",
             "latency": 130,
+            "failure_status": 429,
+            "failure_reason": "rate_limited",
             "tokens": {
                 "input_tokens": 9,
                 "output_tokens": 3,
@@ -2806,6 +2808,28 @@ def run_remote_cloud_connect_runtime_smoke(page: Any, app_url: str) -> None:
 
     page.keyboard.press("Escape")
     page.wait_for_function("() => document.querySelectorAll('[role=\"dialog\"]').length === 0")
+
+
+def run_usage_analytics_smoke(page: Any) -> None:
+    section = page.locator('[aria-label="Performance & Reliability"]')
+    section.wait_for()
+    for expected_heading in [
+        "Latency Trend",
+        "Latency Distribution",
+        "Cache Efficiency",
+        "Error Analysis",
+        "Model Share",
+    ]:
+        section.get_by_text(expected_heading, exact=True).first.wait_for()
+    if section.locator("canvas").count() < 5:
+        raise AssertionError("Usage analytics section did not render its chart canvases")
+    # 分位数 chips 存在且带有样本数说明。
+    if section.get_by_text("P50", exact=True).count() == 0:
+        raise AssertionError("Latency distribution card is missing percentile chips")
+    if section.get_by_text("samples loaded", exact=False).count() == 0:
+        raise AssertionError("Analytics section does not disclose its sample count")
+    # 错误分析展示 mock 的脱敏 failure_reason。
+    section.get_by_text("rate_limited", exact=True).wait_for()
 
 
 def run_usage_pricing_entry_smoke(page: Any) -> None:
@@ -6205,6 +6229,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
                     )
                 page.get_by_text(expected_text, exact=False).first.wait_for()
                 if route == "/usage":
+                    run_usage_analytics_smoke(page)
                     run_usage_pricing_entry_smoke(page)
                     run_usage_service_tier_smoke(page)
                     page.evaluate(
