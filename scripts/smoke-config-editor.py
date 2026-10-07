@@ -460,17 +460,17 @@ def run():
         assert 'hedge-delay-ms: 250' in state.config_yaml, 'Flow save must not clobber other config edits'
         # Bookmarked editor deep links redirect to the dedicated page.
         page.goto(app_url + '#/config?section=flow-control&subsection=monitoring')
-        page.wait_for_function("location.hash === '#/flow-control'")
+        page.wait_for_function("location.hash === '#/analytics/flow/config'")
         page.get_by_test_id('flow-control-settings').wait_for()
-        # Observation connects only while the flow route is mounted; leaving the
+        page.goto(app_url + '#/analytics/flow')
+        # Observation connects only while the dashboard is mounted; leaving the
         # route unmounts the sidecar and drops the live subscription with it.
         page.get_by_role('button', name='Observe live', exact=True).click()
         page.wait_for_function('window.configSSE.started === 1')
         page.goto(app_url + '#/config')
         locate(page, 'codexAbnormalReasoningRetryHedgeDelayMs', 'hedge-delay-ms')
         page.wait_for_function('window.configSSE.aborted === 1')
-        page.goto(app_url + '#/flow-control')
-        page.get_by_test_id('flow-control-settings').wait_for()
+        page.goto(app_url + '#/analytics/flow')
         page.get_by_role('button', name='Observe live', exact=True).click()
         page.wait_for_function('window.configSSE.started === 2')
         page.goto(app_url + '#/config')

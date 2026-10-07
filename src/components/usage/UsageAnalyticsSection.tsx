@@ -1,14 +1,13 @@
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import type { UsageQuerySession } from '@/types/usageQuery';
-import type { AnalyticsTimeWindow, ModelStatsSummary } from '@/utils/usage';
+import type { AnalyticsTimeWindow } from '@/utils/usage';
 import type { UsagePayload } from './hooks/useUsageData';
 import { useUsageAnalyticsDetails } from './hooks/useUsageAnalyticsDetails';
 import { CacheEfficiencyCard } from './CacheEfficiencyCard';
 import { ErrorAnalysisCard } from './ErrorAnalysisCard';
 import { LatencyDistributionCard } from './LatencyDistributionCard';
 import { LatencyTrendChart } from './LatencyTrendChart';
-import { ModelShareCard } from './ModelShareCard';
 import styles from '@/pages/UsagePage.module.scss';
 
 export interface UsageAnalyticsSectionProps {
@@ -17,8 +16,8 @@ export interface UsageAnalyticsSectionProps {
   timeWindow: AnalyticsTimeWindow | null;
   loading: boolean;
   isMobile: boolean;
-  modelStats: ModelStatsSummary[];
-  showPricing: boolean;
+  active?: boolean;
+  enabled?: boolean;
 }
 
 export function UsageAnalyticsSection({
@@ -27,33 +26,55 @@ export function UsageAnalyticsSection({
   timeWindow,
   loading,
   isMobile,
-  modelStats,
-  showPricing,
+  active = true,
+  enabled = true,
 }: UsageAnalyticsSectionProps) {
   const { t } = useTranslation();
-  const { details, loading: samplesLoading, error, loadedCount, needsManualLoad, load } =
-    useUsageAnalyticsDetails(querySession, legacyUsage, timeWindow);
-
-  const idle = (loading || (samplesLoading && !needsManualLoad)) && details.length === 0;
+  const {
+    details,
+    loading: samplesLoading,
+    error,
+    loadedCount,
+    totalCount,
+    status,
+    load,
+    stop,
+  } = useUsageAnalyticsDetails(querySession, legacyUsage, timeWindow, { active, enabled });
+  const pending = loading || samplesLoading;
+  const hasSamples = details.length > 0;
+  const retryable = status === 'error' || status === 'stopped';
 
   return (
-    <section className={styles.analyticsSection} aria-label={t('usage_stats.analytics_section_title')}>
+    <section
+      className={styles.analyticsSection}
+      aria-label={t('usage_stats.analytics_section_title')}
+    >
       <div className={styles.analyticsSectionHeader}>
-        <h2 className={styles.analyticsSectionTitle}>{t('usage_stats.analytics_section_title')}</h2>
         <p className={styles.analyticsSectionHint}>{t('usage_stats.analytics_section_hint')}</p>
-        <div className={styles.analyticsSectionStatus}>
-          {querySession !== null && needsManualLoad ? (
-            <Button variant="secondary" size="sm" onClick={load}>
-              {t('usage_stats.analytics_load_samples')}
-            </Button>
+        <div className={styles.analyticsSectionStatus} role="status" aria-live="polite">
+          {loading ? (
+            t('common.loading')
           ) : (
-            loadedCount > 0 && (
-              <span className={styles.analyticsSampleCount}>
-                {samplesLoading
-                  ? t('usage_stats.analytics_samples_loading', { count: loadedCount })
-                  : t('usage_stats.analytics_samples_loaded', { count: loadedCount })}
+            <>
+              <span>
+                {t(`analytics.samples_${status}`, { count: loadedCount, total: totalCount ?? '—' })}
               </span>
-            )
+              {status === 'deferred' && (
+                <Button variant="secondary" size="sm" onClick={load}>
+                  {t('usage_stats.analytics_load_samples')}
+                </Button>
+              )}
+              {retryable && (
+                <Button variant="secondary" size="sm" onClick={load}>
+                  {t('analytics.retry_samples')}
+                </Button>
+              )}
+              {samplesLoading && (
+                <Button variant="secondary" size="sm" onClick={stop}>
+                  {t('analytics.stop_samples')}
+                </Button>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -62,33 +83,39 @@ export function UsageAnalyticsSection({
           {error}
         </div>
       )}
-      <div className={styles.analyticsGrid}>
-        <LatencyTrendChart
-          details={details}
-          loading={idle}
-          isMobile={isMobile}
-          timeWindow={timeWindow}
-        />
-        <CacheEfficiencyCard
-          details={details}
-          loading={idle}
-          isMobile={isMobile}
-          timeWindow={timeWindow}
-        />
-        <LatencyDistributionCard details={details} loading={idle} isMobile={isMobile} />
-        <ErrorAnalysisCard
-          details={details}
-          loading={idle}
-          isMobile={isMobile}
-          timeWindow={timeWindow}
-        />
-      </div>
-      <ModelShareCard
-        modelStats={modelStats}
-        loading={loading}
-        showPricing={showPricing}
-        isMobile={isMobile}
-      />
+      {hasSamples && status !== 'ready' && (
+        <p className={styles.analyticsNote}>{t('analytics.partial_results')}</p>
+      )}
+      {!pending && !hasSamples && status === 'ready' && (
+        <p className={styles.hint}>{t('analytics.empty_window')}</p>
+      )}
+      {(hasSamples || pending) && (
+        <div className={styles.analyticsGrid}>
+          <LatencyTrendChart
+            details={details}
+            loading={pending && !hasSamples}
+            isMobile={isMobile}
+            timeWindow={timeWindow}
+          />
+          <CacheEfficiencyCard
+            details={details}
+            loading={pending && !hasSamples}
+            isMobile={isMobile}
+            timeWindow={timeWindow}
+          />
+          <LatencyDistributionCard
+            details={details}
+            loading={pending && !hasSamples}
+            isMobile={isMobile}
+          />
+          <ErrorAnalysisCard
+            details={details}
+            loading={pending && !hasSamples}
+            isMobile={isMobile}
+            timeWindow={timeWindow}
+          />
+        </div>
+      )}
     </section>
   );
 }

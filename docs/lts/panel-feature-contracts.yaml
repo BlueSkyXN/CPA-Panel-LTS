@@ -1140,13 +1140,14 @@ features:
 
   - id: local-flow-control-config
     status: lts-maintained
-    reason: Opt-in multi-dimensional local admission settings must preserve old YAML and be editable only with a Core that provides the read-only capability/status API. Editing and observation live on the dedicated /flow-control page, capability-gated like plugin management.
+    reason: Opt-in multi-dimensional local admission settings must preserve old YAML and be editable only with a Core that provides the read-only capability/status API. Editing and observation are separate capability-gated pages under /analytics; /flow-control remains a configuration redirect.
     panel_files:
       - src/lts/flowControl/
       - src/services/api/flowControl.ts
       - src/types/visualConfig.ts
       - src/hooks/useVisualConfig.ts
       - src/pages/FlowControlPage.tsx
+      - src/pages/FlowDashboardPage.tsx
       - src/pages/FlowControlPage.module.scss
       - src/router/MainRoutes.tsx
       - src/stores/useAuthStore.ts
@@ -1154,6 +1155,8 @@ features:
       - docs/lts/flow-control.md
     routes:
       - /flow-control
+      - /analytics/flow
+      - /analytics/flow/config
     capability_gates:
       - supportsFlowControl
       - flowSupportKnown
@@ -1180,3 +1183,37 @@ features:
       - npm run type-check
       - npm run build
       - npm run smoke:config
+
+  - id: advanced-analytics-workspace
+    status: lts-maintained
+    reason: Historical request analysis stays independent of Flow capabilities; the full usage overview retains model share, pricing, events and import/export.
+    panel_files:
+      - src/pages/AnalyticsLayout.tsx
+      - src/pages/AnalyticsPage.module.scss
+      - src/pages/ObservabilityPage.tsx
+      - src/services/api/usage.ts
+      - src/services/api/usageQuery.ts
+      - src/components/usage/UsageAnalyticsSection.tsx
+      - src/components/usage/hooks/useUsageAnalyticsDetails.ts
+      - src/pages/UsagePage.tsx
+      - src/router/MainRoutes.tsx
+      - src/components/layout/MainLayout.tsx
+      - src/services/connectionSession.ts
+      - src/lts/i18n/
+      - docs/lts/advanced-analytics.md
+    routes:
+      - /analytics
+      - /analytics/observability
+    core_endpoints:
+      - /v0/management/usage
+      - /v0/management/usage/query/details
+    required_markers:
+      - UsageAnalyticsSection
+      - ModelShareCard
+      - USAGE_ANALYTICS_AUTO_LOAD_WINDOW_HOURS
+    validation:
+      - npm run test:usage-analytics
+      - npm run test:connections
+      - npm run check:lts
+      - npm run type-check
+      - npm run build

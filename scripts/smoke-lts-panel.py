@@ -2811,6 +2811,8 @@ def run_remote_cloud_connect_runtime_smoke(page: Any, app_url: str) -> None:
 
 
 def run_usage_analytics_smoke(page: Any) -> None:
+    page.get_by_text("Model Share", exact=True).wait_for()
+    page.get_by_role("button", name="Open performance and reliability analysis", exact=True).click()
     section = page.locator('[aria-label="Performance & Reliability"]')
     section.wait_for()
     for expected_heading in [
@@ -2818,18 +2820,19 @@ def run_usage_analytics_smoke(page: Any) -> None:
         "Latency Distribution",
         "Cache Efficiency",
         "Error Analysis",
-        "Model Share",
     ]:
         section.get_by_text(expected_heading, exact=True).first.wait_for()
-    if section.locator("canvas").count() < 5:
+    if section.locator("canvas").count() < 4:
         raise AssertionError("Usage analytics section did not render its chart canvases")
     # 分位数 chips 存在且带有样本数说明。
     if section.get_by_text("P50", exact=True).count() == 0:
         raise AssertionError("Latency distribution card is missing percentile chips")
-    if section.get_by_text("samples loaded", exact=False).count() == 0:
+    if section.get_by_text(re.compile(r"Loaded \d+ / \d+ samples")).count() == 0:
         raise AssertionError("Analytics section does not disclose its sample count")
     # 错误分析展示 mock 的脱敏 failure_reason。
     section.get_by_text("rate_limited", exact=True).wait_for()
+    page.goto(page.url.split("#")[0] + "#/usage")
+    page.get_by_text("Model Share", exact=True).wait_for()
 
 
 def run_usage_pricing_entry_smoke(page: Any) -> None:

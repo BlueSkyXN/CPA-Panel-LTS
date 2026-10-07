@@ -22,6 +22,8 @@ import { UsagePage } from '@/pages/UsagePage';
 import { UsagePricingPage } from '@/pages/UsagePricingPage';
 import { ConfigPage } from '@/pages/ConfigPage';
 import { FlowControlPage } from '@/pages/FlowControlPage';
+import { FlowDashboardPage } from '@/pages/FlowDashboardPage';
+import { ObservabilityPage } from '@/pages/ObservabilityPage';
 import { LogsPage } from '@/pages/LogsPage';
 import { SystemPage } from '@/pages/SystemPage';
 import { CoreWorkspace } from '@/pages/CoreWorkspace';
@@ -162,14 +164,11 @@ const mainRoutes = [
   { path: '/usage/events', element: <UsageEventsPage /> },
   { path: '/usage/pricing', element: <UsagePricingPage /> },
   { path: '/usage', element: <UsagePage /> },
-  {
-    path: '/flow-control',
-    element: (
-      <RequireFlowSupport>
-        <FlowControlPage />
-      </RequireFlowSupport>
-    ),
-  },
+  { path: '/analytics', element: <Navigate to="/analytics/observability" replace /> },
+  { path: '/analytics/observability', element: <ObservabilityPage /> },
+  { path: '/analytics/flow', element: <RequireFlowSupport><FlowDashboardPage /></RequireFlowSupport> },
+  { path: '/analytics/flow/config', element: <RequireFlowSupport><FlowControlPage /></RequireFlowSupport> },
+  { path: '/flow-control', element: <Navigate to="/analytics/flow/config" replace /> },
   {
     path: '/plugins',
     element: (

@@ -515,10 +515,9 @@ export function ConfigPage() {
     />
   );
 
-  // Flow control moved to its own /flow-control page; keep bookmarked
-  // #/config?section=flow-control deep links working.
+  // Preserve configuration bookmarks without mounting a second flow editor.
   if (requestedSection === 'flow-control') {
-    return <Navigate to="/flow-control" replace />;
+    return <Navigate to="/analytics/flow/config" replace />;
   }
 
   return (
