@@ -81,6 +81,51 @@ test('zcode inline accounts: single-file credentials, device identity, and valid
   assert.match(generateDeviceId(), /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
 });
 
+test('zcode account saves use zero retries on creation and update', () => {
+  const created = buildAccountAuth('zcode-coding-plan', 'Coding Plan', 'key.part', 'fixture-device');
+  assert.equal(created.request_retry, 0);
+
+  const previous = Object.freeze({ type: 'zcode-coding-plan', device_id: 'stable-device', request_retry: 3 });
+  const updated = buildAccountAuth('zcode-coding-plan', 'Main', 'key.part', '', previous);
+  assert.equal(updated.request_retry, 0);
+  assert.equal(previous.request_retry, 3);
+});
+
+test('zcode inline migration removes legacy references and preserves shared account settings', () => {
+  const previous = Object.freeze({
+    type: 'zcode-coding-plan',
+    label: 'Old',
+    config_file: '/synthetic/legacy-config.json',
+    api_key: 'old.fixture',
+    device_id: 'stable-device',
+    pat: 'unused-fixture-pat',
+    access_token: 'unused-fixture-access',
+    prefix: 'team',
+    disabled: true,
+    priority: 3,
+    weight: 2,
+    proxy_url: 'http://127.0.0.1:9',
+    note: 'Fixture account',
+  });
+
+  const updated = buildAccountAuth('zcode-coding-plan', ' Main ', ' new.fixture ', '', previous);
+  assert.deepEqual(updated, {
+    type: 'zcode-coding-plan',
+    label: 'Main',
+    api_key: 'new.fixture',
+    device_id: 'stable-device',
+    request_retry: 0,
+    prefix: 'team',
+    disabled: true,
+    priority: 3,
+    weight: 2,
+    proxy_url: 'http://127.0.0.1:9',
+    note: 'Fixture account',
+  });
+  assert.equal(previous.config_file, '/synthetic/legacy-config.json');
+  assert.equal(previous.api_key, 'old.fixture');
+});
+
 const response = (quota) => ({ provider: 'qoder', auth_index: 'fixture-index', label: 'Fixture', account: { status: 'fallback' }, plan: { status: 'unsupported' }, quota, updated_at: '2026-09-09T00:00:00Z', cached: true });
 
 test('exact decimals and zero survive, missing and failed quota are not turned into zero', () => {
