@@ -78,10 +78,19 @@ export function buildAccountAuth(
       throw new Error('invalid_api_key');
     }
     if (previous && previous.type !== provider) throw new Error('provider_mismatch');
-    const auth: Record<string, unknown> = { ...previous, type: provider, api_key: apiKey, label: label.trim() };
+    // 与插件的运行时契约一致，保存时归一为零次重试。
+    const auth: Record<string, unknown> = {
+      ...previous,
+      type: provider,
+      api_key: apiKey,
+      label: label.trim(),
+      request_retry: 0,
+    };
     // 编辑既有账号且未改动设备标识时保留原值，避免静默轮换设备身份。
     const previousDeviceId = typeof previous?.device_id === 'string' ? previous.device_id : '';
     auth.device_id = deviceId.trim() || previousDeviceId || generateDeviceId();
+    // 已改为内联凭据；保留旧引用会被插件拒绝，其他账号设置继续沿用。
+    delete auth.config_file;
     delete auth.pat;
     delete auth.access_token;
     return auth;
