@@ -26,6 +26,16 @@ test('shared fixtures preserve all chart values and decode successfully', () => 
     }
   } finally { if (old === undefined) delete process.env.TZ; else process.env.TZ = old; }
 });
+test('cores without a throughput series degrade to an empty series', () => {
+  const payload = response();
+  delete payload.data.hour.throughput;
+  delete payload.data.day.throughput;
+  const decoded = decodeUsageAnalytics(payload);
+  assert.deepEqual(decoded.data.hour.throughput, []);
+  assert.deepEqual(decoded.data.day.throughput, []);
+  payload.data.hour.throughput = [{ timestampMs: 1 }];
+  assert.throws(() => decodeUsageAnalytics(payload));
+});
 test('invalid aggregate schemas are rejected instead of entering fallback', () => {
   for (const mutate of [r => { r.analytics_version = 2; }, r => { r.bound = ''; }, r => { r.data.hour.latency.p95 = [1]; }, r => { r.data.timings.latency.p50 = -1; }, r => { r.data.histogram.counts = []; }, r => { r.analyzed = 2; }, r => { r.data.cache.cacheReadRate = NaN; }]) {
     const r = response(); mutate(r); assert.throws(() => decodeUsageAnalytics(r));

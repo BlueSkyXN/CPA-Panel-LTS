@@ -7,11 +7,13 @@ import type {
 } from '@/utils/usage/latencyAnalysis';
 import type { CacheAnalyticsSummary, CacheTrendPoint } from '@/utils/usage/cacheAnalytics';
 import type { ErrorAnalyticsSummary, FailureTrendPoint } from '@/utils/usage/errorAnalytics';
+import type { ThroughputTrendPoint } from '@/utils/usage/throughputAnalytics';
 
 export interface UsageAnalyticsGrain {
   latency: LatencyPercentileSeries;
   cache: CacheTrendPoint[];
   errors: FailureTrendPoint[];
+  throughput: ThroughputTrendPoint[];
 }
 export interface UsageAnalyticsData {
   timings: LatencyTimingSummaries;
