@@ -15,6 +15,7 @@ import {
   collectErrorAnalysisRows,
   summarizeErrorAnalytics,
 } from './errorAnalytics';
+import { buildThroughputTrendSeries } from './throughputAnalytics';
 import type { AnalyticsGrain, AnalyticsTimeWindow } from './analyticsBuckets';
 
 export function buildUsageAnalytics(
@@ -29,6 +30,7 @@ export function buildUsageAnalytics(
     latency: buildLatencyPercentileSeries(latency, period, window),
     cache: buildCacheTrendSeries(cache, period, window),
     errors: buildFailureTrendSeries(errors, period, window),
+    throughput: buildThroughputTrendSeries(all, period, window),
   });
   return {
     timings: summarizeLatencyRows(latency),

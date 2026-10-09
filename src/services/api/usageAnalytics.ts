@@ -55,14 +55,58 @@ const grain = (v: unknown) => {
     )
   )
     return false;
+  const throughputCounts = [
+    'outputTokens',
+    'decodeDurationMs',
+    'outputSamples',
+    'averageTokens',
+    'averageDurationMs',
+    'averageSamples',
+    'visibleTokens',
+    'visibleDurationMs',
+    'visibleSamples',
+    'reasoningTokens',
+    'reasoningDenominator',
+    'reasoningSamples',
+  ];
+  // Cores released before the throughput series omit the field entirely.
+  // Fill an empty series so the chart degrades to "no measurements" instead of
+  // rejecting the whole analytics response; a present but malformed series
+  // still fails closed.
+  if (v.throughput === undefined) {
+    v.throughput = (l.times as number[]).map((time) => ({
+      timestampMs: time,
+      outputTokens: 0,
+      decodeDurationMs: 0,
+      outputSamples: 0,
+      averageTokens: 0,
+      averageDurationMs: 0,
+      averageSamples: 0,
+      visibleTokens: 0,
+      visibleDurationMs: 0,
+      visibleSamples: 0,
+      reasoningTokens: 0,
+      reasoningDenominator: 0,
+      reasoningSamples: 0,
+    }));
+  }
+  if (
+    !list(
+      v.throughput,
+      (p) => isRecord(p) && timestamp(p.timestampMs) && counts(p, throughputCounts)
+    )
+  )
+    return false;
   return (
     v.cache.length === length &&
     v.errors.length === length &&
+    v.throughput.length === length &&
     l.times.every(
       (time, i, times) =>
         (i === 0 || (time as number) > (times[i - 1] as number)) &&
         (v.cache as Record<string, unknown>[])[i].timestampMs === time &&
-        (v.errors as Record<string, unknown>[])[i].timestampMs === time
+        (v.errors as Record<string, unknown>[])[i].timestampMs === time &&
+        (v.throughput as Record<string, unknown>[])[i].timestampMs === time
     )
   );
 };
