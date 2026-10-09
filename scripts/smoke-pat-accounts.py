@@ -9,6 +9,7 @@ import re
 from urllib.parse import parse_qs, urlparse
 
 from playwright.sync_api import sync_playwright
+from panel_browser import PanelBrowser
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("panel_smoke", ROOT / "scripts/smoke-lts-panel.py")
@@ -37,7 +38,9 @@ def main():
                  "enabled": plugin_enabled, "configured": True,
                  "metadata": {"name": f"cpa-provider-{provider}", "version": "0.1.0", "author": "Fixture"}}
                 for provider in ("codebuddy", "qoder")
-            ]}
+            ] + [{"id": "zcode-coding-plan", "registered": plugin_enabled, "effective_enabled": plugin_enabled,
+                  "enabled": plugin_enabled, "configured": True,
+                  "metadata": {"name": "zcode-coding-plan", "version": "0.1.0", "author": "Fixture"}}]}
         elif path.startswith("/plugins/") and path.endswith("/config"):
             result = {"transport": "direct_openai", "openapi_endpoint": "https://openapi.qoder.com.cn"}
         elif path.endswith("/summary"):
@@ -87,8 +90,8 @@ def main():
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch()
             context = browser.new_context(locale="en-US", viewport={"width": 1440, "height": 1000})
-            context.add_init_script("localStorage.setItem('cli-proxy-language', JSON.stringify({state:{language:'en'},version:0}));")
-            page = context.new_page()
+            context.add_init_script("if (!localStorage.getItem('cli-proxy-language')) localStorage.setItem('cli-proxy-language', JSON.stringify({state:{language:'en'},version:0}));")
+            page = PanelBrowser(context.new_page())
             page.set_default_timeout(15000)
             output = ROOT / "output/playwright"
             output.mkdir(parents=True, exist_ok=True)
@@ -100,11 +103,12 @@ def main():
             page.locator('input[type="checkbox"]').first.check(force=True)
             page.locator("input.input").first.fill(f"http://127.0.0.1:{api_port}")
             page.locator('input[name="cpa-management-key"]').fill("smoke-management-key")
+            page.get_by_label("Remember password").check(force=True)
             page.get_by_role("button", name=re.compile(r"^(Login|Connect)$", re.I)).click()
-            page.wait_for_function("window.location.hash === '#/'")
+            page.wait_for_url(re.compile(r".*#/$"))
             page.goto(base + "#/auth-files")
-            page.get_by_role("button", name="Add PAT account", exact=True).click()
-            dialog = page.get_by_role("dialog", name="Add PAT account")
+            page.get_by_role("button", name="Add account", exact=True).click()
+            dialog = page.get_by_role("dialog", name="Add account")
             dialog.get_by_label("Account label").fill("Fixture account")
             dialog.get_by_label("PAT", exact=True).fill(secrets_used[0])
             dialog.get_by_role("button", name="Save", exact=True).click()
@@ -113,13 +117,14 @@ def main():
             name = next(iter(auths))
             assert auths[name]["type"] == "codebuddy" and auths[name]["pat"] == secrets_used[0]
             auths[name]["priority"] = 7
-            page.get_by_role("button", name="Update PAT", exact=True).click()
-            dialog = page.get_by_role("dialog", name="Update PAT")
+            page.get_by_role("button", name="Update credentials", exact=True).click()
+            dialog = page.get_by_role("dialog", name="Update credentials")
             assert dialog.get_by_label("PAT", exact=True).input_value() == ""
             dialog.get_by_label("PAT", exact=True).fill(secrets_used[1])
             dialog.get_by_role("button", name="Save", exact=True).click()
             dialog.wait_for(state="detached")
             assert len(auths) == 1 and auths[name]["priority"] == 7 and auths[name]["pat"] == secrets_used[1]
+            page.get_by_role("button", name="CodeBuddy 1", exact=True).click()
             page.get_by_role("button", name="View account and quota", exact=True).click()
             page.get_by_text("100.125 credits", exact=True).first.wait_for()
             page.get_by_text("0 credits", exact=True).wait_for()
@@ -129,8 +134,8 @@ def main():
             page.get_by_text("Credential rejected; update PAT", exact=True).wait_for()
             assert page.get_by_text("0 credits", exact=True).count() == 0
 
-            page.get_by_role("button", name="Add PAT account", exact=True).click()
-            dialog = page.get_by_role("dialog", name="Add PAT account")
+            page.get_by_role("button", name="Add account", exact=True).click()
+            dialog = page.get_by_role("dialog", name="Add account")
             dialog.get_by_role("button", name="Provider", exact=True).click()
             page.get_by_role("option", name="Qoder", exact=True).click()
             dialog.get_by_label("PAT", exact=True).fill("invalid-fixture")
@@ -156,14 +161,14 @@ def main():
                     viewportWidth: document.documentElement.clientWidth,
                     gridDisplays: rows.map(row => getComputedStyle(row).display),
                     typeRightEdges,
-                    fileNameWidth: fileName?.getBoundingClientRect().width ?? 0,
+                    fileNameWidth: fileName?.clientWidth ?? 0,
                     fileNameScrollWidth: fileName?.scrollWidth ?? 0,
                 };
             }""")
             assert desktop_layout["dialogWidth"] <= desktop_layout["viewportWidth"]
             assert set(desktop_layout["gridDisplays"]) == {"grid"}
             assert max(desktop_layout["typeRightEdges"]) - min(desktop_layout["typeRightEdges"]) <= 1
-            assert desktop_layout["fileNameScrollWidth"] <= desktop_layout["fileNameWidth"] + 1
+            assert desktop_layout["fileNameScrollWidth"] <= desktop_layout["fileNameWidth"] + 1, desktop_layout
             page.screenshot(path=str(output / "auth-file-models-desktop.png"), animations="disabled")
             models_dialog.get_by_role("button", name="Close", exact=True).last.click()
             models_dialog.wait_for(state="detached")
@@ -189,8 +194,8 @@ def main():
             page.screenshot(path=str(output / "auth-file-models-mobile.png"), animations="disabled")
             models_dialog.get_by_role("button", name="Close", exact=True).last.click()
             models_dialog.wait_for(state="detached")
-            page.get_by_role("button", name="Add PAT account", exact=True).click()
-            dialog = page.get_by_role("dialog", name="Add PAT account")
+            page.get_by_role("button", name="Add account", exact=True).click()
+            dialog = page.get_by_role("dialog", name="Add account")
             dialog.get_by_text(re.compile("Core plugin support is unconfirmed")).wait_for()
             assert dialog.get_by_role("button", name="Save", exact=True).is_disabled()
             assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1")
@@ -200,9 +205,32 @@ def main():
             dialog.get_by_role("button", name="Retry", exact=True).click()
             dialog.get_by_text(re.compile("Instance: direct_https")).wait_for()
             dialog.get_by_role("button", name="Cancel", exact=True).click()
+            auths["zcode-name-fixture.json"] = {"type": "zcode-coding-plan", "label": "ZCode fixture"}
+            for locale in ("en", "zh-CN", "zh-TW", "ru"):
+                catalog = json.loads((ROOT / f"src/i18n/locales/{locale}.json").read_text())
+                page.evaluate("language => localStorage.setItem('cli-proxy-language', JSON.stringify({state:{language},version:0}))", locale)
+                page.reload()
+                page.get_by_role("button", name=catalog["pat_accounts"]["add"], exact=True).click()
+                zcode_dialog = page.get_by_role("dialog", name=catalog["pat_accounts"]["add"], exact=True)
+                zcode_dialog.get_by_role("button", name=catalog["pat_accounts"]["provider"], exact=True).click()
+                page.get_by_role("option", name="ZCode", exact=True).click()
+                assert zcode_dialog.get_by_role("button", name=catalog["pat_accounts"]["provider"], exact=True).inner_text() == "ZCode"
+                zcode_dialog.get_by_text(catalog["pat_accounts"]["hint_zcode-coding-plan"], exact=True).wait_for()
+                assert "Coding Plan" not in zcode_dialog.inner_text()
+                zcode_dialog.get_by_label(catalog["pat_accounts"]["api_key_label"], exact=True).fill("invalid-fixture")
+                zcode_dialog.get_by_role("button", name=catalog["common"]["save"], exact=True).click()
+                zcode_dialog.get_by_text(catalog["pat_accounts"]["invalid_api_key"], exact=True).wait_for()
+                zcode_dialog.get_by_role("button", name=catalog["common"]["cancel"], exact=True).click()
+                page.get_by_role("button", name="ZCode 1", exact=True).click()
+                page.get_by_test_id("auth-file-card").filter(has_text="ZCode fixture").get_by_role("button", name=catalog["pat_accounts"]["update"], exact=True).click()
+                update_dialog = page.get_by_role("dialog", name=catalog["pat_accounts"]["update"], exact=True)
+                provider = update_dialog.get_by_role("button", name=catalog["pat_accounts"]["provider"], exact=True)
+                assert provider.inner_text() == "ZCode" and provider.is_disabled()
+                assert "Coding Plan" not in update_dialog.inner_text()
+                update_dialog.get_by_role("button", name=catalog["common"]["cancel"], exact=True).click()
             assert not errors, "Browser reported JavaScript errors"
             browser.close()
-    print("PASS: PAT create/update, Qoder validation, quota states/cache, dependency gate, mobile layout, no browser PAT persistence (mock Core)")
+    print("PASS: PAT create/update, Qoder validation, quota states/cache, dependency gate, mobile layout, ZCode add/update names and hints in four locales, no browser PAT persistence (mock Core)")
 
 
 if __name__ == "__main__":

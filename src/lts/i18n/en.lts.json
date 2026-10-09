@@ -1,5 +1,12 @@
 {
   "analytics": {
+    "capacity_error": "The selected range exceeds the exact-analysis capacity. Narrow the time range or filters; no samples were omitted.",
+    "snapshot_expired": "The query snapshot has expired. Refresh to create a new snapshot.",
+    "busy_error": "Core is processing other analyses. Try again shortly.",
+    "updating": "Updating; the last complete result remains visible.",
+    "stale_error": "Refresh failed; the last complete result remains visible.",
+    "aggregated_ready": "Analyzed {{count}} matching requests.",
+    "invalid_timestamps": "{{count}} matching records have no valid timestamp and are excluded from charts.",
     "configured_policy": "Saved desired configuration",
     "title": "Advanced analytics",
     "navigation_hint": "Request performance, flow status and policies",
@@ -20,7 +27,8 @@
     "retry_samples": "Reload samples",
     "stop_samples": "Stop loading",
     "partial_results": "Charts currently use only loaded samples and do not represent final results for the entire time range.",
-    "empty_window": "No requests were recorded in this time range.",
+    "source_names_unavailable": "Credential names could not be loaded; source identifiers are shown instead.",
+    "empty_window": "No requests match the selected time range and filters.",
     "no_measurements": "No successful requests have usable measurements for this metric.",
     "basic_settings": "Basic settings",
     "rules_section": "Flow rules"

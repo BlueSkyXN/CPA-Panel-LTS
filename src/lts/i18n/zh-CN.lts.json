@@ -1,5 +1,12 @@
 {
   "analytics": {
+    "capacity_error": "所选范围超出精确分析容量，请缩小时间范围或筛选条件；未进行抽样或截断。",
+    "snapshot_expired": "查询快照已失效，请刷新以建立新快照。",
+    "busy_error": "Core 正在处理其他分析，请稍后重试。",
+    "updating": "正在更新，暂时显示上次完整结果。",
+    "stale_error": "更新失败，保留上次完整结果。",
+    "aggregated_ready": "已分析 {{count}} 条匹配请求。",
+    "invalid_timestamps": "其中 {{count}} 条记录缺少有效时间戳，未计入图表。",
     "configured_policy": "已保存期望配置",
     "title": "高级分析",
     "navigation_hint": "请求表现、流控状态与策略",
@@ -20,7 +27,8 @@
     "retry_samples": "重新加载样本",
     "stop_samples": "停止加载",
     "partial_results": "当前图表仅基于已加载样本，不能视为整个时间范围的最终结果。",
-    "empty_window": "所选时间范围内没有请求记录。",
+    "source_names_unavailable": "凭据名称加载失败，暂以来源标识显示。",
+    "empty_window": "所选时间范围和筛选条件下没有请求记录。",
     "no_measurements": "没有可用于此指标的成功请求测量数据。",
     "basic_settings": "基本设置",
     "rules_section": "流控规则"

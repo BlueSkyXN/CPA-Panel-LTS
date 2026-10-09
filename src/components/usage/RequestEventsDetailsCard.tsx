@@ -69,6 +69,7 @@ import { downloadBlob } from '@/utils/download';
 import styles from '@/pages/UsagePage.module.scss';
 import type { UsageQuerySession, UsageQueryFilter } from '@/types/usageQuery';
 import { queryItemDetail, useUsageQueryDetails } from './hooks/useUsageQueryDetails';
+import { analyticsQueryFilter, type AnalyticsFilters } from '@/utils/usage/analyticsFilters';
 import { useNotificationStore } from '@/stores/useNotificationStore';
 
 const ALL_FILTER = '__all__';
@@ -411,6 +412,7 @@ const numericFilterPopoverStylesEqual = (
   current?.maxHeight === next.maxHeight;
 
 export interface RequestEventsDetailsCardProps {
+  initialAnalyticsFilters?: AnalyticsFilters | null;
   querySession?: UsageQuerySession | null;
   usage: unknown;
   loading: boolean;
@@ -606,6 +608,7 @@ export function RequestEventsDetailsCard({
   usage,
   loading: parentLoading,
   querySession = null,
+  initialAnalyticsFilters = null,
   pageTimeRange,
   pageTimeRangeCustom = null,
   referenceNowMs,
@@ -657,6 +660,10 @@ export function RequestEventsDetailsCard({
   // 静默清空、"筛选只剩当前页数据"的假象；与页面级 range 的 draft 保留策略一致。
   const REQUEST_EVENT_FILTERS_STORAGE_KEY = 'cpa-request-event-filters-v1';
   const loadPersistedFilters = (): Record<string, string> => {
+    if (initialAnalyticsFilters) return {
+      model: initialAnalyticsFilters.model ?? ALL_FILTER,
+      source: initialAnalyticsFilters.source?.value ?? ALL_FILTER,
+    };
     try {
       const raw = sessionStorage.getItem(REQUEST_EVENT_FILTERS_STORAGE_KEY);
       const parsed: unknown = raw ? JSON.parse(raw) : null;
@@ -678,6 +685,7 @@ export function RequestEventsDetailsCard({
   const persistedFilters = persistedFiltersRef;
   const persistFilter = (name: string, value: string) => {
     persistedFilters.current = { ...persistedFilters.current, [name]: value };
+    if (initialAnalyticsFilters) return;
     try {
       sessionStorage.setItem(
         REQUEST_EVENT_FILTERS_STORAGE_KEY,
@@ -1048,7 +1056,12 @@ export function RequestEventsDetailsCard({
         filter.api = options?.apis[index] ?? (rememberedApi || `__unresolved-${requestKeyFilter}`);
       }
     }
-    if (sourceFilter !== ALL_FILTER) {
+    if (sourceFilter !== ALL_FILTER && sourceFilter === initialAnalyticsFilters?.source?.value) {
+      if (!options) return null;
+      const selection = analyticsQueryFilter({ source: initialAnalyticsFilters.source }, options);
+      if (selection.empty) return null;
+      filter.identities = selection.filter.identities;
+    } else if (sourceFilter !== ALL_FILTER) {
       const identities = options?.identities.filter((id) => {
         const source = normalizeUsageSourceId(id.source);
         const info = resolveSourceDisplay(source, id.auth_index, sourceInfoMap, authFileMap);
@@ -1524,7 +1537,7 @@ export function RequestEventsDetailsCard({
     );
     // 已选值不随窗口收窄消失；沿用记忆中的标签，避免触发器显示成原始值。
     if (sourceFilter !== ALL_FILTER && !optionMap.has(sourceFilter))
-      optionMap.set(sourceFilter, sourceLabelMemory.current.get(sourceFilter) ?? sourceFilter);
+      optionMap.set(sourceFilter, sourceLabelMemory.current.get(sourceFilter) ?? (sourceFilter === initialAnalyticsFilters?.source?.value ? initialAnalyticsFilters.source.label : sourceFilter));
 
     return [
       { value: ALL_FILTER, label: t('usage_stats.filter_all') },
@@ -1533,7 +1546,7 @@ export function RequestEventsDetailsCard({
         label,
       })),
     ];
-  }, [t, timeScopedRows, querySession, remoteSources, sourceFilter]);
+  }, [t, timeScopedRows, querySession, remoteSources, sourceFilter, initialAnalyticsFilters]);
 
   const authIndexOptions = useMemo(
     () => [
@@ -1855,7 +1868,10 @@ export function RequestEventsDetailsCard({
           effectiveRequestKeyFilter === ALL_FILTER ||
           row.requestIdentityToken === effectiveRequestKeyFilter;
         const sourceMatched =
-          effectiveSourceFilter === ALL_FILTER || row.sourceKey === effectiveSourceFilter;
+          effectiveSourceFilter === ALL_FILTER ||
+          (effectiveSourceFilter === initialAnalyticsFilters?.source?.value
+            ? initialAnalyticsFilters.source.identities.some((id) => id.source === row.sourceRaw && id.auth_index === (row.authIndex === '-' ? '' : row.authIndex))
+            : row.sourceKey === effectiveSourceFilter);
         const authIndexMatched =
           effectiveAuthIndexFilter === ALL_FILTER || row.authIndex === effectiveAuthIndexFilter;
         const serviceTierMatched =
@@ -1893,6 +1909,7 @@ export function RequestEventsDetailsCard({
       }),
     [
       cacheFilter,
+      initialAnalyticsFilters,
       effectiveAuthIndexFilter,
       effectiveModelFilter,
       effectiveRequestKeyFilter,
@@ -2024,6 +2041,7 @@ export function RequestEventsDetailsCard({
     setNumericFilterOpen(false);
     setNumericFilterPresentation(null);
     persistedFilters.current = {};
+    if (initialAnalyticsFilters) return;
     try {
       sessionStorage.removeItem(REQUEST_EVENT_FILTERS_STORAGE_KEY);
     } catch {

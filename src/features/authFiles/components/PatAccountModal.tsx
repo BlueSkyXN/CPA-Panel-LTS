@@ -176,7 +176,7 @@ export function PatAccountModal({ file, onClose, onSaved }: Props) {
           options={[
             { value: 'codebuddy', label: 'CodeBuddy' },
             { value: 'qoder', label: 'Qoder' },
-            { value: 'zcode-coding-plan', label: 'Coding Plan' },
+            { value: 'zcode-coding-plan', label: t('auth_files.filter_zcode-coding-plan') },
           ]}
           ariaLabel={t('pat_accounts.provider')}
           disabled={Boolean(file) || saving}

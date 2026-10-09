@@ -65,6 +65,27 @@
   gap: 10px;
 }
 
+.filters {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.filterField {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 0 1 230px;
+  min-width: 0;
+  max-width: 100%;
+
+  > span {
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+}
+
 .range {
   display: flex;
   align-items: center;
@@ -107,5 +128,8 @@
   }
   .range {
     width: 100%;
+  }
+  .filterField {
+    flex: 1 1 140px;
   }
 }

@@ -1,6 +1,16 @@
+import { useUsageAnalytics } from '@/components/usage/hooks/useUsageAnalytics';
+import { UsageAnalyticsCharts } from '@/components/usage/UsageAnalyticsCharts';
+import { analyticsResultWindow } from '@/types/usageAnalytics';
 import { useEffect, useMemo, useState } from 'react';
 import { getConnectionFrameElement } from '@/services/connectionRuntime';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { AnalyticsFiltersBar } from '@/components/usage/AnalyticsFiltersBar';
+import { useUsageAnalyticsOptions } from '@/components/usage/hooks/useUsageAnalyticsOptions';
+import {
+  analyticsQueryFilter,
+  readAnalyticsNavigationState,
+  type AnalyticsFilters,
+} from '@/utils/usage/analyticsFilters';
 import { useTranslation } from 'react-i18next';
 import {
   Chart as ChartJS,
@@ -51,6 +61,16 @@ const localDateTime = (ms: number) => {
 export function ObservabilityPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
+  const filters = useMemo(
+    () => readAnalyticsNavigationState(location.state) ?? {},
+    [location.state]
+  );
+  const setFilters = (next: AnalyticsFilters) =>
+    navigate(`${location.pathname}${location.search}`, {
+      replace: true,
+      state: { analyticsFilters: next },
+    });
   const [params, setParams] = useSearchParams();
   const scope = useMemo(() => resolveUsageEventsScope(params), [params]);
   const { usage, querySession, loading, error, lastRefreshedAt, loadUsage } = useUsageData();
@@ -94,18 +114,40 @@ export function ObservabilityPage() {
     [scope.valid, usage, timeWindow, nowMs]
   );
   const ready = scope.valid && !error && nowMs > 0;
+  const aggregated = querySession?.analytics_version === 1;
+  const analytics = useUsageAnalytics(
+    querySession,
+    timeWindow,
+    filters,
+    active,
+    ready && aggregated,
+    JSON.stringify([scope.range, scope.customRange])
+  );
+  const metadata = useUsageAnalyticsOptions(
+    querySession,
+    legacyUsage,
+    timeWindow,
+    active,
+    ready && !aggregated
+  );
+  const visibleResult = aggregated ? analytics.result : null;
+  const visibleWindow = visibleResult ? analyticsResultWindow(visibleResult) : timeWindow;
+  const selection = useMemo(
+    () => (metadata.options ? analyticsQueryFilter(filters, metadata.options) : null),
+    [filters, metadata.options]
+  );
   const setRange = (range: UsageTimeRange) => {
     const custom = scope.customRange ?? {
       startMs: (nowMs || Date.now()) - 86400000,
       endMs: nowMs || Date.now(),
     };
-    setParams(buildUsageEventsSearch(range, custom));
+    setParams(buildUsageEventsSearch(range, custom), { state: { analyticsFilters: filters } });
   };
   const setCustom = (field: 'start' | 'end', value: string) => {
     const next = new URLSearchParams(params);
     next.set('range', 'custom');
     next.set(field, value ? String(Date.parse(value)) : '');
-    setParams(next, { replace: true });
+    setParams(next, { replace: true, state: { analyticsFilters: filters } });
   };
 
   return (
@@ -119,10 +161,23 @@ export function ObservabilityPage() {
           <Button
             variant="secondary"
             size="sm"
-            disabled={!ready}
+            disabled={!ready || (aggregated && (!visibleResult || analytics.stale))}
             onClick={() =>
               navigate(
-                `/usage/events${buildUsageEventsSearch(timeWindow ? 'custom' : 'all', timeWindow)}`
+                `/usage/events${buildUsageEventsSearch(visibleWindow ? 'custom' : 'all', visibleWindow)}`,
+                {
+                  state: {
+                    analyticsFilters: filters,
+                    analyticsSession:
+                      visibleResult && querySession
+                        ? {
+                            ...querySession,
+                            bound: visibleResult.bound,
+                            now_ms: visibleResult.now_ms,
+                          }
+                        : querySession,
+                  },
+                }
               )
             }
           >
@@ -138,44 +193,61 @@ export function ObservabilityPage() {
           </Button>
         </div>
       </div>
-      <div className={styles.range}>
-        <Select
-          value={scope.range}
-          options={['all', ...USAGE_PRESET_TIME_RANGES, 'custom'].map((value) => ({
-            value,
-            label: t(`usage_stats.range_${value}`),
-          }))}
-          onChange={(value) => setRange(value as UsageTimeRange)}
-          ariaLabel={t('usage_stats.range_filter')}
-          fullWidth={false}
+      <div className={styles.filters}>
+        <div className={styles.filterField}>
+          <span>{t('usage_stats.range_filter')}</span>
+          <Select
+            value={scope.range}
+            options={['all', ...USAGE_PRESET_TIME_RANGES, 'custom'].map((value) => ({
+              value,
+              label: t(`usage_stats.range_${value}`),
+            }))}
+            onChange={(value) => setRange(value as UsageTimeRange)}
+            ariaLabel={t('usage_stats.range_filter')}
+          />
+        </div>
+        <AnalyticsFiltersBar
+          options={aggregated ? analytics.options : metadata.options}
+          filters={filters}
+          onChange={setFilters}
+          active={active && ready}
         />
-        {scope.range === 'custom' && (
-          <>
-            <input
-              type="datetime-local"
-              aria-label={t('usage_stats.range_custom_start')}
-              value={localDateTime(Number(params.get('start') || NaN))}
-              onChange={(event) => setCustom('start', event.target.value)}
-            />
-            <span>–</span>
-            <input
-              type="datetime-local"
-              aria-label={t('usage_stats.range_custom_end')}
-              value={localDateTime(Number(params.get('end') || NaN))}
-              onChange={(event) => setCustom('end', event.target.value)}
-            />
-          </>
-        )}
       </div>
-      {timeWindow && (
+      {scope.range === 'custom' && (
+        <div className={styles.range}>
+          <input
+            type="datetime-local"
+            aria-label={t('usage_stats.range_custom_start')}
+            value={localDateTime(Number(params.get('start') || NaN))}
+            onChange={(event) => setCustom('start', event.target.value)}
+          />
+          <span>–</span>
+          <input
+            type="datetime-local"
+            aria-label={t('usage_stats.range_custom_end')}
+            value={localDateTime(Number(params.get('end') || NaN))}
+            onChange={(event) => setCustom('end', event.target.value)}
+          />
+        </div>
+      )}
+      {!aggregated && metadata.error && (
+        <div className="error-box" role="alert">
+          {t('usage_stats.loading_error')}: {metadata.error}{' '}
+          <Button variant="secondary" size="sm" onClick={metadata.retry}>
+            {t('common.retry')}
+          </Button>
+        </div>
+      )}
+      {visibleWindow && (
         <p className={styles.note}>
-          {new Date(timeWindow.startMs).toLocaleString()} –{' '}
-          {new Date(timeWindow.endMs).toLocaleString()}
+          {new Date(visibleWindow.startMs).toLocaleString()} –{' '}
+          {new Date(visibleWindow.endMs).toLocaleString()}
         </p>
       )}
       {lastRefreshedAt && (
         <p className={styles.note}>
-          {t('usage_stats.last_updated')}: {lastRefreshedAt.toLocaleString()}
+          {t('usage_stats.last_updated')}:{' '}
+          {(visibleResult ? new Date(visibleResult.now_ms) : lastRefreshedAt).toLocaleString()}
         </p>
       )}
       {error && (
@@ -188,15 +260,72 @@ export function ObservabilityPage() {
           {t('usage_stats.range_custom_invalid')}
         </div>
       )}
-      {scope.valid && !error && (
+      {scope.valid && !error && aggregated && (
+        <section aria-label={t('usage_stats.analytics_section_title')}>
+          {analytics.error && (
+            <div className="error-box" role="alert">
+              {t(
+                analytics.code === 'usage_analytics_too_large'
+                  ? 'analytics.capacity_error'
+                  : analytics.code === 'usage_query_expired'
+                    ? 'analytics.snapshot_expired'
+                    : analytics.code === 'usage_analytics_busy'
+                      ? 'analytics.busy_error'
+                      : 'usage_stats.loading_error'
+              )}{' '}
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={
+                  analytics.code === 'usage_query_expired'
+                    ? () => void loadUsage().catch(() => {})
+                    : analytics.retry
+                }
+              >
+                {t('common.retry')}
+              </Button>
+            </div>
+          )}
+          <p className={styles.note} role="status">
+            {analytics.loading || analytics.stale
+              ? t(
+                  analytics.error && visibleResult
+                    ? 'analytics.stale_error'
+                    : visibleResult
+                      ? 'analytics.updating'
+                      : 'common.loading'
+                )
+              : visibleResult
+                ? t('analytics.aggregated_ready', { count: visibleResult.total })
+                : ''}
+          </p>
+          {visibleResult && visibleResult.analyzed < visibleResult.total && (
+            <p className={styles.note}>
+              {t('analytics.invalid_timestamps', {
+                count: visibleResult.total - visibleResult.analyzed,
+              })}
+            </p>
+          )}
+          {visibleResult &&
+            (visibleResult.total > 0 ? (
+              <UsageAnalyticsCharts data={visibleResult.data} loading={false} isMobile={isMobile} />
+            ) : (
+              <p className={styles.note}>{t('analytics.empty_window')}</p>
+            ))}
+        </section>
+      )}
+      {scope.valid && !error && !aggregated && !metadata.error && (
         <UsageAnalyticsSection
           querySession={querySession}
           legacyUsage={legacyUsage}
           timeWindow={timeWindow}
-          loading={loading}
+          loading={loading || metadata.loading}
           isMobile={isMobile}
           active={active}
-          enabled={ready}
+          enabled={ready && selection !== null}
+          filter={selection?.filter}
+          filters={filters}
+          empty={selection?.empty}
         />
       )}
     </AnalyticsLayout>

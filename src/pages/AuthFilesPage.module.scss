@@ -83,21 +83,11 @@
   display: flex;
   flex-direction: column;
   gap: $spacing-md;
-  margin-bottom: $spacing-lg;
 }
 
 .filterRail {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px 14px;
-  border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
-  background: color-mix(in srgb, var(--bg-secondary) 60%, transparent);
-
-  @include mobile {
-    padding: 10px;
-  }
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .filterAllIconWrap {
@@ -126,13 +116,23 @@
 }
 
 .filterTags {
+  position: relative;
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
   gap: 8px;
+
+  @include mobile {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 2px;
+    scrollbar-width: thin;
+    overscroll-behavior-x: contain;
+  }
 }
 
 .filterTag {
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -204,49 +204,48 @@
 }
 
 .filterControlsPanel {
-  position: relative;
-  overflow: hidden;
-  padding: 16px;
-  border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
-  background:
-    linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--primary-color) 8%, transparent),
-      transparent 46%
-    ),
-    color-mix(in srgb, var(--bg-secondary) 56%, transparent);
-
-  @include mobile {
-    padding: 12px;
-  }
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
 }
 
 .filterControls {
   display: grid;
-  grid-template-columns:
-    minmax(260px, 1fr)
-    minmax(108px, 0.35fr)
-    minmax(148px, 0.45fr);
+  grid-template-columns: minmax(200px, 1fr) 180px minmax(260px, 340px);
   gap: 12px;
-  align-items: flex-end;
+  align-items: end;
 
-  // 修复 Input 组件在 filterItem 中的嵌套样式
   :global(.form-group) {
     margin: 0;
   }
-
   :global(.input) {
-    height: 42px;
+    height: 40px;
     box-sizing: border-box;
   }
 
-  @include tablet {
-    grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(140px, 0.8fr));
+  @media (max-width: 1100px) {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    .filterSearchItem {
+      grid-column: 1 / -1;
+    }
   }
 
   @include mobile {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.filterItem {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+
+  > label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 500;
   }
 }
 
@@ -254,71 +253,64 @@
   min-width: 0;
 }
 
-.filterItem {
+.sortControls {
   display: flex;
-  flex-direction: column;
+  align-items: stretch;
   gap: 6px;
   min-width: 0;
+}
 
-  label {
-    font-size: 11px;
-    color: var(--text-tertiary);
-    font-weight: 700;
-    letter-spacing: 0;
-    white-space: nowrap;
+.sortDirectionButton:global(.btn) {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  padding-inline: 8px;
+
+  > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
 }
 
-.filterToggleItem {
+.viewControls,
+.displayControls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 20px;
   min-width: 0;
-  grid-column: 1 / -1;
-
-  @include tablet {
-    grid-column: 1 / -1;
-  }
 }
 
-.filterToggleGroup {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.viewControls {
+  justify-content: space-between;
+}
+
+.resultsSummary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.sortHint {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.pageSizeControl {
+  display: inline-flex;
+  align-items: center;
   gap: 8px;
-  min-height: 42px;
-
-  @include mobile {
-    grid-template-columns: 1fr;
-  }
-}
-
-.filterToggleCard {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  min-height: 42px;
-  padding: 0 10px;
-  border-radius: 8px;
-  border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
-  background: color-mix(in srgb, var(--bg-primary) 56%, transparent);
-
-  > label {
-    width: 100%;
-    min-width: 0;
-  }
-}
-
-.filterToggle {
-  display: flex;
-  align-items: center;
-  min-height: 40px;
-  padding-inline: 2px;
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 .filterToggleLabel {
-  display: inline-flex;
-  align-items: center;
-  color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.25;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .searchInput {
@@ -332,7 +324,7 @@
 }
 
 .pageSizeSelect {
-  width: 100%;
+  width: 68px;
   padding: 8px 12px;
   border: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
   border-radius: 8px;
@@ -340,7 +332,7 @@
   color: var(--text-primary);
   font-size: 14px;
   cursor: text;
-  height: 42px;
+  height: 32px;
   box-sizing: border-box;
 
   &:focus {
@@ -846,7 +838,7 @@
   }
 
   .primaryActionButton:global(.btn.btn-sm) {
-    flex: 0 1 auto;
+    flex: 0 0 auto;
     min-width: 0;
     padding-inline: 8px;
   }
@@ -968,6 +960,8 @@
 }
 
 .fileName {
+  flex: 1;
+  min-width: 0;
   font-size: 14px;
   font-weight: 700;
   color: var(--text-primary);
@@ -978,6 +972,37 @@
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   letter-spacing: -0.01em;
+}
+
+.fileIdentity {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.fileIdentifier {
+  min-width: 0;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-family: monospace;
+  @include text-ellipsis;
+}
+
+.copyNameButton {
+  font: inherit;
+  font-size: 11px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: 4px;
+  border: 0;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  background: transparent;
+  cursor: pointer;
+  &:hover {
+    background: var(--bg-tertiary);
+  }
 }
 
 .cardMeta {
@@ -1062,6 +1087,7 @@
 }
 
 .sortSelect {
+  flex: 1;
   width: 100%;
   min-width: 0;
 }
@@ -1500,6 +1526,7 @@
 
 .cardActions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
@@ -1510,6 +1537,7 @@
 
 .cardActionsMain {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   min-width: 0;
@@ -1517,6 +1545,8 @@
 }
 
 .primaryActionButton:global(.btn.btn-sm) {
+  flex: 0 0 auto;
+  white-space: nowrap;
   min-width: 0;
   padding-inline: 10px;
 }
@@ -1558,15 +1588,6 @@
   @include text-ellipsis;
 }
 
-.cardUtilityActions {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  padding: 2px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-tertiary) 50%, transparent);
-}
-
 .cardHeaderActions {
   display: inline-flex;
   align-items: center;
@@ -1600,27 +1621,6 @@
 
 .actionIcon {
   display: block;
-}
-
-@include mobile {
-  .cardActions {
-    flex-wrap: wrap;
-  }
-
-  .cardActionsMain {
-    flex-wrap: wrap;
-    width: 100%;
-  }
-
-  .primaryActionButton:global(.btn.btn-sm) {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-
-  .statusToggle {
-    width: 100%;
-    justify-content: space-between;
-  }
 }
 
 // 分页

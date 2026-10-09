@@ -82,7 +82,15 @@ const detail = (v: unknown) => {
   );
 };
 export function decodeUsageQuerySession(v: unknown): UsageQuerySession {
-  if (!envelope(v) || !number(v.now_ms) || !number(v.max_page_size) || !strings(v.models))
+  if (
+    !envelope(v) ||
+    !number(v.now_ms) ||
+    !number(v.max_page_size) ||
+    !strings(v.models) ||
+    (v.analytics_version !== undefined &&
+      (!number(v.analytics_version) || !Number.isSafeInteger(v.analytics_version))) ||
+    (v.max_analytics_rows !== undefined && !number(v.max_analytics_rows))
+  )
     return invalid();
   return v as unknown as UsageQuerySession;
 }

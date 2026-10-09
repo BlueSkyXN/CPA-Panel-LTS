@@ -1,5 +1,12 @@
 {
   "analytics": {
+    "capacity_error": "所選範圍超出精確分析容量，請縮小時間範圍或篩選條件；未進行抽樣或截斷。",
+    "snapshot_expired": "查詢快照已失效，請重新整理以建立新快照。",
+    "busy_error": "Core 正在處理其他分析，請稍後重試。",
+    "updating": "正在更新，暫時顯示上次完整結果。",
+    "stale_error": "更新失敗，保留上次完整結果。",
+    "aggregated_ready": "已分析 {{count}} 筆符合條件的請求。",
+    "invalid_timestamps": "其中 {{count}} 筆記錄缺少有效時間戳記，未計入圖表。",
     "configured_policy": "已儲存預期設定",
     "title": "進階分析",
     "navigation_hint": "請求表現、流控狀態與策略",
@@ -20,7 +27,8 @@
     "retry_samples": "重新載入樣本",
     "stop_samples": "停止載入",
     "partial_results": "目前圖表僅根據已載入樣本，不能視為整個時間範圍的最終結果。",
-    "empty_window": "所選時間範圍內沒有請求記錄。",
+    "source_names_unavailable": "憑據名稱載入失敗，暫以來源識別碼顯示。",
+    "empty_window": "所選時間範圍與篩選條件下沒有請求記錄。",
     "no_measurements": "沒有可用於此指標的成功請求測量資料。",
     "basic_settings": "基本設定",
     "rules_section": "流控規則"

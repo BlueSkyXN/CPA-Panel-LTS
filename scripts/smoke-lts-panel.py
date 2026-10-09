@@ -2460,7 +2460,8 @@ def run_auth_file_using_api_smoke(page: Any, app_url: str) -> None:
         and "/v0/management/auth-files/download" in response.url
         and "codex-smoke.json" in response.url
     ):
-        codex_card.locator('button[title="Auth File Details / Edit"]').click()
+        codex_card.get_by_role("button", name="More", exact=True).click()
+        page.get_by_role("menuitem", name="Auth File Details / Edit", exact=True).click()
     codex_dialog = page.get_by_role("dialog").filter(has_text="codex-smoke.json").filter(
         has_text="Auth File Details / Edit"
     )
@@ -2480,7 +2481,8 @@ def run_auth_file_using_api_smoke(page: Any, app_url: str) -> None:
         and "/v0/management/auth-files/download" in response.url
         and "xai-smoke.json" in response.url
     ):
-        xai_card.locator('button[title="Auth File Details / Edit"]').click()
+        xai_card.get_by_role("button", name="More", exact=True).click()
+        page.get_by_role("menuitem", name="Auth File Details / Edit", exact=True).click()
     xai_dialog = page.get_by_role("dialog").filter(has_text="xai-smoke.json").filter(
         has_text="Auth File Details / Edit"
     )

@@ -6,6 +6,8 @@ export interface UsageQuerySession {
   now_ms: number;
   models: string[];
   max_page_size: number;
+  analytics_version?: number;
+  max_analytics_rows?: number;
 }
 export interface UsageQueryIdentity {
   source: string;

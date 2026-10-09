@@ -1,13 +1,13 @@
+import { UsageAnalyticsCharts } from './UsageAnalyticsCharts';
+import { useMemo } from 'react';
+import { buildUsageAnalytics } from '@/utils/usage/analyticsModel';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
-import type { UsageQuerySession } from '@/types/usageQuery';
+import type { UsageQueryFilter, UsageQuerySession } from '@/types/usageQuery';
+import type { AnalyticsFilters } from '@/utils/usage/analyticsFilters';
 import type { AnalyticsTimeWindow } from '@/utils/usage';
 import type { UsagePayload } from './hooks/useUsageData';
 import { useUsageAnalyticsDetails } from './hooks/useUsageAnalyticsDetails';
-import { CacheEfficiencyCard } from './CacheEfficiencyCard';
-import { ErrorAnalysisCard } from './ErrorAnalysisCard';
-import { LatencyDistributionCard } from './LatencyDistributionCard';
-import { LatencyTrendChart } from './LatencyTrendChart';
 import styles from '@/pages/UsagePage.module.scss';
 
 export interface UsageAnalyticsSectionProps {
@@ -18,6 +18,9 @@ export interface UsageAnalyticsSectionProps {
   isMobile: boolean;
   active?: boolean;
   enabled?: boolean;
+  filter?: UsageQueryFilter;
+  filters?: AnalyticsFilters;
+  empty?: boolean;
 }
 
 export function UsageAnalyticsSection({
@@ -28,6 +31,9 @@ export function UsageAnalyticsSection({
   isMobile,
   active = true,
   enabled = true,
+  filter,
+  filters,
+  empty,
 }: UsageAnalyticsSectionProps) {
   const { t } = useTranslation();
   const {
@@ -39,7 +45,14 @@ export function UsageAnalyticsSection({
     status,
     load,
     stop,
-  } = useUsageAnalyticsDetails(querySession, legacyUsage, timeWindow, { active, enabled });
+  } = useUsageAnalyticsDetails(querySession, legacyUsage, timeWindow, {
+    active,
+    enabled,
+    filter,
+    filters,
+    empty,
+  });
+  const data = useMemo(() => buildUsageAnalytics(details, timeWindow), [details, timeWindow]);
   const pending = loading || samplesLoading;
   const hasSamples = details.length > 0;
   const retryable = status === 'error' || status === 'stopped';
@@ -90,31 +103,7 @@ export function UsageAnalyticsSection({
         <p className={styles.hint}>{t('analytics.empty_window')}</p>
       )}
       {(hasSamples || pending) && (
-        <div className={styles.analyticsGrid}>
-          <LatencyTrendChart
-            details={details}
-            loading={pending && !hasSamples}
-            isMobile={isMobile}
-            timeWindow={timeWindow}
-          />
-          <CacheEfficiencyCard
-            details={details}
-            loading={pending && !hasSamples}
-            isMobile={isMobile}
-            timeWindow={timeWindow}
-          />
-          <LatencyDistributionCard
-            details={details}
-            loading={pending && !hasSamples}
-            isMobile={isMobile}
-          />
-          <ErrorAnalysisCard
-            details={details}
-            loading={pending && !hasSamples}
-            isMobile={isMobile}
-            timeWindow={timeWindow}
-          />
-        </div>
+        <UsageAnalyticsCharts data={data} loading={pending && !hasSamples} isMobile={isMobile} />
       )}
     </section>
   );

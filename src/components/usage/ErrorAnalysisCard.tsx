@@ -1,3 +1,4 @@
+import type { UsageAnalyticsData } from '@/types/usageAnalytics';
 import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ChartData, ChartOptions } from 'chart.js';
@@ -5,18 +6,18 @@ import { Bar, Line } from 'react-chartjs-2';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import {
-  buildFailureTrendSeries,
-  collectErrorAnalysisRows,
   formatCompactNumber,
   formatDayLabel,
   formatHourLabel,
-  summarizeErrorAnalytics,
-  type AnalyticsTimeWindow,
   type ErrorAnalyticsSummary,
   type ErrorFamily,
-  type UsageDetail,
 } from '@/utils/usage';
-import { buildChartOptions, buildStaticAxisTheme, getHourChartMinWidth, sparsePointRadius } from '@/utils/usage/chartConfig';
+import {
+  buildChartOptions,
+  buildStaticAxisTheme,
+  getHourChartMinWidth,
+  sparsePointRadius,
+} from '@/utils/usage/chartConfig';
 import styles from '@/pages/UsagePage.module.scss';
 
 const FAILURE_RATE_COLOR = '#EF4444';
@@ -29,18 +30,12 @@ const FAMILY_COLORS: Record<ErrorFamily, string> = {
 };
 
 export interface ErrorAnalysisCardProps {
-  details: UsageDetail[];
+  data: UsageAnalyticsData;
   loading: boolean;
   isMobile: boolean;
-  timeWindow: AnalyticsTimeWindow | null;
 }
 
-export function ErrorAnalysisCard({
-  details,
-  loading,
-  isMobile,
-  timeWindow,
-}: ErrorAnalysisCardProps) {
+export function ErrorAnalysisCard({ data, loading, isMobile }: ErrorAnalysisCardProps) {
   const { t, i18n } = useTranslation();
   const [period, setPeriod] = useState<'hour' | 'day'>('hour');
 
@@ -54,9 +49,8 @@ export function ErrorAnalysisCard({
   );
 
   const { trendData, trendOptions, statusData, statusOptions, summary, hasTrend } = useMemo(() => {
-    const rows = collectErrorAnalysisRows(details);
-    const summary: ErrorAnalyticsSummary = summarizeErrorAnalytics(rows, { topReasonLimit: 5 });
-    const trend = buildFailureTrendSeries(rows, period, timeWindow);
+    const summary: ErrorAnalyticsSummary = data.errors;
+    const trend = data[period].errors;
     const labels = trend.map((point) =>
       period === 'hour'
         ? formatHourLabel(new Date(point.timestampMs))
@@ -121,7 +115,9 @@ export function ErrorAnalysisCard({
 
     const statusData: ChartData<'bar'> = {
       labels: summary.byStatus.map((group) =>
-        group.status === null ? t('usage_stats.error_analysis_unknown_status') : String(group.status)
+        group.status === null
+          ? t('usage_stats.error_analysis_unknown_status')
+          : String(group.status)
       ),
       datasets: [
         {
@@ -150,8 +146,7 @@ export function ErrorAnalysisCard({
           callbacks: {
             label: (context) => {
               const count = Number(context.parsed.x) || 0;
-              const share =
-                summary.failedRequests > 0 ? count / summary.failedRequests : null;
+              const share = summary.failedRequests > 0 ? count / summary.failedRequests : null;
               return share === null ? `${count}` : `${count} (${percentFormatter.format(share)})`;
             },
           },
@@ -184,7 +179,7 @@ export function ErrorAnalysisCard({
       summary,
       hasTrend: trend.some((point) => point.requests > 0),
     };
-  }, [details, period, isMobile, timeWindow, percentFormatter, t]);
+  }, [data, period, isMobile, percentFormatter, t]);
 
   return (
     <Card
@@ -214,15 +209,20 @@ export function ErrorAnalysisCard({
         <div className={styles.chartWrapper}>
           <div className={styles.analyticsChips}>
             <span className={styles.analyticsChip}>
-              <span className={styles.analyticsChipLabel}>{t('usage_stats.error_analysis_failure_rate')}</span>
+              <span className={styles.analyticsChipLabel}>
+                {t('usage_stats.error_analysis_failure_rate')}
+              </span>
               <span className={styles.analyticsChipValue}>
                 {summary.failureRate === null ? '--' : percentFormatter.format(summary.failureRate)}
               </span>
             </span>
             <span className={styles.analyticsChip}>
-              <span className={styles.analyticsChipLabel}>{t('usage_stats.error_analysis_failed_requests')}</span>
+              <span className={styles.analyticsChipLabel}>
+                {t('usage_stats.error_analysis_failed_requests')}
+              </span>
               <span className={styles.analyticsChipValue}>
-                {formatCompactNumber(summary.failedRequests)} / {formatCompactNumber(summary.totalRequests)}
+                {formatCompactNumber(summary.failedRequests)} /{' '}
+                {formatCompactNumber(summary.totalRequests)}
               </span>
             </span>
           </div>
@@ -263,7 +263,9 @@ export function ErrorAnalysisCard({
                         <span className={styles.errorReasonText} title={group.reason}>
                           {group.reason}
                         </span>
-                        <span className={styles.errorReasonCount}>{group.count.toLocaleString()}</span>
+                        <span className={styles.errorReasonCount}>
+                          {group.count.toLocaleString()}
+                        </span>
                       </li>
                     ))}
                   </ul>

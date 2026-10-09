@@ -1,16 +1,10 @@
+import type { UsageAnalyticsData } from '@/types/usageAnalytics';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ChartData, ChartOptions } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
 import { Card } from '@/components/ui/Card';
-import {
-  buildLatencyHistogram,
-  collectLatencyAnalysisRows,
-  formatDurationMs,
-  summarizeLatencyRows,
-  type PercentileSummary,
-  type UsageDetail,
-} from '@/utils/usage';
+import { formatDurationMs, type PercentileSummary } from '@/utils/usage';
 import { buildStaticAxisTheme } from '@/utils/usage/chartConfig';
 import styles from '@/pages/UsagePage.module.scss';
 
@@ -44,9 +38,7 @@ function PercentileChipGroup({ label, summary }: PercentileChipGroupProps) {
         {(['p50', 'p90', 'p95', 'p99'] as const).map((rank) => (
           <span key={rank} className={styles.analyticsChip}>
             <span className={styles.analyticsChipLabel}>{rank.toUpperCase()}</span>
-            <span className={styles.analyticsChipValue}>
-              {formatDurationMs(summary[rank])}
-            </span>
+            <span className={styles.analyticsChipValue}>{formatDurationMs(summary[rank])}</span>
           </span>
         ))}
       </div>
@@ -55,22 +47,25 @@ function PercentileChipGroup({ label, summary }: PercentileChipGroupProps) {
 }
 
 export interface LatencyDistributionCardProps {
-  details: UsageDetail[];
+  data: UsageAnalyticsData;
   loading: boolean;
   isMobile?: boolean;
 }
 
-export function LatencyDistributionCard({ details, loading, isMobile = false }: LatencyDistributionCardProps) {
+export function LatencyDistributionCard({
+  data,
+  loading,
+  isMobile = false,
+}: LatencyDistributionCardProps) {
   const { t } = useTranslation();
 
   const { chartData, chartOptions, histogram, summaries } = useMemo(() => {
-    const rows = collectLatencyAnalysisRows(details);
-    const histogram = buildLatencyHistogram(rows);
-    const summaries = summarizeLatencyRows(rows);
+    const histogram = data.histogram;
+    const summaries = data.timings;
     const labels = [...HISTOGRAM_BIN_LABELS];
     const axis = buildStaticAxisTheme(isMobile ? 10 : 11);
 
-    const data: ChartData<'bar'> = {
+    const chart: ChartData<'bar'> = {
       labels,
       datasets: [
         {
@@ -102,9 +97,7 @@ export function LatencyDistributionCard({ details, loading, isMobile = false }: 
               const count = Number(context.parsed.y) || 0;
               const share =
                 histogram.sampleCount > 0 ? (count / histogram.sampleCount) * 100 : null;
-              return share === null
-                ? `${count}`
-                : `${count} (${share.toFixed(1)}%)`;
+              return share === null ? `${count}` : `${count} (${share.toFixed(1)}%)`;
             },
           },
         },
@@ -135,8 +128,8 @@ export function LatencyDistributionCard({ details, loading, isMobile = false }: 
       },
     };
 
-    return { chartData: data, chartOptions: options, histogram, summaries };
-  }, [details, isMobile, t]);
+    return { chartData: chart, chartOptions: options, histogram, summaries };
+  }, [data, isMobile, t]);
 
   return (
     <Card title={t('usage_stats.latency_distribution_title')}>
@@ -152,10 +145,22 @@ export function LatencyDistributionCard({ details, loading, isMobile = false }: 
             </div>
           </div>
           <div className={styles.analyticsChipStack}>
-            <PercentileChipGroup label={t('usage_stats.latency_distribution_latency')} summary={summaries.latency} />
-            <PercentileChipGroup label={t('usage_stats.request_events_first_content')} summary={summaries.firstContent} />
-            <PercentileChipGroup label={t('usage_stats.request_events_ttft')} summary={summaries.ttft} />
-            <PercentileChipGroup label={t('usage_stats.request_events_ttfa')} summary={summaries.ttfa} />
+            <PercentileChipGroup
+              label={t('usage_stats.latency_distribution_latency')}
+              summary={summaries.latency}
+            />
+            <PercentileChipGroup
+              label={t('usage_stats.request_events_first_content')}
+              summary={summaries.firstContent}
+            />
+            <PercentileChipGroup
+              label={t('usage_stats.request_events_ttft')}
+              summary={summaries.ttft}
+            />
+            <PercentileChipGroup
+              label={t('usage_stats.request_events_ttfa')}
+              summary={summaries.ttfa}
+            />
           </div>
           <p className={styles.analyticsNote}>{t('usage_stats.analytics_success_only_note')}</p>
         </div>

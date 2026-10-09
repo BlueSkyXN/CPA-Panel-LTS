@@ -1192,6 +1192,13 @@ features:
       - src/pages/AnalyticsPage.module.scss
       - src/pages/ObservabilityPage.tsx
       - src/services/api/usage.ts
+      - src/services/api/usageAnalytics.ts
+      - src/services/api/usageAnalytics.test.mjs
+      - src/stores/usageAnalyticsCache.ts
+      - src/types/usageAnalytics.ts
+      - src/utils/usage/analyticsModel.ts
+      - src/components/usage/UsageAnalyticsCharts.tsx
+      - src/components/usage/hooks/useUsageAnalytics.ts
       - src/services/api/usageQuery.ts
       - src/components/usage/UsageAnalyticsSection.tsx
       - src/components/usage/hooks/useUsageAnalyticsDetails.ts
@@ -1206,8 +1213,10 @@ features:
       - /analytics/observability
     core_endpoints:
       - /v0/management/usage
+      - /v0/management/usage/query/analytics
       - /v0/management/usage/query/details
     required_markers:
+      - analytics_version
       - UsageAnalyticsSection
       - ModelShareCard
       - USAGE_ANALYTICS_AUTO_LOAD_WINDOW_HOURS

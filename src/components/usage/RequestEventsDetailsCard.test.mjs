@@ -632,3 +632,26 @@ test('Blue metadata survives both snapshot transforms and does not change pricin
   assert.equal(program.normalizeResponseCyberProgram('daybreak_red'), 'unknown');
   assert.equal(program.normalizeResponseCyberProgram('standard'), 'standard');
 });
+
+
+test('analytics drilldown overrides stored event filters and keeps exact source identities', async () => {
+  await i18n.changeLanguage('en');
+  const storageKey = 'cpa-request-event-filters-v1';
+  sessionStorageValues.set(storageKey, JSON.stringify({ model: 'old-model', result: 'failed', source: 'old-source' }));
+  const detail = (source, auth_index, token) => ({ timestamp: '2026-10-08T00:00:00Z', source, auth_index, failed: false, tokens: { total_tokens: token } });
+  const usage = { apis: { app: { models: {
+    'model-a': { details: [detail('source-a', '1', 11), detail('source-b', '2', 22)] },
+    'model-b': { details: [detail('source-a', '1', 33)] },
+  } } } };
+  const props = { usage, loading: false, pageTimeRange: 'all', referenceNowMs: Date.parse('2026-10-08T01:00:00Z'),
+    priceProfile: pricingModule.createDefaultPriceProfileV3(), requestApiKeys: [], geminiKeys: [], claudeConfigs: [], codexConfigs: [], vertexConfigs: [], openaiProviders: [] };
+  const markup = renderToStaticMarkup(createElement(RequestEventsDetailsCard, { ...props, initialAnalyticsFilters: {
+    model: 'model-a', source: { value: 'auth:1', label: 'Credential A', identities: [{ source: 't:source-a', auth_index: '1' }] },
+  } }));
+  assert.equal((markup.match(/data-request-cost-status=/g) ?? []).length, 1);
+  assert.ok(markup.includes('Credential A'));
+  const all = renderToStaticMarkup(createElement(RequestEventsDetailsCard, { ...props, initialAnalyticsFilters: {} }));
+  assert.equal((all.match(/data-request-cost-status=/g) ?? []).length, 3);
+  assert.equal(JSON.parse(sessionStorageValues.get(storageKey)).model, 'old-model');
+  sessionStorageValues.delete(storageKey);
+});

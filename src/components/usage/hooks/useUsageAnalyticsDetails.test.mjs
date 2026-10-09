@@ -47,6 +47,7 @@ async function createHarness(respond = async () => ({ items: [], total: 0, next_
     [/import \{ usageQueryApi \} from [^;]+;/, `const {usageQueryApi}=globalThis.${key};`],
     [/import \{ collectUsageDetails \} from [^;]+;/, 'const collectUsageDetails=()=>[];'],
     [/import \{ queryItemDetail \} from [^;]+;/, 'const queryItemDetail=(item)=>item;'],
+    [/import \{ matchesAnalyticsFilters \} from [^;]+;/, 'const matchesAnalyticsFilters=()=>true;'],
   ];
   let code = compiled;
   for (const [pattern, replacement] of replacements) { assert.match(code, pattern); code = code.replace(pattern, replacement); }
@@ -174,6 +175,51 @@ test('visibility changes preserve completed and explicitly stopped loads', async
     h.render(session, shortWindow);
     h.render(session, shortWindow, { active: false });
     assert.equal(h.render(session, shortWindow).status, 'stopped');
+    assert.equal(h.requests.length, 1);
+  } finally { h.close(); }
+});
+
+
+test('every page receives model/source filters; changing them aborts and restarts', async () => {
+  const h = await createHarness(async (request) => request.cursor
+    ? new Promise(() => {})
+    : { items: [{ id: request.filter.model }], total: 2, next_cursor: 'next' });
+  try {
+    const filter = { model: 'model-a', identities: [{ source: 'source-a', auth_index: '1' }] };
+    h.render(session, shortWindow, { filter });
+    await tick();
+    assert.equal(h.requests.length, 2);
+    for (const request of h.requests) assert.deepEqual(request.request.filter, filter);
+    h.render(session, shortWindow, { filter: structuredClone(filter) });
+    assert.equal(h.requests.length, 2);
+    const changed = { ...filter, model: 'model-b' };
+    const result = h.render(session, shortWindow, { filter: changed });
+    assert.equal(h.requests[1].signal.aborted, true);
+    assert.equal(h.requests[2].request.cursor, '');
+    assert.deepEqual(h.requests[2].request.filter, changed);
+    assert.equal(result.loadedCount, 0);
+  } finally { h.close(); }
+});
+
+test('an absent selected source is empty, never an unfiltered request', async () => {
+  const h = await createHarness();
+  try {
+    h.render(session, shortWindow, { empty: true });
+    assert.equal(h.requests.length, 0);
+    const result = h.render(session, shortWindow, { empty: true });
+    assert.equal(result.status, 'ready');
+    assert.equal(result.totalCount, 0);
+  } finally { h.close(); }
+});
+
+test('manual long-window loading resets when filters change', async () => {
+  const h = await createHarness();
+  try {
+    const window = { startMs: session.now_ms - 30 * 86400000, endMs: session.now_ms };
+    h.render(session, window, { filter: { model: 'a' } }).load();
+    h.render(session, window, { filter: { model: 'a' } });
+    await tick();
+    assert.equal(h.render(session, window, { filter: { model: 'b' } }).needsManualLoad, true);
     assert.equal(h.requests.length, 1);
   } finally { h.close(); }
 });

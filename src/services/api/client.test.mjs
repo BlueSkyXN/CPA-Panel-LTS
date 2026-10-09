@@ -50,7 +50,7 @@ test('read-only usage POST queries neither block a switch nor become frozen writ
   const lifecycle = await vite.ssrLoadModule('/src/services/connectionSession.ts');
   apiClient.setConfig({ apiBase: 'https://test.example.test', managementKey: 'synthetic' });
   const response = (config) => ({ data: {}, status: 200, statusText: 'OK', headers: {}, config });
-  for (const path of ['/usage/query/summary', '/usage/query/details', '/usage/query/pricing']) {
+  for (const path of ['/usage/query/summary', '/usage/query/details', '/usage/query/pricing', '/usage/query/analytics']) {
     let finish;
     const pending = apiClient.post(path, {}, { adapter: (config) => new Promise(resolve => { finish = () => resolve(response(config)); }) });
     try {

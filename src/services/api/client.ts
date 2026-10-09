@@ -31,6 +31,7 @@ const READ_ONLY_USAGE_POSTS = new Set([
   '/usage/query/summary',
   '/usage/query/details',
   '/usage/query/pricing',
+  '/usage/query/analytics',
 ]);
 
 function isMutationRequest(config: AxiosRequestConfig): boolean {

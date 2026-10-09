@@ -23,7 +23,8 @@ export const queryItemDetail = (item: UsageQueryItem): UsageDetail => ({
 export function useUsageQueryDetails(
   session: UsageQuerySession | null,
   range: UsageQueryRequest,
-  filter: (options: UsageQueryOptions | null) => UsageQueryFilter
+  // null only probes metadata; its unfiltered rows must never reach the table or export.
+  filter: (options: UsageQueryOptions | null) => UsageQueryFilter | null
 ) {
   const scope = useAuthStore((s) => JSON.stringify([s.apiBase, s.managementKey]));
   const baseKey = JSON.stringify([scope, session?.bound, range]);
@@ -47,15 +48,15 @@ export function useUsageQueryDetails(
     error: string;
   } | null>(null);
   const requestKey = JSON.stringify([key, page, cursor]);
-  // options 只控制首次附带元数据，不改变查询身份，也不会因此补发第二个请求。
+  // include_options 不属于查询身份；只有元数据改变实际筛选条件时才重新查询。
   const serialized = JSON.stringify(
     session
       ? {
           ...range,
           bound: session.bound,
           now_ms: session.now_ms,
-          filter: appliedFilter,
-          limit: 100,
+          filter: appliedFilter ?? {},
+          limit: appliedFilter === null ? 1 : 100,
           cursor,
         }
       : null
@@ -68,6 +69,8 @@ export function useUsageQueryDetails(
       .details({ ...request, include_options: metadataKey.current !== baseKey }, controller.signal)
       .then((data) => {
         if (controller.signal.aborted) return;
+        if (request.limit === 1 && metadataKey.current !== baseKey && !data.options)
+          throw new Error('Missing usage query options');
         if (data.options) {
           metadataKey.current = baseKey;
           setMetadata({ key: baseKey, options: data.options });
@@ -85,8 +88,20 @@ export function useUsageQueryDetails(
     return () => controller.abort();
   }, [request, requestKey, baseKey]);
   const current = state?.key === requestKey ? state : null;
+  const data = useMemo(() => {
+    if (!current?.data || appliedFilter !== null) return current?.data ?? null;
+    const metrics: UsageQueryDetails['metrics'] = { ...current.data.metrics };
+    for (const name of Object.keys(metrics) as (keyof typeof metrics)[]) {
+      const value = metrics[name];
+      if (typeof value === 'number') Object.assign(metrics, { [name]: 0 });
+      else if (Array.isArray(value)) Object.assign(metrics, { [name]: [] });
+      else if (value)
+        Object.assign(metrics, { [name]: { numerator: 0, denominator: 0, samples: 0 } });
+    }
+    return { ...current.data, items: [], total: 0, next_cursor: '', metrics };
+  }, [current, appliedFilter]);
   const setPage = (next: number) => {
-    if (!current?.data || next < 0) return;
+    if (!current?.data || appliedFilter === null || next < 0) return;
     const cursors = navigation?.key === key ? [...navigation.cursors] : [''];
     if (next > page) {
       if (!current.data.next_cursor) return;
@@ -95,7 +110,7 @@ export function useUsageQueryDetails(
     setNavigation({ key, page: next, cursors });
   };
   const exportDetails = async (): Promise<UsageDetail[]> => {
-    if (!request) return [];
+    if (!request || appliedFilter === null) return [];
     const result: UsageDetail[] = [];
     let next = '';
     do {
@@ -115,7 +130,7 @@ export function useUsageQueryDetails(
   };
   return {
     options,
-    data: current?.data ?? null,
+    data,
     error: current?.error ?? '',
     loading: session !== null && current === null,
     page,

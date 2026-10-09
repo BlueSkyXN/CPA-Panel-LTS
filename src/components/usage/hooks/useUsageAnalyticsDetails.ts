@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { usageQueryApi } from '@/services/api/usageQuery';
-import type { UsageQueryRequest, UsageQuerySession } from '@/types/usageQuery';
+import type { UsageQueryFilter, UsageQueryRequest, UsageQuerySession } from '@/types/usageQuery';
+import { matchesAnalyticsFilters, type AnalyticsFilters } from '@/utils/usage/analyticsFilters';
 import { collectUsageDetails, type UsageDetail } from '@/utils/usage';
 import type { AnalyticsTimeWindow } from '@/utils/usage/latencyAnalysis';
 import { queryItemDetail } from './useUsageQueryDetails';
@@ -34,19 +35,43 @@ export function useUsageAnalyticsDetails(
   querySession: UsageQuerySession | null,
   usage: UsagePayload | null,
   timeWindow: AnalyticsTimeWindow | null,
-  { active = true, enabled = true }: { active?: boolean; enabled?: boolean } = {}
+  {
+    active = true,
+    enabled = true,
+    filter,
+    filters,
+    empty = false,
+  }: {
+    active?: boolean;
+    enabled?: boolean;
+    filter?: UsageQueryFilter;
+    filters?: AnalyticsFilters;
+    empty?: boolean;
+  } = {}
 ): UseUsageAnalyticsDetailsResult {
   const scope = useAuthStore((s) => JSON.stringify([s.apiBase, s.managementKey]));
   const legacyDetails = useMemo(
-    () => (enabled && querySession === null && usage ? collectUsageDetails(usage) : []),
-    [enabled, querySession, usage]
+    () =>
+      enabled && querySession === null && usage
+        ? collectUsageDetails(usage).filter(
+            (detail) => !filters || matchesAnalyticsFilters(detail, filters)
+          )
+        : [],
+    [enabled, querySession, usage, filters]
   );
   const windowHours = timeWindow ? (timeWindow.endMs - timeWindow.startMs) / 3_600_000 : 0;
   const autoLoad =
     querySession !== null &&
     windowHours > 0 &&
     windowHours <= USAGE_ANALYTICS_AUTO_LOAD_WINDOW_HOURS;
+  const serializedFilter = JSON.stringify(filter ?? {});
+  const appliedFilter = useMemo<UsageQueryFilter>(
+    () => JSON.parse(serializedFilter),
+    [serializedFilter]
+  );
   const baseKey = JSON.stringify([
+    serializedFilter,
+    empty,
     scope,
     querySession?.bound ?? null,
     querySession?.now_ms ?? null,
@@ -86,6 +111,10 @@ export function useUsageAnalyticsDetails(
     const previous = latestState.current;
     if (previous?.key === stateKey && ['ready', 'stopped', 'error'].includes(previous.status))
       return;
+    if (empty) {
+      setState({ key: stateKey, details: [], totalCount: 0, status: 'ready', error: '' });
+      return;
+    }
     if (manualEpoch === 0 && !autoLoad) {
       setState({ key: stateKey, details: [], totalCount: null, status: 'deferred', error: '' });
       return;
@@ -96,6 +125,7 @@ export function useUsageAnalyticsDetails(
     inFlight.current = controller;
     setState({ key: stateKey, details: [], totalCount: null, status: 'loading', error: '' });
     const request: UsageQueryRequest = {
+      filter: appliedFilter,
       bound: querySession.bound,
       now_ms: querySession.now_ms,
       ...(timeWindow ? { from_ms: timeWindow.startMs, to_ms: timeWindow.endMs } : {}),
@@ -154,7 +184,18 @@ export function useUsageAnalyticsDetails(
       controller.abort();
       if (inFlight.current === controller) inFlight.current = null;
     };
-  }, [active, enabled, autoLoad, manualEpoch, querySession, scope, stateKey, timeWindow]);
+  }, [
+    active,
+    enabled,
+    autoLoad,
+    manualEpoch,
+    querySession,
+    scope,
+    stateKey,
+    timeWindow,
+    appliedFilter,
+    empty,
+  ]);
 
   if (querySession === null) {
     return {

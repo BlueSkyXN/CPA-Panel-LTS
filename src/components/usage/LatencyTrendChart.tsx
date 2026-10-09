@@ -1,19 +1,16 @@
+import type { UsageAnalyticsData } from '@/types/usageAnalytics';
 import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ChartData, ChartOptions } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { formatDayLabel, formatDurationMs, formatHourLabel } from '@/utils/usage';
 import {
-  buildLatencyPercentileSeries,
-  collectLatencyAnalysisRows,
-  formatDayLabel,
-  formatDurationMs,
-  formatHourLabel,
-  type AnalyticsTimeWindow,
-  type UsageDetail,
-} from '@/utils/usage';
-import { buildChartOptions, getHourChartMinWidth, sparsePointRadius } from '@/utils/usage/chartConfig';
+  buildChartOptions,
+  getHourChartMinWidth,
+  sparsePointRadius,
+} from '@/utils/usage/chartConfig';
 import styles from '@/pages/UsagePage.module.scss';
 
 const SERIES_COLORS = {
@@ -24,19 +21,17 @@ const SERIES_COLORS = {
 } as const;
 
 export interface LatencyTrendChartProps {
-  details: UsageDetail[];
+  data: UsageAnalyticsData;
   loading: boolean;
   isMobile: boolean;
-  timeWindow: AnalyticsTimeWindow | null;
 }
 
-export function LatencyTrendChart({ details, loading, isMobile, timeWindow }: LatencyTrendChartProps) {
+export function LatencyTrendChart({ data, loading, isMobile }: LatencyTrendChartProps) {
   const { t } = useTranslation();
   const [period, setPeriod] = useState<'hour' | 'day'>('hour');
 
   const { chartData, chartOptions, hasSamples } = useMemo(() => {
-    const rows = collectLatencyAnalysisRows(details);
-    const series = buildLatencyPercentileSeries(rows, period, timeWindow);
+    const series = data[period].latency;
     const labels = series.times.map((time) =>
       period === 'hour' ? formatHourLabel(new Date(time)) : formatDayLabel(new Date(time))
     );
@@ -46,7 +41,7 @@ export function LatencyTrendChart({ details, loading, isMobile, timeWindow }: La
       p99: 'P99',
       average: t('usage_stats.latency_trend_avg'),
     };
-    const data: ChartData<'line'> = {
+    const chart: ChartData<'line'> = {
       labels,
       datasets: [
         {
@@ -120,9 +115,7 @@ export function LatencyTrendChart({ details, loading, isMobile, timeWindow }: La
               `${context.dataset.label}: ${formatDurationMs(Number(context.parsed.y))}`,
             afterBody: (items) => {
               const count = sampleCountAt(items);
-              return count !== null
-                ? t('usage_stats.analytics_samples_in_bucket', { count })
-                : '';
+              return count !== null ? t('usage_stats.analytics_samples_in_bucket', { count }) : '';
             },
           },
         },
@@ -130,11 +123,11 @@ export function LatencyTrendChart({ details, loading, isMobile, timeWindow }: La
     };
 
     return {
-      chartData: data,
+      chartData: chart,
       chartOptions: options,
       hasSamples: series.sampleCounts.some((count) => count > 0),
     };
-  }, [details, period, isMobile, timeWindow, t]);
+  }, [data, period, isMobile, t]);
 
   const labels = chartData.labels ?? [];
 
@@ -167,7 +160,10 @@ export function LatencyTrendChart({ details, loading, isMobile, timeWindow }: La
           <div className={styles.chartLegend} aria-label="Chart legend">
             {chartData.datasets.map((dataset) => (
               <div key={dataset.label} className={styles.legendItem} title={dataset.label}>
-                <span className={styles.legendDot} style={{ backgroundColor: dataset.borderColor as string }} />
+                <span
+                  className={styles.legendDot}
+                  style={{ backgroundColor: dataset.borderColor as string }}
+                />
                 <span className={styles.legendLabel}>{dataset.label}</span>
               </div>
             ))}

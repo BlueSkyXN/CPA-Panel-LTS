@@ -1,6 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { decodeUsageQuerySession } from '@/services/api/usageQuery';
+import { isRecord } from '@/utils/helpers';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { readAnalyticsNavigationState } from '@/utils/usage/analyticsFilters';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
 import { RequestEventsDetailsCard } from '@/components/usage/RequestEventsDetailsCard';
@@ -16,6 +19,8 @@ import styles from './UsagePage.module.scss';
 export function UsageEventsPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
+  const initialAnalyticsFilters = useMemo(() => readAnalyticsNavigationState(location.state), [location.state]);
   const [searchParams, setSearchParams] = useSearchParams();
   const scope = useMemo(() => {
     let storage: Storage | undefined;
@@ -32,7 +37,21 @@ export function UsageEventsPage() {
     usage, loading, error, lastRefreshedAt, priceProfile, loadUsage, querySession,
     handleExport, handleImport, handleImportChange, importInputRef, exporting, importing,
   } = useUsageData();
-  useHeaderRefresh(loadUsage);
+  const pinnedSession = useMemo(() => {
+    if (!isRecord(location.state) || !location.state.analyticsSession) return null;
+    try { return decodeUsageQuerySession(location.state.analyticsSession); } catch { return null; }
+  }, [location.state]);
+  const [releasedSnapshot, setReleasedSnapshot] = useState<string | null>(null);
+  const selectedSession = pinnedSession && releasedSnapshot !== pinnedSession.bound ? pinnedSession : querySession;
+  const refresh = useCallback(async () => {
+    await loadUsage();
+    setReleasedSnapshot(pinnedSession?.bound ?? null);
+    if (pinnedSession) navigate(`${location.pathname}${location.search}`, {
+      replace: true,
+      state: { ...(isRecord(location.state) ? location.state : {}), analyticsSession: null },
+    });
+  }, [loadUsage, pinnedSession, navigate, location.pathname, location.search, location.state]);
+  useHeaderRefresh(refresh);
 
   useEffect(() => {
     let stopped = false;
@@ -55,7 +74,7 @@ export function UsageEventsPage() {
           <Select
             value={scope.range}
             options={ranges.map((value) => ({ value, label: t(`usage_stats.range_${value}`) }))}
-            onChange={(value) => setSearchParams(buildUsageEventsSearch(value as UsageTimeRange, scope.customRange))}
+            onChange={(value) => setSearchParams(buildUsageEventsSearch(value as UsageTimeRange, scope.customRange), { state: location.state })}
             ariaLabel={t('usage_stats.range_filter')}
             fullWidth={false}
           />
@@ -71,7 +90,7 @@ export function UsageEventsPage() {
           <Button variant="secondary" size="sm" onClick={handleImport} loading={importing} disabled={loading || exporting}>
             {t('usage_stats.import')}
           </Button>
-          <Button variant="secondary" size="sm" onClick={() => void loadUsage().catch(() => {})} disabled={loading || importing || exporting}>
+          <Button variant="secondary" size="sm" onClick={() => void refresh().catch(() => {})} disabled={loading || importing || exporting}>
             {loading ? t('common.loading') : t('usage_stats.refresh')}
           </Button>
           <input ref={importInputRef} type="file" accept=".json,application/json" hidden onChange={handleImportChange} />
@@ -80,12 +99,14 @@ export function UsageEventsPage() {
       {error && <div className={styles.errorBox}>{error}</div>}
       {!scope.valid && <div className={styles.errorBox}>{t('usage_stats.request_events_invalid_scope')}</div>}
       <RequestEventsDetailsCard
-        querySession={scope.valid ? querySession : null}
+        key={JSON.stringify(initialAnalyticsFilters)}
+        initialAnalyticsFilters={initialAnalyticsFilters}
+        querySession={scope.valid ? selectedSession : null}
         usage={scope.valid ? usage : null}
         loading={loading}
         pageTimeRange={scope.range}
         pageTimeRangeCustom={scope.customRange}
-        referenceNowMs={lastRefreshedAt?.getTime() ?? 0}
+        referenceNowMs={selectedSession?.now_ms ?? lastRefreshedAt?.getTime() ?? 0}
         priceProfile={priceProfile}
         requestApiKeys={config?.apiKeys || []}
         geminiKeys={config?.geminiApiKeys || []}

@@ -21,25 +21,30 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
-import { IconFilterAll, IconSearch } from '@/components/ui/icons';
+import { IconChevronDown, IconChevronUp, IconFilterAll, IconSearch } from '@/components/ui/icons';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { copyToClipboard } from '@/utils/clipboard';
 import {
   MAX_CARD_PAGE_SIZE,
   MIN_CARD_PAGE_SIZE,
-  OAUTH_PROVIDER_PRESETS,
   QUOTA_PROVIDER_TYPES,
   clampCardPageSize,
   getTypeColor,
   getTypeLabel,
-  isProblemAuthFile,
   isRuntimeOnlyAuthFile,
   normalizeProviderKey,
-  parsePriorityValue,
   type QuotaProviderType,
 } from '@/features/authFiles/constants';
 import { AuthFileCard } from '@/features/authFiles/components/AuthFileCard';
+import { AuthFileActionsMenu } from '@/features/authFiles/components/AuthFileActionsMenu';
+import {
+  authFileProvider,
+  authFileProviderOptions,
+  matchesAuthFileSearch,
+  matchesAuthFileStatus,
+  sortAuthFiles,
+} from '@/features/authFiles/listView';
 import { isAccountFormProvider } from '@/features/authFiles/patProviders';
 import { PatAccountModal } from '@/features/authFiles/components/PatAccountModal';
 import type { AuthFileItem } from '@/types';
@@ -61,24 +66,20 @@ import { useAuthFilesOauth } from '@/features/authFiles/hooks/useAuthFilesOauth'
 import { useAuthFilesPrefixProxyEditor } from '@/features/authFiles/hooks/useAuthFilesPrefixProxyEditor';
 import { useAuthFilesStatusBarCache } from '@/features/authFiles/hooks/useAuthFilesStatusBarCache';
 import {
+  defaultAuthFilesSortDirection,
   isAuthFilesSortMode,
+  resolveAuthFilesSort,
+  resolveAuthFilesStatusFilter,
   readAuthFilesUiState,
   readPersistedAuthFilesCompactMode,
   writeAuthFilesUiState,
   writePersistedAuthFilesCompactMode,
   type AuthFilesSortMode,
+  type AuthFilesSortDirection,
+  type AuthFilesStatusFilter,
 } from '@/features/authFiles/uiState';
 import { useAuthStore, useNotificationStore } from '@/stores';
 import styles from './AuthFilesPage.module.scss';
-
-// 默认排序沿用过滤标签页的固定 provider 顺序：预设按索引排，
-// 非预设（如 qoder/codebuddy）统一按字母追加到末尾，组内再按文件名排。
-const AUTH_FILE_PROVIDER_RANK = new Map(
-  OAUTH_PROVIDER_PRESETS.map((provider, index) => [normalizeProviderKey(provider), index])
-);
-const AUTH_FILE_PROVIDER_TAIL_RANK = OAUTH_PROVIDER_PRESETS.length;
-const authFileProviderRank = (providerKey: string): number =>
-  AUTH_FILE_PROVIDER_RANK.get(providerKey) ?? AUTH_FILE_PROVIDER_TAIL_RANK;
 
 const easePower3Out = (progress: number) => 1 - (1 - progress) ** 4;
 const easePower2In = (progress: number) => progress ** 3;
@@ -86,14 +87,6 @@ const BATCH_BAR_BASE_TRANSFORM = 'translateX(-50%)';
 const BATCH_BAR_HIDDEN_TRANSFORM = 'translateX(-50%) translateY(56px)';
 const DEFAULT_REGULAR_PAGE_SIZE = 9;
 const DEFAULT_COMPACT_PAGE_SIZE = 12;
-
-const escapeWildcardSearchSegment = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-const buildWildcardSearch = (value: string): RegExp | null => {
-  if (!value.includes('*')) return null;
-  const pattern = value.split('*').map(escapeWildcardSearchSegment).join('.*');
-  return new RegExp(pattern, 'i');
-};
 
 export function AuthFilesPage() {
   const { t } = useTranslation();
@@ -108,8 +101,9 @@ export function AuthFilesPage() {
   const [filter, setFilter] = useState<'all' | string>('all');
   const [patTarget, setPatTarget] = useState<AuthFileItem | null | undefined>(undefined);
   const supportsPat = useAuthStore((s) => s.pluginSupportKnown && s.supportsPlugin);
-  const [problemOnly, setProblemOnly] = useState(false);
-  const [disabledOnly, setDisabledOnly] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<AuthFilesStatusFilter>('all');
+  const problemOnly = statusFilter === 'problem';
+  const disabledOnly = statusFilter === 'disabled';
   const [compactMode, setCompactMode] = useState(false);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -120,11 +114,13 @@ export function AuthFilesPage() {
   const [pageSizeInput, setPageSizeInput] = useState('9');
   const [viewMode, setViewMode] = useState<'diagram' | 'list'>('list');
   const [sortMode, setSortMode] = useState<AuthFilesSortMode>('default');
+  const [sortDirection, setSortDirection] = useState<AuthFilesSortDirection>('asc');
   const [codexRemoteCloudConnectSummaryCache, setCodexRemoteCloudConnectSummaryCache] = useState<
     Map<string, CodexRemoteCloudConnectEnvironmentSummary>
   >(() => new Map());
   const [batchActionBarVisible, setBatchActionBarVisible] = useState(false);
   const [uiStateHydrated, setUiStateHydrated] = useState(false);
+  const filterTagsRef = useRef<HTMLDivElement>(null);
   const floatingBatchActionsRef = useRef<HTMLDivElement>(null);
   const batchActionAnimationRef = useRef<AnimationPlaybackControlsWithThen | null>(null);
   const previousSelectionCountRef = useRef(0);
@@ -253,12 +249,7 @@ export function AuthFilesPage() {
       if (typeof persisted.filter === 'string' && persisted.filter.trim()) {
         setFilter(normalizeProviderKey(persisted.filter));
       }
-      if (typeof persisted.problemOnly === 'boolean') {
-        setProblemOnly(persisted.problemOnly);
-      }
-      if (typeof persisted.disabledOnly === 'boolean') {
-        setDisabledOnly(persisted.disabledOnly);
-      }
+      setStatusFilter(resolveAuthFilesStatusFilter(persisted));
       if (typeof persistedCompactMode !== 'boolean' && typeof persisted.compactMode === 'boolean') {
         setCompactMode(persisted.compactMode);
       }
@@ -284,9 +275,9 @@ export function AuthFilesPage() {
         regular: regularPageSize,
         compact: compactPageSize,
       });
-      if (isAuthFilesSortMode(persisted.sortMode)) {
-        setSortMode(persisted.sortMode);
-      }
+      const sorting = resolveAuthFilesSort(persisted);
+      setSortMode(sorting.mode);
+      setSortDirection(sorting.direction);
     }
 
     setUiStateHydrated(true);
@@ -325,6 +316,8 @@ export function AuthFilesPage() {
       regularPageSize: pageSizeByMode.regular,
       compactPageSize: pageSizeByMode.compact,
       sortMode,
+      sortDirection,
+      statusFilter,
     });
     writePersistedAuthFilesCompactMode(compactMode);
   }, [
@@ -337,6 +330,8 @@ export function AuthFilesPage() {
     problemOnly,
     search,
     sortMode,
+    sortDirection,
+    statusFilter,
     uiStateHydrated,
   ]);
 
@@ -393,6 +388,7 @@ export function AuthFilesPage() {
     (value: string) => {
       if (!isAuthFilesSortMode(value) || value === sortMode) return;
       setSortMode(value);
+      setSortDirection(defaultAuthFilesSortDirection(value));
       setPage(1);
     },
     [sortMode]
@@ -418,89 +414,62 @@ export function AuthFilesPage() {
     isCurrentLayer ? 240_000 : null
   );
 
-  const existingTypes = useMemo(() => {
-    const types = new Set<string>(['all']);
-    if (requestedProvider) types.add(requestedProvider);
-    files.forEach((file) => {
-      const type = normalizeProviderKey(String(file.type ?? file.provider ?? ''));
-      if (type) types.add(type);
-    });
-    return Array.from(types);
-  }, [files, requestedProvider]);
+  const existingTypes = useMemo(
+    () => authFileProviderOptions(files, requestedProvider),
+    [files, requestedProvider]
+  );
+
+  useEffect(() => {
+    const rail = filterTagsRef.current;
+    const active = rail?.querySelector<HTMLButtonElement>('[aria-pressed="true"]');
+    if (!rail || !active || rail.scrollWidth <= rail.clientWidth) return;
+    rail.scrollLeft = Math.max(0, active.offsetLeft - (rail.clientWidth - active.offsetWidth) / 2);
+  }, [normalizedFilter, existingTypes]);
 
   const filesMatchingStatusFilters = useMemo(
-    () =>
-      files.filter((file) => {
-        if (problemOnly && !isProblemAuthFile(file)) return false;
-        if (disabledOnly && file.disabled !== true) return false;
-        return true;
-      }),
-    [disabledOnly, files, problemOnly]
+    () => files.filter((file) => matchesAuthFileStatus(file, statusFilter)),
+    [files, statusFilter]
   );
 
   const sortOptions = useMemo(
     () => [
       { value: 'default', label: t('auth_files.sort_default') },
+      { value: 'name', label: t('auth_files.sort_name') },
       { value: 'az', label: t('auth_files.sort_az') },
+      { value: 'modified', label: t('auth_files.sort_modified') },
       { value: 'priority', label: t('auth_files.sort_priority') },
     ],
     [t]
+  );
+  const sortDirectionLabel = t(
+    `auth_files.sort_${sortMode === 'modified' ? 'time' : sortMode === 'priority' ? 'priority' : 'name'}_${sortDirection}`
   );
 
   const typeCounts = useMemo(() => {
     const counts: Record<string, number> = { all: filesMatchingStatusFilters.length };
     filesMatchingStatusFilters.forEach((file) => {
-      const type = normalizeProviderKey(String(file.type ?? file.provider ?? ''));
-      if (!type) return;
+      const type = authFileProvider(file);
       counts[type] = (counts[type] || 0) + 1;
     });
     return counts;
   }, [filesMatchingStatusFilters]);
 
-  const normalizedSearch = search.trim();
-  const wildcardSearch = useMemo(() => buildWildcardSearch(normalizedSearch), [normalizedSearch]);
+  const filtered = useMemo(
+    () =>
+      filesMatchingStatusFilters.filter((item) => {
+        const type = authFileProvider(item);
+        return (
+          (normalizedFilter === 'all' || type === normalizedFilter) &&
+          matchesAuthFileSearch(item, search)
+        );
+      }),
+    [filesMatchingStatusFilters, normalizedFilter, search]
+  );
 
-  const filtered = useMemo(() => {
-    const normalizedTerm = normalizedSearch.toLowerCase();
-
-    return filesMatchingStatusFilters.filter((item) => {
-      const type = normalizeProviderKey(String(item.type ?? item.provider ?? ''));
-      const matchType = normalizedFilter === 'all' || type === normalizedFilter;
-      const matchSearch =
-        !normalizedSearch ||
-        [item.name, item.type, item.provider].some((value) => {
-          const content = (value || '').toString();
-          return wildcardSearch
-            ? wildcardSearch.test(content)
-            : content.toLowerCase().includes(normalizedTerm);
-        });
-      return matchType && matchSearch;
-    });
-  }, [filesMatchingStatusFilters, normalizedFilter, normalizedSearch, wildcardSearch]);
-
-  const sorted = useMemo(() => {
-    const copy = [...filtered];
-    if (sortMode === 'default') {
-      copy.sort((a, b) => {
-        const providerA = normalizeProviderKey(String(a.type ?? a.provider ?? 'unknown'));
-        const providerB = normalizeProviderKey(String(b.type ?? b.provider ?? 'unknown'));
-        const rankCompare = authFileProviderRank(providerA) - authFileProviderRank(providerB);
-        if (rankCompare !== 0) return rankCompare;
-        const providerCompare = providerA.localeCompare(providerB);
-        if (providerCompare !== 0) return providerCompare;
-        return a.name.localeCompare(b.name);
-      });
-    } else if (sortMode === 'az') {
-      copy.sort((a, b) => a.name.localeCompare(b.name));
-    } else if (sortMode === 'priority') {
-      copy.sort((a, b) => {
-        const pa = parsePriorityValue(a.priority) ?? 0;
-        const pb = parsePriorityValue(b.priority) ?? 0;
-        return pb - pa; // 高优先级排前面
-      });
-    }
-    return copy;
-  }, [filtered, sortMode]);
+  const sorted = useMemo(
+    () => sortAuthFiles(filtered, sortMode, sortDirection),
+    [filtered, sortMode, sortDirection]
+  );
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const currentPage = Math.min(page, totalPages);
@@ -532,6 +501,17 @@ export function AuthFilesPage() {
         copied
           ? t('notification.link_copied', { defaultValue: 'Copied to clipboard' })
           : t('notification.copy_failed', { defaultValue: 'Copy failed' }),
+        copied ? 'success' : 'error'
+      );
+    },
+    [showNotification, t]
+  );
+
+  const copyFileName = useCallback(
+    async (name: string) => {
+      const copied = await copyToClipboard(name);
+      showNotification(
+        t(copied ? 'auth_files.filename_copied' : 'notification.copy_failed'),
         copied ? 'success' : 'error'
       );
     },
@@ -639,7 +619,7 @@ export function AuthFilesPage() {
 
   const renderFilterTags = () => (
     <div className={styles.filterRail}>
-      <div className={styles.filterTags}>
+      <div ref={filterTagsRef} className={styles.filterTags}>
         {existingTypes.map((type) => {
           const isActive = normalizedFilter === type;
           const color =
@@ -657,6 +637,7 @@ export function AuthFilesPage() {
               key={type}
               className={`${styles.filterTag} ${isActive ? styles.filterTagActive : ''}`}
               style={buttonStyle}
+              aria-pressed={isActive}
               onClick={() => handleProviderFilterChange(type)}
             >
               <span className={styles.filterTagLabel}>
@@ -737,24 +718,25 @@ export function AuthFilesPage() {
             >
               {t('auth_files.upload_button')}
             </Button>
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={() =>
-                handleDeleteAll({
-                  filter,
-                  problemOnly,
-                  disabledOnly,
-                  onResetFilterToAll: () => setFilter('all'),
-                  onResetProblemOnly: () => setProblemOnly(false),
-                  onResetDisabledOnly: () => setDisabledOnly(false),
-                })
-              }
-              disabled={disableControls || loading || deletingAll}
-              loading={deletingAll}
-            >
-              {deleteAllButtonLabel}
-            </Button>
+            <AuthFileActionsMenu
+              label={t('auth_files.more_actions')}
+              actions={[
+                {
+                  label: deleteAllButtonLabel,
+                  danger: true,
+                  disabled: disableControls || loading || deletingAll || Boolean(search.trim()),
+                  onClick: () =>
+                    handleDeleteAll({
+                      filter,
+                      problemOnly,
+                      disabledOnly,
+                      onResetFilterToAll: () => handleProviderFilterChange('all'),
+                      onResetProblemOnly: () => setStatusFilter('all'),
+                      onResetDisabledOnly: () => setStatusFilter('all'),
+                    }),
+                },
+              ]}
+            />
             <input
               ref={fileInputRef}
               type="file"
@@ -775,8 +757,9 @@ export function AuthFilesPage() {
             <div className={styles.filterControlsPanel}>
               <div className={styles.filterControls}>
                 <div className={`${styles.filterItem} ${styles.filterSearchItem}`}>
-                  <label>{t('auth_files.search_label')}</label>
+                  <label htmlFor="auth-files-search">{t('auth_files.search_label')}</label>
                   <Input
+                    id="auth-files-search"
                     className={styles.searchInput}
                     value={search}
                     onChange={(e) => {
@@ -788,82 +771,101 @@ export function AuthFilesPage() {
                   />
                 </div>
                 <div className={styles.filterItem}>
-                  <label>{t('auth_files.page_size_label')}</label>
-                  <input
-                    className={styles.pageSizeSelect}
-                    type="number"
-                    min={MIN_CARD_PAGE_SIZE}
-                    max={MAX_CARD_PAGE_SIZE}
-                    step={1}
-                    value={pageSizeInput}
-                    onChange={handlePageSizeChange}
-                    onBlur={(e) => commitPageSizeInput(e.currentTarget.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.currentTarget.blur();
-                      }
+                  <label id="auth-files-status-label">{t('auth_files.status_filter_label')}</label>
+                  <Select
+                    value={statusFilter}
+                    options={[
+                      { value: 'all', label: t('auth_files.status_filter_all') },
+                      { value: 'problem', label: t('auth_files.problem_filter_only') },
+                      { value: 'disabled', label: t('auth_files.disabled_filter_only') },
+                    ]}
+                    onChange={(value) => {
+                      if (value !== 'all' && value !== 'problem' && value !== 'disabled') return;
+                      setStatusFilter(value);
+                      setPage(1);
                     }}
+                    ariaLabelledBy="auth-files-status-label"
                   />
                 </div>
                 <div className={styles.filterItem}>
-                  <label>{t('auth_files.sort_label')}</label>
-                  <Select
-                    className={styles.sortSelect}
-                    value={sortMode}
-                    options={sortOptions}
-                    onChange={handleSortModeChange}
-                    ariaLabel={t('auth_files.sort_label')}
-                    fullWidth
-                  />
-                </div>
-                <div className={`${styles.filterItem} ${styles.filterToggleItem}`}>
-                  <label>{t('auth_files.display_options_label')}</label>
-                  <div className={styles.filterToggleGroup}>
-                    <div className={styles.filterToggleCard}>
-                      <ToggleSwitch
-                        checked={problemOnly}
-                        onChange={(value) => {
-                          setProblemOnly(value);
+                  <label id="auth-files-sort-label">{t('auth_files.sort_label')}</label>
+                  <div className={styles.sortControls}>
+                    <Select
+                      className={styles.sortSelect}
+                      value={sortMode}
+                      options={sortOptions}
+                      onChange={handleSortModeChange}
+                      ariaLabelledBy="auth-files-sort-label"
+                      ariaDescribedBy="auth-files-sort-hint"
+                    />
+                    {sortMode !== 'default' && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className={styles.sortDirectionButton}
+                        aria-label={t('auth_files.sort_direction', {
+                          direction: sortDirectionLabel,
+                        })}
+                        onClick={() => {
+                          setSortDirection((value) => (value === 'asc' ? 'desc' : 'asc'));
                           setPage(1);
                         }}
-                        ariaLabel={t('auth_files.problem_filter_only')}
-                        label={
-                          <span className={styles.filterToggleLabel}>
-                            {t('auth_files.problem_filter_only')}
-                          </span>
-                        }
-                      />
-                    </div>
-                    <div className={styles.filterToggleCard}>
-                      <ToggleSwitch
-                        checked={disabledOnly}
-                        onChange={(value) => {
-                          setDisabledOnly(value);
-                          setPage(1);
-                        }}
-                        ariaLabel={t('auth_files.disabled_filter_only')}
-                        label={
-                          <span className={styles.filterToggleLabel}>
-                            {t('auth_files.disabled_filter_only')}
-                          </span>
-                        }
-                      />
-                    </div>
-                    <div className={styles.filterToggleCard}>
-                      <ToggleSwitch
-                        checked={compactMode}
-                        onChange={(value) => setCompactMode(value)}
-                        ariaLabel={t('auth_files.compact_mode_label')}
-                        label={
-                          <span className={styles.filterToggleLabel}>
-                            {t('auth_files.compact_mode_label')}
-                          </span>
-                        }
-                      />
-                    </div>
+                      >
+                        {sortDirection === 'asc' ? (
+                          <IconChevronUp size={14} />
+                        ) : (
+                          <IconChevronDown size={14} />
+                        )}
+                        {sortDirectionLabel}
+                      </Button>
+                    )}
                   </div>
                 </div>
               </div>
+              <div className={styles.viewControls}>
+                <div className={styles.resultsSummary}>
+                  <span role="status">
+                    {t('auth_files.results_summary', { shown: sorted.length, total: files.length })}
+                  </span>
+                  <span id="auth-files-sort-hint" className={styles.sortHint}>
+                    {t('auth_files.sort_display_only')}
+                  </span>
+                </div>
+                <div className={styles.displayControls}>
+                  <ToggleSwitch
+                    checked={compactMode}
+                    onChange={(value) => {
+                      setCompactMode(value);
+                      setPage(1);
+                    }}
+                    ariaLabel={t('auth_files.compact_mode_label')}
+                    label={
+                      <span className={styles.filterToggleLabel}>
+                        {t('auth_files.compact_mode_label')}
+                      </span>
+                    }
+                  />
+                  <label className={styles.pageSizeControl}>
+                    {t('auth_files.page_size_label')}
+                    <input
+                      className={styles.pageSizeSelect}
+                      type="number"
+                      min={MIN_CARD_PAGE_SIZE}
+                      max={MAX_CARD_PAGE_SIZE}
+                      step={1}
+                      value={pageSizeInput}
+                      onChange={handlePageSizeChange}
+                      onBlur={(e) => commitPageSizeInput(e.currentTarget.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') e.currentTarget.blur();
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
+              {search.trim() && (
+                <span className={styles.sortHint}>{t('auth_files.search_delete_hint')}</span>
+              )}
             </div>
 
             {loading ? (
@@ -897,6 +899,7 @@ export function AuthFilesPage() {
                     onShowCodexRemoteCloudConnectEnvironments={
                       openCodexRemoteCloudConnectEnvironments
                     }
+                    onCopyName={copyFileName}
                     onDownload={handleDownload}
                     onOpenPrefixProxyEditor={openPrefixProxyEditor}
                     onDelete={handleDelete}

@@ -1,15 +1,8 @@
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
-import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { SelectionCheckbox } from '@/components/ui/SelectionCheckbox';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
-import {
-  IconDownload,
-  IconInfo,
-  IconModelCluster,
-  IconSettings,
-  IconTrash2,
-} from '@/components/ui/icons';
+import { IconInfo, IconModelCluster } from '@/components/ui/icons';
 import { ProviderStatusBar } from '@/components/providers/ProviderStatusBar';
 import type { AuthFileItem } from '@/types';
 import { resolveAuthProvider } from '@/utils/quota';
@@ -42,6 +35,8 @@ import type { AuthFileStatusBarData } from '@/features/authFiles/hooks/useAuthFi
 import { AuthFileQuotaSection } from '@/features/authFiles/components/AuthFileQuotaSection';
 import { ProviderIcon } from '@/features/authFiles/components/ProviderIcon';
 import { PatAccountSummary } from './PatAccountSummary';
+import { AuthFileActionsMenu } from './AuthFileActionsMenu';
+import { authFileDisplayName } from '../listView';
 import { isAccountFormProvider } from '../patProviders';
 import styles from '@/pages/AuthFilesPage.module.scss';
 
@@ -58,6 +53,7 @@ export type AuthFileCardProps = {
   codexRemoteCloudConnectSummary?: CodexRemoteCloudConnectEnvironmentSummary;
   onShowModels: (file: AuthFileItem) => void;
   onShowCodexRemoteCloudConnectEnvironments: (file: AuthFileItem) => void;
+  onCopyName: (name: string) => void;
   onDownload: (name: string) => void;
   onOpenPrefixProxyEditor: (file: AuthFileItem) => void;
   onDelete: (name: string) => void;
@@ -87,6 +83,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
     codexRemoteCloudConnectSummary,
     onShowModels,
     onShowCodexRemoteCloudConnectEnvironments,
+    onCopyName,
     onDownload,
     onOpenPrefixProxyEditor,
     onDelete,
@@ -135,7 +132,8 @@ export function AuthFileCard(props: AuthFileCardProps) {
   const rawStatusMessage = getAuthFileStatusMessage(file);
   const hasStatusWarning = hasAuthFileStatusWarning(file);
 
-  const priorityValue = parsePriorityValue(file.priority ?? file['priority']);
+  const priorityValue = parsePriorityValue(file.priority);
+  const displayName = authFileDisplayName(file);
   const weightValue = readCredentialWeight(file.weight ?? file['weight']);
   const noteValue = typeof file.note === 'string' ? file.note.trim() : '';
   const stateLabel = isRuntimeOnly
@@ -157,6 +155,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
 
   return (
     <div
+      data-testid="auth-file-card"
       className={`${styles.fileCard} ${compact ? styles.fileCardCompact : ''} ${providerCardClass} ${selected ? styles.fileCardSelected : ''} ${file.disabled ? styles.fileCardDisabled : ''}`}
     >
       <div className={styles.fileCardLayout}>
@@ -192,9 +191,25 @@ export function AuthFileCard(props: AuthFileCardProps) {
                 </span>
                 <span className={`${styles.stateBadge} ${stateBadgeClass}`}>{stateLabel}</span>
               </div>
-              <span className={styles.fileName} title={file.name}>
-                {file.name}
-              </span>
+              <div className={styles.fileIdentity}>
+                <span className={styles.fileName} title={displayName}>
+                  {displayName}
+                </span>
+                <button
+                  type="button"
+                  className={styles.copyNameButton}
+                  title={t('auth_files.copy_filename')}
+                  aria-label={t('auth_files.copy_filename')}
+                  onClick={() => onCopyName(file.name)}
+                >
+                  {t('common.copy')}
+                </button>
+              </div>
+              {displayName !== file.name && (
+                <span className={styles.fileIdentifier} title={file.name}>
+                  {file.name}
+                </span>
+              )}
               {!compact && noteValue && (
                 <div className={styles.noteText} title={noteValue}>
                   <span className={styles.noteLabel}>{t('auth_files.note_display')}</span>
@@ -226,14 +241,12 @@ export function AuthFileCard(props: AuthFileCardProps) {
               <span className={styles.metaLabel}>{t('auth_files.file_modified')}</span>
               <span className={styles.metaValue}>{formatModified(file)}</span>
             </div>
-            {priorityValue !== undefined && (
-              <div className={`${styles.metaItem} ${styles.priorityBadge}`}>
-                <span className={styles.metaLabel}>{t('auth_files.priority_display')}</span>
-                <span className={`${styles.metaValue} ${styles.priorityValue}`}>
-                  {priorityValue}
-                </span>
-              </div>
-            )}
+            <div className={`${styles.metaItem} ${styles.priorityBadge}`}>
+              <span className={styles.metaLabel}>{t('auth_files.priority_display')}</span>
+              <span className={`${styles.metaValue} ${styles.priorityValue}`}>
+                {priorityValue ?? t('auth_files.priority_default')}
+              </span>
+            </div>
             {weightValue !== undefined && (
               <div className={styles.metaItem}>
                 <span className={styles.metaLabel}>{t('auth_files.weight_display')}</span>
@@ -283,20 +296,17 @@ export function AuthFileCard(props: AuthFileCardProps) {
 
           <div className={styles.cardActions}>
             <div className={styles.cardActionsMain}>
-              {!isRuntimeOnly &&
-                patDetailActive &&
-                isAccountFormProvider(providerKey) &&
-                onUpdatePat && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className={styles.updatePatButton}
-                    disabled={disableControls}
-                    onClick={() => onUpdatePat(file)}
-                  >
-                    {t('pat_accounts.update')}
-                  </Button>
-                )}
+              {!isRuntimeOnly && isAccountFormProvider(providerKey) && onUpdatePat && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className={styles.updatePatButton}
+                  disabled={disableControls}
+                  onClick={() => onUpdatePat(file)}
+                >
+                  {t('pat_accounts.update')}
+                </Button>
+              )}
               {showModelsButton && (
                 <Button
                   variant="secondary"
@@ -317,42 +327,27 @@ export function AuthFileCard(props: AuthFileCardProps) {
                 </Button>
               )}
               {!isRuntimeOnly && (
-                <div className={styles.cardUtilityActions}>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => onDownload(file.name)}
-                    className={styles.iconButton}
-                    title={t('auth_files.download_button')}
-                    disabled={disableControls}
-                  >
-                    <IconDownload className={styles.actionIcon} size={16} />
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => onOpenPrefixProxyEditor(file)}
-                    className={styles.iconButton}
-                    title={t('auth_files.prefix_proxy_button')}
-                    disabled={disableControls}
-                  >
-                    <IconSettings className={styles.actionIcon} size={16} />
-                  </Button>
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    onClick={() => onDelete(file.name)}
-                    className={styles.iconButton}
-                    title={t('auth_files.delete_button')}
-                    disabled={disableControls || deleting === file.name}
-                  >
-                    {deleting === file.name ? (
-                      <LoadingSpinner size={14} />
-                    ) : (
-                      <IconTrash2 className={styles.actionIcon} size={16} />
-                    )}
-                  </Button>
-                </div>
+                <AuthFileActionsMenu
+                  label={t('auth_files.more_actions')}
+                  actions={[
+                    {
+                      label: t('auth_files.download_button'),
+                      onClick: () => onDownload(file.name),
+                      disabled: disableControls,
+                    },
+                    {
+                      label: t('auth_files.prefix_proxy_button'),
+                      onClick: () => onOpenPrefixProxyEditor(file),
+                      disabled: disableControls,
+                    },
+                    {
+                      label: t('auth_files.delete_button'),
+                      onClick: () => onDelete(file.name),
+                      disabled: disableControls || deleting === file.name,
+                      danger: true,
+                    },
+                  ]}
+                />
               )}
             </div>
             {!isRuntimeOnly && (

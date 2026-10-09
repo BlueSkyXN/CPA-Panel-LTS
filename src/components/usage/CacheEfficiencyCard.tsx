@@ -1,3 +1,4 @@
+import type { UsageAnalyticsData } from '@/types/usageAnalytics';
 import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ChartData, ChartOptions } from 'chart.js';
@@ -5,35 +6,28 @@ import { Line } from 'react-chartjs-2';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import {
-  buildCacheTrendSeries,
-  collectCacheAnalysisRows,
   formatCompactNumber,
   formatDayLabel,
   formatHourLabel,
-  summarizeCacheAnalytics,
-  type AnalyticsTimeWindow,
   type CacheAnalyticsSummary,
   type CacheTrendPoint,
-  type UsageDetail,
 } from '@/utils/usage';
-import { buildChartOptions, getHourChartMinWidth, sparsePointRadius } from '@/utils/usage/chartConfig';
+import {
+  buildChartOptions,
+  getHourChartMinWidth,
+  sparsePointRadius,
+} from '@/utils/usage/chartConfig';
 import styles from '@/pages/UsagePage.module.scss';
 
 const CACHE_RATE_COLOR = '#0E9F6E';
 
 export interface CacheEfficiencyCardProps {
-  details: UsageDetail[];
+  data: UsageAnalyticsData;
   loading: boolean;
   isMobile: boolean;
-  timeWindow: AnalyticsTimeWindow | null;
 }
 
-export function CacheEfficiencyCard({
-  details,
-  loading,
-  isMobile,
-  timeWindow,
-}: CacheEfficiencyCardProps) {
+export function CacheEfficiencyCard({ data, loading, isMobile }: CacheEfficiencyCardProps) {
   const { t, i18n } = useTranslation();
   const [period, setPeriod] = useState<'hour' | 'day'>('hour');
 
@@ -47,16 +41,15 @@ export function CacheEfficiencyCard({
   );
 
   const { chartData, chartOptions, points, summary, hasData } = useMemo(() => {
-    const rows = collectCacheAnalysisRows(details);
-    const points: CacheTrendPoint[] = buildCacheTrendSeries(rows, period, timeWindow);
-    const summary: CacheAnalyticsSummary = summarizeCacheAnalytics(rows);
+    const points: CacheTrendPoint[] = data[period].cache;
+    const summary: CacheAnalyticsSummary = data.cache;
     const labels = points.map((point) =>
       period === 'hour'
         ? formatHourLabel(new Date(point.timestampMs))
         : formatDayLabel(new Date(point.timestampMs))
     );
 
-    const data: ChartData<'line'> = {
+    const chart: ChartData<'line'> = {
       labels,
       datasets: [
         {
@@ -114,13 +107,13 @@ export function CacheEfficiencyCard({
     };
 
     return {
-      chartData: data,
+      chartData: chart,
       chartOptions: options,
       points,
       summary,
       hasData: points.some((point) => point.requests > 0),
     };
-  }, [details, period, isMobile, timeWindow, percentFormatter, t]);
+  }, [data, period, isMobile, percentFormatter, t]);
 
   return (
     <Card
@@ -150,13 +143,19 @@ export function CacheEfficiencyCard({
         <div className={styles.chartWrapper}>
           <div className={styles.analyticsChips}>
             <span className={styles.analyticsChip}>
-              <span className={styles.analyticsChipLabel}>{t('usage_stats.cache_analytics_read_rate')}</span>
+              <span className={styles.analyticsChipLabel}>
+                {t('usage_stats.cache_analytics_read_rate')}
+              </span>
               <span className={styles.analyticsChipValue}>
-                {summary.cacheReadRate === null ? '--' : percentFormatter.format(summary.cacheReadRate)}
+                {summary.cacheReadRate === null
+                  ? '--'
+                  : percentFormatter.format(summary.cacheReadRate)}
               </span>
             </span>
             <span className={styles.analyticsChip}>
-              <span className={styles.analyticsChipLabel}>{t('usage_stats.cache_analytics_hit_requests')}</span>
+              <span className={styles.analyticsChipLabel}>
+                {t('usage_stats.cache_analytics_hit_requests')}
+              </span>
               <span className={styles.analyticsChipValue}>
                 {summary.cacheHitRequestRatio === null
                   ? '--'
@@ -164,13 +163,17 @@ export function CacheEfficiencyCard({
               </span>
             </span>
             <span className={styles.analyticsChip}>
-              <span className={styles.analyticsChipLabel}>{t('usage_stats.cache_read_tokens')}</span>
+              <span className={styles.analyticsChipLabel}>
+                {t('usage_stats.cache_read_tokens')}
+              </span>
               <span className={styles.analyticsChipValue}>
                 {formatCompactNumber(summary.cacheReadTokens)}
               </span>
             </span>
             <span className={styles.analyticsChip}>
-              <span className={styles.analyticsChipLabel}>{t('usage_stats.cache_write_tokens')}</span>
+              <span className={styles.analyticsChipLabel}>
+                {t('usage_stats.cache_write_tokens')}
+              </span>
               <span className={styles.analyticsChipValue}>
                 {formatCompactNumber(summary.cacheWriteTokens)}
               </span>
