@@ -2940,6 +2940,7 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
             "grok-4.6",
             "grok-4.3",
             "grok-4.7",
+            "doubao-seed-2.1-pro",
             "claude-haiku-4-5-20251001",
             "claude-sonnet-4-5-20250929",
             "claude-sonnet-4-6",
@@ -3336,6 +3337,49 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
                 raise AssertionError(
                     f"{grok_new_model} Official source does not point to xAI model pricing"
                 )
+
+        doubao_model = catalog.locator(
+            '[data-testid="preset-pricing-model"][data-model="doubao-seed-2.1-pro"]'
+        )
+        doubao_rows = doubao_model.locator("tr")
+        if doubao_rows.count() != 1:
+            raise AssertionError(
+                "Doubao Seed 2.1 Pro catalog did not render a single standard row"
+            )
+        doubao_row = doubao_model.locator('tr[data-context-band="short"]')
+        for label, expected_rate in {
+            "Input": "$0.882",
+            "Cached input": "$0.176",
+            "Output": "$4.412",
+        }.items():
+            actual_rate = (
+                doubao_row.locator(f'td[data-label="{label}"] strong').first.text_content() or ""
+            )
+            if actual_rate != expected_rate:
+                raise AssertionError(
+                    f"Doubao Seed 2.1 Pro {label} rate is {actual_rate!r}, "
+                    f"expected {expected_rate!r}"
+                )
+        doubao_cache_write = doubao_row.locator('td[data-label="Cache write"]')
+        if (
+            (doubao_cache_write.locator("strong").text_content() or "")
+            != "Auto / input rate"
+            or (doubao_cache_write.locator("small").text_content() or "")
+            != "$0.882"
+        ):
+            raise AssertionError("Doubao Seed 2.1 Pro Cache write did not inherit the Input rate")
+        if "Unavailable" not in (
+            doubao_row.locator('td[data-label="Fast policies"]').text_content() or ""
+        ):
+            raise AssertionError("Doubao Seed 2.1 Pro row did not expose Fast as unavailable")
+        if (
+            doubao_model.locator('[data-testid="pricing-official-source"]')
+            .first.get_attribute("href")
+            != "https://www.volcengine.com/docs/82379/1099320"
+        ):
+            raise AssertionError(
+                "Doubao Seed 2.1 Pro Official source does not point to Volcano Ark pricing"
+            )
 
         sol_model = catalog.locator('[data-testid="preset-pricing-model"][data-model="gpt-5.6-sol"]')
         for band, expected_rates in [
