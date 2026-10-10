@@ -2834,7 +2834,12 @@ def run_usage_analytics_smoke(page: Any) -> None:
     # 错误分析展示 mock 的脱敏 failure_reason。
     section.get_by_text("rate_limited", exact=True).wait_for()
     page.goto(page.url.split("#")[0] + "#/usage")
-    page.get_by_text("Model Share", exact=True).wait_for()
+    # 客户端转场期间旧页面停留在 aria-hidden 的退场层，get_by_text 仍会命中；
+    # 等非隐藏层真正渲染出 usage 内容，后续 role 查询才不会读到退场层。
+    page.wait_for_function(
+        "() => [...document.querySelectorAll('.page-transition__layer:not([aria-hidden=\"true\"])')]"
+        ".some((layer) => layer.textContent.includes('Model Share'))"
+    )
 
 
 def run_usage_pricing_entry_smoke(page: Any) -> None:
@@ -2933,6 +2938,8 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
             "kimi-k2.7-code-highspeed",
             "grok-4.5",
             "grok-4.6",
+            "grok-4.3",
+            "grok-4.7",
             "claude-haiku-4-5-20251001",
             "claude-sonnet-4-5-20250929",
             "claude-sonnet-4-6",
@@ -3259,6 +3266,76 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
             != "https://docs.x.ai/developers/models/grok-4.6"
         ):
             raise AssertionError("Grok 4.6 Official source does not point to xAI model pricing")
+
+        for grok_new_model, grok_new_rates, grok_new_source in [
+            (
+                "grok-4.3",
+                {
+                    "short": {"Input": "$1.25", "Cached input": "$0.2", "Output": "$2.5"},
+                    "long": {"Input": "$2.5", "Cached input": "$0.4", "Output": "$5"},
+                },
+                "https://docs.x.ai/developers/models/grok-4.3",
+            ),
+            (
+                "grok-4.7",
+                {
+                    "short": {"Input": "$2", "Cached input": "$0.5", "Output": "$6"},
+                    "long": {"Input": "$4", "Cached input": "$1", "Output": "$12"},
+                },
+                "https://docs.x.ai/developers/models/grok-4.7",
+            ),
+        ]:
+            grok_new = catalog.locator(
+                f'[data-testid="preset-pricing-model"][data-model="{grok_new_model}"]'
+            )
+            grok_new_rows = grok_new.locator("tr")
+            if grok_new_rows.count() != 2:
+                raise AssertionError(
+                    f"{grok_new_model} catalog did not render short and long-context rows"
+                )
+            for band, expected_rates in grok_new_rates.items():
+                grok_new_row = grok_new.locator(f'tr[data-context-band="{band}"]')
+                for label, expected_rate in expected_rates.items():
+                    actual_rate = (
+                        grok_new_row.locator(f'td[data-label="{label}"] strong')
+                        .first.text_content()
+                        or ""
+                    )
+                    if actual_rate != expected_rate:
+                        raise AssertionError(
+                            f"{grok_new_model} {band} {label} rate is {actual_rate!r}, "
+                            f"expected {expected_rate!r}"
+                        )
+                cache_write = grok_new_row.locator('td[data-label="Cache write"]')
+                if (
+                    (cache_write.locator("strong").text_content() or "")
+                    != "Auto / input rate"
+                    or (cache_write.locator("small").text_content() or "")
+                    != expected_rates["Input"]
+                ):
+                    raise AssertionError(
+                        f"{grok_new_model} {band} Cache write did not inherit the Input rate"
+                    )
+                if "Unavailable" not in (
+                    grok_new_row.locator('td[data-label="Fast policies"]').text_content() or ""
+                ):
+                    raise AssertionError(
+                        f"{grok_new_model} {band} row did not expose Fast as unavailable"
+                    )
+
+            if "200.0K" not in grok_new.inner_text():
+                raise AssertionError(
+                    f"{grok_new_model} catalog did not expose the 200K pricing threshold"
+                )
+            if (
+                grok_new.locator(
+                    '[data-testid="pricing-official-source"]'
+                ).first.get_attribute("href")
+                != grok_new_source
+            ):
+                raise AssertionError(
+                    f"{grok_new_model} Official source does not point to xAI model pricing"
+                )
 
         sol_model = catalog.locator('[data-testid="preset-pricing-model"][data-model="gpt-5.6-sol"]')
         for band, expected_rates in [

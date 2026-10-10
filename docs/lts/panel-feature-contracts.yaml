@@ -206,8 +206,12 @@ features:
       - KIMI_PRICING_SOURCE_URL
       - grok-4.5
       - grok-4.6
+      - grok-4.3
+      - grok-4.7
       - XAI_PRICING_SOURCE_URL
       - XAI_GROK_46_PRICING_SOURCE_URL
+      - XAI_GROK_43_PRICING_SOURCE_URL
+      - XAI_GROK_47_PRICING_SOURCE_URL
       - XAI_LONG_CONTEXT_INPUT_TOKEN_THRESHOLD
       - claude-haiku-4-5-20251001
       - claude-haiku-4-5

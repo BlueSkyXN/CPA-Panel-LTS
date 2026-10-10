@@ -15,6 +15,10 @@ export const KIMI_PRICING_SOURCE_URL = 'https://platform.kimi.ai/docs/pricing/ch
 export const XAI_PRICING_SOURCE_URL = 'https://docs.x.ai/developers/models/grok-4.5';
 export const XAI_GROK_46_PRICING_SOURCE_URL = 'https://docs.x.ai/developers/models/grok-4.6';
 export const XAI_GROK_46_CATALOG_AS_OF = '2026-08-18';
+export const XAI_GROK_43_PRICING_SOURCE_URL = 'https://docs.x.ai/developers/models/grok-4.3';
+export const XAI_GROK_43_CATALOG_AS_OF = '2026-10-10';
+export const XAI_GROK_47_PRICING_SOURCE_URL = 'https://docs.x.ai/developers/models/grok-4.7';
+export const XAI_GROK_47_CATALOG_AS_OF = '2026-10-10';
 export const ANTHROPIC_PRICING_SOURCE_URL =
   'https://platform.claude.com/docs/en/about-claude/pricing';
 export const ANTHROPIC_MODEL_IDS_SOURCE_URL =
@@ -439,5 +443,27 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
     },
     sourceUrl: XAI_GROK_46_PRICING_SOURCE_URL,
     asOf: XAI_GROK_46_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'grok-4.3',
+    aliases: [],
+    currency: 'USD',
+    standard: {
+      short: rateCard(1.25, 0.2, undefined, 2.5),
+      long: longCard(rateCard(2.5, 0.4, undefined, 5), XAI_LONG_CONTEXT_INPUT_TOKEN_THRESHOLD),
+    },
+    sourceUrl: XAI_GROK_43_PRICING_SOURCE_URL,
+    asOf: XAI_GROK_43_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'grok-4.7',
+    aliases: [],
+    currency: 'USD',
+    standard: {
+      short: rateCard(2, 0.5, undefined, 6),
+      long: longCard(rateCard(4, 1, undefined, 12), XAI_LONG_CONTEXT_INPUT_TOKEN_THRESHOLD),
+    },
+    sourceUrl: XAI_GROK_47_PRICING_SOURCE_URL,
+    asOf: XAI_GROK_47_CATALOG_AS_OF,
   },
 ];
