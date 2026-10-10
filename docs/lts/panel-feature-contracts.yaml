@@ -213,6 +213,8 @@ features:
       - XAI_GROK_43_PRICING_SOURCE_URL
       - XAI_GROK_47_PRICING_SOURCE_URL
       - XAI_LONG_CONTEXT_INPUT_TOKEN_THRESHOLD
+      - doubao-seed-2.1-pro
+      - DOUBAO_PRICING_SOURCE_URL
       - claude-haiku-4-5-20251001
       - claude-haiku-4-5
       - claude-sonnet-4-5-20250929
