@@ -1,4 +1,10 @@
 import { readCodexCacheAffinity, isCodexCacheAffinityStrategy } from '@/lts/codexPolicy/cacheAffinity';
+import {
+  isCodexOutboundAcceptEncoding,
+  isCodexOutboundRequestCompression,
+  isCodexOutboundTransport,
+  readCodexOutbound,
+} from '@/lts/codexPolicy/outbound';
 import { FLOW_FIELDS, flowControlValidation, readFlowControlValues } from '@/lts/flowControl/model';
 import { writeFlowControlValues } from '@/lts/flowControl/yaml';
 import { useCallback, useMemo, useReducer } from 'react';
@@ -290,6 +296,23 @@ function snapshotPayloadSections(
   })) as Record<PayloadDirtyField, string>;
 }
 
+// codex.outbound visual fields: [field, YAML key under codex.outbound, accepted-value check].
+const CODEX_OUTBOUND_FIELDS: ReadonlyArray<
+  readonly [
+    | 'codexOutboundTransport'
+    | 'codexOutboundWebsocketThresholdBytes'
+    | 'codexOutboundRequestCompression'
+    | 'codexOutboundAcceptEncoding',
+    string,
+    (value: string) => boolean,
+  ]
+> = [
+  ['codexOutboundTransport', 'transport', isCodexOutboundTransport],
+  ['codexOutboundWebsocketThresholdBytes', 'websocket-threshold-bytes', () => true],
+  ['codexOutboundRequestCompression', 'request-compression', isCodexOutboundRequestCompression],
+  ['codexOutboundAcceptEncoding', 'accept-encoding', isCodexOutboundAcceptEncoding],
+];
+
 const CODEX_ABNORMAL_REASONING_RETRY_DIRTY_FIELDS = [
   'codexAbnormalReasoningRetryAction',
   'codexAbnormalReasoningRetryEnabled',
@@ -374,6 +397,9 @@ export function getVisualConfigValidationErrors(
     ),
     codexAbnormalReasoningRetryStreamBufferMaxBytes: getNonNegativeIntegerError(
       values.codexAbnormalReasoningRetryStreamBufferMaxBytes
+    ),
+    codexOutboundWebsocketThresholdBytes: getNonNegativeIntegerError(
+      values.codexOutboundWebsocketThresholdBytes
     ),
     codexAbnormalReasoningRetryHedgeDelayMs: getNonNegativeIntegerError(
       values.codexAbnormalReasoningRetryHedgeDelayMs
@@ -1322,6 +1348,10 @@ function getNextDirtyFields(
       'codexHeaderBetaFeatures',
       'codexIdentityConfuse',
       'codexCacheAffinityStrategy',
+      'codexOutboundTransport',
+      'codexOutboundWebsocketThresholdBytes',
+      'codexOutboundRequestCompression',
+      'codexOutboundAcceptEncoding',
       'codexAbnormalReasoningRetryAction',
       'codexAbnormalReasoningRetryEnabled',
       'codexAbnormalReasoningRetryStreamBuffer',
@@ -1675,6 +1705,15 @@ export function useVisualConfig() {
             : '',
         codexIdentityConfuse: Boolean(codex?.['identity-confuse']),
         codexCacheAffinityStrategy: readCodexCacheAffinity(codex?.['cache-affinity']),
+        ...(() => {
+          const outbound = readCodexOutbound(codex?.outbound);
+          return {
+            codexOutboundTransport: outbound.transport,
+            codexOutboundWebsocketThresholdBytes: outbound.websocketThresholdBytes,
+            codexOutboundRequestCompression: outbound.requestCompression,
+            codexOutboundAcceptEncoding: outbound.acceptEncoding,
+          };
+        })(),
         codexAbnormalReasoningRetryAction,
         codexAbnormalReasoningRetryEnabled: codexAbnormalReasoningRetryAction !== 'disabled',
         codexAbnormalReasoningRetryModelContains: parseStringListWithDefault(
@@ -2055,8 +2094,13 @@ export function useVisualConfig() {
 
         const abnormalReasoningRetryDirty =
           hasCodexAbnormalReasoningRetryDirtyFields(dirtyFields);
-        const codexDirty = dirtyFields.has('codexIdentityConfuse') || dirtyFields.has('codexCacheAffinityStrategy') || abnormalReasoningRetryDirty;
+        const outboundDirty = CODEX_OUTBOUND_FIELDS.some(([field]) => dirtyFields.has(field));
+        const codexDirty = dirtyFields.has('codexIdentityConfuse') || dirtyFields.has('codexCacheAffinityStrategy') || outboundDirty || abnormalReasoningRetryDirty;
         if (codexDirty) {
+          if (outboundDirty &&
+              (isAlias(doc.getIn(['codex'], true)) || isAlias(doc.getIn(['codex', 'outbound'], true)))) {
+            throw new VisualConfigApplyError('visual_apply_failed');
+          }
           if (dirtyFields.has('codexCacheAffinityStrategy') &&
               (isAlias(doc.getIn(['codex'], true)) || isAlias(doc.getIn(['codex', 'cache-affinity'], true)))) {
             throw new VisualConfigApplyError('visual_apply_failed');
@@ -2068,6 +2112,27 @@ export function useVisualConfig() {
             }
             ensureMapInDoc(doc, ['codex', 'cache-affinity']);
             doc.setIn(['codex', 'cache-affinity', 'strategy'], values.codexCacheAffinityStrategy);
+          }
+          if (outboundDirty) {
+            ensureMapInDoc(doc, ['codex', 'outbound']);
+            for (const [field, key, isKnown] of CODEX_OUTBOUND_FIELDS) {
+              if (!dirtyFields.has(field)) continue;
+              const value = values[field].trim();
+              if (field === 'codexOutboundWebsocketThresholdBytes') {
+                if (value !== '' && getNonNegativeIntegerError(value)) {
+                  throw new VisualConfigApplyError('visual_apply_failed');
+                }
+                setIntFromStringInDoc(doc, ['codex', 'outbound', key], value);
+                continue;
+              }
+              if (value === '') {
+                if (docHas(doc, ['codex', 'outbound', key])) doc.deleteIn(['codex', 'outbound', key]);
+                continue;
+              }
+              if (!isKnown(value)) throw new VisualConfigApplyError('visual_apply_failed');
+              doc.setIn(['codex', 'outbound', key], value);
+            }
+            deleteIfMapEmpty(doc, ['codex', 'outbound']);
           }
           if (dirtyFields.has('codexIdentityConfuse')) {
             setBooleanInDoc(doc, ['codex', 'identity-confuse'], values.codexIdentityConfuse);

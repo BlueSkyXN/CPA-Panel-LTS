@@ -31,6 +31,8 @@ export interface AuthFileItem {
   unavailable?: boolean;
   status?: string;
   statusMessage?: string;
+  /** Core: the refresh token was rejected; the credential needs a new login before expiry. */
+  reauthRequired?: boolean;
   lastRefresh?: string | number;
   modified?: number;
   priority?: number;

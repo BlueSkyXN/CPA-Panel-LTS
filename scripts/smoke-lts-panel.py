@@ -329,6 +329,10 @@ def build_usage_payload() -> dict[str, Any]:
             "timing_version": 1,
             "ttft_ms": 80,
             "ttfa_ms": 95,
+            "size_version": 1,
+            "upstream_transport": "websocket",
+            "upstream_request_bytes": 900000,
+            "upstream_request_wire_bytes": 900000,
             "tokens": {
                 "input_tokens": 12,
                 "output_tokens": 8,
@@ -4030,6 +4034,8 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         'td[data-request-performance="first-content"][data-first-content-ms="80"]'
     ).wait_for()
     card.locator('td[data-request-performance="ttft"][data-ttft-ms="80"]').wait_for()
+    card.locator('td[data-upstream-transport="websocket"]').wait_for()
+    card.locator('td[data-upstream-request-bytes="900000"]').wait_for()
     card.locator('td[data-request-performance="ttfa"][data-ttfa-ms="95"]').wait_for()
     card.locator('td[data-request-performance="output-tps"][data-output-tps="200"]').wait_for()
     card.locator('[data-performance-summary-key="output-tps"]').wait_for()
@@ -4129,6 +4135,8 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         "authIndex": False,
         "tier": True,
         "result": True,
+        "transport": True,
+        "requestSize": True,
         "latency": True,
         "ttfb": True,
         "firstContent": True,
@@ -4417,6 +4425,11 @@ def run_usage_service_tier_smoke(page: Any) -> None:
             "Request-event CSV did not export canonical timing/performance columns: "
             f"{sorted(csv_rows[0])!r}"
         )
+    if (
+        csv_rows[0].get("upstream_transport") != "websocket"
+        or csv_rows[0].get("upstream_request_bytes") != "900000"
+    ):
+        raise AssertionError(f"Request-event CSV did not export request size fields: {csv_rows[0]!r}")
     if (
         csv_rows[0].get("timing_version") != "1"
         or csv_rows[0].get("first_content_ms") != "80"
@@ -5369,6 +5382,8 @@ def run_usage_request_event_column_storage_smoke(context: Any, app_url: str) -> 
                 authIndex: false,
                 tier: false,
                 result: false,
+                transport: false,
+                requestSize: false,
                 latency: true,
                 ttfb: false,
                 firstContent: false,

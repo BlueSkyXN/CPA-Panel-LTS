@@ -1689,6 +1689,18 @@
   white-space: nowrap;
 }
 
+.requestEventsResultHint {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 2px 6px;
+  border-radius: $radius-full;
+  border: 1px dashed var(--failure-badge-border);
+  color: var(--failure-badge-text);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 .requestEventsEffortBadge,
 .requestEventsEffortEmpty {
   display: inline-flex;

@@ -16,6 +16,7 @@ import {
   summarizeErrorAnalytics,
 } from './errorAnalytics';
 import { buildThroughputTrendSeries } from './throughputAnalytics';
+import { buildRequestSizeDistribution } from './requestSizeAnalytics';
 import type { AnalyticsGrain, AnalyticsTimeWindow } from './analyticsBuckets';
 
 export function buildUsageAnalytics(
@@ -32,6 +33,7 @@ export function buildUsageAnalytics(
     errors: buildFailureTrendSeries(errors, period, window),
     throughput: buildThroughputTrendSeries(all, period, window),
   });
+  const requestSize = buildRequestSizeDistribution(all);
   return {
     timings: summarizeLatencyRows(latency),
     histogram: buildLatencyHistogram(latency),
@@ -39,5 +41,7 @@ export function buildUsageAnalytics(
     errors: summarizeErrorAnalytics(errors),
     hour: grain('hour'),
     day: grain('day'),
+    // Omitted when no detail carries a size measurement, matching Core exact analytics.
+    ...(requestSize ? { requestSize } : {}),
   };
 }

@@ -545,12 +545,14 @@
         "codex-policy": "Codex 最佳化"
       },
       "pages": {
-        "codex-policy_cache": "快取最佳化"
+        "codex-policy_cache": "快取最佳化",
+        "codex-policy_outbound": "出站策略"
       },
       "guidance": {
         "pages": {
           "codex-policy": {
-            "cache": "協助連續對話重用上游快取，適配 ZCode 等用戶端的請求方式。僅適用於透過 ChatGPT 帳號登入接入的 Codex；使用 API Key 接入的模型不受影響。"
+            "cache": "協助連續對話重用上游快取，適配 ZCode 等用戶端的請求方式。僅適用於透過 ChatGPT 帳號登入接入的 Codex；使用 API Key 接入的模型不受影響。",
+            "outbound": "設定 Codex 請求以什麼方式送往上游。只對透過 ChatGPT 帳號登入接入的 Codex 生效；切換傳輸方式還要求憑據開啟 WebSocket。"
           },
           "headers": {
             "codex": "設定 Codex 請求身分資訊；快取最佳化、異常偵測、重試與對沖在「Codex 最佳化」中設定。"
@@ -583,6 +585,59 @@
       "legacy": {
         "label": "關閉增強最佳化",
         "description": "關閉工作階段相容性修復和歷史內容匹配，保留一般請求處理。上游本身的快取仍可能生效。"
+      }
+    }
+  },
+  "codex_outbound": {
+    "unknown_hint": "目前設定值無法識別。除非修改此項，否則會原樣保留。",
+    "transport": {
+      "title": "HTTP 請求的上游傳輸方式",
+      "default_hint": "目前使用預設值：跟隨用戶端。",
+      "options": {
+        "follow": {
+          "label": "跟隨用戶端",
+          "description": "HTTP 請求經 HTTP 送往上游，WebSocket 工作階段保持 WebSocket。"
+        },
+        "websocket": {
+          "label": "一律使用 WebSocket",
+          "description": "HTTP 請求改經 WebSocket 送往上游，與官方 Codex 用戶端一致。每個請求單獨建立上游連線。"
+        },
+        "auto": {
+          "label": "大請求使用 WebSocket",
+          "description": "請求體達到下方門檻時才改走 WebSocket，小請求仍走 HTTP。適用於大請求經 HTTP 失敗的情況。"
+        }
+      }
+    },
+    "threshold": {
+      "label": "WebSocket 門檻（位元組）",
+      "hint": "用於「大請求使用 WebSocket」。留空或 0 使用預設值 786432（768 KiB）。"
+    },
+    "request_compression": {
+      "title": "請求體壓縮",
+      "default_hint": "目前使用預設值：zstd，與官方用戶端一致。",
+      "options": {
+        "auto": {
+          "label": "zstd（官方）",
+          "description": "送往 Codex 後端的 HTTP 請求體以 zstd 壓縮；上游回傳 415 時自動以原文重送一次。"
+        },
+        "none": {
+          "label": "關閉",
+          "description": "請求體不壓縮。"
+        }
+      }
+    },
+    "accept_encoding": {
+      "title": "回應壓縮協商（Accept-Encoding）",
+      "default_hint": "目前使用預設值：與官方用戶端一致。",
+      "options": {
+        "official": {
+          "label": "與官方用戶端一致",
+          "description": "不向 chatgpt.com 送出 Accept-Encoding，回應以原文返回。"
+        },
+        "legacy": {
+          "label": "舊行為",
+          "description": "請求 gzip 回應並自動解壓，即此選項出現之前的行為。"
+        }
       }
     }
   }

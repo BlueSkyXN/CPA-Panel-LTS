@@ -129,7 +129,10 @@ export function AuthFileCard(props: AuthFileCardProps) {
   const statusData =
     (authIndexKey && statusBarCache.get(authIndexKey)) ||
     statusBarDataFromRecentRequests(recentBuckets);
-  const rawStatusMessage = getAuthFileStatusMessage(file);
+  const reauthRequired = file.reauthRequired === true;
+  const rawStatusMessage = reauthRequired
+    ? t('auth_files.reauth_required')
+    : getAuthFileStatusMessage(file);
   const hasStatusWarning = hasAuthFileStatusWarning(file);
 
   const priorityValue = parsePriorityValue(file.priority);

@@ -91,9 +91,25 @@ const DETAIL_STRING_FIELDS = [
   'effective_service_tier',
   'response_cyber_program',
   'failure_reason',
+  // Request size fields (Core size_version 1); Core decodes them into strings.
+  'trace_id',
+  'client_request_encoding',
+  'upstream_transport',
+  'upstream_request_encoding',
 ] as const;
 
-const DETAIL_INTEGER_FIELDS = ['latency_ms', 'failure_status'] as const;
+const DETAIL_INTEGER_FIELDS = [
+  'latency_ms',
+  'failure_status',
+  // Core decodes these into int64 and clamps negatives, so only the JSON type is checked.
+  'client_request_bytes',
+  'upstream_request_bytes',
+  'upstream_request_wire_bytes',
+  'upstream_response_bytes',
+] as const;
+
+// Core decodes size_version into uint32; unknown versions are dropped on import, not rejected.
+const DETAIL_NON_NEGATIVE_INTEGER_FIELDS = ['size_version'] as const;
 const DETAIL_BOOLEAN_FIELDS = ['failed', 'generate'] as const;
 
 const RFC3339_PATTERN =
@@ -195,6 +211,7 @@ const validateSnapshotMetadata = (snapshot: UnknownRecord): boolean => {
 const validateDetailMetadata = (detail: UnknownRecord): boolean =>
   validateOptionalFields(detail, DETAIL_STRING_FIELDS, (value) => typeof value === 'string') &&
   validateOptionalIntegerFields(detail, DETAIL_INTEGER_FIELDS) &&
+  validateOptionalIntegerFields(detail, DETAIL_NON_NEGATIVE_INTEGER_FIELDS, { nonNegative: true }) &&
   validateOptionalFields(detail, DETAIL_BOOLEAN_FIELDS, (value) => typeof value === 'boolean');
 
 const validateTimingMetadata = (

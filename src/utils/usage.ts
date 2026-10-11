@@ -12,6 +12,7 @@ import {
   extractLatencyMs,
   finalizeLatencyStats,
 } from './usage/latency';
+import { extractRequestSize, type RequestSizeFields } from './usage/requestSize';
 import {
   getUsageCacheTokenCounts,
   resolveUsageTotalTokens,
@@ -176,7 +177,7 @@ export interface UsageTokenStats extends UsageTokenFields {
   total_tokens?: number;
 }
 
-export interface UsageDetail {
+export interface UsageDetail extends RequestSizeFields {
   __queryId?: string;
   timestamp: string;
   source: string;
@@ -845,6 +846,7 @@ export function collectUsageDetails(usageData: unknown): UsageDetail[] {
           failed: detailRaw.failed === true,
           failure_status: extractFailureStatus(detailRaw),
           failure_reason: extractFailureReason(detailRaw),
+          ...extractRequestSize(detailRaw),
           __apiBucket: apiBucket,
           __modelName: modelName,
           __timestampMs: Number.isNaN(timestampMs) ? 0 : timestampMs,
@@ -940,6 +942,7 @@ export function collectUsageDetailsWithEndpoint(usageData: unknown): UsageDetail
           failed: detailRaw.failed === true,
           failure_status: extractFailureStatus(detailRaw),
           failure_reason: extractFailureReason(detailRaw),
+          ...extractRequestSize(detailRaw),
           __apiBucket: endpoint,
           __modelName: modelName,
           __endpoint: endpoint,

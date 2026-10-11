@@ -1,4 +1,14 @@
 import { CODEX_CACHE_AFFINITY_STRATEGIES, isCodexCacheAffinityStrategy } from './cacheAffinity';
+import {
+  CODEX_OUTBOUND_ACCEPT_ENCODINGS,
+  CODEX_OUTBOUND_DEFAULT_WEBSOCKET_THRESHOLD_BYTES,
+  CODEX_OUTBOUND_DEFAULTS,
+  CODEX_OUTBOUND_REQUEST_COMPRESSIONS,
+  CODEX_OUTBOUND_TRANSPORTS,
+  isCodexOutboundAcceptEncoding,
+  isCodexOutboundRequestCompression,
+  isCodexOutboundTransport,
+} from './outbound';
 import { useId, useMemo, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/ui/Input';
@@ -79,7 +89,10 @@ const ABNORMAL_RETRY_HEDGED_MODE_HINT_KEYS = {
     'config_management.visual.sections.headers.codex_abnormal_reasoning_retry_hedged_retry_mode_quality_desc',
 } satisfies Record<CodexAbnormalReasoningRetryHedgedRetryMode, ConfigHeaderI18nKey>;
 
-type CodexPolicyFieldId = Extract<ConfigFieldId, `codexAbnormalReasoningRetry${string}` | 'codexCacheAffinityStrategy'>;
+type CodexPolicyFieldId = Extract<
+  ConfigFieldId,
+  `codexAbnormalReasoningRetry${string}` | 'codexCacheAffinityStrategy' | `codexOutbound${string}`
+>;
 export function useCodexPolicyControls({
   values,
   validationErrors,
@@ -258,7 +271,78 @@ export function useCodexPolicyControls({
     ABNORMAL_RETRY_FALLBACK_POLICY_HINT_KEYS[values.codexAbnormalReasoningRetryFallbackPolicy]
   );
 
+  const outboundChoice = (
+    testId: string,
+    group: 'transport' | 'request_compression' | 'accept_encoding',
+    value: string,
+    options: readonly string[],
+    fallback: string,
+    isKnown: (candidate: string) => boolean,
+    apply: (next: string) => void
+  ) => (
+    <div data-testid={testId}>
+      <ConfigChoiceGroup
+        label={t(`codex_outbound.${group}.title`)}
+        value={value || fallback}
+        options={options.map((option) => ({
+          value: option,
+          label: t(`codex_outbound.${group}.options.${option}.label`),
+          description: t(`codex_outbound.${group}.options.${option}.description`),
+        }))}
+        disabled={disabled}
+        onChange={(next) => {
+          if (isKnown(next)) apply(next);
+        }}
+      />
+      {!value && <p role="status">{t(`codex_outbound.${group}.default_hint`)}</p>}
+      {value && !isKnown(value) && <p role="alert">{t('codex_outbound.unknown_hint')}</p>}
+    </div>
+  );
+  const codexOutboundThresholdError = getValidationMessage(
+    t,
+    validationErrors?.codexOutboundWebsocketThresholdBytes
+  );
+
   return {
+    codexOutboundTransport: outboundChoice(
+      'codex-outbound-transport-control',
+      'transport',
+      values.codexOutboundTransport,
+      CODEX_OUTBOUND_TRANSPORTS,
+      CODEX_OUTBOUND_DEFAULTS.transport,
+      isCodexOutboundTransport,
+      (codexOutboundTransport) => onChange({ codexOutboundTransport })
+    ),
+    codexOutboundWebsocketThresholdBytes: (
+      <Input
+        label={t('codex_outbound.threshold.label')}
+        type="number"
+        placeholder={String(CODEX_OUTBOUND_DEFAULT_WEBSOCKET_THRESHOLD_BYTES)}
+        value={values.codexOutboundWebsocketThresholdBytes}
+        onChange={(e) => onChange({ codexOutboundWebsocketThresholdBytes: e.target.value })}
+        disabled={disabled}
+        hint={t('codex_outbound.threshold.hint')}
+        error={codexOutboundThresholdError}
+      />
+    ),
+    codexOutboundRequestCompression: outboundChoice(
+      'codex-outbound-request-compression-control',
+      'request_compression',
+      values.codexOutboundRequestCompression,
+      CODEX_OUTBOUND_REQUEST_COMPRESSIONS,
+      CODEX_OUTBOUND_DEFAULTS.requestCompression,
+      isCodexOutboundRequestCompression,
+      (codexOutboundRequestCompression) => onChange({ codexOutboundRequestCompression })
+    ),
+    codexOutboundAcceptEncoding: outboundChoice(
+      'codex-outbound-accept-encoding-control',
+      'accept_encoding',
+      values.codexOutboundAcceptEncoding,
+      CODEX_OUTBOUND_ACCEPT_ENCODINGS,
+      CODEX_OUTBOUND_DEFAULTS.acceptEncoding,
+      isCodexOutboundAcceptEncoding,
+      (codexOutboundAcceptEncoding) => onChange({ codexOutboundAcceptEncoding })
+    ),
     codexCacheAffinityStrategy: (
       <div data-testid="codex-cache-affinity-control">
         <ConfigChoiceGroup

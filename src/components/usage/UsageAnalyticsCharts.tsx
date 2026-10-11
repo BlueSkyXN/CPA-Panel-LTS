@@ -3,6 +3,7 @@ import { CacheEfficiencyCard } from './CacheEfficiencyCard';
 import { ErrorAnalysisCard } from './ErrorAnalysisCard';
 import { LatencyDistributionCard } from './LatencyDistributionCard';
 import { LatencyTrendChart } from './LatencyTrendChart';
+import { RequestSizeDistributionCard } from './RequestSizeDistributionCard';
 import { ThroughputTrendChart } from './ThroughputTrendChart';
 import styles from '@/pages/UsagePage.module.scss';
 
@@ -22,6 +23,7 @@ export function UsageAnalyticsCharts({
       <CacheEfficiencyCard data={data} loading={loading} isMobile={isMobile} />
       <LatencyDistributionCard data={data} loading={loading} isMobile={isMobile} />
       <ErrorAnalysisCard data={data} loading={loading} isMobile={isMobile} />
+      <RequestSizeDistributionCard data={data} loading={loading} />
     </div>
   );
 }

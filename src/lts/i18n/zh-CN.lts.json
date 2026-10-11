@@ -545,12 +545,14 @@
         "codex-policy": "Codex 优化"
       },
       "pages": {
-        "codex-policy_cache": "缓存优化"
+        "codex-policy_cache": "缓存优化",
+        "codex-policy_outbound": "出站策略"
       },
       "guidance": {
         "pages": {
           "codex-policy": {
-            "cache": "帮助连续对话复用上游缓存，适配 ZCode 等客户端的请求方式。仅适用于通过 ChatGPT 账号登录接入的 Codex；使用 API Key 接入的模型不受影响。"
+            "cache": "帮助连续对话复用上游缓存，适配 ZCode 等客户端的请求方式。仅适用于通过 ChatGPT 账号登录接入的 Codex；使用 API Key 接入的模型不受影响。",
+            "outbound": "设置 Codex 请求以什么方式发往上游。只对通过 ChatGPT 账号登录接入的 Codex 生效；切换传输方式还要求凭据开启 WebSocket。"
           },
           "headers": {
             "codex": "设置 Codex 请求身份信息；缓存优化、异常检测、重试与对冲在「Codex 优化」中设置。"
@@ -583,6 +585,59 @@
       "legacy": {
         "label": "关闭增强优化",
         "description": "关闭会话兼容修复和历史内容匹配，保留常规请求处理。上游自身的缓存仍可能生效。"
+      }
+    }
+  },
+  "codex_outbound": {
+    "unknown_hint": "当前配置值无法识别。除非修改此项，否则会原样保留。",
+    "transport": {
+      "title": "HTTP 请求的上游传输方式",
+      "default_hint": "当前使用默认值：跟随客户端。",
+      "options": {
+        "follow": {
+          "label": "跟随客户端",
+          "description": "HTTP 请求经 HTTP 发往上游，WebSocket 会话保持 WebSocket。"
+        },
+        "websocket": {
+          "label": "始终使用 WebSocket",
+          "description": "HTTP 请求改经 WebSocket 发往上游，与官方 Codex 客户端一致。每个请求单独建立上游连接。"
+        },
+        "auto": {
+          "label": "大请求使用 WebSocket",
+          "description": "请求体达到下方阈值时才改走 WebSocket，小请求仍走 HTTP。适用于大请求经 HTTP 失败的情况。"
+        }
+      }
+    },
+    "threshold": {
+      "label": "WebSocket 阈值（字节）",
+      "hint": "用于“大请求使用 WebSocket”。留空或 0 使用默认值 786432（768 KiB）。"
+    },
+    "request_compression": {
+      "title": "请求体压缩",
+      "default_hint": "当前使用默认值：zstd，与官方客户端一致。",
+      "options": {
+        "auto": {
+          "label": "zstd（官方）",
+          "description": "发往 Codex 后端的 HTTP 请求体用 zstd 压缩；上游返回 415 时自动用原文重发一次。"
+        },
+        "none": {
+          "label": "关闭",
+          "description": "请求体不压缩。"
+        }
+      }
+    },
+    "accept_encoding": {
+      "title": "响应压缩协商（Accept-Encoding）",
+      "default_hint": "当前使用默认值：与官方客户端一致。",
+      "options": {
+        "official": {
+          "label": "与官方客户端一致",
+          "description": "不向 chatgpt.com 发送 Accept-Encoding，响应以原文返回。"
+        },
+        "legacy": {
+          "label": "旧行为",
+          "description": "请求 gzip 响应并自动解压，即此选项出现之前的行为。"
+        }
       }
     }
   }

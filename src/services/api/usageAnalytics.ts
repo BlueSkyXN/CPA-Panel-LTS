@@ -2,6 +2,7 @@ import { apiClient } from './client';
 import { isRecord } from '@/utils/helpers';
 import type { UsageAnalyticsResult } from '@/types/usageAnalytics';
 import type { UsageQueryRequest } from '@/types/usageQuery';
+import { isRequestSizeDistribution } from '@/utils/usage/requestSizeAnalytics';
 
 const number = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0;
 const integer = (v: unknown): v is number => number(v) && Number.isSafeInteger(v);
@@ -172,6 +173,9 @@ export function decodeUsageAnalytics(v: unknown): UsageAnalyticsResult {
     !grain(d.day)
   )
     return invalid();
+  // Cores before request size tracking, or windows without measured rows, omit the field; a
+  // present but inconsistent distribution fails closed like the other series.
+  if (d.requestSize !== undefined && !isRequestSizeDistribution(d.requestSize)) return invalid();
   if (
     v.options !== undefined &&
     (!isRecord(v.options) ||
