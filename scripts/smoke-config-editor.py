@@ -596,6 +596,8 @@ def run():
         page.set_viewport_size({'width':1440,'height':900})
         # Check every second-level page, not only the Codex examples (last language is Russian).
         visited_pages = []
+        # evaluate_all does not wait: after the 320px pass the domain navigation re-renders, so wait for it.
+        page.locator('[data-config-domain]').first.wait_for()
         domains = page.locator('[data-config-domain]').evaluate_all("nodes => nodes.map(n => n.dataset.configDomain)")
         for domain in domains:
             page.locator(f'[data-config-domain="{domain}"]').click()
