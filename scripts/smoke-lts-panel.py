@@ -329,6 +329,7 @@ def build_usage_payload() -> dict[str, Any]:
             "timing_version": 1,
             "ttft_ms": 80,
             "ttfa_ms": 95,
+            "trace_id": "smoke-trace-1",
             "size_version": 1,
             "upstream_transport": "websocket",
             "upstream_request_bytes": 900000,
@@ -4156,6 +4157,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         "cacheWriteTokens": True,
         "totalTokens": True,
         "cost": True,
+        "requestLog": False,
     }
     if stored_columns != expected_column_defaults:
         raise AssertionError(
@@ -4428,6 +4430,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     if (
         csv_rows[0].get("upstream_transport") != "websocket"
         or csv_rows[0].get("upstream_request_bytes") != "900000"
+        or csv_rows[0].get("trace_id") != "smoke-trace-1"
     ):
         raise AssertionError(f"Request-event CSV did not export request size fields: {csv_rows[0]!r}")
     if (

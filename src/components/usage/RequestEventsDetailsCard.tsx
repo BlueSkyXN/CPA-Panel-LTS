@@ -68,6 +68,7 @@ import {
 import { normalizeReasoningEffort } from '@/utils/usage/reasoningEffort';
 import { normalizeResponseCyberProgram } from '@/utils/usage/cyberProgram';
 import { downloadBlob } from '@/utils/download';
+import { logsApi } from '@/services/api/logs';
 import styles from '@/pages/UsagePage.module.scss';
 import type { UsageQuerySession, UsageQueryFilter } from '@/types/usageQuery';
 import { queryItemDetail, useUsageQueryDetails } from './hooks/useUsageQueryDetails';
@@ -174,6 +175,7 @@ const REQUEST_EVENT_COLUMN_IDS = [
   'cacheWriteTokens',
   'totalTokens',
   'cost',
+  'requestLog',
 ] as const;
 
 type RequestEventColumnId = (typeof REQUEST_EVENT_COLUMN_IDS)[number];
@@ -284,6 +286,8 @@ const DEFAULT_COLUMN_VISIBILITY: RequestEventColumnVisibility = {
   cacheWriteTokens: true,
   totalTokens: true,
   cost: true,
+  // Request logs exist only when Core request-log is enabled, so the action column is opt-in.
+  requestLog: false,
 };
 
 type RequestEventRow = {
@@ -320,6 +324,7 @@ type RequestEventRow = {
   reasoningEffortFilterValue: string;
   reasoningEffortLabel: string;
   failed: boolean;
+  traceId: string | null;
   upstreamTransport: string | null;
   upstreamRequestBytes: number | null;
   upstreamRequestWireBytes: number | null;
@@ -786,6 +791,9 @@ export function RequestEventsDetailsCard({
   const [draftNumericMinimumFilter, setDraftNumericMinimumFilter] = useState('');
   const [draftNumericMaximumFilter, setDraftNumericMaximumFilter] = useState('');
   const [authFileMap, setAuthFileMap] = useState<Map<string, CredentialInfo>>(new Map());
+  const [requestLogDownloads, setRequestLogDownloads] = useState<ReadonlySet<string>>(
+    () => new Set()
+  );
   const [columnSettingsOpen, setColumnSettingsOpen] = useState(false);
   const [activeHeaderTooltip, setActiveHeaderTooltip] =
     useState<RequestEventHeaderTooltipState | null>(null);
@@ -1341,6 +1349,7 @@ export function RequestEventsDetailsCard({
         reasoningEffortFilterValue,
         reasoningEffortLabel,
         failed: detail.failed === true,
+        traceId: detail.trace_id ?? null,
         upstreamTransport: detail.upstream_transport ?? null,
         upstreamRequestBytes: upstreamPayloadBytes(detail),
         upstreamRequestWireBytes: detail.upstream_request_wire_bytes ?? null,
@@ -1727,6 +1736,7 @@ export function RequestEventsDetailsCard({
       { id: 'cacheWriteTokens' as const, label: t('usage_stats.cache_write_tokens') },
       { id: 'totalTokens' as const, label: t('usage_stats.total_tokens') },
       { id: 'cost' as const, label: t('usage_stats.request_events_cost_estimate') },
+      { id: 'requestLog' as const, label: t('usage_stats.request_events_request_log') },
     ],
     [t]
   );
@@ -2140,6 +2150,7 @@ export function RequestEventsDetailsCard({
       'total_tokens',
       'estimated_cost_usd',
       'pricing_status',
+      'trace_id',
     ];
 
     const csvRows = exportRows.map((row) =>
@@ -2187,6 +2198,7 @@ export function RequestEventsDetailsCard({
         row.totalTokens,
         row.costAmount ?? '',
         row.costStatus,
+        row.traceId ?? '',
       ]
         .map((value) => encodeCsv(value))
         .join(',')
@@ -2198,6 +2210,33 @@ export function RequestEventsDetailsCard({
       filename: `usage-events-${fileTime}.csv`,
       blob: new Blob([content], { type: 'text/csv;charset=utf-8' }),
     });
+  };
+
+  const downloadRequestLog = async (traceId: string) => {
+    setRequestLogDownloads((current) => new Set(current).add(traceId));
+    try {
+      const response = await logsApi.downloadRequestLogById(traceId);
+      downloadBlob({
+        filename: `request-${traceId}.log`,
+        blob: new Blob([response.data], { type: 'text/plain' }),
+      });
+    } catch (error) {
+      const status = isRecord(error) && typeof error.status === 'number' ? error.status : undefined;
+      useNotificationStore
+        .getState()
+        .showNotification(
+          status === 404
+            ? t('usage_stats.request_events_request_log_missing')
+            : `${t('notification.download_failed')}${error instanceof Error && error.message ? `: ${error.message}` : ''}`,
+          'error'
+        );
+    } finally {
+      setRequestLogDownloads((current) => {
+        const next = new Set(current);
+        next.delete(traceId);
+        return next;
+      });
+    }
   };
 
   const handleExportJson = async () => {
@@ -2253,6 +2292,7 @@ export function RequestEventsDetailsCard({
       },
       estimated_cost_usd: row.costAmount,
       pricing_status: row.costStatus,
+      trace_id: row.traceId,
     }));
 
     const content = JSON.stringify(payload, null, 2);
@@ -2910,6 +2950,11 @@ export function RequestEventsDetailsCard({
                       {t('usage_stats.request_events_cost_estimate')}
                     </th>
                   )}
+                  {columnVisibility.requestLog && (
+                    <th title={t('usage_stats.request_events_request_log_hint')}>
+                      {t('usage_stats.request_events_request_log')}
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -3316,6 +3361,24 @@ export function RequestEventsDetailsCard({
                           {row.costAmount === null
                             ? '--'
                             : formatRequestEventCostUsd(row.costAmount, i18n.language)}
+                        </td>
+                      )}
+                      {columnVisibility.requestLog && (
+                        <td data-request-trace-id={row.traceId ?? undefined}>
+                          {row.traceId ? (
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              loading={requestLogDownloads.has(row.traceId)}
+                              disabled={requestLogDownloads.has(row.traceId)}
+                              onClick={() => row.traceId && void downloadRequestLog(row.traceId)}
+                            >
+                              {t('usage_stats.request_events_request_log_download')}
+                            </Button>
+                          ) : (
+                            '-'
+                          )}
                         </td>
                       )}
                     </tr>

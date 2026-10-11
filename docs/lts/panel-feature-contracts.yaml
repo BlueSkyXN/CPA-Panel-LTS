@@ -105,6 +105,8 @@ features:
       - isLargeRequestConnectFailure
       - upstream_connect_failure
       - request_size_title
+      - downloadRequestLogById
+      - request_events_request_log
     validation:
       - npm run test:usage
       - npm run type-check
