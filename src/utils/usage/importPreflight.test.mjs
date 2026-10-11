@@ -793,3 +793,36 @@ test('accepts optional response cyber program without requiring it on legacy row
     response_cyber_program: 42,
   }))).valid, false);
 });
+
+test('accepts Core request size fields and rejects only types Core cannot decode', () => {
+  const sized = detail(v2Tokens(), {
+    trace_id: 'abc123',
+    size_version: 1,
+    client_request_bytes: 1_080_429,
+    upstream_transport: 'websocket',
+    upstream_request_bytes: 1_080_631,
+    upstream_request_wire_bytes: 1_080_631,
+    upstream_request_encoding: 'zstd',
+    upstream_response_bytes: 8_135,
+  });
+  assert.equal(analyzeUsageImport(v3Payload(sized)).valid, true);
+  // Unknown versions and negative byte counts are dropped or clamped by Core, not rejected.
+  assert.equal(analyzeUsageImport(v3Payload(detail(v2Tokens(), { size_version: 2 }))).valid, true);
+  assert.equal(
+    analyzeUsageImport(v3Payload(detail(v2Tokens(), { size_version: 1, upstream_request_bytes: -5 }))).valid,
+    true
+  );
+
+  for (const overrides of [
+    { size_version: -1 },
+    { size_version: '1' },
+    { upstream_request_bytes: 1.5 },
+    { upstream_response_bytes: '10' },
+    { upstream_transport: 1 },
+    { trace_id: 7 },
+  ]) {
+    assert.deepEqual(analyzeUsageImport(v3Payload(detail(v2Tokens(), overrides))).issues, [
+      'usage_shape_invalid',
+    ]);
+  }
+});

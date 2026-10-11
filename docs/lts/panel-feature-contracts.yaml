@@ -43,6 +43,73 @@ features:
       - npm run build
       - npm run smoke:config
 
+  - id: codex-outbound-config
+    status: lts-maintained
+    reason: Core codex.outbound selects the upstream transport for HTTP clients and aligns request-body compression and Accept-Encoding with the official Codex client; operators need visual controls that keep absent defaults, unknown values and unrelated YAML intact.
+    routes:
+      - /config
+    panel_files:
+      - src/services/api/configFile.ts
+      - src/lts/codexPolicy/outbound.ts
+      - src/lts/codexPolicy/outbound.test.mjs
+      - src/lts/codexPolicy/useCodexPolicyControls.tsx
+      - src/lts/i18n/
+      - src/hooks/useVisualConfig.ts
+      - src/types/visualConfig.ts
+      - src/components/config/configNavigation.ts
+    core_endpoints:
+      - /v0/management/config.yaml
+    required_markers:
+      - codexOutboundTransport
+      - codexOutboundWebsocketThresholdBytes
+      - codexOutboundRequestCompression
+      - codexOutboundAcceptEncoding
+      - websocket-threshold-bytes
+      - request-compression
+      - accept-encoding
+      - codex_outbound
+      - codex-policy_outbound
+    validation:
+      - npm run test:config
+      - npm run type-check
+      - npm run build
+
+  - id: usage-request-size
+    status: lts-maintained
+    reason: Core size_version 1 usage details record request body size and upstream transport; the usage page shows them per request, flags upstream connection failures on large requests, and the analytics views show the request size distribution, while older Cores and exports without these fields keep working.
+    routes:
+      - /usage
+    panel_files:
+      - src/services/api/usageAnalytics.ts
+      - src/utils/usage.ts
+      - src/utils/usage/requestSize.ts
+      - src/utils/usage/requestSize.test.mjs
+      - src/utils/usage/requestSizeAnalytics.ts
+      - src/utils/usage/requestSizeAnalytics.test.mjs
+      - src/utils/usage/analyticsModel.ts
+      - src/utils/usage/importPreflight.ts
+      - src/types/usageAnalytics.ts
+      - src/components/usage/RequestEventsDetailsCard.tsx
+      - src/components/usage/RequestSizeDistributionCard.tsx
+      - src/components/usage/UsageAnalyticsCharts.tsx
+    core_endpoints:
+      - /usage/query/analytics
+    required_markers:
+      - size_version
+      - upstream_transport
+      - upstream_request_bytes
+      - upstream_request_wire_bytes
+      - upstream_request_encoding
+      - requestSize
+      - isRequestSizeDistribution
+      - isLargeRequestConnectFailure
+      - upstream_connect_failure
+      - request_size_title
+    validation:
+      - npm run test:usage
+      - npm run type-check
+      - npm run build
+
   - id: multi-instance-connections
     status: lts-maintained
     reason: Independent same-origin runtime documents preserve per-instance pages, drafts, and clients. Multi-instance management is opt-in and off by default, so the panel auto-enters the only or first remembered instance with a resident connection, and keeping several instances connected requires enabling the dedicated toggle.
@@ -893,6 +960,8 @@ features:
       - src/utils/quota/upstreamQuotaPort.test.mjs
       - src/hooks/useUnsavedChangesGuard.ts
       - src/services/api/authFiles.ts
+      - src/features/authFiles/constants.ts
+      - src/features/authFiles/reauthRequired.test.mjs
       - src/services/api/oauth.ts
       - src/lts/codexRemoteCloudConnect/
       - src/i18n/locales/
@@ -947,6 +1016,8 @@ features:
       - weight_invalid_max
       - accepts WRR strategy aliases and enforces credential weight bounds
       - Auth file credential weight round-tripped through Core
+      - reauth_required
+      - reauthRequired
     validation:
       - npm run test:auth-files
       - npm run smoke:lts

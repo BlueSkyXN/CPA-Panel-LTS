@@ -8,6 +8,7 @@ import type {
 import type { CacheAnalyticsSummary, CacheTrendPoint } from '@/utils/usage/cacheAnalytics';
 import type { ErrorAnalyticsSummary, FailureTrendPoint } from '@/utils/usage/errorAnalytics';
 import type { ThroughputTrendPoint } from '@/utils/usage/throughputAnalytics';
+import type { RequestSizeDistribution } from '@/utils/usage/requestSizeAnalytics';
 
 export interface UsageAnalyticsGrain {
   latency: LatencyPercentileSeries;
@@ -22,6 +23,8 @@ export interface UsageAnalyticsData {
   errors: ErrorAnalyticsSummary;
   hour: UsageAnalyticsGrain;
   day: UsageAnalyticsGrain;
+  /** Present only when Core (or the local sample set) measured request sizes. */
+  requestSize?: RequestSizeDistribution;
 }
 export interface UsageAnalyticsResult {
   version: 1;

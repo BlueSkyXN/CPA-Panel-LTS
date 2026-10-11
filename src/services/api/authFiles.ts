@@ -239,6 +239,9 @@ const normalizeAuthFileEntry = (entry: AuthFileEntry): AuthFileEntry => {
   const modified = readDateField(entry);
   const priority = readIntegerField(entry['priority']);
   const weight = readCredentialWeight(entry['weight']);
+  // Core sets reauth_required once the token endpoint rejected the refresh token; the access token
+  // may still work until it expires.
+  const reauthRequired = entry['reauth_required'] === true || entry.reauthRequired === true;
 
   return {
     ...entry,
@@ -252,6 +255,7 @@ const normalizeAuthFileEntry = (entry: AuthFileEntry): AuthFileEntry => {
     ...(priority !== undefined ? { priority } : {}),
     ...(weight !== undefined ? { weight } : {}),
     ...(note ? { note } : {}),
+    ...(reauthRequired ? { reauthRequired: true } : {}),
   };
 };
 

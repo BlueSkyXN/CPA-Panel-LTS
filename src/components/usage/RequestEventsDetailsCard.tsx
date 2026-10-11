@@ -24,7 +24,9 @@ import type { GeminiKeyConfig, ProviderKeyConfig, OpenAIProviderConfig } from '@
 import type { AuthFileItem } from '@/types/authFile';
 import type { CredentialInfo } from '@/types/sourceInfo';
 import { buildSourceInfoMap, resolveSourceDisplay } from '@/utils/sourceResolver';
+import { formatFileSize } from '@/utils/format';
 import { parseTimestampMs } from '@/utils/timestamp';
+import { isLargeRequestConnectFailure, upstreamPayloadBytes } from '@/utils/usage/requestSize';
 import {
   classifyServiceTier,
   calculateAverageTps,
@@ -151,6 +153,8 @@ const REQUEST_EVENT_COLUMN_IDS = [
   'authIndex',
   'tier',
   'result',
+  'transport',
+  'requestSize',
   'latency',
   'ttfb',
   'firstContent',
@@ -259,6 +263,8 @@ const DEFAULT_COLUMN_VISIBILITY: RequestEventColumnVisibility = {
   authIndex: false,
   tier: true,
   result: true,
+  transport: true,
+  requestSize: true,
   latency: true,
   ttfb: true,
   firstContent: true,
@@ -314,6 +320,11 @@ type RequestEventRow = {
   reasoningEffortFilterValue: string;
   reasoningEffortLabel: string;
   failed: boolean;
+  upstreamTransport: string | null;
+  upstreamRequestBytes: number | null;
+  upstreamRequestWireBytes: number | null;
+  upstreamRequestEncoding: string | null;
+  largeConnectFailure: boolean;
   latencyMs: number | null;
   ttfbMs: number | null;
   timingVersion: number | null;
@@ -1330,6 +1341,11 @@ export function RequestEventsDetailsCard({
         reasoningEffortFilterValue,
         reasoningEffortLabel,
         failed: detail.failed === true,
+        upstreamTransport: detail.upstream_transport ?? null,
+        upstreamRequestBytes: upstreamPayloadBytes(detail),
+        upstreamRequestWireBytes: detail.upstream_request_wire_bytes ?? null,
+        upstreamRequestEncoding: detail.upstream_request_encoding ?? null,
+        largeConnectFailure: isLargeRequestConnectFailure(detail),
         latencyMs,
         ttfbMs,
         timingVersion,
@@ -1669,6 +1685,8 @@ export function RequestEventsDetailsCard({
       { id: 'authIndex' as const, label: t('usage_stats.request_events_auth_index') },
       { id: 'tier' as const, label: t('usage_stats.request_events_tier') },
       { id: 'result' as const, label: t('usage_stats.request_events_result') },
+      { id: 'transport' as const, label: t('usage_stats.request_events_transport') },
+      { id: 'requestSize' as const, label: t('usage_stats.request_events_request_size') },
       { id: 'latency' as const, label: t('usage_stats.time') },
       { id: 'ttfb' as const, label: t('usage_stats.request_events_ttfb') },
       {
@@ -2098,6 +2116,10 @@ export function RequestEventsDetailsCard({
       'service_tier_evidence',
         'reasoning_effort',
         'result',
+        'upstream_transport',
+        'upstream_request_bytes',
+        'upstream_request_wire_bytes',
+        'upstream_request_encoding',
         ...(hasLatencyData ? ['latency_ms'] : []),
         ...(hasTTFBData ? ['ttfb_ms'] : []),
         'first_content_ms',
@@ -2141,6 +2163,10 @@ export function RequestEventsDetailsCard({
         row.resolvedServiceTier.evidence,
         row.reasoningEffort ?? '',
         row.failed ? 'failed' : 'success',
+        row.upstreamTransport ?? '',
+        row.upstreamRequestBytes ?? '',
+        row.upstreamRequestWireBytes ?? '',
+        row.upstreamRequestEncoding ?? '',
         ...(hasLatencyData ? [row.latencyMs ?? ''] : []),
         ...(hasTTFBData ? [row.ttfbMs ?? ''] : []),
         row.firstContentMs ?? '',
@@ -2199,6 +2225,10 @@ export function RequestEventsDetailsCard({
       service_tier_evidence: row.resolvedServiceTier.evidence,
       reasoning_effort: row.reasoningEffort,
       failed: row.failed,
+      upstream_transport: row.upstreamTransport,
+      upstream_request_bytes: row.upstreamRequestBytes,
+      upstream_request_wire_bytes: row.upstreamRequestWireBytes,
+      upstream_request_encoding: row.upstreamRequestEncoding,
       ...(hasLatencyData && row.latencyMs !== null ? { latency_ms: row.latencyMs } : {}),
       ...(hasTTFBData && row.ttfbMs !== null ? { ttfb_ms: row.ttfbMs } : {}),
       first_content_ms: row.firstContentMs,
@@ -2777,6 +2807,16 @@ export function RequestEventsDetailsCard({
                   )}
                   {columnVisibility.tier && <th>{t('usage_stats.request_events_tier')}</th>}
                   {columnVisibility.result && <th>{t('usage_stats.request_events_result')}</th>}
+                  {columnVisibility.transport && (
+                    <th title={t('usage_stats.request_events_transport_hint')}>
+                      {t('usage_stats.request_events_transport')}
+                    </th>
+                  )}
+                  {columnVisibility.requestSize && (
+                    <th title={t('usage_stats.request_events_request_size_hint')}>
+                      {t('usage_stats.request_events_request_size')}
+                    </th>
+                  )}
                   {columnVisibility.latency && hasLatencyData && (
                     <th title={latencyHint}>{t('usage_stats.time')}</th>
                   )}
@@ -3045,6 +3085,42 @@ export function RequestEventsDetailsCard({
                           >
                             {row.failed ? t('stats.failure') : t('stats.success')}
                           </span>
+                          {row.largeConnectFailure && (
+                            <span
+                              className={styles.requestEventsResultHint}
+                              data-request-diagnostic="large-request-connect-failure"
+                              title={t('usage_stats.request_events_large_connect_failure_hint')}
+                            >
+                              {t('usage_stats.request_events_large_connect_failure')}
+                            </span>
+                          )}
+                        </td>
+                      )}
+                      {columnVisibility.transport && (
+                        <td data-upstream-transport={row.upstreamTransport ?? undefined}>
+                          {row.upstreamTransport === 'websocket'
+                            ? t('usage_stats.request_events_transport_websocket')
+                            : row.upstreamTransport === 'http'
+                              ? t('usage_stats.request_events_transport_http')
+                              : '-'}
+                        </td>
+                      )}
+                      {columnVisibility.requestSize && (
+                        <td
+                          className={styles.durationCell}
+                          data-upstream-request-bytes={row.upstreamRequestBytes ?? undefined}
+                          title={
+                            row.upstreamRequestEncoding && row.upstreamRequestWireBytes !== null
+                              ? t('usage_stats.request_events_request_size_wire', {
+                                  wire: formatFileSize(row.upstreamRequestWireBytes),
+                                  encoding: row.upstreamRequestEncoding,
+                                })
+                              : undefined
+                          }
+                        >
+                          {row.upstreamRequestBytes !== null
+                            ? formatFileSize(row.upstreamRequestBytes)
+                            : '-'}
                         </td>
                       )}
                       {columnVisibility.latency && hasLatencyData && (

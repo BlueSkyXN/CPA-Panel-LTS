@@ -545,12 +545,14 @@
         "codex-policy": "Codex optimization"
       },
       "pages": {
-        "codex-policy_cache": "Cache optimization"
+        "codex-policy_cache": "Cache optimization",
+        "codex-policy_outbound": "Outbound strategy"
       },
       "guidance": {
         "pages": {
           "codex-policy": {
-            "cache": "Help consecutive conversation turns reuse upstream cache with clients such as ZCode. Applies only to Codex connected through ChatGPT account sign-in; API key connections are unaffected."
+            "cache": "Help consecutive conversation turns reuse upstream cache with clients such as ZCode. Applies only to Codex connected through ChatGPT account sign-in; API key connections are unaffected.",
+            "outbound": "Choose how Codex requests reach the upstream. Applies only to Codex connected through ChatGPT account sign-in; the transport switch also requires WebSocket to be enabled on the credential."
           },
           "headers": {
             "codex": "Configure Codex request identity; cache optimization, anomaly detection, retries and hedging are configured under Codex optimization."
@@ -583,6 +585,59 @@
       "legacy": {
         "label": "Disable enhanced optimization",
         "description": "Turn off session compatibility fixes and history matching while keeping regular request processing. The upstream service may still use its own cache."
+      }
+    }
+  },
+  "codex_outbound": {
+    "unknown_hint": "The configured value is not recognized. It is preserved unless you edit this setting.",
+    "transport": {
+      "title": "Upstream transport for HTTP requests",
+      "default_hint": "Using the default: Follow the client.",
+      "options": {
+        "follow": {
+          "label": "Follow the client",
+          "description": "HTTP requests go upstream over HTTP; WebSocket sessions stay on WebSocket."
+        },
+        "websocket": {
+          "label": "Always WebSocket",
+          "description": "Send HTTP requests upstream over WebSocket, like the official Codex client. Each request opens its own upstream connection."
+        },
+        "auto": {
+          "label": "WebSocket for large requests",
+          "description": "Use WebSocket only when a request reaches the threshold below; smaller requests stay on HTTP. Use this when large requests over HTTP fail."
+        }
+      }
+    },
+    "threshold": {
+      "label": "WebSocket threshold (bytes)",
+      "hint": "Used by \"WebSocket for large requests\". Empty or 0 uses the default 786432 (768 KiB)."
+    },
+    "request_compression": {
+      "title": "Request body compression",
+      "default_hint": "Using the default: zstd, like the official client.",
+      "options": {
+        "auto": {
+          "label": "zstd (official)",
+          "description": "Compress HTTP requests to the Codex backend with zstd. A 415 response is retried once uncompressed."
+        },
+        "none": {
+          "label": "Off",
+          "description": "Send request bodies uncompressed."
+        }
+      }
+    },
+    "accept_encoding": {
+      "title": "Response compression negotiation (Accept-Encoding)",
+      "default_hint": "Using the default: like the official client.",
+      "options": {
+        "official": {
+          "label": "Like the official client",
+          "description": "Send no Accept-Encoding to chatgpt.com; responses arrive uncompressed."
+        },
+        "legacy": {
+          "label": "Legacy",
+          "description": "Request gzip responses and decode them transparently, the behavior before this option."
+        }
       }
     }
   }

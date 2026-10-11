@@ -1424,6 +1424,24 @@ done
 require_path src/lts/codexPolicy/cacheAffinity.ts
 require_path src/lts/codexPolicy/cacheAffinity.test.mjs
 require_path docs/lts/codex-cache-affinity.md
+require_path src/lts/codexPolicy/outbound.ts
+require_path src/lts/codexPolicy/outbound.test.mjs
+require_file_contains src/types/visualConfig.ts "codexOutboundTransport"
+require_file_contains src/lts/codexPolicy/useCodexPolicyControls.tsx "codexOutboundTransport"
+require_file_contains src/hooks/useVisualConfig.ts "['codex', 'outbound']"
+require_file_contains src/components/config/configNavigation.ts "codex.outbound.transport"
+for locale in en zh-CN zh-TW ru; do
+  require_file_contains "src/lts/i18n/$locale.lts.json" '"codex_outbound"'
+done
+# Core size_version 1 usage details: request size, upstream transport and size distribution.
+require_path src/utils/usage/requestSize.ts
+require_path src/utils/usage/requestSizeAnalytics.ts
+require_path src/components/usage/RequestSizeDistributionCard.tsx
+require_file_contains src/utils/usage.ts "extractRequestSize"
+require_file_contains src/services/api/usageAnalytics.ts "isRequestSizeDistribution"
+require_file_contains src/utils/usage/importPreflight.ts "upstream_request_bytes"
+# Core reauth_required on /auth-files.
+require_file_contains src/services/api/authFiles.ts "reauth_required"
 require_file_contains src/types/visualConfig.ts "codexCacheAffinityStrategy"
 require_file_contains src/hooks/useVisualConfig.ts "['codex', 'cache-affinity', 'strategy']"
 require_file_contains src/components/config/configNavigation.ts "codex.cache-affinity.strategy"
