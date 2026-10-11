@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { ProxyUrlField } from '@/components/common/ProxyUrlField';
 import { Input } from '@/components/ui/Input';
 import { HeaderInputList } from '@/components/ui/HeaderInputList';
 import { ModelInputList } from '@/components/ui/ModelInputList';
@@ -601,10 +602,10 @@ export function AiProvidersCodexEditPage() {
               />
               <div className="hint">{t('ai_providers.codex_websockets_hint')}</div>
             </div>
-            <Input
+            <ProxyUrlField
               label={t('ai_providers.codex_add_modal_proxy_label')}
               value={form.proxyUrl ?? ''}
-              onChange={(e) => setForm((prev) => ({ ...prev, proxyUrl: e.target.value }))}
+              onChange={(proxyUrl) => setForm((prev) => ({ ...prev, proxyUrl }))}
               disabled={disableControls || saving}
             />
             <HeaderInputList

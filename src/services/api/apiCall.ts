@@ -10,6 +10,7 @@ export interface ApiCallRequest {
   authIndex?: string;
   method: string;
   url: string;
+  proxyUrl?: string;
   header?: Record<string, string>;
   data?: string;
 }
@@ -80,7 +81,10 @@ export const apiCallApi = {
     payload: ApiCallRequest,
     config?: AxiosRequestConfig
   ): Promise<ApiCallResult> => {
-    const response = await apiClient.post<Record<string, unknown>>('/api-call', payload, config);
+    const { proxyUrl, ...rest } = payload;
+    const requestBody: Record<string, unknown> = { ...rest };
+    if (proxyUrl !== undefined) requestBody.proxy_url = proxyUrl;
+    const response = await apiClient.post<Record<string, unknown>>('/api-call', requestBody, config);
     const statusCode = Number(response?.status_code ?? 0);
     const header = (response?.header ?? {}) as Record<string, string[]>;
     const { bodyText, body } = normalizeBody(response?.body);

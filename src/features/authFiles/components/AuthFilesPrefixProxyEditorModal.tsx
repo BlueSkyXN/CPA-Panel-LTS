@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { ProxyUrlField } from '@/components/common/ProxyUrlField';
 import { Input } from '@/components/ui/Input';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import type {
@@ -142,12 +143,12 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                     disabled={disableControls || editor.saving || !editor.json}
                     onChange={(e) => onChange('prefix', e.target.value)}
                   />
-                  <Input
+                  <ProxyUrlField
                     label={t('auth_files.proxy_url_label')}
                     value={editor.proxyUrl}
                     placeholder={t('auth_files.proxy_url_placeholder')}
                     disabled={disableControls || editor.saving || !editor.json}
-                    onChange={(e) => onChange('proxyUrl', e.target.value)}
+                    onChange={(proxyUrl) => onChange('proxyUrl', proxyUrl)}
                   />
                   <Input
                     label={t('auth_files.priority_label')}

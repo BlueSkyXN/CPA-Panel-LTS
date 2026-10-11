@@ -3,6 +3,7 @@ import { useNavigate, useOutletContext } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { ProxyUrlField } from '@/components/common/ProxyUrlField';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { HeaderInputList } from '@/components/ui/HeaderInputList';
@@ -228,6 +229,7 @@ export function AiProvidersClaudeEditPage() {
           authIndex,
           method: 'POST',
           url: endpoint,
+          proxyUrl: form.proxyUrl?.trim() || undefined,
           header: headers,
           data: JSON.stringify({
             model: modelName,
@@ -268,6 +270,7 @@ export function AiProvidersClaudeEditPage() {
     form.authIndex,
     form.baseUrl,
     form.headers,
+    form.proxyUrl,
     isTesting,
     setTestMessage,
     setTestStatus,
@@ -351,10 +354,10 @@ export function AiProvidersClaudeEditPage() {
               onChange={(e) => setForm((prev) => ({ ...prev, baseUrl: e.target.value }))}
               disabled={saving || disableControls || isTesting}
             />
-            <Input
+            <ProxyUrlField
               label={t('ai_providers.claude_add_modal_proxy_label')}
               value={form.proxyUrl ?? ''}
-              onChange={(e) => setForm((prev) => ({ ...prev, proxyUrl: e.target.value }))}
+              onChange={(proxyUrl) => setForm((prev) => ({ ...prev, proxyUrl }))}
               disabled={saving || disableControls || isTesting}
             />
             <HeaderInputList

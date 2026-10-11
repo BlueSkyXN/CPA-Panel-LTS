@@ -1,6 +1,7 @@
 import { useCodexPolicyControls } from '@/lts/codexPolicy/useCodexPolicyControls';
 import { useCallback, useId, useMemo, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ProxyUrlField } from '@/components/common/ProxyUrlField';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { ToggleRow, FieldShell } from './ConfigFieldShells';
@@ -507,11 +508,11 @@ export function useConfigFieldControls({
     ),
 
     proxyUrl: (
-      <Input
+      <ProxyUrlField
         label={t('config_management.visual.sections.network.proxy_url')}
         placeholder="socks5://user:pass@127.0.0.1:1080/"
         value={values.proxyUrl}
-        onChange={(e) => onChange({ proxyUrl: e.target.value })}
+        onChange={(proxyUrl) => onChange({ proxyUrl })}
         disabled={disabled}
       />
     ),

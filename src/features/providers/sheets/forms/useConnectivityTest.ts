@@ -64,6 +64,7 @@ export interface UseConnectivityTestArgs {
   apiKey?: string;
   fallbackApiKey?: string;
   authIndex?: string;
+  proxyUrl?: string;
 }
 
 export interface ConnectivityErrorMessages {
@@ -102,6 +103,7 @@ export function useConnectivityTest(
     apiKey,
     fallbackApiKey,
     authIndex,
+    proxyUrl,
   } = args;
 
   const entriesCount = apiKeyEntries?.length ?? 0;
@@ -157,10 +159,11 @@ export function useConnectivityTest(
       apiKey ?? '',
       fallbackApiKey ?? '',
       authIndex ?? '',
+      proxyUrl ?? '',
       h,
       m,
     ].join('||');
-  }, [apiKey, authIndex, baseUrl, fallbackApiKey, testModel, formHeaders, models]);
+  }, [apiKey, authIndex, baseUrl, fallbackApiKey, proxyUrl, testModel, formHeaders, models]);
 
   const lastSignatureRef = useRef(signature);
   useEffect(() => {
@@ -240,6 +243,7 @@ export function useConnectivityTest(
             authIndex: resolvedAuthIndex,
             method: 'POST',
             url: endpoint,
+            proxyUrl: entry?.proxyUrl?.trim() || undefined,
             header: headerObj,
             data: JSON.stringify({
               model,
@@ -338,6 +342,7 @@ export function useConnectivityTest(
           authIndex: resolvedAuthIndex,
           method: 'POST',
           url: endpoint,
+          proxyUrl: proxyUrl?.trim() || undefined,
           header: headerObj,
           data: JSON.stringify({
             model,
@@ -359,7 +364,7 @@ export function useConnectivityTest(
     } finally {
       setInFlight((n) => n - 1);
     }
-  }, [apiKey, authIndex, baseUrl, brand, fallbackApiKey, formHeaders, messages, models, testModel]);
+  }, [apiKey, authIndex, baseUrl, brand, fallbackApiKey, formHeaders, messages, models, proxyUrl, testModel]);
 
   const runGemini = useCallback(async (): Promise<void> => {
     if (brand !== 'gemini' && brand !== 'interactions') return;
@@ -414,6 +419,7 @@ export function useConnectivityTest(
           authIndex: resolvedAuthIndex,
           method: 'POST',
           url: endpoint,
+          proxyUrl: proxyUrl?.trim() || undefined,
           header: headerObj,
           data: JSON.stringify(
             brand === 'interactions'
@@ -438,7 +444,7 @@ export function useConnectivityTest(
     } finally {
       setInFlight((n) => n - 1);
     }
-  }, [apiKey, authIndex, baseUrl, brand, fallbackApiKey, formHeaders, messages, models, testModel]);
+  }, [apiKey, authIndex, baseUrl, brand, fallbackApiKey, formHeaders, messages, models, proxyUrl, testModel]);
 
   const runClaude = useCallback(async (): Promise<void> => {
     if (brand !== 'claude' && brand !== 'claudeApi') return;
@@ -488,6 +494,7 @@ export function useConnectivityTest(
           authIndex: resolvedAuthIndex,
           method: 'POST',
           url: endpoint,
+          proxyUrl: proxyUrl?.trim() || undefined,
           header: headerObj,
           data: JSON.stringify({
             model,
@@ -509,7 +516,7 @@ export function useConnectivityTest(
     } finally {
       setInFlight((n) => n - 1);
     }
-  }, [apiKey, authIndex, baseUrl, brand, fallbackApiKey, formHeaders, messages, models, testModel]);
+  }, [apiKey, authIndex, baseUrl, brand, fallbackApiKey, formHeaders, messages, models, proxyUrl, testModel]);
 
   return {
     openaiStatuses,
