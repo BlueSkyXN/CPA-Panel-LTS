@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { HeaderInputList } from '@/components/ui/HeaderInputList';
+import { ProxyUrlField } from '@/components/common/ProxyUrlField';
 import { Input } from '@/components/ui/Input';
 import { ModelInputList } from '@/components/ui/ModelInputList';
 import { Select } from '@/components/ui/Select';
@@ -251,6 +252,7 @@ export function AiProvidersOpenAIEditPage() {
             authIndex,
             method: 'POST',
             url: endpoint,
+            proxyUrl: keyEntry?.proxyUrl?.trim() || undefined,
             header: Object.keys(headers).length ? headers : undefined,
             data: JSON.stringify({
               model: modelName,
@@ -497,12 +499,12 @@ export function AiProvidersOpenAIEditPage() {
 
                 {/* Proxy 输入框 */}
                 <div className={styles.keyTableColProxy}>
-                  <input
-                    type="text"
+                  <ProxyUrlField
+                    label=""
                     value={entry.proxyUrl ?? ''}
-                    onChange={(e) => updateEntry(index, 'proxyUrl', e.target.value)}
+                    onChange={(proxyUrl) => updateEntry(index, 'proxyUrl', proxyUrl)}
                     disabled={saving || disableControls || isTestingKeys}
-                    className={`input ${styles.keyTableInput}`}
+                    inputClassName={styles.keyTableInput}
                     placeholder={t('ai_providers.openai_proxy_placeholder')}
                   />
                 </div>

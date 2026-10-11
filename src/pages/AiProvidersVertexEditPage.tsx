@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { ProxyUrlField } from '@/components/common/ProxyUrlField';
 import { Input } from '@/components/ui/Input';
 import { HeaderInputList } from '@/components/ui/HeaderInputList';
 import { ModelInputList } from '@/components/ui/ModelInputList';
@@ -346,11 +347,11 @@ export function AiProvidersVertexEditPage() {
               onChange={(e) => setForm((prev) => ({ ...prev, baseUrl: e.target.value }))}
               disabled={disableControls || saving}
             />
-            <Input
+            <ProxyUrlField
               label={t('ai_providers.vertex_add_modal_proxy_label')}
               placeholder={t('ai_providers.vertex_add_modal_proxy_placeholder')}
               value={form.proxyUrl ?? ''}
-              onChange={(e) => setForm((prev) => ({ ...prev, proxyUrl: e.target.value }))}
+              onChange={(proxyUrl) => setForm((prev) => ({ ...prev, proxyUrl }))}
               disabled={disableControls || saving}
             />
             <HeaderInputList

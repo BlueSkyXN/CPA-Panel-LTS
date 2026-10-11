@@ -6,6 +6,13 @@ import { apiClient } from './client';
 import type { Config } from '@/types';
 import { normalizeConfigResponse } from './transformers';
 
+export type ProxyProbeStatus = 'ok' | 'skipped' | 'error';
+
+export interface ProxyProbeResponse {
+  status?: ProxyProbeStatus | string;
+  code?: string;
+}
+
 export const configApi = {
   /**
    * 获取配置（会进行字段规范化）
@@ -29,6 +36,12 @@ export const configApi = {
    * 更新代理 URL
    */
   updateProxyUrl: (proxyUrl: string) => apiClient.put('/proxy-url', { value: proxyUrl }),
+
+  /**
+   * 探测一次代理值。Core 不读取、不保存配置，响应也不回显代理地址。
+   */
+  testProxyUrl: (proxyUrl: string) =>
+    apiClient.post<ProxyProbeResponse>('/proxy-url/test', { value: proxyUrl }),
 
   /**
    * 清除代理 URL

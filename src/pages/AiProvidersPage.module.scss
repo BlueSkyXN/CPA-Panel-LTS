@@ -1257,7 +1257,7 @@ $openai-toolbar-control-height: 36px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-top: none;
-  align-items: center;
+  align-items: start;
 
   &:last-child {
     border-radius: 0 0 $radius-md $radius-md;
@@ -1293,6 +1293,15 @@ $openai-toolbar-control-height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.keyTableColProxy {
+  align-items: flex-start;
+
+  :global([class*='field']) {
+    width: 100%;
+    margin: 0;
+  }
 }
 
 .keyTableColAction {

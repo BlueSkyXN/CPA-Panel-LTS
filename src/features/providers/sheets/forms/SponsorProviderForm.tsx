@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ProxyUrlField } from '@/components/common/ProxyUrlField';
 import { Collapsible } from '@/components/ui/Collapsible';
 import { Select } from '@/components/ui/Select';
 import {
@@ -525,19 +526,16 @@ function SponsorKeyEntryCard({
             <span className={styles.labelHint}>{t('providersPage.sponsor.apiKeyHint')}</span>
           </div>
 
-          <div className={styles.field}>
-            <label className={styles.label} htmlFor={`${formId}-group-${index}-proxy`}>
-              {t('providersPage.form.proxyUrl')}
-            </label>
-            <input
-              id={`${formId}-group-${index}-proxy`}
-              className={styles.input}
-              value={entry.proxyUrl}
-              onChange={(event) => updateEntry({ proxyUrl: event.target.value })}
-              placeholder="http://127.0.0.1:7890"
-              disabled={mutating}
-            />
-          </div>
+          <ProxyUrlField
+            id={`${formId}-group-${index}-proxy`}
+            label={t('providersPage.form.proxyUrl')}
+            value={entry.proxyUrl}
+            onChange={(proxyUrl) => updateEntry({ proxyUrl })}
+            placeholder="http://127.0.0.1:7890"
+            disabled={mutating}
+            className={styles.field}
+            inputClassName={styles.input}
+          />
 
           <div className={styles.fieldRow}>
             <div className={styles.field}>

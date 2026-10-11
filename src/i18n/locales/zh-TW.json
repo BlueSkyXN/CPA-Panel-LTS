@@ -118,7 +118,22 @@
     "model_alias_placeholder": "模型別名（選填）",
     "invalid_provider_index": "無效的供應商索引。",
     "unsaved_changes_title": "未儲存的變更",
-    "unsaved_changes_message": "你有未儲存的變更，離開後將遺失這些變更。確定要離開嗎？"
+    "unsaved_changes_message": "你有未儲存的變更，離開後將遺失這些變更。確定要離開嗎？",
+    "proxy_probe": {
+      "test": "測試代理",
+      "testing": "正在測試代理",
+      "reachable": "代理可以存取外網。",
+      "direct": "已選擇直連，沒有連線代理。",
+      "empty": "請先填寫代理 URL。",
+      "invalid_proxy_url": "代理 URL 無效。請使用 http、https、socks5、socks5h、direct 或 none。",
+      "connection_refused": "無法連線到代理。",
+      "timeout": "代理在限定時間內沒有回應。",
+      "proxy_auth_required": "代理要求身分驗證。",
+      "proxy_auth_failed": "代理身分驗證失敗。",
+      "tls_failed": "透過代理建立 TLS 連線失敗。",
+      "probe_failed": "代理測試失敗。",
+      "unsupported": "目前的 Core 版本不支援代理測試，請升級 Core 後再試。"
+    }
   },
   "title": {
     "main": "CPA Management Center",

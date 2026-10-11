@@ -118,7 +118,22 @@
     "model_alias_placeholder": "Model alias (optional)",
     "invalid_provider_index": "Invalid provider index.",
     "unsaved_changes_title": "Unsaved changes",
-    "unsaved_changes_message": "You have unsaved changes. Leaving now will discard them. Do you want to leave?"
+    "unsaved_changes_message": "You have unsaved changes. Leaving now will discard them. Do you want to leave?",
+    "proxy_probe": {
+      "test": "Test proxy",
+      "testing": "Testing proxy",
+      "reachable": "Proxy can reach the internet.",
+      "direct": "Direct connection selected; no proxy was contacted.",
+      "empty": "Enter a proxy URL first.",
+      "invalid_proxy_url": "Proxy URL is invalid. Use http, https, socks5, socks5h, direct, or none.",
+      "connection_refused": "Could not connect to the proxy.",
+      "timeout": "The proxy did not respond in time.",
+      "proxy_auth_required": "The proxy requires authentication.",
+      "proxy_auth_failed": "Proxy authentication failed.",
+      "tls_failed": "The TLS connection through the proxy failed.",
+      "probe_failed": "The proxy test failed.",
+      "unsupported": "This Core version does not support proxy testing. Update Core and try again."
+    }
   },
   "title": {
     "main": "CPA Management Center",
