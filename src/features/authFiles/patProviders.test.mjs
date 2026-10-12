@@ -5,10 +5,47 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createServer } from 'vite';
 
 const vite = await createServer({ appType: 'custom', logLevel: 'silent', server: { middlewareMode: true } });
-const { buildAccountAuth, buildPatAuth, generateDeviceId, isAccountFormProvider, parsePatSummary, newPatAuthFileName } = await vite.ssrLoadModule('/src/features/authFiles/patProviders.ts');
+const { buildAccountAuth, buildPatAuth, generateDeviceId, isAccountFormProvider, parsePatSummary, newPatAuthFileName, normalizeAccountExtraModels } = await vite.ssrLoadModule('/src/features/authFiles/patProviders.ts');
 const { PatSummaryDetails } = await vite.ssrLoadModule('/src/features/authFiles/components/PatAccountSummary.tsx');
 const { default: i18n } = await vite.ssrLoadModule('/src/i18n/index.ts');
 test.after(() => vite.close());
+
+test('ZCode extra models normalize, preserve credentials, and clear independently', () => {
+  const previous = Object.freeze({ type: 'zcode-coding-plan', api_key: 'fixture.secret', device_id: 'stable-device', prefix: 'team', exmodel: Object.freeze(['glm-5.3-highspeed']) });
+  const updated = buildAccountAuth('zcode-coding-plan', 'Main', '', '', previous, [' glm-5.3-flashx ', 'glm-5.3-flashx']);
+  assert.deepEqual(updated.exmodel, ['glm-5.3-flashx']);
+  assert.equal(updated.api_key, previous.api_key);
+  assert.equal(updated.device_id, previous.device_id);
+  assert.equal(updated.prefix, previous.prefix);
+  assert.deepEqual(previous.exmodel, ['glm-5.3-highspeed']);
+  assert.deepEqual(buildAccountAuth('zcode-coding-plan', 'Main', '', '', previous, []).exmodel, []);
+  assert.deepEqual(buildAccountAuth('zcode-coding-plan', 'Main', '', '', previous).exmodel, previous.exmodel);
+  assert.deepEqual(buildAccountAuth('zcode-coding-plan', 'Main', 'new.secret', '', previous, ['custom-model']).exmodel, ['custom-model']);
+  assert.deepEqual(normalizeAccountExtraModels(undefined), []);
+  assert.deepEqual(normalizeAccountExtraModels(null), []);
+  for (const invalid of ['glm-5.3-flashx', {}, [1], [null], [' '], ['<model>'], ['model\n']]) {
+    assert.throws(() => normalizeAccountExtraModels(invalid), /invalid_extra_models/);
+  }
+  assert.throws(() => buildAccountAuth('zcode-coding-plan', 'New', '', '', undefined, []), /invalid_api_key/);
+  assert.throws(() => buildAccountAuth('qoder', 'Old', '', '', { type: 'qoder', pat: 'pt-fixture' }), /invalid_pat/);
+});
+
+test('ZCode extra model editing requires the loaded plugin feature version', async () => {
+  const { pluginsApi } = await vite.ssrLoadModule('/src/services/api/plugins.ts');
+  const { patProvidersApi } = await vite.ssrLoadModule('/src/services/api/patProviders.ts');
+  const originalList = pluginsApi.list;
+  try {
+    for (const [version, supported] of [[undefined, false], ['0.5.0', false], ['0.6.0', true], ['0.6.1', true]]) {
+      pluginsApi.list = async () => ({ pluginsEnabled: true, plugins: [{ id: 'zcode-coding-plan', registered: true, effectiveEnabled: true, metadata: { version } }] });
+      const config = await patProvidersApi.configuration('zcode-coding-plan');
+      assert.equal(config.supportsExtraModels, supported);
+    }
+    pluginsApi.list = async () => ({ pluginsEnabled: true, plugins: [{ id: 'zcode-coding-plan', registered: false, effectiveEnabled: true, metadata: { version: '0.6.0' } }] });
+    await assert.rejects(() => patProvidersApi.configuration('zcode-coding-plan'), /plugin_unavailable/);
+  } finally {
+    pluginsApi.list = originalList;
+  }
+});
 
 test('new accounts receive unique path-safe filenames without using the label', () => {
   const names = new Set(Array.from({ length: 20 }, () => newPatAuthFileName('qoder')));

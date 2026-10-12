@@ -1,6 +1,10 @@
 import { apiClient } from './client';
 import { pluginsApi } from './plugins';
-import { parsePatSummary, type AccountFormProvider, type PatProvider } from '@/features/authFiles/patProviders';
+import {
+  parsePatSummary,
+  type AccountFormProvider,
+  type PatProvider,
+} from '@/features/authFiles/patProviders';
 
 // Qoder 插件 0.3.0 起固定原生 direct_openai；旧插件（<0.3.0）未配置 transport 时实际仍是 sdk_cli。
 const pluginVersionAtLeast = (version: unknown, minimum: string): boolean => {
@@ -35,6 +39,7 @@ export const patProvidersApi = {
       return {
         transport: 'direct_anthropic',
         endpoint: 'https://open.bigmodel.cn/api/anthropic/v1/messages',
+        supportsExtraModels: pluginVersionAtLeast(plugin.metadata?.version, '0.6.0'),
       };
     }
     const config = await pluginsApi.getConfig(plugin.id);
@@ -42,11 +47,13 @@ export const patProvidersApi = {
       return {
         transport: 'direct_https',
         endpoint: String(config.endpoint || 'https://copilot.tencent.com/v2/chat/completions'),
+        supportsExtraModels: false,
       };
     }
     const nativeOnly = pluginVersionAtLeast(plugin.metadata?.version, '0.3.0');
     return {
       transport: nativeOnly ? 'direct_openai' : String(config.transport || 'sdk_cli'),
+      supportsExtraModels: false,
       endpoint: String(
         config.openapi_endpoint ||
           config.direct_auth_endpoint ||

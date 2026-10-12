@@ -35,7 +35,11 @@ export function buildPatAuth(
   }
   if (previous && previous.type !== provider) throw new Error('provider_mismatch');
   const previousMode = typeof previous?.auth_mode === 'string' ? previous.auth_mode : '';
-  if (previousMode && previousMode !== 'pat' && !(provider === 'codebuddy' && previousMode === 'api_key')) {
+  if (
+    previousMode &&
+    previousMode !== 'pat' &&
+    !(provider === 'codebuddy' && previousMode === 'api_key')
+  ) {
     throw new Error('unsupported_auth_mode');
   }
   const auth = { ...previous, type: provider, auth_mode: 'pat', pat, label: label.trim() };
@@ -54,7 +58,24 @@ export function generateDeviceId(): string {
   bytes[6] = (bytes[6] & 0x0f) | 0x40;
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
   const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
-  return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)].join('-');
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    hex.slice(12, 16),
+    hex.slice(16, 20),
+    hex.slice(20),
+  ].join('-');
+}
+
+export function normalizeAccountExtraModels(value: unknown): string[] {
+  if (value === undefined || value === null) return [];
+  if (
+    !Array.isArray(value) ||
+    value.some((model) => typeof model !== 'string' || !model.trim() || /[<>\r\n]/.test(model))
+  ) {
+    throw new Error('invalid_extra_models');
+  }
+  return [...new Set((value as string[]).map((model) => model.trim()))];
 }
 
 export function buildAccountAuth(
@@ -62,22 +83,24 @@ export function buildAccountAuth(
   label: string,
   value: string,
   deviceId: string,
-  previous?: Record<string, unknown>
+  previous?: Record<string, unknown>,
+  extraModels?: string[]
 ): Record<string, unknown> {
   if (provider === 'zcode-coding-plan') {
-    const apiKey = value.trim();
+    if (previous && previous.type !== provider) throw new Error('provider_mismatch');
+    const previousKey = typeof previous?.api_key === 'string' ? previous.api_key : '';
+    const apiKey = value.trim() || previousKey.trim();
     const parts = apiKey.split('.');
     if (
       !apiKey ||
-        /[\r\n\0<]/.test(apiKey) ||
-        /\s/.test(apiKey) ||
-        parts.length !== 2 ||
-        !parts[0] ||
-        !parts[1]
+      /[\r\n\0<]/.test(apiKey) ||
+      /\s/.test(apiKey) ||
+      parts.length !== 2 ||
+      !parts[0] ||
+      !parts[1]
     ) {
       throw new Error('invalid_api_key');
     }
-    if (previous && previous.type !== provider) throw new Error('provider_mismatch');
     // 与插件的运行时契约一致，保存时归一为零次重试。
     const auth: Record<string, unknown> = {
       ...previous,
@@ -89,6 +112,8 @@ export function buildAccountAuth(
     // 编辑既有账号且未改动设备标识时保留原值，避免静默轮换设备身份。
     const previousDeviceId = typeof previous?.device_id === 'string' ? previous.device_id : '';
     auth.device_id = deviceId.trim() || previousDeviceId || generateDeviceId();
+    // undefined 表示未编辑（例如旧插件）；显式空数组表示清除额外模型。
+    if (extraModels !== undefined) auth.exmodel = normalizeAccountExtraModels(extraModels);
     // 已改为内联凭据；保留旧引用会被插件拒绝，其他账号设置继续沿用。
     delete auth.config_file;
     delete auth.pat;

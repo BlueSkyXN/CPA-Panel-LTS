@@ -23,6 +23,8 @@ def main():
     auths = {}
     plugin_enabled = True
     quota_rejected = False
+    zcode_version = "0.6.0"
+    fail_auth_download = False
     secrets_used = ["pt-fixture-create-only", "pt-fixture-update-only"]
 
     def api(route):
@@ -40,7 +42,7 @@ def main():
                 for provider in ("codebuddy", "qoder")
             ] + [{"id": "zcode-coding-plan", "registered": plugin_enabled, "effective_enabled": plugin_enabled,
                   "enabled": plugin_enabled, "configured": True,
-                  "metadata": {"name": "zcode-coding-plan", "version": "0.1.0", "author": "Fixture"}}]}
+                  "metadata": {"name": "zcode-coding-plan", "version": zcode_version, "author": "Fixture"}}]}
         elif path.startswith("/plugins/") and path.endswith("/config"):
             result = {"transport": "direct_openai", "openapi_endpoint": "https://openapi.qoder.com.cn"}
         elif path.endswith("/summary"):
@@ -79,6 +81,10 @@ def main():
                 {"id": "mmodel", "display_name": "MiniMax-M2.7", "type": "agent"},
             ]}
         elif path == "/auth-files/download":
+            if fail_auth_download:
+                route.fulfill(status=503, content_type="application/json", body='{"error":"fixture unavailable"}',
+                              headers={"Access-Control-Allow-Origin": "*"})
+                return
             result = auths[query["name"][0]]
         if result is None:
             route.continue_()
@@ -205,7 +211,73 @@ def main():
             dialog.get_by_role("button", name="Retry", exact=True).click()
             dialog.get_by_text(re.compile("Instance: direct_https")).wait_for()
             dialog.get_by_role("button", name="Cancel", exact=True).click()
-            auths["zcode-name-fixture.json"] = {"type": "zcode-coding-plan", "label": "ZCode fixture"}
+            # 新建、编辑及清除额外模型；编辑不重新填写账号凭据。
+            page.get_by_role("button", name="Add account", exact=True).click()
+            dialog = page.get_by_role("dialog", name="Add account")
+            dialog.get_by_role("button", name="Provider", exact=True).click()
+            page.get_by_role("option", name="ZCode", exact=True).click()
+            dialog.get_by_label("Account label").fill("ZCode fixture")
+            dialog.get_by_label("API key", exact=True).fill("zcode-fixture.synthetic-secret")
+            dialog.get_by_label("Extra models", exact=True).fill(" glm-5.3-highspeed, glm-5.3-flashx, glm-5.3-highspeed ")
+            dialog.get_by_role("button", name="Save", exact=True).click()
+            dialog.wait_for(state="detached")
+            zcode_name = next(name for name, value in auths.items() if value["type"] == "zcode-coding-plan")
+            original_key, original_device = auths[zcode_name]["api_key"], auths[zcode_name]["device_id"]
+            assert auths[zcode_name]["exmodel"] == ["glm-5.3-highspeed", "glm-5.3-flashx"]
+            secrets_used.append(original_key)
+            page.get_by_role("button", name="ZCode 1", exact=True).click()
+
+            def open_zcode_editor():
+                page.get_by_test_id("auth-file-card").filter(has_text="ZCode fixture").get_by_role("button", name="Update credentials", exact=True).click()
+                return page.get_by_role("dialog", name="Update credentials", exact=True)
+
+            for value, expected in [("glm-5.3-flashx", ["glm-5.3-flashx"]), ("", [])]:
+                dialog = open_zcode_editor()
+                dialog.get_by_label("Extra models", exact=True).fill(value)
+                assert dialog.get_by_label("API key", exact=True).input_value() == ""
+                auths[zcode_name]["note"] = "preserve-new-server-field"
+                assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1")
+                if expected:
+                    page.wait_for_function("document.querySelectorAll('.notification-container .notification').length === 0")
+                    dialog.get_by_label("Account label").scroll_into_view_if_needed()
+                    page.screenshot(path=str(output / "zcode-extra-models-mobile.png"), animations="disabled")
+                dialog.get_by_role("button", name="Save", exact=True).click()
+                dialog.wait_for(state="detached")
+                assert auths[zcode_name]["exmodel"] == expected
+                assert auths[zcode_name]["api_key"] == original_key and auths[zcode_name]["device_id"] == original_device
+                assert auths[zcode_name]["note"] == "preserve-new-server-field"
+
+            # 旧插件不能编辑新字段，但保存其他设置不能丢失既有列表。
+            zcode_version = "0.5.0"
+            auths[zcode_name]["exmodel"] = ["glm-5.3-highspeed"]
+            dialog = open_zcode_editor()
+            dialog.get_by_text("Extra models require ZCode plugin 0.6.0 or later. Existing settings will be preserved.", exact=True).wait_for()
+            assert dialog.get_by_label("Extra models", exact=True).is_disabled()
+            assert dialog.get_by_label("Extra models", exact=True).input_value() == "glm-5.3-highspeed"
+            dialog.get_by_role("button", name="Save", exact=True).click()
+            dialog.wait_for(state="detached")
+            assert auths[zcode_name]["exmodel"] == ["glm-5.3-highspeed"]
+
+            # 账号读取失败时不能把空值保存成删除列表；重试后回显原值。
+            zcode_version = "0.6.0"
+            fail_auth_download = True
+            dialog = open_zcode_editor()
+            dialog.get_by_role("alert").filter(has_text="Could not load the account settings. Retry before saving.").wait_for()
+            assert dialog.get_by_role("button", name="Save", exact=True).is_disabled()
+            fail_auth_download = False
+            dialog.get_by_role("button", name="Retry", exact=True).click()
+            dialog.get_by_text(re.compile("Instance: direct_anthropic")).wait_for()
+            assert dialog.get_by_label("Extra models", exact=True).input_value() == "glm-5.3-highspeed"
+            page.set_viewport_size({"width": 1440, "height": 1000})
+            page.wait_for_function("document.querySelectorAll('.notification-container .notification').length === 0")
+            dialog.get_by_label("Account label").scroll_into_view_if_needed()
+            page.screenshot(path=str(output / "zcode-extra-models-desktop.png"), animations="disabled")
+            auths[zcode_name]["exmodel"] = ["glm-5.3-flashx"]
+            dialog.get_by_role("button", name="Save", exact=True).click()
+            dialog.wait_for(state="detached")
+            assert auths[zcode_name]["exmodel"] == ["glm-5.3-flashx"], "unedited list overwrote newer server settings"
+            storage = page.evaluate("JSON.stringify([Object.entries(localStorage),Object.entries(sessionStorage)])")
+            assert all(value not in storage for value in secrets_used)
             for locale in ("en", "zh-CN", "zh-TW", "ru"):
                 catalog = json.loads((ROOT / f"src/i18n/locales/{locale}.json").read_text())
                 page.evaluate("language => localStorage.setItem('cli-proxy-language', JSON.stringify({state:{language},version:0}))", locale)
@@ -230,7 +302,7 @@ def main():
                 update_dialog.get_by_role("button", name=catalog["common"]["cancel"], exact=True).click()
             assert not errors, "Browser reported JavaScript errors"
             browser.close()
-    print("PASS: PAT create/update, Qoder validation, quota states/cache, dependency gate, mobile layout, ZCode add/update names and hints in four locales, no browser PAT persistence (mock Core)")
+    print("PASS: PAT create/update, Qoder validation, quota states/cache, dependency gate, mobile layout, ZCode exmodel create/edit/clear, preserved credentials, old-plugin gate, failed-load retry, four locales, no browser credential persistence (mock Core)")
 
 
 if __name__ == "__main__":

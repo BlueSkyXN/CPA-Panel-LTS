@@ -1,5 +1,12 @@
 {
   "pat_accounts": {
+    "account_load_failed": "無法讀取帳號設定，請重試後再儲存。",
+    "zcode_edit_hint": "將更新 {{name}} 的帳號設定，未填寫的新憑證沿用已有值。",
+    "extra_models_label": "額外模型",
+    "extra_models_hint": "填寫此帳號支援的額外模型 ID，以逗號分隔。留空使用基礎模型；此設定不會授予上游模型權限。",
+    "extra_models_upgrade": "額外模型需要 ZCode 外掛 0.6.0 或更新版本；現有設定會保留。",
+    "invalid_extra_models": "請輸入有效的模型 ID，以逗號分隔；不能包含角括號或控制換行。",
+    "keep_api_key_hint": "留空保留此帳號現有的 API key；僅在需要更換憑證時填寫。",
     "retry": "重試",
     "advanced_options": "高級選項",
     "priority_invalid": "優先級必須是整數。",

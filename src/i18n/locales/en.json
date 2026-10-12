@@ -1,5 +1,12 @@
 {
   "pat_accounts": {
+    "account_load_failed": "Could not load the account settings. Retry before saving.",
+    "zcode_edit_hint": "Updates the settings for {{name}}. Blank credential fields keep their existing values.",
+    "extra_models_label": "Extra models",
+    "extra_models_hint": "Enter extra model IDs supported by this account, separated by commas. Leave empty to use the base models. This setting does not grant upstream model access.",
+    "extra_models_upgrade": "Extra models require ZCode plugin 0.6.0 or later. Existing settings will be preserved.",
+    "invalid_extra_models": "Enter valid model IDs separated by commas, without angle brackets or control line breaks.",
+    "keep_api_key_hint": "Leave blank to keep this account’s existing API key. Enter a key only to replace it.",
     "retry": "Retry",
     "advanced_options": "Advanced options",
     "priority_invalid": "Priority must be an integer.",
