@@ -534,7 +534,12 @@
     "applied_on": "Applied: on",
     "applied_off": "Applied: off",
     "queue_section": "Queue & capacity",
-    "waiting_split": "{{requests}} requests · {{attempts}} attempts"
+    "waiting_split": "{{requests}} requests · {{attempts}} attempts",
+    "trend_title": "Observation trend",
+    "trend_scope": "Current session only. Gaps indicate pauses or missing samples.",
+    "trend_empty": "Start live observation to collect samples. No history has been recorded in this view.",
+    "trend_collecting": "One sample received; waiting for the next sample.",
+    "trend_readings": "View sample readings"
   },
   "config_management": {
     "visual": {

@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Collapsible } from '@/components/ui/Collapsible/Collapsible';
 import { Button } from '@/components/ui/Button';
 import { FLOW_CONTROL_ENDPOINTS } from '@/services/api/flowControl';
 import { apiClient } from '@/services/api/client';
@@ -72,8 +73,7 @@ export function RuleInspector({ values, data, runningOnly = false }: Props) {
     || models.length < 1 || models.length > 24 || models.some((model) => model.includes('*'));
 
   return (
-    <details className={styles.inspector} open>
-      <summary><strong>{t('flow_control.v3_preview_title')}</strong></summary>
+    <Collapsible label={t('flow_control.v3_preview_title')} defaultOpen={!runningOnly}>
       <p className={styles.hint}>{t('flow_control.v3_preview_hint')}</p>
       <div className={styles.grid}>
         <label className={styles.field}>
@@ -194,6 +194,6 @@ export function RuleInspector({ values, data, runningOnly = false }: Props) {
         </div>
       )}
       <p className={styles.hint}>{t('flow_control.v3_preview_advisory')}</p>
-    </details>
+    </Collapsible>
   );
 }

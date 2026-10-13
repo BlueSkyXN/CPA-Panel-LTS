@@ -1,5 +1,8 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Collapsible } from '@/components/ui/Collapsible/Collapsible';
+import { FlowTrend } from './FlowTrend';
+import type { FlowPoint } from './history';
 import { Button } from '@/components/ui/Button';
 import {
   IconNetwork,
@@ -13,13 +16,12 @@ import { referenceLabel } from './insights';
 import { type FlowLiveState } from './useStatus';
 import styles from './styles.module.scss';
 
-type Point = { requests: number; attempts: number; waiting: number };
 type Props = {
   data: FlowCapabilities | null;
   live: boolean;
   setLive: (value: boolean) => void;
   liveState: FlowLiveState;
-  history: Point[];
+  history: FlowPoint[];
   onRefresh: () => void;
 };
 type DetailsPage = {
@@ -31,34 +33,6 @@ type DetailsPage = {
 };
 
 const DETAILS_PAGE_SIZE = 100;
-
-function Trend({ history, label }: { history: Point[]; label: string }) {
-  const max = Math.max(1, ...history.flatMap((point) => [point.requests, point.attempts, point.waiting]));
-  const points = (field: 'requests' | 'attempts' | 'waiting') =>
-    history.map((point, index) => {
-      const x = (index * 300) / Math.max(1, history.length - 1);
-      return `${x},${55 - (point[field] * 48) / max}`;
-    }).join(' ');
-  const area = history.length > 1
-    ? `M0,55 L${points('attempts')} L300,55 Z`
-    : '';
-
-  return (
-    <svg className={styles.trend} viewBox="0 0 300 60" role="img" aria-label={label} preserveAspectRatio="none">
-      <defs>
-        <linearGradient id="flow-trend-fill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#477fa5" stopOpacity="0.2" />
-          <stop offset="100%" stopColor="#477fa5" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d="M0 55H300" className={styles.trendBase} />
-      {area && <path d={area} fill="url(#flow-trend-fill)" />}
-      <polyline points={points('requests')} className={styles.trendRequests} />
-      <polyline points={points('attempts')} className={styles.trendActive} />
-      <polyline points={points('waiting')} className={styles.trendWaiting} />
-    </svg>
-  );
-}
 
 type KpiCard = {
   key: string;
@@ -184,33 +158,21 @@ export function LiveMonitor({ data, live, setLive, liveState, history, onRefresh
           <small>{t('flow_control.timed_out_total')}: {state?.['timed-out'] ?? '—'} · {t('flow_control.canceled_total')}: {state?.canceled ?? '—'}</small>
         </div>
       </dl>
-      {history.length > 1 && (
-        <div className={styles.trendPanel}>
-          <Trend history={history} label={t('flow_control.trend_label')} />
-          <div className={styles.trendSide}>
-            <div className={styles.trendLegend}>
-              <span><i className={styles.dotRequests} />{t('flow_control.active_requests')}</span>
-              <span><i className={styles.dotActive} />{t('flow_control.active_attempts')}</span>
-              <span><i className={styles.dotWaiting} />{t('flow_control.waiting')}</span>
-            </div>
-            <small>{t('flow_control.trend_label')}</small>
-          </div>
-        </div>
-      )}
+      <div className={styles.waitSummary}>
+        <span>{t('flow_control.v3_oldest')}</span>
+        <strong>{state?.['oldest-wait-ms'] == null ? '—' : `${(state['oldest-wait-ms'] / 1000).toFixed(1)} s`}</strong>
+        {blockers.length > 0 && <div>
+          <span>{t('flow_control.v3_recent_blockers')}</span>
+          {blockers.map(([key, count]) => <span key={key} className={styles.blocker}>{lookup(key)} · {count}</span>)}
+        </div>}
+      </div>
+      <FlowTrend history={history} liveState={liveState} />
       <p className={styles.sampleLine}>
-        {state?.['sampled-at'] || '—'} · {t('flow_control.v3_revision')} {state?.['policy-revision'] ?? '—'}
-        {' · '}{t('flow_control.v3_oldest')} {Math.round((state?.['oldest-wait-ms'] ?? 0) / 1000)} s
+        {t('flow_control.sampled')}: {state?.['sampled-at'] ? new Date(state['sampled-at']).toLocaleString() : '—'}
+        {' · '}{t('flow_control.v3_revision')} {state?.['policy-revision'] ?? '—'}
       </p>
-      {blockers.length > 0 && (
-        <p className={styles.hint}>
-          {t('flow_control.v3_recent_blockers')}: {blockers.map(([key, count]) => (
-            <span key={key} className={styles.blocker}>{lookup(key)} · {count}</span>
-          ))}
-        </p>
-      )}
       {resources && (
-        <details>
-          <summary>{t('flow_control.v3_resource_snapshot')}</summary>
+        <Collapsible label={t('flow_control.v3_resource_snapshot')}>
           <div className={styles.status}>
             <span>{t('flow_control.v3_heap')}: {mib(resources['heap-object-bytes'])}</span>
             <span>{t('flow_control.v3_managed')}: {mib(resources['go-managed-bytes'])}</span>
@@ -219,10 +181,9 @@ export function LiveMonitor({ data, live, setLive, liveState, history, onRefresh
           </div>
           <p className={styles.hint}>{t('flow_control.v3_resource_note')}</p>
           <small>{resources['sampled-at']} / {resources['filesystem-sampled-at']}</small>
-        </details>
+        </Collapsible>
       )}
-      <details className={styles.details}>
-        <summary>{t('flow_control.v3_manual_details')}</summary>
+      <Collapsible className={styles.detailsPanel} label={t('flow_control.v3_manual_details')}>
         <p className={styles.hint}>{t('flow_control.v3_detail_hint')}</p>
         <div className={styles.grid}>
           <label className={styles.field}>
@@ -312,7 +273,7 @@ export function LiveMonitor({ data, live, setLive, liveState, history, onRefresh
             </div>
           </>
         )}
-      </details>
+      </Collapsible>
     </section>
   );
 }

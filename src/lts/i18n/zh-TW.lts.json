@@ -534,7 +534,12 @@
     "applied_on": "已套用：開啟",
     "applied_off": "已套用：關閉",
     "queue_section": "佇列與容量",
-    "waiting_split": "{{requests}} 請求 · {{attempts}} 執行"
+    "waiting_split": "{{requests}} 請求 · {{attempts}} 執行",
+    "trend_title": "本次觀察趨勢",
+    "trend_scope": "僅顯示本次觀察取樣；暫停或缺少取樣處斷開曲線。",
+    "trend_empty": "開啟即時觀察後採集樣本，目前檢視尚無趨勢記錄。",
+    "trend_collecting": "已收到一個樣本，等待下一次取樣。",
+    "trend_readings": "查看取樣讀數"
   },
   "config_management": {
     "visual": {
