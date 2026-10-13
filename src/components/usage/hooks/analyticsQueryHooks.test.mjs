@@ -43,6 +43,7 @@ async function harness(file, respond) {
     close() { for (const slot of slots) slot.cleanup?.(); },
   };
 }
+const exportText = (details) => details.map((row) => row.__queryId).join(',');
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 const session = { bound: 'synthetic', now_ms: 10000, max_page_size: 100 };
 const window = { startMs: 1000, endMs: 10000 };
@@ -103,7 +104,7 @@ test('unresolved event identities never display or export unfiltered probe rows'
     assert.equal(result.data.next_cursor, ''); assert.equal(result.data.metrics.tokens, 0);
     assert.deepEqual(result.data.metrics.output_tps, { numerator: 0, denominator: 0, samples: 0 });
     assert.deepEqual(result.data.metrics.prices, []);
-    assert.deepEqual(await result.exportDetails(), []);
+    assert.deepEqual(await result.exportDetails(exportText), []);
     result.setPage(1); h.render(session, {}, filter);
     assert.equal(h.requests.length, 1);
   } finally { h.close(); }
@@ -145,20 +146,20 @@ const runExport = (job, fetchPage, controller = new AbortController(), isCurrent
 
 test('export starts at the first cursor and reports validated batches with fixed filters', async () => {
   const filter = { model: 'a', tier_flow: 'fast_to_std', effort: 'high' };
-  const job = new UsageDetailsExport({ bound: 'synthetic', filter, from_ms: 1, to_ms: 10, cursor: 'viewing-page-3', limit: 200 });
+  const job = new UsageDetailsExport({ bound: 'synthetic', filter, from_ms: 1, to_ms: 10, cursor: 'viewing-page-3', limit: 200 }, (items) => items);
   const requests = []; const progress = [];
   const rows = await runExport(job, async (q) => {
     requests.push(q);
     return q.cursor ? page(['3'], 3) : page(['1', '2'], 3, 'next');
   }, undefined, undefined, (p) => progress.push(p));
-  assert.deepEqual(rows.map((row) => row.id), ['1', '2', '3']);
+  assert.deepEqual(rows.flat().map((row) => row.id), ['1', '2', '3']);
   assert.deepEqual(requests.map((q) => q.cursor), ['', 'next']);
   assert.ok(requests.every((q) => q.filter === filter && q.bound === 'synthetic' && q.include_options === false && q.limit === 200 && q.from_ms === 1 && q.to_ms === 10));
   assert.deepEqual(progress.map((p) => p.loaded), [0, 2, 3]);
 });
 
 test('transient export errors retry only the unfinished cursor and then resume its checkpoint', async () => {
-  const job = new UsageDetailsExport({ bound: 'synthetic' });
+  const job = new UsageDetailsExport({ bound: 'synthetic' }, (items) => items);
   const requests = []; let fail = true;
   const fetchPage = async (q) => {
     requests.push(q.cursor);
@@ -171,12 +172,12 @@ test('transient export errors retry only the unfinished cursor and then resume i
   assert.deepEqual(job.progress, { loaded: 1, total: 2, retry: 0 });
   fail = false;
   const rows = await runExport(job, fetchPage);
-  assert.deepEqual(rows.map((row) => row.id), ['1', '2']);
+  assert.deepEqual(rows.flat().map((row) => row.id), ['1', '2']);
   assert.deepEqual(requests, ['', 'next', 'next', 'next', 'next']);
 });
 
 test('export cancellation interrupts retry backoff without another request', async () => {
-  const job = new UsageDetailsExport({ bound: 'synthetic' });
+  const job = new UsageDetailsExport({ bound: 'synthetic' }, (items) => items);
   const controller = new AbortController(); let calls = 0;
   await assert.rejects(job.run(async () => { calls++; throw transient(); }, controller.signal, () => true,
     (p) => { if (p.retry) controller.abort(); }, 10000), { name: 'AbortError' });
@@ -185,7 +186,7 @@ test('export cancellation interrupts retry backoff without another request', asy
 
 test('a connection switch or cancellation during the final response cannot complete an export', async () => {
   for (const cancel of [false, true]) {
-    const job = new UsageDetailsExport({ bound: 'synthetic' });
+    const job = new UsageDetailsExport({ bound: 'synthetic' }, (items) => items);
     const controller = new AbortController(); let current = true;
     await assert.rejects(runExport(job, async () => {
       if (cancel) controller.abort(); else current = false;
@@ -197,7 +198,7 @@ test('a connection switch or cancellation during the final response cannot compl
 
 test('non-transient errors are not retried and expired snapshots are distinguished', async () => {
   for (const status of [400, 401, 403, 409]) {
-    const job = new UsageDetailsExport({ bound: 'synthetic' }); let calls = 0;
+    const job = new UsageDetailsExport({ bound: 'synthetic' }, (items) => items); let calls = 0;
     const error = Object.assign(new Error('synthetic error'), { status });
     await assert.rejects(runExport(job, async () => { calls++; throw error; }));
     assert.equal(calls, 1);
@@ -220,7 +221,7 @@ test('inconsistent export batches are rejected before advancing the checkpoint',
     page(['2'], 2.5),
   ];
   for (const invalid of invalidPages) {
-    const job = new UsageDetailsExport({ bound: 'synthetic' }); let calls = 0;
+    const job = new UsageDetailsExport({ bound: 'synthetic' }, (items) => items); let calls = 0;
     await assert.rejects(runExport(job, async () => ++calls === 1 ? page(['1'], 3, 'next') : invalid),
       (error) => usageExportFailure(error) === 'incomplete' && !canRetryUsageExport(error));
     assert.deepEqual(job.progress, { loaded: 1, total: 3, retry: 0 });
@@ -276,8 +277,8 @@ test('export hook aborts on query changes or unmount and rejects concurrent star
     try {
       h.render(session, {}, filter); await tick();
       const result = h.render(session, {}, filter);
-      const exporting = result.exportDetails();
-      assert.equal(await result.exportDetails(), null);
+      const exporting = result.exportDetails(exportText);
+      assert.equal(await result.exportDetails(exportText), null);
       const signal = h.requests.at(-1).signal;
       const finishOldExport = resolveExport;
       if (unmount) h.close(); else h.render(session, {}, () => ({ model: 'b' }));
@@ -303,13 +304,13 @@ test('export hook retains a failed batch for manual continuation and clears it o
   try {
     h.render(session, {}, filter); await tick();
     let result = h.render(session, {}, filter);
-    assert.equal(await result.exportDetails(), null);
+    assert.equal(await result.exportDetails(exportText), null);
     result = h.render(session, {}, filter);
     assert.equal(result.exportState.status, 'error'); assert.equal(result.exportState.loaded, 1);
     assert.equal(result.exportState.canResume, true); assert.equal(exportingCalls, 4);
     fail = false;
-    const rows = await result.exportDetails(true);
-    assert.deepEqual(rows.map((row) => row.__queryId), ['1', '2']);
+    const rows = await result.exportDetails(exportText, true);
+    assert.deepEqual(await Promise.all(rows.map((part) => part.text())), ['1', '2']);
     assert.deepEqual(cursors, ['', 'next', 'next', 'next', 'next']);
     result = h.render(session, {}, filter);
     assert.equal(result.exportState.status, 'generating'); assert.equal(result.isExportCurrent(), true);
@@ -318,4 +319,50 @@ test('export hook retains a failed batch for manual continuation and clears it o
     result.cancelExport(); result = h.render(session, {}, filter);
     assert.equal(result.exportState.status, 'cancelled'); assert.equal(result.exportState.canResume, false);
   } finally { h.close(); }
+});
+
+
+test('recent pages use a five-page cache, evict old pages, and explicit retry bypasses it', async () => {
+  const h = await harness('./useUsageQueryDetails.ts', async (q) => {
+    const offset = Number(q.cursor || 0);
+    return page([String(offset)], 701, String(offset + 100), { options });
+  });
+  const filter = () => ({});
+  const render = () => h.render(session, {}, filter);
+  try {
+    render(); await tick();
+    for (let i = 1; i <= 5; i++) {
+      render().setPage(i); render(); await tick();
+      assert.equal(render().page, i);
+    }
+    assert.equal(h.requests.length, 6);
+    render().setPage(4); render(); await tick();
+    assert.equal(render().page, 4); assert.equal(h.requests.length, 6);
+    render().setPage(0); render(); await tick();
+    assert.equal(render().page, 0); assert.equal(h.requests.length, 7);
+    render().retry(); render(); await tick();
+    assert.equal(h.requests.length, 8);
+    h.auth.apiBase = 'new-instance'; render(); await tick();
+    assert.equal(h.requests.length, 9);
+  } finally { h.close(); }
+});
+
+test('converted export batches are atomic and resume without reprocessing completed batches', async () => {
+  const converted = [];
+  const job = new UsageDetailsExport({ bound: 'synthetic' }, (items, first) => {
+    converted.push(items.map((row) => row.id));
+    return `${first ? 'header:' : ','}${items.map((row) => row.id).join(',')}`;
+  });
+  await assert.rejects(runExport(job, async (q) => {
+    if (q.cursor) throw transient();
+    return page(['1', '2'], 3, 'next');
+  }));
+  assert.deepEqual(converted, [['1', '2']]);
+  const parts = await runExport(job, async () => page(['3'], 3));
+  assert.equal(parts.join(''), 'header:1,2,3');
+  assert.deepEqual(converted, [['1', '2'], ['3']]);
+  const controller = new AbortController();
+  const cancelled = new UsageDetailsExport({ bound: 'synthetic' }, () => { controller.abort(); return 'discard'; });
+  await assert.rejects(runExport(cancelled, async () => page(['1'], 1), controller), { name: 'AbortError' });
+  assert.equal(cancelled.progress.loaded, 0);
 });
