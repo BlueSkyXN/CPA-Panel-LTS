@@ -23,7 +23,7 @@ import {
   Legend,
   Filler,
 } from 'chart.js';
-import { AnalyticsLayout } from './AnalyticsLayout';
+import { AnalyticsLayout, AnalyticsPageHeader } from './AnalyticsLayout';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
 import { UsageAnalyticsSection } from '@/components/usage/UsageAnalyticsSection';
@@ -152,12 +152,10 @@ export function ObservabilityPage() {
 
   return (
     <AnalyticsLayout>
-      <div className={styles.header}>
-        <div>
-          <h1>{t('analytics.observability')}</h1>
-          <p>{t('analytics.observability_hint')}</p>
-        </div>
-        <div className={styles.actions}>
+      <AnalyticsPageHeader
+        title={t('analytics.observability')}
+        description={t('analytics.observability_hint')}
+        actions={<>
           <Button
             variant="secondary"
             size="sm"
@@ -191,8 +189,8 @@ export function ObservabilityPage() {
           >
             {t('usage_stats.refresh')}
           </Button>
-        </div>
-      </div>
+        </>}
+      />
       <div className={styles.filters}>
         <div className={styles.filterField}>
           <span>{t('usage_stats.range_filter')}</span>

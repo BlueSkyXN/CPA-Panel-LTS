@@ -1930,9 +1930,12 @@ def run_browser_flow_control_smoke(page: Any, app_url: str, api_url: str) -> lis
         raise AssertionError("Management previews must not create model activity")
 
     flow.get_by_role("button", name="Refresh status and references", exact=True).click()
-    flow.get_by_role("button", name="Observe live", exact=True).click()
-    flow.locator('[data-state="live"]').wait_for()
-    flow.get_by_role("button", name="Stop live updates", exact=True).click()
+    # 配置页只编辑策略，实时观测在独立的流控看板中验证。
+    page.get_by_role("button", name="Flow dashboard", exact=True).click()
+    monitor = page.get_by_role("region", name="Runtime status", exact=True)
+    monitor.get_by_role("button", name="Observe live", exact=True).click()
+    monitor.locator('[data-state="live"]').wait_for()
+    monitor.get_by_role("button", name="Stop live updates", exact=True).click()
     # Change the actual policy while observation is stopped. Its first resumed
     # summary must refresh the full policy, not only its counters/revision.
     current_yaml = request_text(api_url, "/v0/management/config.yaml")
@@ -1948,11 +1951,20 @@ def run_browser_flow_control_smoke(page: Any, app_url: str, api_url: str) -> lis
         raise AssertionError("Paused Flow policy update was not applied")
     with page.expect_response(lambda response: response.request.method == "GET"
                               and response.url.endswith(endpoint)) as refreshed:
-        flow.get_by_role("button", name="Observe live", exact=True).click()
+        monitor.get_by_role("button", name="Observe live", exact=True).click()
     if refreshed.value.json()["policy"]["rules"][0]["max-concurrent"] != 3:
         raise AssertionError("Resumed Flow observation did not reload the latest policy")
-    flow.locator('[data-state="live"]').wait_for()
-    flow.get_by_role("button", name="Stop live updates", exact=True).click()
+    monitor.locator('[data-state="live"]').wait_for()
+    monitor.get_by_role("button", name="Stop live updates", exact=True).click()
+    for width in (1440, 390):
+        page.set_viewport_size({"width": width, "height": 1000})
+        monitor.scroll_into_view_if_needed()
+        if page.evaluate("document.documentElement.scrollWidth > window.innerWidth + 1"):
+            raise AssertionError(f"Flow dashboard overflows the page at {width}px")
+    page.set_viewport_size({"width": 1440, "height": 1000})
+    page.get_by_role("button", name="Flow configuration", exact=True).click()
+    flow = page.get_by_test_id("flow-control-settings")
+    flow.wait_for()
     for width in (1440, 390):
         page.set_viewport_size({"width": width, "height": 1000})
         flow.scroll_into_view_if_needed()

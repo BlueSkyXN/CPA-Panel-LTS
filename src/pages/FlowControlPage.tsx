@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import { parseDocument } from 'yaml';
 import { useNavigate } from 'react-router-dom';
-import { AnalyticsLayout } from './AnalyticsLayout';
+import { AnalyticsLayout, AnalyticsPageHeader } from './AnalyticsLayout';
 import { Button } from '@/components/ui/Button';
 import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer';
 import { DiffModal } from '@/components/config/DiffModal';
@@ -249,13 +249,13 @@ export function FlowControlPage() {
   return (
     <AnalyticsLayout>
       <div className={configStyles.container}>
-        <div className={configStyles.pageHeader}>
-          <h1 className={configStyles.pageTitle}>{t('analytics.flow_config')}</h1>
-          <Button variant="secondary" onClick={() => navigate('/analytics/flow')}>
+        <AnalyticsPageHeader
+          title={t('analytics.flow_config')}
+          description={t('analytics.flow_config_hint')}
+          actions={<Button variant="secondary" onClick={() => navigate('/analytics/flow')}>
             {t('analytics.flow_dashboard')}
-          </Button>
-        </div>
-        <p className={styles.intro}>{t('analytics.flow_config_hint')}</p>
+          </Button>}
+        />
 
         <div className={configStyles.workspaceShell}>
           <div className={configStyles.content}>

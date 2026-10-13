@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { AnalyticsLayout } from './AnalyticsLayout';
+import { AnalyticsLayout, AnalyticsPageHeader } from './AnalyticsLayout';
 import { Button } from '@/components/ui/Button';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer';
@@ -19,15 +19,22 @@ export function FlowDashboardPage() {
   const data = support.state === 'ready' ? support.data : null;
   return (
     <AnalyticsLayout>
-      <div className={styles.header}>
-        <div>
-          <h1>{t('analytics.flow_dashboard')}</h1>
-          <p>{t('analytics.flow_dashboard_hint')}</p>
-        </div>
-        <Button variant="secondary" onClick={() => navigate('/analytics/flow/config')}>
+      <AnalyticsPageHeader
+        title={t('analytics.flow_dashboard')}
+        description={t('analytics.flow_dashboard_hint')}
+        actions={<Button variant="secondary" onClick={() => navigate('/analytics/flow/config')}>
           {t('analytics.flow_config')}
-        </Button>
-      </div>
+        </Button>}
+      >
+        {data && <div className={styles.statusRow}>
+          <span className={styles.statusBadge} data-enabled={data.state.enabled}>
+            {t('flow_control.enabled')}: {t(data.state.enabled ? 'flow_control.switch_on' : 'flow_control.switch_off')}
+          </span>
+          <span className={styles.note}>
+            {t('flow_control.v3_realtime')}: {t(data['events-enabled'] ? 'flow_control.switch_on' : 'flow_control.switch_off')}
+          </span>
+        </div>}
+      </AnalyticsPageHeader>
       {support.state === 'loading' ? (
         <LoadingSpinner />
       ) : support.state !== 'ready' ? (
@@ -39,20 +46,17 @@ export function FlowDashboardPage() {
         </div>
       ) : (
         <>
-          <p className={styles.note}>
-            {t('flow_control.enabled')}:{' '}
-            {t(data?.state.enabled ? 'flow_control.switch_on' : 'flow_control.switch_off')}
-            {' · '}
-            {t('flow_control.v3_realtime')}:{' '}
-            {t(data?.['events-enabled'] ? 'flow_control.switch_on' : 'flow_control.switch_off')}
-          </p>
           {data?.['configuration-error'] && (
             <div className="error-box" role="alert">
               <strong>{t('flow_control.runtime_error')}</strong>
               <p>{data['configuration-failure']?.message}</p>
             </div>
           )}
-          <p className={styles.note}>{t('analytics.flow_scope_hint')}</p>
+          <details className={styles.scopeNote}>
+            <summary>{t('analytics.flow_scope_short')} · {t('analytics.scope_details')}</summary>
+            <p>{t('analytics.flow_scope_hint')}</p>
+            <p>{t('flow_control.counts_hint')}</p>
+          </details>
           <LiveMonitor
             data={data}
             live={live}

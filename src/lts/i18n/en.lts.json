@@ -31,7 +31,9 @@
     "empty_window": "No requests match the selected time range and filters.",
     "no_measurements": "No successful requests have usable measurements for this metric.",
     "basic_settings": "Basic settings",
-    "rules_section": "Flow rules"
+    "rules_section": "Flow rules",
+    "scope_details": "Scope and counting",
+    "flow_scope_short": "Controlled calls · current observation"
   },
   "usage_stats": {
     "execution_blue_std": "BLUE",

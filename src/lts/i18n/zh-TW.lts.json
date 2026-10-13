@@ -31,7 +31,9 @@
     "empty_window": "所選時間範圍與篩選條件下沒有請求記錄。",
     "no_measurements": "沒有可用於此指標的成功請求測量資料。",
     "basic_settings": "基本設定",
-    "rules_section": "流控規則"
+    "rules_section": "流控規則",
+    "scope_details": "統計範圍與口徑",
+    "flow_scope_short": "受控呼叫 · 本次觀察"
   },
   "usage_stats": {
     "execution_blue_std": "BLUE",
