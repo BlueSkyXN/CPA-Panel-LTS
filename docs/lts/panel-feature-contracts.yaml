@@ -326,6 +326,8 @@ features:
       - request_key_hint
       - ttfb_ms
       - output_timing
+      - token_breakdown
+      - resolvePerformanceTokens
       - extractTTFBMs
       - calculateFirstContentMs
       - calculateOutputTps

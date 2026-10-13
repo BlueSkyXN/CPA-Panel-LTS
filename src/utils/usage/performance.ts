@@ -115,7 +115,7 @@ export function calculateDecodeDurationMs(
 
 /**
  * 输出 TPS 优先使用同次上游尝试的观测窗口；仅历史记录使用 latency - TTFB。
- * 输出 token 保留 provider 报告的总输出语义，因此可能包含 reasoning token。
+ * 调用方优先传入已验证的全部生成 token（含推理）；历史记录使用原始输出估算。
  */
 export function calculateOutputTps(
   outputTokens: number | null | undefined,
@@ -132,7 +132,7 @@ export function calculateOutputTps(
 }
 
 /**
- * 端到端平均 TPS = 总输出 token / 总耗时。
+ * 平均 TPS = 全部生成 token / Core reporter 耗时。
  */
 export function calculateAverageTps(
   outputTokens: number | null | undefined,
@@ -146,7 +146,7 @@ export function calculateAverageTps(
   return (output * 1000) / latency;
 }
 
-/** 可见输出 TPS = max(output_tokens - reasoning_tokens, 0) / 总延迟。 */
+/** 非推理平均 TPS = (全部生成 token - 推理 token) / Core reporter 耗时。 */
 export function calculateVisibleAverageTps(
   outputTokens: number | null | undefined,
   reasoningTokens: number | null | undefined,

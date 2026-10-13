@@ -4110,8 +4110,8 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         raise AssertionError("Request events must expose one canonical effort column")
     card.get_by_role("columnheader", name="Total Input Tokens", exact=True).wait_for()
     card.locator("th", has_text="Non-Cache-Read Input Tokens").wait_for()
-    card.get_by_role("columnheader", name="Total Output Tokens", exact=True).wait_for()
-    card.locator("th", has_text="Explicit Output Tokens").wait_for()
+    card.get_by_role("columnheader", name="Reported output tokens", exact=True).wait_for()
+    card.locator("th", has_text="Non-reasoning output tokens").wait_for()
     card.get_by_role("columnheader", name="Reasoning Tokens", exact=True).wait_for()
     card.locator("th", has_text="Cache Read Tokens").wait_for()
     card.get_by_role("columnheader", name="Cache Write Tokens", exact=True).wait_for()
@@ -4290,8 +4290,8 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         [
             "Total Input Tokens",
             "Non-Cache-Read Input Tokens",
-            "Total Output Tokens",
-            "Explicit Output Tokens",
+            "Reported output tokens",
+            "Non-reasoning output tokens",
             "Reasoning Tokens",
             "Cache Read Tokens",
             "Cache Write Tokens",
@@ -4334,7 +4334,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         column["label"]: column.get("headerAriaLabel") or column.get("headerTitle")
         for column in token_column_alignment
         if column["label"]
-        in {"Non-Cache-Read Input Tokens", "Explicit Output Tokens", "Cache Read Tokens"}
+        in {"Non-Cache-Read Input Tokens", "Non-reasoning output tokens", "Cache Read Tokens"}
     }
     if any(not hint for hint in header_hints.values()):
         raise AssertionError(
@@ -4639,6 +4639,8 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         "input_tokens": 12,
         "non_cache_read_input_tokens": 9,
         "output_tokens": 8,
+        "tps_output_tokens": 8,
+        "non_reasoning_output_tokens": 6,
         "reasoning_tokens": 2,
         "cached_tokens": 3,
         "cache_read_tokens": 3,
@@ -4921,8 +4923,8 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     for metric_name in [
         "Total Input Tokens",
         "Non-Cache-Read Input Tokens",
-        "Total Output Tokens",
-        "Explicit Output Tokens",
+        "Reported output tokens",
+        "Non-reasoning output tokens",
         "Reasoning Tokens",
         "Cache Read Tokens",
         "Cache Write Tokens",

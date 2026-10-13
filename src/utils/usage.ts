@@ -6,6 +6,8 @@
 import type { ScriptableContext } from 'chart.js';
 import type { LatencyAccumulator, LatencyStats } from './usage/latency';
 import type { UsageOutputTiming } from './usage/performance';
+import { normalizeTokenAccounting, type UsageTokenAccounting } from './usage/tokenAccounting';
+export { resolvePerformanceTokens } from './usage/tokenAccounting';
 import {
   addLatencySample,
   calculateLatencyStatsFromDetails,
@@ -198,6 +200,7 @@ export interface UsageDetail extends RequestSizeFields {
   ttft_ms?: number;
   ttfa_ms?: number;
   output_timing?: UsageOutputTiming | null;
+  token_breakdown?: UsageTokenAccounting | null;
   tokens: UsageTokenStats;
   failed: boolean;
   failure_status?: number | null;
@@ -847,6 +850,7 @@ export function collectUsageDetails(usageData: unknown): UsageDetail[] {
           ttfa_ms: ttfaMs ?? undefined,
           output_timing: detailRaw.output_timing === undefined ? undefined : normalizeOutputTiming(detailRaw.output_timing),
           tokens: normalizeUsageDetailTokens(tokensRaw),
+          token_breakdown: detailRaw.token_breakdown === undefined ? undefined : normalizeTokenAccounting(detailRaw.token_breakdown),
           failed: detailRaw.failed === true,
           failure_status: extractFailureStatus(detailRaw),
           failure_reason: extractFailureReason(detailRaw),
@@ -944,6 +948,7 @@ export function collectUsageDetailsWithEndpoint(usageData: unknown): UsageDetail
           ttfa_ms: ttfaMs ?? undefined,
           output_timing: detailRaw.output_timing === undefined ? undefined : normalizeOutputTiming(detailRaw.output_timing),
           tokens: normalizeUsageDetailTokens(tokensRaw),
+          token_breakdown: detailRaw.token_breakdown === undefined ? undefined : normalizeTokenAccounting(detailRaw.token_breakdown),
           failed: detailRaw.failed === true,
           failure_status: extractFailureStatus(detailRaw),
           failure_reason: extractFailureReason(detailRaw),
