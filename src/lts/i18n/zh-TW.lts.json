@@ -33,7 +33,16 @@
     "basic_settings": "基本設定",
     "rules_section": "流控規則",
     "scope_details": "統計範圍與口徑",
-    "flow_scope_short": "受控呼叫 · 本次觀察"
+    "flow_scope_short": "受控呼叫 · 本次觀察",
+    "filter_title": "篩選範圍",
+    "active_filters": "已選條件：{{count}} 項",
+    "result_scope": "結果時間範圍",
+    "group_performance": "吞吐與回應",
+    "group_performance_hint": "結合請求量與回應耗時觀察負載變化。",
+    "group_reliability": "效率與可靠性",
+    "group_reliability_hint": "查看快取利用與失敗分佈。",
+    "group_distribution": "請求與延遲分佈",
+    "group_distribution_hint": "比較請求大小和回應耗時的分佈。"
   },
   "usage_stats": {
     "execution_blue_std": "BLUE",

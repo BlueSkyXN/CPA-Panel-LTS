@@ -58,6 +58,7 @@ export function AnalyticsFiltersBar({
       .catch(() => {
         if (!cancelled) setCredentials({ scope, files: new Map(), failed: true });
       });
+
     return () => {
       cancelled = true;
     };
@@ -82,10 +83,18 @@ export function AnalyticsFiltersBar({
       ...(filters.model !== undefined ? [filters.model] : []),
     ]),
   ].sort();
-  const efforts = [...new Set([
-    ...(options?.efforts ?? []),
-    ...(filters.effort !== undefined ? [filters.effort] : []),
-  ].map((effort) => effort.trim().toLowerCase()))].sort();
+  const efforts = [
+    ...new Set(
+      [...(options?.efforts ?? []), ...(filters.effort !== undefined ? [filters.effort] : [])].map(
+        (effort) => effort.trim().toLowerCase()
+      )
+    ),
+  ].sort();
+  const activeFilterCount =
+    Number(filters.model !== undefined) +
+    Number(!!selected) +
+    Number(filters.tier !== undefined) +
+    Number(filters.effort !== undefined);
   return (
     <>
       <div className={styles.filterField}>
@@ -141,20 +150,25 @@ export function AnalyticsFiltersBar({
               label: effort || t('usage_stats.request_events_effort_legacy_unknown'),
             })),
           ]}
-          onChange={(value) => onChange({ ...filters, effort: value === ALL ? undefined : value.slice(7) })}
+          onChange={(value) =>
+            onChange({ ...filters, effort: value === ALL ? undefined : value.slice(7) })
+          }
           ariaLabel={t('usage_stats.request_events_filter_effort')}
         />
       </div>
-      <Button
-        variant="secondary"
-        size="sm"
-        disabled={filters.model === undefined && !selected && filters.tier === undefined && filters.effort === undefined}
-        onClick={() => onChange({})}
-      >
-        {t('usage_stats.clear_filters')}
-      </Button>
+      <div className={styles.filterActions}>
+        <span>{t('analytics.active_filters', { count: activeFilterCount })}</span>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={activeFilterCount === 0}
+          onClick={() => onChange({})}
+        >
+          {t('usage_stats.clear_filters')}
+        </Button>
+      </div>
       {current?.failed && (
-        <span className={styles.note} role="status">
+        <span className={styles.filterMessage} role="status">
           {t('analytics.source_names_unavailable')}{' '}
           <Button variant="secondary" size="sm" onClick={() => setCredentials(null)}>
             {t('common.retry')}

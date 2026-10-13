@@ -23,6 +23,7 @@ import {
   Legend,
   Filler,
 } from 'chart.js';
+import { AnalyticsSection } from '@/components/common/AnalyticsSection';
 import { AnalyticsLayout, AnalyticsPageHeader } from './AnalyticsLayout';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
@@ -155,79 +156,87 @@ export function ObservabilityPage() {
       <AnalyticsPageHeader
         title={t('analytics.observability')}
         description={t('analytics.observability_hint')}
-        actions={<>
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={!ready || (aggregated && (!visibleResult || analytics.stale))}
-            onClick={() =>
-              navigate(
-                `/usage/events${buildUsageEventsSearch(visibleWindow ? 'custom' : 'all', visibleWindow)}`,
-                {
-                  state: {
-                    analyticsFilters: filters,
-                    analyticsSession:
-                      visibleResult && querySession
-                        ? {
-                            ...querySession,
-                            bound: visibleResult.bound,
-                            now_ms: visibleResult.now_ms,
-                          }
-                        : querySession,
-                  },
-                }
-              )
-            }
-          >
-            {t('usage_stats.request_events_open_workspace')}
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={loading}
-            onClick={() => void loadUsage().catch(() => {})}
-          >
-            {t('usage_stats.refresh')}
-          </Button>
-        </>}
+        actions={
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!ready || (aggregated && (!visibleResult || analytics.stale))}
+              onClick={() =>
+                navigate(
+                  `/usage/events${buildUsageEventsSearch(visibleWindow ? 'custom' : 'all', visibleWindow)}`,
+                  {
+                    state: {
+                      analyticsFilters: filters,
+                      analyticsSession:
+                        visibleResult && querySession
+                          ? {
+                              ...querySession,
+                              bound: visibleResult.bound,
+                              now_ms: visibleResult.now_ms,
+                            }
+                          : querySession,
+                    },
+                  }
+                )
+              }
+            >
+              {t('usage_stats.request_events_open_workspace')}
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={loading}
+              onClick={() => void loadUsage().catch(() => {})}
+            >
+              {t('usage_stats.refresh')}
+            </Button>
+          </>
+        }
       />
-      <div className={styles.filters}>
-        <div className={styles.filterField}>
-          <span>{t('usage_stats.range_filter')}</span>
-          <Select
-            value={scope.range}
-            options={['all', ...USAGE_PRESET_TIME_RANGES, 'custom'].map((value) => ({
-              value,
-              label: t(`usage_stats.range_${value}`),
-            }))}
-            onChange={(value) => setRange(value as UsageTimeRange)}
-            ariaLabel={t('usage_stats.range_filter')}
-          />
-        </div>
-        <AnalyticsFiltersBar
-          options={aggregated ? analytics.options : metadata.options}
-          filters={filters}
-          onChange={setFilters}
-          active={active && ready}
-        />
+      <div className={styles.filterPanel}>
+        <AnalyticsSection title={t('analytics.filter_title')}>
+          <div className={styles.filters}>
+            <div
+              className={`${styles.filterField} ${scope.range === 'custom' ? styles.customTimeField : ''}`}
+            >
+              <span>{t('usage_stats.range_filter')}</span>
+              <Select
+                value={scope.range}
+                options={['all', ...USAGE_PRESET_TIME_RANGES, 'custom'].map((value) => ({
+                  value,
+                  label: t(`usage_stats.range_${value}`),
+                }))}
+                onChange={(value) => setRange(value as UsageTimeRange)}
+                ariaLabel={t('usage_stats.range_filter')}
+              />
+              {scope.range === 'custom' && (
+                <div className={styles.range}>
+                  <input
+                    type="datetime-local"
+                    aria-label={t('usage_stats.range_custom_start')}
+                    value={localDateTime(Number(params.get('start') || NaN))}
+                    onChange={(event) => setCustom('start', event.target.value)}
+                  />
+                  <span>–</span>
+                  <input
+                    type="datetime-local"
+                    aria-label={t('usage_stats.range_custom_end')}
+                    value={localDateTime(Number(params.get('end') || NaN))}
+                    onChange={(event) => setCustom('end', event.target.value)}
+                  />
+                </div>
+              )}
+            </div>
+            <AnalyticsFiltersBar
+              options={aggregated ? analytics.options : metadata.options}
+              filters={filters}
+              onChange={setFilters}
+              active={active && ready}
+            />
+          </div>
+        </AnalyticsSection>
       </div>
-      {scope.range === 'custom' && (
-        <div className={styles.range}>
-          <input
-            type="datetime-local"
-            aria-label={t('usage_stats.range_custom_start')}
-            value={localDateTime(Number(params.get('start') || NaN))}
-            onChange={(event) => setCustom('start', event.target.value)}
-          />
-          <span>–</span>
-          <input
-            type="datetime-local"
-            aria-label={t('usage_stats.range_custom_end')}
-            value={localDateTime(Number(params.get('end') || NaN))}
-            onChange={(event) => setCustom('end', event.target.value)}
-          />
-        </div>
-      )}
       {!aggregated && metadata.error && (
         <div className="error-box" role="alert">
           {t('usage_stats.loading_error')}: {metadata.error}{' '}
@@ -236,18 +245,38 @@ export function ObservabilityPage() {
           </Button>
         </div>
       )}
-      {visibleWindow && (
-        <p className={styles.note}>
-          {new Date(visibleWindow.startMs).toLocaleString()} –{' '}
-          {new Date(visibleWindow.endMs).toLocaleString()}
-        </p>
-      )}
-      {lastRefreshedAt && (
-        <p className={styles.note}>
-          {t('usage_stats.last_updated')}:{' '}
-          {(visibleResult ? new Date(visibleResult.now_ms) : lastRefreshedAt).toLocaleString()}
-        </p>
-      )}
+      <div className={styles.resultMeta}>
+        {visibleWindow && (
+          <p>
+            <span>{t('analytics.result_scope')}</span>
+            {new Date(visibleWindow.startMs).toLocaleString()} –{' '}
+            {new Date(visibleWindow.endMs).toLocaleString()}
+          </p>
+        )}
+        {lastRefreshedAt && (
+          <p>
+            <span>{t('usage_stats.last_updated')}</span>
+            {(visibleResult ? new Date(visibleResult.now_ms) : lastRefreshedAt).toLocaleString()}
+          </p>
+        )}
+        {scope.valid && !error && aggregated && (
+          <>
+            <p className={styles.note} role="status">
+              {analytics.loading || analytics.stale
+                ? t(
+                    analytics.error && visibleResult
+                      ? 'analytics.stale_error'
+                      : visibleResult
+                        ? 'analytics.updating'
+                        : 'common.loading'
+                  )
+                : visibleResult
+                  ? t('analytics.aggregated_ready', { count: visibleResult.total })
+                  : ''}
+            </p>
+          </>
+        )}
+      </div>
       {error && (
         <div className="error-box" role="alert">
           {error}
@@ -284,19 +313,6 @@ export function ObservabilityPage() {
               </Button>
             </div>
           )}
-          <p className={styles.note} role="status">
-            {analytics.loading || analytics.stale
-              ? t(
-                  analytics.error && visibleResult
-                    ? 'analytics.stale_error'
-                    : visibleResult
-                      ? 'analytics.updating'
-                      : 'common.loading'
-                )
-              : visibleResult
-                ? t('analytics.aggregated_ready', { count: visibleResult.total })
-                : ''}
-          </p>
           {visibleResult && visibleResult.analyzed < visibleResult.total && (
             <p className={styles.note}>
               {t('analytics.invalid_timestamps', {

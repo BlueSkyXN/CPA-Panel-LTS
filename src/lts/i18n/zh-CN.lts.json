@@ -33,7 +33,16 @@
     "basic_settings": "基本设置",
     "rules_section": "流控规则",
     "scope_details": "统计范围与口径",
-    "flow_scope_short": "受控调用 · 本次观察"
+    "flow_scope_short": "受控调用 · 本次观察",
+    "filter_title": "筛选范围",
+    "active_filters": "已选条件：{{count}} 项",
+    "result_scope": "结果时间范围",
+    "group_performance": "吞吐与响应",
+    "group_performance_hint": "结合请求量与响应耗时观察负载变化。",
+    "group_reliability": "效率与可靠性",
+    "group_reliability_hint": "查看缓存利用与失败分布。",
+    "group_distribution": "请求与延迟分布",
+    "group_distribution_hint": "比较请求大小和响应耗时的分布。"
   },
   "usage_stats": {
     "execution_blue_std": "BLUE",
