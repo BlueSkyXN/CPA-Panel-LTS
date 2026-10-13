@@ -32,7 +32,7 @@ export function FlowTrend({ history, liveState }: { history: FlowPoint[]; liveSt
               {series.flatMap(({ key, line, label }) => flowSampleSegments(history).map((segment, index) => (
                 <g key={`${key}-${index}`}>
                   <polyline points={segment.map((point) => `${flowSamplePosition(history, point) * 600},${132 - point[key] * 124 / max}`).join(' ')} className={line} />
-                  {segment.map((point) => <circle key={point.sampledAt} cx={flowSamplePosition(history, point) * 600} cy={132 - point[key] * 124 / max} r="4" className={`${line} ${styles.trendPoint}`}>
+                  {segment.filter((_, index) => segment.length <= 12 || index === segment.length - 1).map((point) => <circle key={point.sampledAt} cx={flowSamplePosition(history, point) * 600} cy={132 - point[key] * 124 / max} r="2.5" className={`${line} ${styles.trendPoint}`}>
                     <title>{formatTime(point.sampledAt)} · {label}: {point[key]}</title>
                   </circle>)}
                 </g>
