@@ -1,5 +1,12 @@
 {
   "pat_accounts": {
+    "account_load_failed": "无法读取账号设置，请重试后再保存。",
+    "zcode_edit_hint": "将更新 {{name}} 的账号设置，未填写的新凭据沿用已有值。",
+    "extra_models_label": "额外模型",
+    "extra_models_hint": "填写此账号支持的额外模型 ID，以逗号分隔。留空使用基础模型；此设置不会授予上游模型权限。",
+    "extra_models_upgrade": "额外模型需要 ZCode 插件 0.6.0 或更新版本；现有配置会保留。",
+    "invalid_extra_models": "请输入有效的模型 ID，以逗号分隔；不能包含尖括号或控制换行。",
+    "keep_api_key_hint": "留空保留此账号现有的 API key；仅在需要更换凭据时填写。",
     "retry": "重试",
     "advanced_options": "高级选项",
     "priority_invalid": "优先级必须是整数。",
