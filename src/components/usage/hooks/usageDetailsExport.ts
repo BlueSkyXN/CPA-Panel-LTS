@@ -45,18 +45,22 @@ const waitForRetry = (ms: number, signal: AbortSignal) =>
   });
 
 // 只在内存中保留已校验批次；重试从未完成的游标继续，禁止跨查询边界拼接。
-export class UsageDetailsExport {
-  private items: UsageQueryItem[] = [];
+export class UsageDetailsExport<T> {
+  private parts: T[] = [];
+  private loaded = 0;
   private ids = new Set<string>();
   private cursors = new Set<string>(['']);
   private cursor = '';
   private total: number | null = null;
   private complete = false;
 
-  constructor(private readonly request: UsageQueryRequest) {}
+  constructor(
+    private readonly request: UsageQueryRequest,
+    private readonly convert: (items: UsageQueryItem[], first: boolean) => T
+  ) {}
 
   get progress(): UsageExportProgress {
-    return { loaded: this.items.length, total: this.total, retry: 0 };
+    return { loaded: this.loaded, total: this.total, retry: 0 };
   }
 
   async run(
@@ -65,7 +69,7 @@ export class UsageDetailsExport {
     isCurrent: () => boolean,
     onProgress: (progress: UsageExportProgress) => void,
     retryDelayMs = 500
-  ): Promise<UsageQueryItem[]> {
+  ): Promise<T[]> {
     checkActive(signal, isCurrent);
     onProgress(this.progress);
     while (!this.complete) {
@@ -88,7 +92,7 @@ export class UsageDetailsExport {
       }
 
       const next = data.next_cursor ?? '';
-      const loaded = this.items.length + data.items.length;
+      const loaded = this.loaded + data.items.length;
       const pageIds = new Set(data.items.map((item) => item.id));
       if (
         data.bound !== this.request.bound ||
@@ -103,7 +107,13 @@ export class UsageDetailsExport {
       }
 
       // 整批验证通过后才推进 checkpoint，失败批次不会留下重复数据。
-      this.items.push(...data.items);
+      // 每批只保留最终文件片段；让浏览器在转换之间处理绘制和取消。
+      await waitForRetry(0, signal);
+      checkActive(signal, isCurrent);
+      const part = this.convert(data.items, this.loaded === 0);
+      checkActive(signal, isCurrent);
+      this.parts.push(part);
+      this.loaded = loaded;
       pageIds.forEach((id) => this.ids.add(id));
       this.total = data.total;
       this.cursor = next;
@@ -111,6 +121,6 @@ export class UsageDetailsExport {
       this.complete = !next;
       onProgress(this.progress);
     }
-    return this.items;
+    return this.parts;
   }
 }

@@ -168,6 +168,14 @@ def run(app_url, api_url, state):
             assert region.locator("tbody tr").first.inner_text() != before
             checks.append("page failure retains rows and position; retry loads requested page")
 
+            calls_before = len(state.calls)
+            page.get_by_role("button", name="Previous page", exact=True).click()
+            page.get_by_text("1–100 of 450 requests. Export includes all filtered requests.", exact=True).wait_for()
+            page.get_by_role("button", name="Next page", exact=True).click()
+            page.get_by_text("101–200 of 450 requests. Export includes all filtered requests.", exact=True).wait_for()
+            assert len(state.calls) == calls_before, "recent pages should not refetch"
+            checks.append("returning to either recent page uses cached data without network requests")
+
             state.reset("resume")
             export()
             page.get_by_role("button", name="Continue export", exact=True).wait_for()

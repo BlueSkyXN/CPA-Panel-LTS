@@ -61,6 +61,7 @@ export function useUsageQueryDetails(
   const requestedPage = navigation?.key === key ? navigation.page : 0;
   const cursor = navigation?.key === key ? (navigation.cursors[requestedPage] ?? '') : '';
   const [retryVersion, setRetryVersion] = useState(0);
+  const pageCache = useRef<{ key: string; pages: Map<string, UsageQueryDetails> }>({ key: '', pages: new Map() });
   const [lastPage, setLastPage] = useState<{
     key: string; page: number; data: UsageQueryDetails;
   } | null>(null);
@@ -87,6 +88,16 @@ export function useUsageQueryDetails(
   const request = useMemo<UsageQueryRequest | null>(() => JSON.parse(serialized), [serialized]);
   useEffect(() => {
     if (!request) return;
+    if (pageCache.current.key !== key) pageCache.current = { key, pages: new Map() };
+    const pages = pageCache.current.pages;
+    const cached = pages.get(serialized);
+    if (cached) {
+      pages.delete(serialized);
+      pages.set(serialized, cached);
+      setState({ key: requestKey, data: cached, error: '' });
+      setLastPage({ key, page: requestedPage, data: cached });
+      return;
+    }
     const controller = new AbortController();
     void usageQueryApi
       .details({ ...request, include_options: metadataKey.current !== baseKey }, controller.signal)
@@ -98,6 +109,8 @@ export function useUsageQueryDetails(
           metadataKey.current = baseKey;
           setMetadata({ key: baseKey, options: data.options });
         }
+        pages.set(serialized, data);
+        if (pages.size > 5) pages.delete(pages.keys().next().value!);
         setState({ key: requestKey, data, error: '' });
         setLastPage({ key, page: requestedPage, data });
       })
@@ -110,7 +123,7 @@ export function useUsageQueryDetails(
           });
       });
     return () => controller.abort();
-  }, [request, requestKey, baseKey, key, requestedPage]);
+  }, [request, requestKey, baseKey, key, requestedPage, serialized]);
   const current = state?.key === requestKey ? state : null;
   const retained = lastPage?.key === key ? lastPage : null;
   const displayedData = current?.data ?? retained?.data ?? null;
@@ -128,7 +141,10 @@ export function useUsageQueryDetails(
     return { ...displayedData, items: [], total: 0, next_cursor: '', metrics };
   }, [displayedData, appliedFilter]);
   const loading = session !== null && current === null;
-  const retry = () => setRetryVersion((version) => version + 1);
+  const retry = () => {
+    pageCache.current.pages.delete(serialized);
+    setRetryVersion((version) => version + 1);
+  };
   const setPage = (next: number) => {
     if (!data || loading || appliedFilter === null || next < 0 || next > page + 1) return;
     const cursors = navigation?.key === key ? [...navigation.cursors] : [''];
@@ -141,7 +157,7 @@ export function useUsageQueryDetails(
   };
   const [exportState, setExportState] = useState<ExportState>(emptyExport);
   const activeExport = useRef<{
-    key: string; job: UsageDetailsExport; controller: AbortController | null;
+    key: string; job: UsageDetailsExport<Blob>; controller: AbortController | null;
   } | null>(null);
   useEffect(() => () => {
     activeExport.current?.controller?.abort();
@@ -166,12 +182,18 @@ export function useUsageQueryDetails(
     setExportState({ ...emptyExport, ...activeExport.current!.job.progress, key, status: 'complete' });
     activeExport.current = null;
   };
-  const exportDetails = async (resume = false): Promise<UsageDetail[] | null> => {
+  const exportDetails = async (
+    convert: (details: UsageDetail[], first: boolean) => string,
+    resume = false
+  ): Promise<Blob[] | null> => {
     if (!request || appliedFilter === null) return [];
     if (activeExport.current?.controller) return null;
     const job = resume && activeExport.current?.key === key
       ? activeExport.current.job
-      : new UsageDetailsExport({ ...request, limit: Math.max(1, Math.min(200, session?.max_page_size || 200)) });
+      : new UsageDetailsExport(
+          { ...request, limit: Math.max(1, Math.min(200, session?.max_page_size || 200)) },
+          (items, first) => new Blob([convert(items.map(queryItemDetail), first)])
+        );
     const controller = new AbortController();
     const active = { key, job, controller };
     activeExport.current = active;
@@ -183,7 +205,7 @@ export function useUsageQueryDetails(
       });
       if (!isCurrent() || controller.signal.aborted) return null;
       setExportState({ ...job.progress, key, status: 'generating', canResume: false });
-      return items.map(queryItemDetail);
+      return items;
     } catch (error) {
       if (!isCurrent() || controller.signal.aborted) return null;
       const canResume = canRetryUsageExport(error);

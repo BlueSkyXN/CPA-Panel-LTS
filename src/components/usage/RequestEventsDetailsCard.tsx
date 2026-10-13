@@ -1140,6 +1140,7 @@ export function RequestEventsDetailsCard({
     for (const e of entries) { const set = labels.get(e.label) ?? new Set<string>(); set.add(e.value); labels.set(e.label, set); }
     return Array.from(new Map(entries.map((e) => [e.value, { value: e.value, label: (labels.get(e.label)?.size ?? 0) > 1 ? `${e.label} · ${e.auth || (e.raw !== e.label ? e.raw : '') || e.type || e.value}` : e.label }])).values());
   }, [remote.options, sourceInfoMap, authFileMap]);
+  const remoteSourceLabels = useMemo(() => new Map(remoteSources.map((source) => [source.value, source.label])), [remoteSources]);
   const buildRows = useCallback((details: UsageDetail[]): RequestEventRow[] => {
     const configuredKeyIndexes = new Map<string, number>();
     requestApiKeys.forEach((key, index) => {
@@ -1401,7 +1402,7 @@ export function RequestEventsDetailsCard({
     });
 
     const sourceLabelKeyMap = new Map<string, Set<string>>();
-    baseRows.forEach((row) => {
+    if (!querySession) baseRows.forEach((row) => {
       const keys = sourceLabelKeyMap.get(row.source) ?? new Set<string>();
       keys.add(row.sourceKey);
       sourceLabelKeyMap.set(row.source, keys);
@@ -1428,13 +1429,12 @@ export function RequestEventsDetailsCard({
       return `${row.source} · ${row.sourceKey}`;
     };
 
-    return baseRows
-      .map((row) => {
-        row.source = querySession ? (remoteSources.find((s) => s.value === row.sourceKey)?.label ?? row.source) : buildDisambiguatedSourceLabel(row);
-        return row;
-      })
-      .sort((a, b) => b.timestampMs - a.timestampMs);
-  }, [authFileMap, i18n.language, priceProfile, requestApiKeys, sourceInfoMap, t, querySession, remote.options, remoteSources]);
+    baseRows.forEach((row) => {
+      row.source = querySession ? (remoteSourceLabels.get(row.sourceKey) ?? row.source) : buildDisambiguatedSourceLabel(row);
+    });
+    // Query pages already have a stable server order, including timestamp ties.
+    return querySession ? baseRows : baseRows.sort((a, b) => b.timestampMs - a.timestampMs);
+  }, [authFileMap, i18n.language, priceProfile, requestApiKeys, sourceInfoMap, t, querySession, remote.options, remoteSourceLabels]);
   const rows = useMemo(() => buildRows(querySession ? (remote.data?.items ?? []).map(queryItemDetail) : collectUsageDetails(usage)), [buildRows, querySession, remote.data, usage]);
 
   const effectiveTimeRangeFilter = isRequestEventTimeRange(timeRangeFilter)
@@ -2116,7 +2116,7 @@ export function RequestEventsDetailsCard({
 
   const [exportingRows, setExportingRows] = useState(false);
   const [exportFormat, setExportFormat] = useState<'csv' | 'json'>('csv');
-  const downloadCsv = (exportRows: RequestEventRow[]) => {
+  const serializeCsv = (exportRows: RequestEventRow[], first: boolean) => {
     const csvHeader = [
       'timestamp',
       'model',
@@ -2221,12 +2221,7 @@ export function RequestEventsDetailsCard({
         .join(',')
     );
 
-    const content = [csvHeader.join(','), ...csvRows].join('\n');
-    const fileTime = new Date().toISOString().replace(/[:.]/g, '-');
-    downloadBlob({
-      filename: `usage-events-${fileTime}.csv`,
-      blob: new Blob([content], { type: 'text/csv;charset=utf-8' }),
-    });
+    return `${first ? csvHeader.join(',') : ''}\n${csvRows.join('\n')}`;
   };
 
   const downloadRequestLog = async (traceId: string) => {
@@ -2256,7 +2251,7 @@ export function RequestEventsDetailsCard({
     }
   };
 
-  const downloadJson = (exportRows: RequestEventRow[]) => {
+  const serializeJson = (exportRows: RequestEventRow[], first: boolean) => {
     const payload = exportRows.map((row) => ({
       timestamp: row.timestamp,
       model: row.model,
@@ -2309,12 +2304,7 @@ export function RequestEventsDetailsCard({
       trace_id: row.traceId,
     }));
 
-    const content = JSON.stringify(payload, null, 2);
-    const fileTime = new Date().toISOString().replace(/[:.]/g, '-');
-    downloadBlob({
-      filename: `usage-events-${fileTime}.json`,
-      blob: new Blob([content], { type: 'application/json;charset=utf-8' }),
-    });
+    return `${first ? '[\n' : ',\n'}${JSON.stringify(payload, null, 2).slice(2, -2)}`;
   };
 
   const handleExportRows = async (format: 'csv' | 'json', resume = false) => {
@@ -2322,13 +2312,29 @@ export function RequestEventsDetailsCard({
     setExportFormat(format);
     setExportingRows(true);
     try {
-      const details = querySession ? await remote.exportDetails(resume) : null;
-      if (querySession && details === null) return;
-      // 让“生成文件”状态先绘制，再执行同步转换；取消或查询变化后不下载旧结果。
+      const serialize = format === 'csv' ? serializeCsv : serializeJson;
+      let parts: BlobPart[];
+      if (querySession) {
+        const result = await remote.exportDetails((details, first) => serialize(buildRows(details), first), resume);
+        if (result === null) return;
+        parts = result;
+      } else {
+        parts = [];
+        for (let offset = 0; offset < filteredRows.length; offset += 200) {
+          await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+          if (!remote.isCurrentConnection()) return;
+          parts.push(new Blob([serialize(filteredRows.slice(offset, offset + 200), offset === 0)]));
+        }
+      }
       await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       if (!remote.isCurrentConnection() || (querySession && !remote.isExportCurrent())) return;
-      const exportRows = details ? buildRows(details) : filteredRows;
-      if (format === 'csv') downloadCsv(exportRows); else downloadJson(exportRows);
+      const fileTime = new Date().toISOString().replace(/[:.]/g, '-');
+      downloadBlob({
+        filename: `usage-events-${fileTime}.${format}`,
+        blob: new Blob(format === 'json' ? [...parts, '\n]'] : parts, {
+          type: format === 'json' ? 'application/json;charset=utf-8' : 'text/csv;charset=utf-8',
+        }),
+      });
       remote.finishExport();
     } catch (error) {
       remote.cancelExport();
