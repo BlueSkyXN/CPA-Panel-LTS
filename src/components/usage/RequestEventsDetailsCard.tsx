@@ -343,6 +343,7 @@ type RequestEventRow = {
   firstContentMs: number | null;
   ttftMs: number | null;
   ttfaMs: number | null;
+  outputTiming: UsageDetail['output_timing'];
   decodeDurationMs: number | null;
   outputTps: number | null;
   averageTps: number | null;
@@ -1320,8 +1321,9 @@ export function RequestEventsDetailsCard({
       const ttftMs = normalizeSemanticTimingMs(extractTTFTMs(detail), latencyMs, ttfbMs);
       const ttfaMs = normalizeSemanticTimingMs(extractTTFAMs(detail), latencyMs, ttfbMs);
       const firstContentMs = calculateFirstContentMs(ttftMs, ttfaMs);
-      const decodeDurationMs = calculateDecodeDurationMs(latencyMs, ttfbMs);
-      const outputTps = calculateOutputTps(outputTokens, latencyMs, ttfbMs);
+      const outputTiming = detail.output_timing;
+      const decodeDurationMs = calculateDecodeDurationMs(latencyMs, ttfbMs, outputTiming);
+      const outputTps = calculateOutputTps(outputTokens, latencyMs, ttfbMs, outputTiming);
       const averageTps = calculateAverageTps(outputTokens, latencyMs);
       const visibleAverageTps = calculateVisibleAverageTps(
         outputTokens,
@@ -1375,6 +1377,7 @@ export function RequestEventsDetailsCard({
         firstContentMs,
         ttftMs,
         ttfaMs,
+        outputTiming,
         decodeDurationMs,
         outputTps,
         averageTps,
@@ -1998,6 +2001,7 @@ export function RequestEventsDetailsCard({
           reasoningTokens: row.reasoningTokens,
           latencyMs: row.latencyMs,
           ttfbMs: row.ttfbMs,
+          outputTiming: row.outputTiming,
         }))
       );
     },
@@ -2152,6 +2156,9 @@ export function RequestEventsDetailsCard({
         'timing_version',
         'ttft_ms',
         'ttfa_ms',
+        'output_timing_version',
+        'output_streamed',
+        'output_duration_ms',
         ...(hasOutputTpsData ? ['decode_duration_ms', 'output_tps'] : []),
         ...(hasAverageTpsData ? ['average_tps'] : []),
         'visible_average_tps',
@@ -2200,6 +2207,9 @@ export function RequestEventsDetailsCard({
         row.timingVersion ?? '',
         row.ttftMs ?? '',
         row.ttfaMs ?? '',
+        row.outputTiming?.version ?? '',
+        row.outputTiming ? String(row.outputTiming.streamed) : '',
+        row.outputTiming?.duration_ms ?? '',
         ...(hasOutputTpsData ? [row.decodeDurationMs ?? '', row.outputTps ?? ''] : []),
         ...(hasAverageTpsData ? [row.averageTps ?? ''] : []),
         row.visibleAverageTps ?? '',
@@ -2286,6 +2296,7 @@ export function RequestEventsDetailsCard({
       upstream_request_encoding: row.upstreamRequestEncoding,
       ...(hasLatencyData && row.latencyMs !== null ? { latency_ms: row.latencyMs } : {}),
       ...(hasTTFBData && row.ttfbMs !== null ? { ttfb_ms: row.ttfbMs } : {}),
+      ...(row.outputTiming ? { output_timing: row.outputTiming } : {}),
       first_content_ms: row.firstContentMs,
       timing_version: row.timingVersion,
       ttft_ms: row.ttftMs,

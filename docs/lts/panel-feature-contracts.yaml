@@ -323,6 +323,7 @@ features:
       - request_identity_type
       - request_key_hint
       - ttfb_ms
+      - output_timing
       - extractTTFBMs
       - calculateFirstContentMs
       - calculateOutputTps

@@ -9,7 +9,7 @@
  */
 
 import { buildAnalyticsBuckets, type AnalyticsGrain, type AnalyticsTimeWindow } from './analyticsBuckets';
-import { extractTimingVersion, SEMANTIC_TIMING_VERSION } from './performance';
+import { calculateDecodeDurationMs } from './performance';
 
 export interface ThroughputTrendPoint {
   timestampMs: number;
@@ -33,6 +33,7 @@ interface ThroughputRow {
   reasoningTokens: number;
   latencyMs: number;
   ttfbMs: number | null;
+  outputTiming?: unknown;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -58,10 +59,10 @@ const toRow = (detail: unknown): ThroughputRow | null => {
   const latencyMs = readNumber(record.latency_ms);
   if (timestampMs === null || latencyMs === null || latencyMs < 0) return null;
   const tokens = isRecord(record.tokens) ? record.tokens : {};
-  const ttfbMs =
-    extractTimingVersion(record) === SEMANTIC_TIMING_VERSION ? readNumber(record.ttfb_ms) : null;
+  const ttfbMs = readNumber(record.ttfb_ms);
   return {
     timestampMs,
+    outputTiming: record.output_timing,
     outputTokens: Math.max(readNumber(tokens.output_tokens) ?? 0, 0),
     reasoningTokens: Math.max(readNumber(tokens.reasoning_tokens) ?? 0, 0),
     latencyMs,
@@ -105,9 +106,10 @@ export function buildThroughputTrendSeries(
     point.averageTokens += row.outputTokens;
     point.averageDurationMs += row.latencyMs;
     point.averageSamples += 1;
-    if (row.ttfbMs !== null && row.latencyMs > row.ttfbMs) {
+    const duration = calculateDecodeDurationMs(row.latencyMs, row.ttfbMs, row.outputTiming);
+    if (duration !== null) {
       point.outputTokens += row.outputTokens;
-      point.decodeDurationMs += row.latencyMs - row.ttfbMs;
+      point.decodeDurationMs += duration;
       point.outputSamples += 1;
     }
     if (row.reasoningTokens <= row.outputTokens) {

@@ -76,16 +76,37 @@ export function normalizeSemanticTimingMs(
   return timing;
 }
 
+export interface UsageOutputTiming {
+  version: 1;
+  streamed: boolean;
+  duration_ms?: number;
+}
+
+/** 缺失元数据允许旧估算；存在但无效的元数据必须阻止回退。 */
+export function normalizeOutputTiming(value: unknown): UsageOutputTiming | null {
+  if (!isRecord(value) || value.version !== 1 || typeof value.streamed !== 'boolean') return null;
+  const duration = value.duration_ms;
+  if (duration !== undefined && (typeof duration !== 'number' || !Number.isSafeInteger(duration) || duration < 0 || !value.streamed)) return null;
+  return { version: 1, streamed: value.streamed, ...(duration !== undefined ? { duration_ms: duration as number } : {}) };
+}
+
 /**
  * 计算首字节之后的有效输出时长。
  * latency 和 ttfb 必须来自同一条 request detail；无法得到正时长时返回 null。
  */
 export function calculateDecodeDurationMs(
   latencyMs: number | null | undefined,
-  ttfbMs: number | null | undefined
+  ttfbMs: number | null | undefined,
+  outputTiming?: unknown
 ): number | null {
   const latency = readNonNegativeNumber(latencyMs);
   const ttfb = readNonNegativeNumber(ttfbMs);
+  if (outputTiming !== undefined) {
+    const measured = normalizeOutputTiming(outputTiming);
+    const duration = measured?.duration_ms;
+    if (!measured?.streamed || duration === undefined || duration <= 0 || latency === null || ttfb === null || ttfb > latency || duration > latency - ttfb) return null;
+    return duration;
+  }
   if (latency === null || ttfb === null || latency <= ttfb) {
     return null;
   }
@@ -93,16 +114,17 @@ export function calculateDecodeDurationMs(
 }
 
 /**
- * 输出 TPS = 总输出 token / (总耗时 - 首字节时间)。
+ * 输出 TPS 优先使用同次上游尝试的观测窗口；仅历史记录使用 latency - TTFB。
  * 输出 token 保留 provider 报告的总输出语义，因此可能包含 reasoning token。
  */
 export function calculateOutputTps(
   outputTokens: number | null | undefined,
   latencyMs: number | null | undefined,
-  ttfbMs: number | null | undefined
+  ttfbMs: number | null | undefined,
+  outputTiming?: unknown
 ): number | null {
   const output = readNonNegativeNumber(outputTokens);
-  const decodeDurationMs = calculateDecodeDurationMs(latencyMs, ttfbMs);
+  const decodeDurationMs = calculateDecodeDurationMs(latencyMs, ttfbMs, outputTiming);
   if (output === null || output <= 0 || decodeDurationMs === null) {
     return null;
   }
@@ -164,6 +186,7 @@ export interface UsagePerformanceSummaryRow {
   reasoningTokens: number | null | undefined;
   latencyMs: number | null | undefined;
   ttfbMs: number | null | undefined;
+  outputTiming?: unknown;
 }
 
 export interface UsagePerformanceSummaryMetric {
@@ -203,9 +226,10 @@ export function summarizeUsagePerformance(
     const ttfb = readNonNegativeNumber(row.ttfbMs);
     if (output === null || output <= 0 || latency === null || latency <= 0) continue;
 
-    if (ttfb !== null && latency > ttfb) {
+    const duration = calculateDecodeDurationMs(latency, ttfb, row.outputTiming);
+    if (duration !== null) {
       outputNumerator += output;
-      outputDuration += latency - ttfb;
+      outputDuration += duration;
       outputSamples += 1;
     }
 

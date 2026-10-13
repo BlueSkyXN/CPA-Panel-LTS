@@ -1587,7 +1587,7 @@
     "request_events_ttfb": "上游首包（TTFB）",
     "request_events_ttfb_hint": "Core 欄位 {{field}}（{{unit}}）：從本次上游嘗試開始，到首次讀到回應主體位元組或訊息內容。不等於 HTTP 回應標頭、首文字或用戶端收到資料的時間。",
     "request_events_output_tps": "輸出 TPS（估算）",
-    "request_events_output_tps_hint": "估算輸出 TPS = 總輸出 Tokens /（總耗時 − 上游首包時間）。兩個計時器的起點可能不同，不代表精確模型解碼速度；上游報告的總輸出可能包含推理 Tokens。",
+    "request_events_output_tps_hint": "估算輸出 TPS 優先使用輸出 Tokens / 上游首包至末包的觀測時長；無測量中繼資料的歷史記錄沿用總耗時減首包時間。整包回傳或視窗無法測量時顯示 --。此值包含傳輸影響，不代表模型內部解碼速度。",
     "request_events_first_content": "首文字（含推理）",
     "request_events_first_content_hint": "取 ttft_ms 與 ttfa_ms 中已觀測到的較早值，僅涵蓋推理與回答文字；不包含純工具呼叫、圖片或音訊。缺失表示未觀測。採集發生在上游內容翻譯及交付用戶端之前。",
     "request_events_ttft": "首推理文字",

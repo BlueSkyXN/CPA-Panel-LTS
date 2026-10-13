@@ -81,3 +81,17 @@ test('summarizes filtered rows with weighted durations and independent sample co
   assert.equal(summary.reasoningRatio.value, 20 / 400);
   assert.notEqual(summary.outputTps.value, (100 / 0.9 + 300 / 1.5) / 2);
 });
+
+test('measured output windows exclude preparation and unmeasurable requests never use the legacy estimate', () => {
+  const measured = { version: 1, streamed: true, duration_ms: 20 };
+  assert.equal(performance.calculateOutputTps(100, 10_000, 100, measured), 5_000);
+  for (const value of [null, {}, { version: 1, streamed: false }, { version: 1, streamed: true }, { version: 2, streamed: true, duration_ms: 20 }, { version: 1, streamed: true, duration_ms: 0 }, { version: 1, streamed: true, duration_ms: 10_000 }]) {
+    assert.equal(performance.calculateOutputTps(100, 10_000, 100, value), null);
+  }
+  const summary = performance.summarizeUsagePerformance([
+    { outputTokens: 100, reasoningTokens: 0, latencyMs: 10_000, ttfbMs: 100, outputTiming: measured },
+    { outputTokens: 100, reasoningTokens: 0, latencyMs: 10_000, ttfbMs: 100, outputTiming: { version: 1, streamed: false } },
+  ]);
+  assert.deepEqual(summary.outputTps, { value: 5_000, sampleCount: 1 });
+  assert.equal(summary.averageTps.sampleCount, 2);
+});

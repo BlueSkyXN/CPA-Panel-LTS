@@ -1561,7 +1561,7 @@
     "request_events_ttfb": "Upstream TTFB",
     "request_events_ttfb_hint": "Core field {{field}} ({{unit}}): time from the current upstream attempt to its first response-body byte or message payload. Not HTTP headers, first text, or the time the client received data.",
     "request_events_output_tps": "Output TPS (estimate)",
-    "request_events_output_tps_hint": "Estimated Output TPS = Total Output Tokens / (Latency - TTFB). The two timers may have different start points; this is not exact model decoding throughput. Provider output may include reasoning tokens.",
+    "request_events_output_tps_hint": "Estimated output TPS uses output tokens divided by the observed first-to-last upstream payload window. Legacy rows without measurement metadata use latency minus TTFB. Buffered or unmeasurable responses show --. This includes transport effects and is not model decoding speed.",
     "request_events_average_tps": "Avg TPS",
     "request_events_average_tps_hint": "Avg TPS = Total Output Tokens / Core reporter duration. This is an average over the recorded duration, not full client end-to-end or decode-only throughput.",
     "request_events_first_content": "First Text",

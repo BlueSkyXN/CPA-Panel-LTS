@@ -17,7 +17,7 @@
     "test:usage-import": "node --test src/utils/usage/importPreflight.test.mjs src/utils/usage/requestSize.test.mjs",
     "test:usage-effort": "node --test src/utils/usage/reasoningEffort.test.mjs",
     "test:usage-tier": "node --test src/utils/usage/serviceTier.test.mjs",
-    "test:usage-performance": "node --test src/utils/usage/performance.test.mjs",
+    "test:usage-performance": "node --test src/utils/usage/performance.test.mjs src/utils/usage/throughputAnalytics.test.mjs",
     "test:usage-pricing-v3": "node --test src/utils/usage/pricing/index.test.mjs",
     "test:usage-pricing-catalog": "node --test src/components/usage/PresetPricingCatalog.test.mjs",
     "test:usage-pricing-storage": "node --test src/utils/usage/pricing/storage.test.mjs",
