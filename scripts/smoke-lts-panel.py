@@ -4035,7 +4035,7 @@ def run_usage_events_workspace_smoke(context: Any, app_url: str) -> None:
         if not workspace.get_by_role("button", name="Next page", exact=True).is_disabled():
             raise AssertionError("The last request page must disable Next page")
         with workspace.expect_download() as pending:
-            workspace.get_by_role("button", name="Export JSON", exact=True).click()
+            workspace.get_by_role("button", name="Export filtered JSON", exact=True).click()
         exported = json.loads(Path(pending.value.path()).read_text(encoding="utf-8"))
         if len(exported) != 625:
             raise AssertionError("Request export was incorrectly limited to the current page")
@@ -4450,7 +4450,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         )
 
     with page.expect_download() as csv_download:
-        card.get_by_role("button", name="Export CSV", exact=True).click()
+        card.get_by_role("button", name="Export filtered CSV", exact=True).click()
     csv_path = csv_download.value.path()
     if not csv_path:
         raise AssertionError("Request-event CSV export did not create a download")
@@ -4558,7 +4558,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         )
 
     with page.expect_download() as json_download:
-        card.get_by_role("button", name="Export JSON", exact=True).click()
+        card.get_by_role("button", name="Export filtered JSON", exact=True).click()
     json_path = json_download.value.path()
     if not json_path:
         raise AssertionError("Request-event JSON export did not create a download")

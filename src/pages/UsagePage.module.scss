@@ -2449,3 +2449,13 @@
   margin-top: $spacing-sm;
   font-variant-numeric: tabular-nums;
 }
+
+.requestEventsExportStatus {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: $spacing-sm;
+  margin-block: $spacing-sm;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}

@@ -414,10 +414,11 @@ export function UsagePage() {
             variant="secondary"
             size="sm"
             onClick={handleExport}
+            title={t('usage_stats.export_backup_hint')}
             loading={exporting}
             disabled={loading || importing}
           >
-            {t('usage_stats.export')}
+            {t('usage_stats.export_backup')}
           </Button>
           <Button
             variant="secondary"
