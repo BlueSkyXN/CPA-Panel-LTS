@@ -1533,6 +1533,28 @@
   font-weight: 840;
 }
 
+:global([data-theme='aurora-nebula']) .requestEventsTable {
+  td.requestEventsCostCell[data-request-cost-tone='micro'] {
+    color: #5eead4;
+  }
+
+  td.requestEventsCostCell[data-request-cost-tone='low'] {
+    color: #93c5fd;
+  }
+
+  td.requestEventsCostCell[data-request-cost-tone='medium'] {
+    color: #c4b5fd;
+  }
+
+  td.requestEventsCostCell[data-request-cost-tone='elevated'] {
+    color: #fde047;
+  }
+
+  td.requestEventsCostCell[data-request-cost-tone='high'] {
+    color: #fdba74;
+  }
+}
+
 .requestEventsTokenHeaderHint {
   cursor: help;
   text-decoration: underline dotted;
@@ -1594,8 +1616,8 @@
 }
 
 .requestEventsCacheRateLow {
-  --request-events-token-color: var(--failure-badge-text);
-  background: var(--failure-badge-bg);
+  --request-events-token-color: var(--text-secondary);
+  background: var(--bg-tertiary);
 
   .requestEventsTokenValue {
     font-weight: 800;
@@ -1603,8 +1625,13 @@
 }
 
 .requestEventsCacheRateMedium {
-  --request-events-token-color: var(--amber-text);
-  background: var(--amber-10);
+  --request-events-token-color: #1e40af;
+  background: #dbeafe;
+
+  :global([data-theme='aurora-nebula']) & {
+    --request-events-token-color: #bfdbfe;
+    background: #1e3a8a;
+  }
 
   .requestEventsTokenValue {
     font-weight: 750;
@@ -1727,51 +1754,85 @@
 }
 
 .requestEventsEffortNone {
-  color: color-mix(in srgb, #64748b 70%, var(--text-primary));
-  background: color-mix(in srgb, #64748b 12%, transparent);
-  border-color: color-mix(in srgb, #64748b 36%, var(--border-color));
+  color: #52525b;
+  background: #f4f4f5;
+  border-color: #d4d4d8;
 }
 
 .requestEventsEffortMinimal {
-  color: color-mix(in srgb, #0891b2 64%, var(--text-primary));
-  background: color-mix(in srgb, #0891b2 11%, transparent);
-  border-color: color-mix(in srgb, #0891b2 34%, var(--border-color));
+  color: #065f46;
+  background: #a7f3d0;
+  border-color: #34d399;
 }
 
 .requestEventsEffortLow {
-  color: var(--success-badge-text, #065f46);
-  background: var(--success-badge-bg, #d1fae5);
-  border-color: var(--success-badge-border, #6ee7b7);
+  color: #1e40af;
+  background: #dbeafe;
+  border-color: #93c5fd;
 }
 
 .requestEventsEffortMedium {
-  color: color-mix(in srgb, #2563eb 62%, var(--text-primary));
-  background: color-mix(in srgb, #2563eb 11%, transparent);
-  border-color: color-mix(in srgb, #2563eb 34%, var(--border-color));
+  color: #6b21a8;
+  background: #f3e8ff;
+  border-color: #c084fc;
 }
 
 .requestEventsEffortHigh {
-  color: color-mix(in srgb, #7c3aed 62%, var(--text-primary));
-  background: color-mix(in srgb, #7c3aed 12%, transparent);
-  border-color: color-mix(in srgb, #7c3aed 36%, var(--border-color));
+  color: #9a3412;
+  background: #ffedd5;
+  border-color: #fb923c;
 }
 
 .requestEventsEffortXHigh {
-  color: var(--amber-text);
-  background: var(--amber-10);
-  border-color: var(--amber-30);
+  color: #991b1b;
+  background: #fee2e2;
+  border-color: #f87171;
 }
 
-.requestEventsEffortMax {
-  color: var(--failure-badge-text);
-  background: var(--failure-badge-bg);
-  border-color: var(--failure-badge-border);
-}
-
+// 保留原始强度值；历史 ultra 标签复用 max 配色，不另设视觉档位。
+.requestEventsEffortMax,
 .requestEventsEffortUltra {
-  color: color-mix(in srgb, #c026d3 66%, var(--text-primary));
-  background: color-mix(in srgb, #c026d3 12%, transparent);
-  border-color: color-mix(in srgb, #c026d3 38%, var(--border-color));
+  color: #fcd34d;
+  background: #292524;
+  border-color: #b89334;
+}
+
+:global([data-theme='aurora-nebula']) {
+  .requestEventsEffortNone {
+    color: #d4d4d8;
+    background: #3f3f46;
+    border-color: #71717a;
+  }
+
+  .requestEventsEffortMinimal {
+    color: #6ee7b7;
+    background: #064e3b;
+    border-color: #10b981;
+  }
+
+  .requestEventsEffortLow {
+    color: #bfdbfe;
+    background: #1e3a8a;
+    border-color: #3b82f6;
+  }
+
+  .requestEventsEffortMedium {
+    color: #e9d5ff;
+    background: #581c87;
+    border-color: #a855f7;
+  }
+
+  .requestEventsEffortHigh {
+    color: #fed7aa;
+    background: #7c2d12;
+    border-color: #ea580c;
+  }
+
+  .requestEventsEffortXHigh {
+    color: #fecaca;
+    background: #7f1d1d;
+    border-color: #ef4444;
+  }
 }
 
 .requestEventsEffortOther {
@@ -2373,8 +2434,6 @@
     width: 100%;
   }
 }
-
-
 .requestEventsWorkspace .requestEventsTableWrapper {
   min-width: 0;
   max-width: 100%;
