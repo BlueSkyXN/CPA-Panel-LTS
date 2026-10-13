@@ -1616,8 +1616,8 @@
 }
 
 .requestEventsCacheRateLow {
-  --request-events-token-color: var(--failure-badge-text);
-  background: var(--failure-badge-bg);
+  --request-events-token-color: var(--text-secondary);
+  background: var(--bg-tertiary);
 
   .requestEventsTokenValue {
     font-weight: 800;
@@ -1625,8 +1625,13 @@
 }
 
 .requestEventsCacheRateMedium {
-  --request-events-token-color: var(--amber-text);
-  background: var(--amber-10);
+  --request-events-token-color: #1e40af;
+  background: #dbeafe;
+
+  :global([data-theme='aurora-nebula']) & {
+    --request-events-token-color: #bfdbfe;
+    background: #1e3a8a;
+  }
 
   .requestEventsTokenValue {
     font-weight: 750;
