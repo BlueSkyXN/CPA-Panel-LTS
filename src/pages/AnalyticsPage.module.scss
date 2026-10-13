@@ -63,11 +63,28 @@
   gap: 10px;
 }
 
+.filterPanel {
+  border: 1px solid var(--border-color); border-radius: 12px; padding: 16px;
+  background: var(--bg-primary); min-width: 0;
+}
 .filters {
-  display: flex;
-  align-items: flex-end;
-  flex-wrap: wrap;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
+  align-items: start;
+  gap: 14px 12px;
+}
+.filterActions {
+  grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding-top: 10px; border-top: 1px solid var(--border-color);
+  color: var(--text-secondary); font-size: 12px;
+}
+.filterMessage { grid-column: 1 / -1; color: var(--text-secondary); font-size: 12px; }
+.customTimeField { grid-column: 1 / -1; }
+.resultMeta {
+  display: flex; flex-wrap: wrap; gap: 8px 24px; color: var(--text-secondary); font-size: 12px;
+  p { margin: 0; line-height: 1.6; overflow-wrap: anywhere; }
+  p > span { margin-right: 8px; font-weight: 600; }
+  p[role='status'] { flex-basis: 100%; }
 }
 
 .filterField {
@@ -91,6 +108,8 @@
   gap: 8px;
 
   input {
+    flex: 1 1 200px;
+    box-sizing: border-box;
     max-width: 100%;
     min-width: 0;
     padding: 8px;

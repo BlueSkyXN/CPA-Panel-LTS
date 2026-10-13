@@ -33,7 +33,16 @@
     "basic_settings": "Basic settings",
     "rules_section": "Flow rules",
     "scope_details": "Scope and counting",
-    "flow_scope_short": "Controlled calls · current observation"
+    "flow_scope_short": "Controlled calls · current observation",
+    "filter_title": "Filter scope",
+    "active_filters": "Active filters: {{count}}",
+    "result_scope": "Result window",
+    "group_performance": "Throughput and response",
+    "group_performance_hint": "Inspect request volume and response timing together.",
+    "group_reliability": "Efficiency and reliability",
+    "group_reliability_hint": "Review cache reuse alongside failure patterns.",
+    "group_distribution": "Request and latency distributions",
+    "group_distribution_hint": "Compare request sizes and the spread of response times."
   },
   "usage_stats": {
     "execution_blue_std": "BLUE",

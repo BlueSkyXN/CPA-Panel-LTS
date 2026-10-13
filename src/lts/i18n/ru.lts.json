@@ -33,7 +33,16 @@
     "basic_settings": "Основные настройки",
     "rules_section": "Правила потока",
     "scope_details": "Область и правила подсчёта",
-    "flow_scope_short": "Контролируемые вызовы · текущий сеанс"
+    "flow_scope_short": "Контролируемые вызовы · текущий сеанс",
+    "filter_title": "Область фильтрации",
+    "active_filters": "Активные фильтры: {{count}}",
+    "result_scope": "Период результатов",
+    "group_performance": "Нагрузка и время ответа",
+    "group_performance_hint": "Сопоставьте объём запросов и время ответа.",
+    "group_reliability": "Эффективность и надёжность",
+    "group_reliability_hint": "Использование кеша и распределение ошибок.",
+    "group_distribution": "Распределение запросов и задержек",
+    "group_distribution_hint": "Сравните размеры запросов и распределение времени ответа."
   },
   "usage_stats": {
     "execution_blue_std": "BLUE",

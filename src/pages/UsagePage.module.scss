@@ -872,6 +872,13 @@
   color: var(--text-secondary);
 }
 
+.analyticsGroups {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  min-width: 0;
+}
+
 .analyticsGrid {
   display: grid;
   gap: 20px;
