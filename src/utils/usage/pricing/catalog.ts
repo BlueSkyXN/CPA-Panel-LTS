@@ -19,7 +19,8 @@ export const XAI_GROK_43_PRICING_SOURCE_URL = 'https://docs.x.ai/developers/mode
 export const XAI_GROK_43_CATALOG_AS_OF = '2026-10-10';
 export const XAI_GROK_47_PRICING_SOURCE_URL = 'https://docs.x.ai/developers/models/grok-4.7';
 export const XAI_GROK_47_CATALOG_AS_OF = '2026-10-10';
-export const XAI_GROK_47_FAST_PRICING_SOURCE_URL = 'https://docs.x.ai/developers/pricing';
+export const XAI_GROK_47_FAST_PRICING_SOURCE_URL =
+  'https://docs.x.ai/developers/pricing#grok-47-fast-pricing-cursor-and-grok-build-only';
 export const XAI_GROK_47_FAST_CATALOG_AS_OF = '2026-10-13';
 export const DOUBAO_PRICING_SOURCE_URL = 'https://www.volcengine.com/docs/82379/1099320';
 export const DOUBAO_CATALOG_AS_OF = '2026-10-10';
@@ -471,14 +472,14 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
     asOf: XAI_GROK_47_CATALOG_AS_OF,
   },
   {
-    // Cursor / Grok Build product, not a public API model and not the grok-4.7
-    // Priority tier: short context is 2x, long context is 1.5x of grok-4.7.
+    // Cursor / Grok Build 的独立产品价格；不表示公共 API 的 Priority 档。
+    // 官方规定超过 200K 提示词 token 才提价；引擎使用包含边界的门槛。
     canonicalModel: 'grok-4.7-fast',
     aliases: [],
     currency: 'USD',
     standard: {
       short: rateCard(4, 1, undefined, 12),
-      long: longCard(rateCard(6, 1.5, undefined, 18), XAI_LONG_CONTEXT_INPUT_TOKEN_THRESHOLD),
+      long: longCard(rateCard(6, 1.5, undefined, 18), XAI_LONG_CONTEXT_INPUT_TOKEN_THRESHOLD + 1),
     },
     sourceUrl: XAI_GROK_47_FAST_PRICING_SOURCE_URL,
     asOf: XAI_GROK_47_FAST_CATALOG_AS_OF,

@@ -3216,7 +3216,7 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
                 raise AssertionError(f"Grok 4.5 {band} row did not expose Fast as unavailable")
 
         grok_text = grok_model.inner_text()
-        if "200.0K" not in grok_text:
+        if "200,000" not in grok_text:
             raise AssertionError("Grok 4.5 catalog did not expose the 200K pricing threshold")
         if (
             grok_model.locator(
@@ -3264,7 +3264,7 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
                 raise AssertionError(f"Grok 4.6 {band} row did not expose Fast as unavailable")
 
         grok46_text = grok46_model.inner_text()
-        if "200.0K" not in grok46_text:
+        if "200,000" not in grok46_text:
             raise AssertionError("Grok 4.6 catalog did not expose the 200K pricing threshold")
         if (
             grok46_model.locator(
@@ -3297,7 +3297,7 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
                     "short": {"Input": "$4", "Cached input": "$1", "Output": "$12"},
                     "long": {"Input": "$6", "Cached input": "$1.5", "Output": "$18"},
                 },
-                "https://docs.x.ai/developers/pricing",
+                "https://docs.x.ai/developers/pricing#grok-47-fast-pricing-cursor-and-grok-build-only",
             ),
         ]:
             grok_new = catalog.locator(
@@ -3338,9 +3338,10 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
                         f"{grok_new_model} {band} row did not expose Fast as unavailable"
                     )
 
-            if "200.0K" not in grok_new.inner_text():
+            threshold = "200,001" if grok_new_model == "grok-4.7-fast" else "200,000"
+            if threshold not in grok_new.inner_text():
                 raise AssertionError(
-                    f"{grok_new_model} catalog did not expose the 200K pricing threshold"
+                    f"{grok_new_model} catalog did not expose the exact {threshold} pricing threshold"
                 )
             if (
                 grok_new.locator(
