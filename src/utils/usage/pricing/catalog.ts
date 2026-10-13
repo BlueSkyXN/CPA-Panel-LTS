@@ -19,6 +19,8 @@ export const XAI_GROK_43_PRICING_SOURCE_URL = 'https://docs.x.ai/developers/mode
 export const XAI_GROK_43_CATALOG_AS_OF = '2026-10-10';
 export const XAI_GROK_47_PRICING_SOURCE_URL = 'https://docs.x.ai/developers/models/grok-4.7';
 export const XAI_GROK_47_CATALOG_AS_OF = '2026-10-10';
+export const DOUBAO_PRICING_SOURCE_URL = 'https://www.volcengine.com/docs/82379/1099320';
+export const DOUBAO_CATALOG_AS_OF = '2026-10-10';
 export const ANTHROPIC_PRICING_SOURCE_URL =
   'https://platform.claude.com/docs/en/about-claude/pricing';
 export const ANTHROPIC_MODEL_IDS_SOURCE_URL =
@@ -465,5 +467,16 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
     },
     sourceUrl: XAI_GROK_47_PRICING_SOURCE_URL,
     asOf: XAI_GROK_47_CATALOG_AS_OF,
+  },
+  {
+    // Volcano Ark quotes CNY list prices; these USD rates are the confirmed
+    // CNY 6 / 1.2 / 30 per 1M tokens converted at 6.8, standard
+    // online-inference tier (the cheaper low-priority tier is not applied).
+    canonicalModel: 'doubao-seed-2.1-pro',
+    aliases: [],
+    currency: 'USD',
+    standard: { short: rateCard(0.882, 0.176, undefined, 4.412) },
+    sourceUrl: DOUBAO_PRICING_SOURCE_URL,
+    asOf: DOUBAO_CATALOG_AS_OF,
   },
 ];

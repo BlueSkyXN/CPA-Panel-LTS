@@ -398,6 +398,8 @@ require_file_contains src/utils/usage/pricing/catalog.ts "XAI_GROK_46_PRICING_SO
 require_file_contains src/utils/usage/pricing/catalog.ts "XAI_GROK_43_PRICING_SOURCE_URL"
 require_file_contains src/utils/usage/pricing/catalog.ts "XAI_GROK_47_PRICING_SOURCE_URL"
 require_file_contains src/utils/usage/pricing/catalog.ts "XAI_LONG_CONTEXT_INPUT_TOKEN_THRESHOLD"
+require_file_contains src/utils/usage/pricing/catalog.ts "doubao-seed-2.1-pro"
+require_file_contains src/utils/usage/pricing/catalog.ts "DOUBAO_PRICING_SOURCE_URL"
 require_file_contains src/utils/usage/pricing/catalog.ts "claude-haiku-4-5-20251001"
 require_file_contains src/utils/usage/pricing/catalog.ts "claude-haiku-4-5"
 require_file_contains src/utils/usage/pricing/catalog.ts "claude-sonnet-4-5-20250929"

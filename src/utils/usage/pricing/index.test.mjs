@@ -178,6 +178,26 @@ test('catalog is versioned, self-describing, exact, and keeps provider rate boun
   assert.equal(grok47.sourceUrl, 'https://docs.x.ai/developers/models/grok-4.7');
   assert.equal(grok47.pricingNotesUrl, undefined);
   assert.equal(grok47.asOf, '2026-10-10');
+
+  const doubao = pricing.findCatalogEntry('doubao-seed-2.1-pro');
+  assert.equal(doubao.currency, 'USD');
+  assert.deepEqual(doubao.aliases, []);
+  assert.deepEqual(doubao.standard.short, { input: 0.882, cachedInput: 0.176, output: 4.412 });
+  assert.equal(doubao.standard.long, undefined);
+  assert.equal(doubao.fast, undefined);
+  assert.equal(doubao.sourceUrl, 'https://www.volcengine.com/docs/82379/1099320');
+  assert.equal(doubao.pricingNotesUrl, undefined);
+  assert.equal(doubao.asOf, '2026-10-10');
+
+  const doubaoEstimate = pricing.estimateUsageCost(
+    'doubao-seed-2.1-pro',
+    { input_tokens: 1_000, cache_read_tokens: 500, output_tokens: 2_000 },
+    undefined,
+    tier()
+  );
+  assert.equal(doubaoEstimate.status, 'priced');
+  assert.equal(doubaoEstimate.contextBand, 'short');
+  assert.deepEqual(doubaoEstimate.rates, { input: 0.882, cachedInput: 0.176, output: 4.412 });
 });
 
 test('September GPT-5.6 rates price Standard and Fast in both context bands', () => {
