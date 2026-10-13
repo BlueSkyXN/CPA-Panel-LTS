@@ -71,3 +71,11 @@ test('dashboard inspector is running-only and does not require a YAML draft',asy
  assert(!html.includes('value="draft"'));
  assert(html.includes(i18nModule.default.t('flow_control.v3_running')));
 });
+
+test('dashboard diagnostics are collapsed while configuration diagnostics stay expanded', async () => {
+ const {RuleInspector}=await vite.ssrLoadModule('/src/lts/flowControl/RuleInspector.tsx');
+ const dashboard=renderToStaticMarkup(createElement(RuleInspector,{data,runningOnly:true}));
+ const config=renderToStaticMarkup(createElement(RuleInspector,{data}));
+ assert(!dashboard.match(/^<details[^>]*\sopen=/));
+ assert(config.match(/^<details[^>]*\sopen=/));
+});

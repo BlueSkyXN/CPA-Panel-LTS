@@ -551,7 +551,12 @@
     "applied_on": "已应用：开启",
     "applied_off": "已应用：关闭",
     "queue_section": "排队与容量",
-    "waiting_split": "{{requests}} 请求 · {{attempts}} 执行"
+    "waiting_split": "{{requests}} 请求 · {{attempts}} 执行",
+    "trend_title": "本次观察趋势",
+    "trend_scope": "仅显示本次观察采样；暂停或缺失采样处断开曲线。",
+    "trend_empty": "开启实时观察后采集样本，当前视图尚无趋势记录。",
+    "trend_collecting": "已收到一个样本，等待下一次采样。",
+    "trend_readings": "查看采样读数"
   },
   "config_management": {
     "visual": {
