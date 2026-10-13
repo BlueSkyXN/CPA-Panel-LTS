@@ -1507,6 +1507,8 @@
     "request_events_tier": "Уровень",
     "request_events_tier_fast": "Fast",
     "request_events_tier_standard": "Std",
+    "request_events_tier_fast_to_std": "Fast → Std",
+    "request_events_tier_std_to_fast": "Std → Fast",
     "request_events_tier_tooltip_effective": "Core подтвердил фактический уровень обслуживания: {{tier}}.",
     "request_events_tier_tooltip_response": "Вышестоящий сервис сообщил уровень обслуживания: {{tier}}.",
     "request_events_tier_tooltip_request": "Показан запрошенный уровень {{tier}}; фактическая тарификация может отличаться.",

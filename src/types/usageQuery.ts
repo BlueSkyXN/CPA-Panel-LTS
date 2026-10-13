@@ -1,4 +1,5 @@
 import type { UsageDetail } from '@/utils/usage';
+import type { ServiceTierFlow } from '@/utils/usage/serviceTier';
 
 export interface UsageQuerySession {
   version: 1;
@@ -19,6 +20,7 @@ export interface UsageQueryFilter {
   auth_index?: string;
   identities?: UsageQueryIdentity[];
   tier?: 'fast' | 'std';
+  tier_flow?: ServiceTierFlow;
   effort?: string;
   failed?: boolean;
   cached?: boolean;

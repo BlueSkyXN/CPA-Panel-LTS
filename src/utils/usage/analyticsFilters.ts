@@ -3,6 +3,9 @@ import type { CredentialInfo } from '@/types/sourceInfo';
 import { isRecord } from '@/utils/helpers';
 import { normalizeAuthIndex, normalizeUsageSourceId, type UsageDetail } from '@/utils/usage';
 import { resolveSourceDisplay, type SourceInfoMap } from '@/utils/sourceResolver';
+import { resolveUsageDetailServiceTier } from './pricing/usagePricing';
+import { isServiceTierFlow, serviceTierFlow, type ServiceTierFlow } from './serviceTier';
+import { normalizeReasoningEffort } from './reasoningEffort';
 
 export interface AnalyticsSourceSelection {
   value: string;
@@ -13,11 +16,14 @@ export interface AnalyticsSourceSelection {
 export interface AnalyticsFilters {
   model?: string;
   source?: AnalyticsSourceSelection;
+  tier?: ServiceTierFlow;
+  effort?: string;
 }
 
 export interface AnalyticsFilterOptions {
   models: string[];
   identities: UsageQueryIdentity[];
+  efforts?: string[];
 }
 
 const identityKey = (identity: UsageQueryIdentity) =>
@@ -61,10 +67,12 @@ export function buildAnalyticsSources(
 
 export function analyticsQueryFilter(
   filters: AnalyticsFilters,
-  options: AnalyticsFilterOptions
+  options: AnalyticsFilterOptions = { models: [], identities: [] }
 ): { filter: UsageQueryFilter; empty: boolean } {
   const filter: UsageQueryFilter = {};
   if (filters.model !== undefined) filter.model = filters.model;
+  if (filters.tier !== undefined) filter.tier_flow = filters.tier;
+  if (filters.effort !== undefined) filter.effort = filters.effort.trim().toLowerCase();
   if (filters.source) {
     const selected = new Set(filters.source.identities.map(identityKey));
     filter.identities = options.identities.filter((id) =>
@@ -77,6 +85,11 @@ export function analyticsQueryFilter(
 
 export function matchesAnalyticsFilters(detail: UsageDetail, filters: AnalyticsFilters): boolean {
   if (filters.model !== undefined && detail.__modelName !== filters.model) return false;
+  if (filters.tier !== undefined && serviceTierFlow(resolveUsageDetailServiceTier(detail)) !== filters.tier)
+    return false;
+  if (filters.effort !== undefined &&
+      (normalizeReasoningEffort(detail.reasoning_effort)?.toLowerCase() ?? '') !== filters.effort.trim().toLowerCase())
+    return false;
   return (
     !filters.source ||
     filters.source.identities.some(
@@ -90,6 +103,7 @@ export function matchesAnalyticsFilters(detail: UsageDetail, filters: AnalyticsF
 export function legacyAnalyticsOptions(usage: unknown): AnalyticsFilterOptions {
   const models = new Set<string>();
   const identities = new Map<string, UsageQueryIdentity>();
+  const efforts = new Set<string>();
   if (isRecord(usage) && isRecord(usage.apis)) {
     for (const api of Object.values(usage.apis)) {
       if (!isRecord(api) || !isRecord(api.models)) continue;
@@ -98,6 +112,9 @@ export function legacyAnalyticsOptions(usage: unknown): AnalyticsFilterOptions {
         for (const detail of data.details) {
           if (!isRecord(detail) || typeof detail.timestamp !== 'string') continue;
           models.add(model);
+          efforts.add(normalizeReasoningEffort(
+            detail.reasoning_effort ?? detail.reasoningEffort ?? detail.ReasoningEffort
+          )?.toLowerCase() ?? '');
           const identity = {
             source: typeof detail.source === 'string' ? detail.source : '',
             auth_index:
@@ -108,13 +125,15 @@ export function legacyAnalyticsOptions(usage: unknown): AnalyticsFilterOptions {
       }
     }
   }
-  return { models: [...models].sort(), identities: [...identities.values()] };
+  return { models: [...models].sort(), identities: [...identities.values()], efforts: [...efforts].sort() };
 }
 
 export function readAnalyticsNavigationState(state: unknown): AnalyticsFilters | null {
   if (!isRecord(state) || !isRecord(state.analyticsFilters)) return null;
   const filters = state.analyticsFilters;
   if (filters.model !== undefined && typeof filters.model !== 'string') return null;
+  if (filters.tier !== undefined && !isServiceTierFlow(filters.tier)) return null;
+  if (filters.effort !== undefined && typeof filters.effort !== 'string') return null;
   if (filters.source !== undefined) {
     const source = filters.source;
     if (

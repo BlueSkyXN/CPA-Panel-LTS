@@ -1506,6 +1506,8 @@
     "request_events_tier": "Tier",
     "request_events_tier_fast": "Fast",
     "request_events_tier_standard": "Std",
+    "request_events_tier_fast_to_std": "Fast → Std",
+    "request_events_tier_std_to_fast": "Std → Fast",
     "request_events_tier_tooltip_effective": "Core confirmed the effective service tier: {{tier}}.",
     "request_events_tier_tooltip_response": "Upstream reported the service tier: {{tier}}.",
     "request_events_tier_tooltip_request": "Shown from the requested service tier: {{tier}}; billing may differ.",

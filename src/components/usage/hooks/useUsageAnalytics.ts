@@ -57,8 +57,7 @@ export function useUsageAnalytics(
       ? {
           ...base,
           filter:
-            selection?.filter ??
-            (stableFilters.model === undefined ? {} : { model: stableFilters.model }),
+            selection?.filter ?? analyticsQueryFilter(stableFilters).filter,
         }
       : null;
   const cacheKey = request ? analyticsCacheKey(request) : '';
@@ -129,8 +128,7 @@ export function useUsageAnalytics(
           {
             ...base,
             filter:
-              selected?.filter ??
-              (stableFilters.model === undefined ? {} : { model: stableFilters.model }),
+              selected?.filter ?? analyticsQueryFilter(stableFilters).filter,
           },
           force
         );
@@ -143,7 +141,19 @@ export function useUsageAnalytics(
       }
       if (stopped) return;
       if (!result.options) throw new Error('Missing usage analytics options');
-      setMetadata({ key: metadataKey, options: result.options });
+      let resultOptions = result.options;
+      // 旧聚合端点没有 effort 目录时，复用已有明细目录，避免猜测强度枚举。
+      if (result.options.efforts === undefined) {
+        if (!known?.efforts) {
+          const directory = await usageQueryApi.details({ ...base, limit: 1 }, controller.signal);
+          if (stopped) return;
+          if (!directory.options) throw new Error('Missing usage analytics options');
+          known = directory.options;
+        }
+        resultOptions = { ...resultOptions, efforts: known.efforts };
+        result = { ...result, options: resultOptions };
+      }
+      setMetadata({ key: metadataKey, options: resultOptions });
       setState({ key, result, error: '', code: '', loading: false });
       previous.current = { scope, filters: filtersJSON, range: rangeIdentity, result };
     })().catch((error: unknown) => {

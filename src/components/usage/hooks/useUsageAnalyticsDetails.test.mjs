@@ -180,19 +180,19 @@ test('visibility changes preserve completed and explicitly stopped loads', async
 });
 
 
-test('every page receives model/source filters; changing them aborts and restarts', async () => {
+test('every page receives model/source/tier filters; changing tier aborts and restarts', async () => {
   const h = await createHarness(async (request) => request.cursor
     ? new Promise(() => {})
     : { items: [{ id: request.filter.model }], total: 2, next_cursor: 'next' });
   try {
-    const filter = { model: 'model-a', identities: [{ source: 'source-a', auth_index: '1' }] };
+    const filter = { model: 'model-a', tier_flow: 'fast_to_std', effort: 'high', identities: [{ source: 'source-a', auth_index: '1' }] };
     h.render(session, shortWindow, { filter });
     await tick();
     assert.equal(h.requests.length, 2);
     for (const request of h.requests) assert.deepEqual(request.request.filter, filter);
     h.render(session, shortWindow, { filter: structuredClone(filter) });
     assert.equal(h.requests.length, 2);
-    const changed = { ...filter, model: 'model-b' };
+    const changed = { ...filter, tier_flow: 'std_to_fast' };
     const result = h.render(session, shortWindow, { filter: changed });
     assert.equal(h.requests[1].signal.aborted, true);
     assert.equal(h.requests[2].request.cursor, '');
