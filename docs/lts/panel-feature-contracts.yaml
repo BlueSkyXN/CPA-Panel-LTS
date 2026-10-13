@@ -282,10 +282,12 @@ features:
       - grok-4.6
       - grok-4.3
       - grok-4.7
+      - grok-4.7-fast
       - XAI_PRICING_SOURCE_URL
       - XAI_GROK_46_PRICING_SOURCE_URL
       - XAI_GROK_43_PRICING_SOURCE_URL
       - XAI_GROK_47_PRICING_SOURCE_URL
+      - XAI_GROK_47_FAST_PRICING_SOURCE_URL
       - XAI_LONG_CONTEXT_INPUT_TOKEN_THRESHOLD
       - doubao-seed-2.1-pro
       - DOUBAO_PRICING_SOURCE_URL

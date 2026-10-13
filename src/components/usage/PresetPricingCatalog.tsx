@@ -4,7 +4,6 @@ import {
   PRICE_CATALOG,
   PRICE_CATALOG_AS_OF,
   PRICE_CATALOG_VERSION,
-  formatCompactNumber,
   type PriceCatalogEntry,
   type TokenRates,
 } from '@/utils/usage';
@@ -165,7 +164,7 @@ export function PresetPricingCatalog({ allowFastLongContext = false }: PresetPri
                           band.kind === 'short'
                             ? 'usage_stats.pricing_catalog_short_range'
                             : 'usage_stats.pricing_catalog_long_range',
-                          { threshold: formatCompactNumber(band.thresholdTokens) }
+                          { threshold: band.thresholdTokens.toLocaleString() }
                         );
                   const fastPolicy = getFastPolicyPresentation(entry, band);
 

@@ -179,6 +179,21 @@ test('catalog is versioned, self-describing, exact, and keeps provider rate boun
   assert.equal(grok47.pricingNotesUrl, undefined);
   assert.equal(grok47.asOf, '2026-10-10');
 
+  const grok47Fast = pricing.findCatalogEntry('grok-4.7-fast');
+  assert.equal(grok47Fast.currency, 'USD');
+  assert.deepEqual(grok47Fast.aliases, []);
+  assert.deepEqual(grok47Fast.standard.short, { input: 4, cachedInput: 1, output: 12 });
+  assert.deepEqual(grok47Fast.standard.long, {
+    thresholdTokens: 200_001,
+    basis: 'inputTokens',
+    appliesTo: 'entireRequest',
+    rates: { input: 6, cachedInput: 1.5, output: 18 },
+  });
+  assert.equal(grok47Fast.fast, undefined);
+  assert.equal(grok47Fast.sourceUrl, 'https://docs.x.ai/developers/pricing#grok-47-fast-pricing-cursor-and-grok-build-only');
+  assert.equal(grok47Fast.pricingNotesUrl, undefined);
+  assert.equal(grok47Fast.asOf, '2026-10-13');
+
   const doubao = pricing.findCatalogEntry('doubao-seed-2.1-pro');
   assert.equal(doubao.currency, 'USD');
   assert.deepEqual(doubao.aliases, []);
@@ -884,6 +899,32 @@ test('Grok 4.3 and Grok 4.7 switch the entire request to long-context rates at 2
     assert.equal(fast.amount, null);
     assert.equal(fast.rates, null);
   }
+});
+
+test('Grok 4.7 Fast changes rates strictly above 200K prompt tokens without implying API Priority', () => {
+  const shortRates = { input: 4, cachedInput: 1, output: 12 };
+  const longRates = { input: 6, cachedInput: 1.5, output: 18 };
+  for (const [inputTokens, contextBand, rates] of [
+    [199_999, 'short', shortRates],
+    [200_000, 'short', shortRates],
+    [200_001, 'long', longRates],
+  ]) {
+    const estimate = pricing.estimateUsageCost(
+      'grok-4.7-fast',
+      { input_tokens: inputTokens, cache_read_tokens: 1_000, output_tokens: 10_000 },
+      undefined,
+      tier()
+    );
+    assert.equal(estimate.status, 'priced');
+    assert.equal(estimate.contextBand, contextBand);
+    assert.deepEqual(estimate.rates, rates);
+  }
+  const priority = pricing.estimateUsageCost(
+    'grok-4.7-fast', { input_tokens: 1_000 }, undefined, tier('fast', 'request')
+  );
+  assert.equal(priority.status, 'unsupported');
+  assert.equal(priority.amount, null);
+  assert.equal(pricing.findCatalogEntry('grok-4.7-fast-latest'), null);
 });
 
 test('Fast long context is estimated by default and only restricted under the official policy', () => {
