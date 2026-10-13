@@ -180,6 +180,7 @@ export function decodeUsageAnalytics(v: unknown): UsageAnalyticsResult {
     v.options !== undefined &&
     (!isRecord(v.options) ||
       !list(v.options.models, (m) => typeof m === 'string', 8192) ||
+      (v.options.efforts !== undefined && !list(v.options.efforts, (e) => typeof e === 'string', 8192)) ||
       !list(
         v.options.identities,
         (id) => isRecord(id) && typeof id.source === 'string' && typeof id.auth_index === 'string',

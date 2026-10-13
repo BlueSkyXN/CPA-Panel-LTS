@@ -16,7 +16,7 @@ const source = await readFile(new URL('./useUsageAnalytics.ts', import.meta.url)
 const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
 const session = { version: 1, bound: 'synthetic', now_ms: 10000, max_page_size: 200, models: ['a'], analytics_version: 1 };
 const window = { startMs: 1000, endMs: 10000 };
-const options = { models: ['a'], identities: [{ source: 'synthetic-source', auth_index: '1' }] };
+const options = { models: ['a'], identities: [{ source: 'synthetic-source', auth_index: '1' }], efforts: ['', 'high', 'medium'] };
 const result = (q) => ({ version: 1, analytics_version: 1, bound: q.bound, now_ms: q.now_ms, from_ms: q.from_ms ?? null, to_ms: q.to_ms ?? null, timezone: q.timezone, total: 0, analyzed: 0, options, data: buildUsageAnalytics([], null) });
 const tick = () => new Promise(resolve => setImmediate(resolve));
 let requests;
@@ -49,6 +49,38 @@ test('first load aggregates once; remount and source selection reuse cached opti
   b.render(session, window, f); await tick(); assert.equal(requests.length, 2); assert.deepEqual(requests[1].filter, { model: 'a', identities: options.identities }); b.close();
   const c = await harness(); assert.ok(c.render(session, window, f).result); await tick(); assert.equal(requests.length, 2); c.close();
 });
+test('tier survives a cold load, filter changes, remount cache and snapshot refresh', async () => {
+  const h = await harness();
+  try {
+    h.render(session, window, { tier: 'fast' });
+    await tick();
+    assert.deepEqual(requests[0].filter, { tier_flow: 'fast' });
+    assert.ok(h.render(session, window, { tier: 'fast' }).result);
+
+    const standard = { model: 'a', tier: 'std', source: {
+      value: 'source:synthetic', label: 'Synthetic', identities: [{ source: 't:synthetic-source', auth_index: '1' }],
+    } };
+    assert.equal(h.render(session, window, standard).result, null);
+    await tick();
+    assert.deepEqual(requests[1].filter, { model: 'a', tier_flow: 'std', identities: options.identities });
+    h.render(session, window, standard);
+
+    const next = { ...session, bound: 'next-tier-snapshot', now_ms: 11000 };
+    h.render(next, { startMs: 2000, endMs: 11000 }, { tier: 'std' });
+    await tick();
+    assert.deepEqual(requests[2].filter, { tier_flow: 'std' });
+
+    const cached = await harness();
+    try {
+      assert.ok(cached.render(session, window, { tier: 'fast' }).result);
+      await tick();
+      assert.equal(requests.length, 3);
+      cached.render(session, window, {});
+      await tick();
+      assert.deepEqual(requests[3].filter, {});
+    } finally { cached.close(); }
+  } finally { h.close(); }
+});
 test('refresh keeps only the same logical range and filters, and errors never fall back', async () => {
   const h = await harness(); h.render(); await tick(); h.render();
   usageAnalyticsApi.query = async () => { throw Object.assign(new Error('synthetic timeout'), { details: { code: 'usage_query_timeout' } }); };
@@ -62,4 +94,60 @@ test('inactive pages do not query and late responses after disconnect are discar
   let done, signal; usageAnalyticsApi.query = (q, s) => { signal = s; return new Promise(resolve => { done = () => resolve(result(q)); }); };
   h.render(); h.close(); assert.equal(signal.aborted, true); done(); await tick();
   const next = await harness(); assert.equal(next.render(session, window, {}, false).result, null); next.close();
+});
+
+test('transition and effort survive cold load and do not reuse results for other cohorts', async () => {
+  const h = await harness();
+  try {
+    const selected = { tier: 'fast_to_std', effort: 'high' };
+    h.render(session, window, selected); await tick();
+    assert.deepEqual(requests[0].filter, { tier_flow: 'fast_to_std', effort: 'high' });
+    assert.ok(h.render(session, window, selected).result);
+    assert.equal(h.render(session, window, { ...selected, effort: 'medium' }).result, null);
+    await tick();
+    assert.deepEqual(requests[1].filter, { tier_flow: 'fast_to_std', effort: 'medium' });
+    h.render(session, window, { tier: 'std_to_fast', effort: '' }); await tick();
+    assert.deepEqual(requests[2].filter, { tier_flow: 'std_to_fast', effort: '' });
+  } finally { h.close(); }
+});
+
+test('older analytics responses fetch only the missing effort directory at the same snapshot', async () => {
+  let directoryRequests = [];
+  usageAnalyticsApi.query = async (q) => {
+    requests.push(q);
+    const r = result(q);
+    r.options = { models: options.models, identities: options.identities };
+    return r;
+  };
+  usageQueryApi.details = async (q) => { directoryRequests.push(q); return { options }; };
+  const h = await harness();
+  try {
+    h.render(); await tick();
+    assert.deepEqual(h.render().options.efforts, options.efforts);
+    assert.equal(directoryRequests.length, 1);
+    assert.equal(directoryRequests[0].bound, session.bound);
+    assert.equal(directoryRequests[0].from_ms, window.startMs);
+    assert.equal(directoryRequests[0].limit, 1);
+    assert.equal(directoryRequests[0].filter, undefined);
+    h.render(session, window, { effort: 'high' }); await tick();
+    assert.deepEqual(requests[1].filter, { effort: 'high' });
+    assert.equal(directoryRequests.length, 1);
+  } finally { h.close(); }
+});
+
+test('unsupported transition queries surface an error without retrying unfiltered', async () => {
+  usageAnalyticsApi.query = async (q) => {
+    requests.push(q);
+    throw Object.assign(new Error('usage_query_invalid'), { details: { code: 'usage_query_invalid' } });
+  };
+  const h = await harness();
+  try {
+    const selected = { tier: 'fast_to_std' };
+    h.render(session, window, selected); await tick();
+    const state = h.render(session, window, selected);
+    assert.equal(state.code, 'usage_query_invalid');
+    assert.equal(state.result, null);
+    assert.equal(requests.length, 1);
+    assert.deepEqual(requests[0].filter, { tier_flow: 'fast_to_std' });
+  } finally { h.close(); }
 });

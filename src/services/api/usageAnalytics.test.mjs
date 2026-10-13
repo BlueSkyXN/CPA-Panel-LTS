@@ -36,6 +36,17 @@ test('cores without a throughput series degrade to an empty series', () => {
   payload.data.hour.throughput = [{ timestampMs: 1 }];
   assert.throws(() => decodeUsageAnalytics(payload));
 });
+
+test('effort directories are optional for older Core and validated when present', () => {
+  const r = response();
+  assert.doesNotThrow(() => decodeUsageAnalytics(r));
+  r.options.efforts = ['', 'high', 'custom:42'];
+  assert.deepEqual(decodeUsageAnalytics(r).options.efforts, r.options.efforts);
+  for (const efforts of [null, ['high', 1], 'high']) {
+    r.options.efforts = efforts;
+    assert.throws(() => decodeUsageAnalytics(r));
+  }
+});
 test('invalid aggregate schemas are rejected instead of entering fallback', () => {
   for (const mutate of [r => { r.analytics_version = 2; }, r => { r.bound = ''; }, r => { r.data.hour.latency.p95 = [1]; }, r => { r.data.timings.latency.p50 = -1; }, r => { r.data.histogram.counts = []; }, r => { r.analyzed = 2; }, r => { r.data.cache.cacheReadRate = NaN; }]) {
     const r = response(); mutate(r); assert.throws(() => decodeUsageAnalytics(r));

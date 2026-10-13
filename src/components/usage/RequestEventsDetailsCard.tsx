@@ -66,6 +66,7 @@ import {
   getUsageNonCacheReadInputTokenCount,
 } from '@/utils/usage/cacheTokens';
 import { normalizeReasoningEffort } from '@/utils/usage/reasoningEffort';
+import { SERVICE_TIER_FLOWS, serviceTierFlow } from '@/utils/usage/serviceTier';
 import { normalizeResponseCyberProgram } from '@/utils/usage/cyberProgram';
 import { downloadBlob } from '@/utils/download';
 import { logsApi } from '@/services/api/logs';
@@ -78,6 +79,12 @@ import { useNotificationStore } from '@/stores/useNotificationStore';
 const ALL_FILTER = '__all__';
 const SERVICE_TIER_FAST_FILTER = '__service_tier_fast__';
 const SERVICE_TIER_STD_FILTER = '__service_tier_std__';
+const SERVICE_TIER_FILTER_VALUES = {
+  fast: SERVICE_TIER_FAST_FILTER,
+  std: SERVICE_TIER_STD_FILTER,
+  fast_to_std: '__service_tier_fast_to_std__',
+  std_to_fast: '__service_tier_std_to_fast__',
+};
 const REASONING_EFFORT_LEGACY_UNKNOWN_FILTER = '__reasoning_effort_legacy_unknown__';
 const REASONING_EFFORT_RAW_FILTER_PREFIX = '__reasoning_effort_raw__:';
 const RESULT_SUCCESS_FILTER = '__result_success__';
@@ -679,6 +686,12 @@ export function RequestEventsDetailsCard({
     if (initialAnalyticsFilters) return {
       model: initialAnalyticsFilters.model ?? ALL_FILTER,
       source: initialAnalyticsFilters.source?.value ?? ALL_FILTER,
+      serviceTier:
+        initialAnalyticsFilters.tier ? SERVICE_TIER_FILTER_VALUES[initialAnalyticsFilters.tier] : ALL_FILTER,
+      reasoningEffort:
+        initialAnalyticsFilters.effort === undefined
+          ? ALL_FILTER
+          : getReasoningEffortFilterValue(normalizeReasoningEffort(initialAnalyticsFilters.effort)),
     };
     try {
       const raw = sessionStorage.getItem(REQUEST_EVENT_FILTERS_STORAGE_KEY);
@@ -1099,7 +1112,8 @@ export function RequestEventsDetailsCard({
       }
     }
     if (authIndexFilter !== ALL_FILTER) filter.auth_index = authIndexFilter === '-' ? '' : authIndexFilter;
-    if (serviceTierFilter !== ALL_FILTER) filter.tier = serviceTierFilter === SERVICE_TIER_FAST_FILTER ? 'fast' : 'std';
+    if (serviceTierFilter !== ALL_FILTER)
+      filter.tier_flow = SERVICE_TIER_FLOWS.find((flow) => SERVICE_TIER_FILTER_VALUES[flow] === serviceTierFilter) ?? 'std';
     if (reasoningEffortFilter !== ALL_FILTER) {
       const effort = reasoningEffortFilter === REASONING_EFFORT_LEGACY_UNKNOWN_FILTER ? '' : decodeURIComponent(reasoningEffortFilter.slice(REASONING_EFFORT_RAW_FILTER_PREFIX.length));
       filter.effort = effort;
@@ -1240,7 +1254,7 @@ export function RequestEventsDetailsCard({
         effectiveServiceTier,
       });
       const serviceTierFilterValue =
-        resolvedServiceTier.tier === 'fast' ? SERVICE_TIER_FAST_FILTER : SERVICE_TIER_STD_FILTER;
+        SERVICE_TIER_FILTER_VALUES[serviceTierFlow(resolvedServiceTier)];
       const getServiceTierLabel = (tier: DisplayServiceTier) => tierLabels[tier];
       const serviceTierLabel = getServiceTierLabel(resolvedServiceTier.tier);
       const responseCyberProgram = normalizeResponseCyberProgram(detail.response_cyber_program);
@@ -1590,6 +1604,8 @@ export function RequestEventsDetailsCard({
       { value: ALL_FILTER, label: t('usage_stats.filter_all') },
       { value: SERVICE_TIER_FAST_FILTER, label: t('usage_stats.request_events_tier_fast') },
       { value: SERVICE_TIER_STD_FILTER, label: t('usage_stats.request_events_tier_standard') },
+      { value: SERVICE_TIER_FILTER_VALUES.fast_to_std, label: t('usage_stats.request_events_tier_fast_to_std') },
+      { value: SERVICE_TIER_FILTER_VALUES.std_to_fast, label: t('usage_stats.request_events_tier_std_to_fast') },
     ],
     [t]
   );

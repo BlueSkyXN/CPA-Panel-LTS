@@ -7,6 +7,7 @@ import { useAuthStore, useConfigStore } from '@/stores';
 import type { CredentialInfo } from '@/types/sourceInfo';
 import { normalizeAuthIndex } from '@/utils/usage';
 import { buildSourceInfoMap } from '@/utils/sourceResolver';
+import { isServiceTierFlow } from '@/utils/usage/serviceTier';
 import {
   buildAnalyticsSources,
   type AnalyticsFilterOptions,
@@ -81,6 +82,10 @@ export function AnalyticsFiltersBar({
       ...(filters.model !== undefined ? [filters.model] : []),
     ]),
   ].sort();
+  const efforts = [...new Set([
+    ...(options?.efforts ?? []),
+    ...(filters.effort !== undefined ? [filters.effort] : []),
+  ].map((effort) => effort.trim().toLowerCase()))].sort();
   return (
     <>
       <div className={styles.filterField}>
@@ -108,10 +113,42 @@ export function AnalyticsFiltersBar({
           ariaLabel={t('usage_stats.request_events_filter_source')}
         />
       </div>
+      <div className={styles.filterField}>
+        <span>{t('usage_stats.request_events_filter_tier')}</span>
+        <Select
+          value={filters.tier ?? ALL}
+          options={[
+            { value: ALL, label: t('usage_stats.filter_all') },
+            { value: 'fast', label: t('usage_stats.request_events_tier_fast') },
+            { value: 'std', label: t('usage_stats.request_events_tier_standard') },
+            { value: 'fast_to_std', label: t('usage_stats.request_events_tier_fast_to_std') },
+            { value: 'std_to_fast', label: t('usage_stats.request_events_tier_std_to_fast') },
+          ]}
+          onChange={(value) =>
+            onChange({ ...filters, tier: isServiceTierFlow(value) ? value : undefined })
+          }
+          ariaLabel={t('usage_stats.request_events_filter_tier')}
+        />
+      </div>
+      <div className={styles.filterField}>
+        <span>{t('usage_stats.request_events_filter_effort')}</span>
+        <Select
+          value={filters.effort === undefined ? ALL : `effort:${filters.effort}`}
+          options={[
+            { value: ALL, label: t('usage_stats.filter_all') },
+            ...efforts.map((effort) => ({
+              value: `effort:${effort}`,
+              label: effort || t('usage_stats.request_events_effort_legacy_unknown'),
+            })),
+          ]}
+          onChange={(value) => onChange({ ...filters, effort: value === ALL ? undefined : value.slice(7) })}
+          ariaLabel={t('usage_stats.request_events_filter_effort')}
+        />
+      </div>
       <Button
         variant="secondary"
         size="sm"
-        disabled={filters.model === undefined && !selected}
+        disabled={filters.model === undefined && !selected && filters.tier === undefined && filters.effort === undefined}
         onClick={() => onChange({})}
       >
         {t('usage_stats.clear_filters')}

@@ -634,24 +634,60 @@ test('Blue metadata survives both snapshot transforms and does not change pricin
 });
 
 
-test('analytics drilldown overrides stored event filters and keeps exact source identities', async () => {
+test('analytics drilldown overrides stored filters and combines tier with exact model/source', async () => {
   await i18n.changeLanguage('en');
   const storageKey = 'cpa-request-event-filters-v1';
-  sessionStorageValues.set(storageKey, JSON.stringify({ model: 'old-model', result: 'failed', source: 'old-source' }));
+  sessionStorageValues.set(storageKey, JSON.stringify({ model: 'old-model', result: 'failed', source: 'old-source', serviceTier: '__service_tier_std__' }));
   const detail = (source, auth_index, token) => ({ timestamp: '2026-10-08T00:00:00Z', source, auth_index, failed: false, tokens: { total_tokens: token } });
   const usage = { apis: { app: { models: {
-    'model-a': { details: [detail('source-a', '1', 11), detail('source-b', '2', 22)] },
+    'model-a': { details: [detail('source-a', '1', 11), detail('source-b', '2', 22), {
+      ...detail('source-a', '1', 44), effective_service_tier: 'priority',
+    }] },
     'model-b': { details: [detail('source-a', '1', 33)] },
   } } } };
   const props = { usage, loading: false, pageTimeRange: 'all', referenceNowMs: Date.parse('2026-10-08T01:00:00Z'),
     priceProfile: pricingModule.createDefaultPriceProfileV3(), requestApiKeys: [], geminiKeys: [], claudeConfigs: [], codexConfigs: [], vertexConfigs: [], openaiProviders: [] };
-  const markup = renderToStaticMarkup(createElement(RequestEventsDetailsCard, { ...props, initialAnalyticsFilters: {
-    model: 'model-a', source: { value: 'auth:1', label: 'Credential A', identities: [{ source: 't:source-a', auth_index: '1' }] },
-  } }));
-  assert.equal((markup.match(/data-request-cost-status=/g) ?? []).length, 1);
-  assert.ok(markup.includes('Credential A'));
+  for (const tier of ['fast', 'std', undefined]) {
+    const markup = renderToStaticMarkup(createElement(RequestEventsDetailsCard, { ...props, initialAnalyticsFilters: {
+      model: 'model-a', tier, source: { value: 'auth:1', label: 'Credential A', identities: [{ source: 't:source-a', auth_index: '1' }] },
+    } }));
+    assert.equal((markup.match(/data-request-cost-status=/g) ?? []).length, tier ? 1 : 2);
+    assert.ok(markup.includes('Credential A'));
+    const rows = markup.slice(markup.indexOf('<tbody'));
+    assert.equal(rows.includes('>44<'), tier !== 'std');
+    assert.equal(rows.includes('>11<'), tier !== 'fast');
+  }
   const all = renderToStaticMarkup(createElement(RequestEventsDetailsCard, { ...props, initialAnalyticsFilters: {} }));
-  assert.equal((all.match(/data-request-cost-status=/g) ?? []).length, 3);
+  assert.equal((all.match(/data-request-cost-status=/g) ?? []).length, 4);
   assert.equal(JSON.parse(sessionStorageValues.get(storageKey)).model, 'old-model');
   sessionStorageValues.delete(storageKey);
+});
+
+test('transition drilldown keeps effort and excludes pure tiers from both conversion groups', async () => {
+  await i18n.changeLanguage('en');
+  const rows = [
+    ['priority', 'priority', 'high', 11],
+    ['default', 'default', 'high', 22],
+    ['priority', 'default', 'high', 33],
+    ['priority', 'default', 'medium', 44],
+    ['default', 'priority', 'high', 55],
+    ['priority', 'default', undefined, 66],
+  ].map(([request_service_tier, response_service_tier, reasoning_effort, total_tokens]) => ({
+    request_service_tier, response_service_tier, reasoning_effort,
+    timestamp: '2026-10-08T00:00:00Z', source: 'synthetic-source', auth_index: '1',
+    failed: false, tokens: { total_tokens },
+  }));
+  const props = { usage: { apis: { app: { models: { 'model-a': { details: rows } } } } },
+    loading: false, pageTimeRange: 'all', referenceNowMs: Date.parse('2026-10-08T01:00:00Z'),
+    priceProfile: pricingModule.createDefaultPriceProfileV3(), requestApiKeys: [], geminiKeys: [], claudeConfigs: [], codexConfigs: [], vertexConfigs: [], openaiProviders: [] };
+  for (const [tier, effort, tokens] of [
+    ['fast', 'high', 11], ['std', 'high', 22], ['fast_to_std', 'high', 33],
+    ['fast_to_std', 'medium', 44], ['std_to_fast', 'high', 55], ['fast_to_std', '', 66],
+  ]) {
+    const html = renderToStaticMarkup(createElement(RequestEventsDetailsCard, {
+      ...props, initialAnalyticsFilters: { tier, effort },
+    }));
+    assert.equal((html.match(/data-request-cost-status=/g) ?? []).length, 1, `${tier}/${effort}`);
+    assert.ok(html.slice(html.indexOf('<tbody')).includes(`>${tokens}<`));
+  }
 });

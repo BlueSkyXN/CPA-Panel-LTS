@@ -4617,11 +4617,12 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         )
 
     tier_select = card.get_by_label("Tier", exact=True)
-    for option_label, expected_rows in [("Fast", 1), ("Std", 4)]:
+    for option_label, expected_rows in [("Fast", 1), ("Std", 1), ("Fast → Std", 3), ("Std → Fast", 0)]:
         tier_select.click()
         page.get_by_role("option", name=option_label, exact=True).click()
         wait_for_row_count(expected_rows)
-        if any(option_label not in rows.nth(index).inner_text() for index in range(expected_rows)):
+        expected_label = option_label.replace(" ", "")
+        if any(expected_label not in rows.nth(index).inner_text().replace("\n", "").replace(" ", "") for index in range(expected_rows)):
             raise AssertionError(
                 f"Tier filter {option_label!r} returned the wrong request event row"
             )
