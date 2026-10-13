@@ -19,6 +19,8 @@ export const XAI_GROK_43_PRICING_SOURCE_URL = 'https://docs.x.ai/developers/mode
 export const XAI_GROK_43_CATALOG_AS_OF = '2026-10-10';
 export const XAI_GROK_47_PRICING_SOURCE_URL = 'https://docs.x.ai/developers/models/grok-4.7';
 export const XAI_GROK_47_CATALOG_AS_OF = '2026-10-10';
+export const XAI_GROK_47_FAST_PRICING_SOURCE_URL = 'https://docs.x.ai/developers/pricing';
+export const XAI_GROK_47_FAST_CATALOG_AS_OF = '2026-10-13';
 export const DOUBAO_PRICING_SOURCE_URL = 'https://www.volcengine.com/docs/82379/1099320';
 export const DOUBAO_CATALOG_AS_OF = '2026-10-10';
 export const ANTHROPIC_PRICING_SOURCE_URL =
@@ -467,6 +469,19 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
     },
     sourceUrl: XAI_GROK_47_PRICING_SOURCE_URL,
     asOf: XAI_GROK_47_CATALOG_AS_OF,
+  },
+  {
+    // Cursor / Grok Build product, not a public API model and not the grok-4.7
+    // Priority tier: short context is 2x, long context is 1.5x of grok-4.7.
+    canonicalModel: 'grok-4.7-fast',
+    aliases: [],
+    currency: 'USD',
+    standard: {
+      short: rateCard(4, 1, undefined, 12),
+      long: longCard(rateCard(6, 1.5, undefined, 18), XAI_LONG_CONTEXT_INPUT_TOKEN_THRESHOLD),
+    },
+    sourceUrl: XAI_GROK_47_FAST_PRICING_SOURCE_URL,
+    asOf: XAI_GROK_47_FAST_CATALOG_AS_OF,
   },
   {
     // Volcano Ark quotes CNY list prices; these USD rates are the confirmed

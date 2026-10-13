@@ -179,6 +179,21 @@ test('catalog is versioned, self-describing, exact, and keeps provider rate boun
   assert.equal(grok47.pricingNotesUrl, undefined);
   assert.equal(grok47.asOf, '2026-10-10');
 
+  const grok47Fast = pricing.findCatalogEntry('grok-4.7-fast');
+  assert.equal(grok47Fast.currency, 'USD');
+  assert.deepEqual(grok47Fast.aliases, []);
+  assert.deepEqual(grok47Fast.standard.short, { input: 4, cachedInput: 1, output: 12 });
+  assert.deepEqual(grok47Fast.standard.long, {
+    thresholdTokens: 200_000,
+    basis: 'inputTokens',
+    appliesTo: 'entireRequest',
+    rates: { input: 6, cachedInput: 1.5, output: 18 },
+  });
+  assert.equal(grok47Fast.fast, undefined);
+  assert.equal(grok47Fast.sourceUrl, 'https://docs.x.ai/developers/pricing');
+  assert.equal(grok47Fast.pricingNotesUrl, undefined);
+  assert.equal(grok47Fast.asOf, '2026-10-13');
+
   const doubao = pricing.findCatalogEntry('doubao-seed-2.1-pro');
   assert.equal(doubao.currency, 'USD');
   assert.deepEqual(doubao.aliases, []);
@@ -857,6 +872,7 @@ test('Grok 4.3 and Grok 4.7 switch the entire request to long-context rates at 2
   for (const [model, shortRates, longRates] of [
     ['grok-4.3', { input: 1.25, cachedInput: 0.2, output: 2.5 }, { input: 2.5, cachedInput: 0.4, output: 5 }],
     ['grok-4.7', { input: 2, cachedInput: 0.5, output: 6 }, { input: 4, cachedInput: 1, output: 12 }],
+    ['grok-4.7-fast', { input: 4, cachedInput: 1, output: 12 }, { input: 6, cachedInput: 1.5, output: 18 }],
   ]) {
     for (const [inputTokens, contextBand, rates] of [
       [199_999, 'short', shortRates],

@@ -2945,6 +2945,7 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
             "grok-4.6",
             "grok-4.3",
             "grok-4.7",
+            "grok-4.7-fast",
             "doubao-seed-2.1-pro",
             "claude-haiku-4-5-20251001",
             "claude-sonnet-4-5-20250929",
@@ -3289,6 +3290,14 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
                     "long": {"Input": "$4", "Cached input": "$1", "Output": "$12"},
                 },
                 "https://docs.x.ai/developers/models/grok-4.7",
+            ),
+            (
+                "grok-4.7-fast",
+                {
+                    "short": {"Input": "$4", "Cached input": "$1", "Output": "$12"},
+                    "long": {"Input": "$6", "Cached input": "$1.5", "Output": "$18"},
+                },
+                "https://docs.x.ai/developers/pricing",
             ),
         ]:
             grok_new = catalog.locator(
