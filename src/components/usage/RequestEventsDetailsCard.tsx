@@ -1973,7 +1973,8 @@ export function RequestEventsDetailsCard({
   // Reset to the first page on a new filter/snapshot without an effect-driven rerender.
   const [pagination, setPagination] = useState<{ rows: RequestEventRow[]; page: number } | null>(null);
   const filteredCount = querySession ? remote.data?.total ?? 0 : filteredRows.length;
-  const pageCount = Math.max(1, Math.ceil(filteredCount / REQUEST_EVENTS_PAGE_SIZE));
+  const pageSize = querySession ? remote.pageSize : REQUEST_EVENTS_PAGE_SIZE;
+  const pageCount = Math.max(1, Math.ceil(filteredCount / pageSize));
   const currentPage = querySession ? remote.page : pagination && pagination.rows === filteredRows ? Math.min(pagination.page, pageCount - 1) : 0;
   const renderedRows = useMemo(
     () => querySession ? filteredRows : filteredRows.slice(currentPage * REQUEST_EVENTS_PAGE_SIZE, (currentPage + 1) * REQUEST_EVENTS_PAGE_SIZE),
@@ -2110,18 +2111,8 @@ export function RequestEventsDetailsCard({
   };
 
   const [exportingRows, setExportingRows] = useState(false);
-  const collectExportRows = async () => {
-    if (!querySession) return filteredRows;
-    setExportingRows(true);
-    try { return buildRows(await remote.exportDetails()); }
-    catch (error) { useNotificationStore.getState().showNotification(`${t('notification.download_failed')}: ${error instanceof Error ? error.message : ''}`, 'error'); return null; }
-    finally { setExportingRows(false); }
-  };
-  const handleExportCsv = async () => {
-    if (!filteredRows.length) return;
-    const exportRows = await collectExportRows();
-    if (!exportRows) return;
-
+  const [exportFormat, setExportFormat] = useState<'csv' | 'json'>('csv');
+  const downloadCsv = (exportRows: RequestEventRow[]) => {
     const csvHeader = [
       'timestamp',
       'model',
@@ -2255,11 +2246,7 @@ export function RequestEventsDetailsCard({
     }
   };
 
-  const handleExportJson = async () => {
-    if (!filteredRows.length) return;
-    const exportRows = await collectExportRows();
-    if (!exportRows) return;
-
+  const downloadJson = (exportRows: RequestEventRow[]) => {
     const payload = exportRows.map((row) => ({
       timestamp: row.timestamp,
       model: row.model,
@@ -2317,6 +2304,29 @@ export function RequestEventsDetailsCard({
       filename: `usage-events-${fileTime}.json`,
       blob: new Blob([content], { type: 'application/json;charset=utf-8' }),
     });
+  };
+
+  const handleExportRows = async (format: 'csv' | 'json', resume = false) => {
+    if (exportingRows || !filteredRows.length) return;
+    setExportFormat(format);
+    setExportingRows(true);
+    try {
+      const details = querySession ? await remote.exportDetails(resume) : null;
+      if (querySession && details === null) return;
+      // 让“生成文件”状态先绘制，再执行同步转换；取消或查询变化后不下载旧结果。
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      if (!remote.isCurrentConnection() || (querySession && !remote.isExportCurrent())) return;
+      const exportRows = details ? buildRows(details) : filteredRows;
+      if (format === 'csv') downloadCsv(exportRows); else downloadJson(exportRows);
+      remote.finishExport();
+    } catch (error) {
+      remote.cancelExport();
+      useNotificationStore.getState().showNotification(
+        `${t('notification.download_failed')}: ${error instanceof Error ? error.message : ''}`, 'error'
+      );
+    } finally {
+      setExportingRows(false);
+    }
   };
 
   const numericFilterEditor = (
@@ -2485,18 +2495,18 @@ export function RequestEventsDetailsCard({
           <Button
             variant="secondary"
             size="sm"
-            onClick={handleExportCsv}
+            onClick={() => void handleExportRows('csv')}
             disabled={filteredRows.length === 0 || exportingRows || loading}
           >
-            {t('usage_stats.export_csv')}
+            {t('usage_stats.export_filtered_csv')}
           </Button>
           <Button
             variant="secondary"
             size="sm"
-            onClick={handleExportJson}
+            onClick={() => void handleExportRows('json')}
             disabled={filteredRows.length === 0 || exportingRows || loading}
           >
-            {t('usage_stats.export_json')}
+            {t('usage_stats.export_filtered_json')}
           </Button>
           <div
             ref={columnSettingsRef}
@@ -2806,12 +2816,40 @@ export function RequestEventsDetailsCard({
         </Sheet>
       )}
 
-      {remote.error && <div className={styles.errorBox} role="alert">{remote.error}</div>}
+      <div className={styles.requestEventsExportStatus}>
+        <span>{t('usage_stats.export_filtered_scope', { count: filteredCount })}</span>
+        {referenceNowMs > 0 && <span>{t('usage_stats.query_as_of', { time: new Date(referenceNowMs).toLocaleString(i18n.language) })}</span>}
+      </div>
+      {remote.exportState.status !== 'idle' && (
+        <div className={styles.requestEventsExportStatus} role={remote.exportState.status === 'error' ? 'alert' : 'status'} aria-live="polite">
+          <span>{t('usage_stats.export_progress', { loaded: remote.exportState.loaded, total: remote.exportState.total ?? filteredCount })}</span>
+          {remote.exportState.retry > 0 && <span>{t('usage_stats.export_retrying', { attempt: remote.exportState.retry })}</span>}
+          {remote.exportState.status === 'generating' && <span>{t('usage_stats.export_generating')}</span>}
+          {remote.exportState.status === 'complete' && <span>{t('usage_stats.export_success')}</span>}
+          {remote.exportState.status === 'cancelled' && <span>{t('usage_stats.export_cancelled')}</span>}
+          {remote.exportState.status === 'error' && <span>{t(`usage_stats.export_error_${remote.exportState.failure}`)}</span>}
+          {['loading', 'generating'].includes(remote.exportState.status) && (
+            <Button size="sm" variant="secondary" onClick={remote.cancelExport}>{t('common.cancel')}</Button>
+          )}
+          {remote.exportState.canResume && (
+            <Button size="sm" variant="secondary" disabled={exportingRows || loading} onClick={() => void handleExportRows(exportFormat, true)}>
+              {t('usage_stats.export_resume')}
+            </Button>
+          )}
+        </div>
+      )}
+      {remote.error && (
+        <div className={`${styles.errorBox} ${styles.requestEventsExportStatus}`} role="alert">
+          <span>{t('usage_stats.page_load_failed', { page: remote.requestedPage + 1 })} {remote.error}</span>
+          <Button size="sm" variant="secondary" onClick={remote.retry}>{t('usage_stats.page_retry')}</Button>
+        </div>
+      )}
+      {remote.loading && remote.data && <div className={styles.hint} role="status">{t('usage_stats.page_loading', { page: remote.requestedPage + 1 })}</div>}
       {performanceSummaryGrid}
 
       {loading && timeScopedRows.length === 0 ? (
         <div className={styles.hint}>{t('common.loading')}</div>
-      ) : timeScopedRows.length === 0 ? (
+      ) : remote.error && timeScopedRows.length === 0 ? null : timeScopedRows.length === 0 ? (
         <EmptyState
           title={t('usage_stats.request_events_empty_title')}
           description={t('usage_stats.request_events_empty_desc')}
@@ -2839,6 +2877,7 @@ export function RequestEventsDetailsCard({
             role="region"
             tabIndex={0}
             aria-label={t('usage_stats.request_events_table_region')}
+            aria-busy={remote.loading}
           >
             <table className={`${styles.table} ${styles.requestEventsTable}`}>
               <thead>
@@ -3406,14 +3445,14 @@ export function RequestEventsDetailsCard({
           {pageCount > 1 && (
             <nav className={styles.requestEventsPagination} aria-label={t('usage_stats.request_events_pagination')}>
               <span>{t('usage_stats.request_events_page_status', {
-                start: currentPage * REQUEST_EVENTS_PAGE_SIZE + 1,
-                end: Math.min((currentPage + 1) * REQUEST_EVENTS_PAGE_SIZE, filteredCount),
+                start: currentPage * pageSize + 1,
+                end: Math.min((currentPage + 1) * pageSize, filteredCount),
                 total: filteredCount,
               })}</span>
-              <Button variant="secondary" size="sm" disabled={currentPage === 0} onClick={() => changePage(currentPage - 1)}>
+              <Button variant="secondary" size="sm" disabled={remote.loading || currentPage === 0} onClick={() => changePage(currentPage - 1)}>
                 {t('usage_stats.request_events_previous_page')}
               </Button>
-              <Button variant="secondary" size="sm" disabled={currentPage + 1 >= pageCount} onClick={() => changePage(currentPage + 1)}>
+              <Button variant="secondary" size="sm" disabled={remote.loading || currentPage + 1 >= pageCount} onClick={() => changePage(currentPage + 1)}>
                 {t('usage_stats.request_events_next_page')}
               </Button>
             </nav>

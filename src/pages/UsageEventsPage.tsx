@@ -84,8 +84,8 @@ export function UsageEventsPage() {
           <Button variant="secondary" size="sm" onClick={() => navigate('/usage/pricing')}>
             {t('usage_stats.pricing_title')}
           </Button>
-          <Button variant="secondary" size="sm" onClick={handleExport} loading={exporting} disabled={loading || importing}>
-            {t('usage_stats.export')}
+          <Button variant="secondary" size="sm" onClick={handleExport} title={t('usage_stats.export_backup_hint')} loading={exporting} disabled={loading || importing}>
+            {t('usage_stats.export_backup')}
           </Button>
           <Button variant="secondary" size="sm" onClick={handleImport} loading={importing} disabled={loading || exporting}>
             {t('usage_stats.import')}
