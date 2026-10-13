@@ -3,6 +3,7 @@ import { useAuthStore } from '@/stores/useAuthStore';
 import { usageQueryApi } from '@/services/api/usageQuery';
 import type {
   UsageQueryDetails,
+  UsageQueryPage,
   UsageQueryFilter,
   UsageQueryItem,
   UsageQueryOptions,
@@ -158,15 +159,22 @@ export function useUsageQueryDetails(
   const [exportState, setExportState] = useState<ExportState>(emptyExport);
   const activeExport = useRef<{
     key: string; job: UsageDetailsExport<Blob>; controller: AbortController | null;
+    fetchPage: (request: UsageQueryRequest, signal?: AbortSignal) => Promise<UsageQueryPage>;
   } | null>(null);
-  useEffect(() => () => {
-    activeExport.current?.controller?.abort();
-    activeExport.current = null;
+  const currentQueryKey = useRef<string | null>(null);
+  useEffect(() => {
+    currentQueryKey.current = key;
+    return () => {
+      currentQueryKey.current = null;
+      activeExport.current?.controller?.abort();
+      activeExport.current = null;
+    };
   }, [key]);
   const isCurrentConnection = () => {
     const auth = useAuthStore.getState();
     return JSON.stringify([auth.apiBase, auth.managementKey]) === scope;
   };
+  const isCurrentQuery = () => currentQueryKey.current === key && isCurrentConnection();
   const isExportCurrent = () =>
     activeExport.current?.key === key &&
     activeExport.current.controller !== null &&
@@ -188,18 +196,25 @@ export function useUsageQueryDetails(
   ): Promise<Blob[] | null> => {
     if (!request || appliedFilter === null) return [];
     if (activeExport.current?.controller) return null;
+    const useBulkExport = session?.export_version === 1 && (session.max_export_page_size ?? 0) > 0;
+    const fetchPage = resume && activeExport.current?.key === key
+      ? activeExport.current.fetchPage
+      : useBulkExport ? usageQueryApi.exportPage : usageQueryApi.details;
+    const exportLimit = useBulkExport
+      ? Math.min(1000, session!.max_export_page_size!)
+      : Math.max(1, Math.min(200, session?.max_page_size || 200));
     const job = resume && activeExport.current?.key === key
       ? activeExport.current.job
       : new UsageDetailsExport(
-          { ...request, limit: Math.max(1, Math.min(200, session?.max_page_size || 200)) },
+          { ...request, limit: exportLimit },
           (items, first) => new Blob([convert(items.map(queryItemDetail), first)])
         );
     const controller = new AbortController();
-    const active = { key, job, controller };
+    const active = { key, job, controller, fetchPage };
     activeExport.current = active;
     const isCurrent = () => activeExport.current === active && isCurrentConnection();
     try {
-      const items = await job.run(usageQueryApi.details, controller.signal, isCurrent, (progress) => {
+      const items = await job.run(fetchPage, controller.signal, isCurrent, (progress) => {
         if (isCurrent() && !controller.signal.aborted)
           setExportState({ ...progress, key, status: 'loading', canResume: false });
       });
@@ -210,7 +225,7 @@ export function useUsageQueryDetails(
       if (!isCurrent() || controller.signal.aborted) return null;
       const canResume = canRetryUsageExport(error);
       setExportState({ ...job.progress, key, status: 'error', failure: usageExportFailure(error), canResume });
-      activeExport.current = canResume ? { key, job, controller: null } : null;
+      activeExport.current = canResume ? { ...active, controller: null } : null;
       return null;
     }
   };
@@ -230,5 +245,6 @@ export function useUsageQueryDetails(
     finishExport,
     isExportCurrent,
     isCurrentConnection,
+    isCurrentQuery,
   };
 }

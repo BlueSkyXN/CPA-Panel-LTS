@@ -2,6 +2,7 @@
 """使用本地合成 Core 验证导出恢复、取消、完整性与翻页；先运行 npm run build。"""
 from __future__ import annotations
 
+import argparse
 import csv
 import importlib.util
 import io
@@ -49,6 +50,7 @@ class ExportState(mock.MockCoreState):
         } for i in range(450)]
         self.scenario = "normal"
         self.calls = []
+        self.paths = []
         self.failures = 0
         self.pending = threading.Event()
         self.release = threading.Event()
@@ -56,6 +58,7 @@ class ExportState(mock.MockCoreState):
     def reset(self, scenario):
         self.scenario = scenario
         self.calls = []
+        self.paths = []
         self.failures = 0
         self.pending.clear()
         self.release.clear()
@@ -79,10 +82,11 @@ class ExportHandler(mock.MockCoreHandler):
         if not path.startswith("/v0/management/usage/query/"):
             return super().do_POST()
         request = json.loads(self._read_body_text())
-        if not path.endswith("/details"):
+        if not path.endswith(("/details", "/export")):
             self._send_json({**self.state.session, "totals": metrics(450), "groups": {}})
             return
         self.state.calls.append(request)
+        self.state.paths.append(path)
         limit = request.get("limit", 100)
         offset = int(request.get("cursor") or 0)
         scenario = self.state.scenario
@@ -96,6 +100,9 @@ class ExportHandler(mock.MockCoreHandler):
             if not self.state.release.wait(15):
                 self._send_json({"error": "synthetic timeout"}, status=504)
                 return
+        if scenario == "missing" and limit == 200:
+            self._send_json({"error": "synthetic missing endpoint"}, status=404)
+            return
         if scenario == "expired" and limit == 200:
             self._send_json({"error": "synthetic expired snapshot"}, status=409)
             return
@@ -115,6 +122,9 @@ class ExportHandler(mock.MockCoreHandler):
                 response["bound"] = "different-synthetic-bound"
             elif scenario == "short":
                 response["next_cursor"] = ""
+        if path.endswith("/export"):
+            response.pop("metrics", None)
+            response.pop("options", None)
         self._send_json(response)
 
 
@@ -207,12 +217,16 @@ def run(app_url, api_url, state):
             assert any("/usage/export" in entry for entry in state.requests)
             checks.append("filtered CSV includes all 250 matching records; full backup keeps its separate API")
 
-            for scenario in ["cursor", "bound", "short", "expired"]:
+            for scenario in ["cursor", "bound", "short", "expired", "missing"]:
                 workspace(scenario)
                 count = len(downloads)
                 export()
                 message = "The query snapshot expired." if scenario == "expired" else "Export stopped because records, count or cursor were inconsistent."
+                if scenario == "missing":
+                    message = "Export failed. No file was downloaded."
                 page.get_by_text(message, exact=False).wait_for()
+                expected_path = "/export" if state.session.get("export_version") == 1 else "/details"
+                assert all(path.endswith(expected_path) for path in state.paths), "failure switched export routes"
                 assert len(downloads) == count
                 expect(page.get_by_role("button", name="Continue export", exact=True)).to_have_count(0)
             checks.append("repeated cursor, changed bound, incomplete count and expired snapshot prevent download")
@@ -259,13 +273,18 @@ def run(app_url, api_url, state):
         finally:
             state.release.set()
             browser.close()
-    result = {"passed": checks, "page_errors": errors}
+    result = {"export_version": state.session.get("export_version"), "passed": checks, "page_errors": errors}
     (artifacts / "browser-results.json").write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n")
     print(json.dumps(result, indent=2, ensure_ascii=False))
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--export-capability", action="store_true")
+    args = parser.parse_args()
     state = ExportState()
+    if args.export_capability:
+        state.session.update(export_version=1, max_export_page_size=200)
     app_port, api_port = mock.find_free_port(), mock.find_free_port()
     with mock.run_server(mock.StaticPanelHandler, app_port), mock.run_server(ExportHandler, api_port, state):
         run(f"http://127.0.0.1:{app_port}/management.html", f"http://127.0.0.1:{api_port}", state)

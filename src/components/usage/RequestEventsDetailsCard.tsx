@@ -2339,12 +2339,12 @@ export function RequestEventsDetailsCard({
         parts = [];
         for (let offset = 0; offset < filteredRows.length; offset += 200) {
           await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
-          if (!remote.isCurrentConnection()) return;
+          if (!remote.isCurrentQuery()) return;
           parts.push(new Blob([serialize(filteredRows.slice(offset, offset + 200), offset === 0)]));
         }
       }
       await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
-      if (!remote.isCurrentConnection() || (querySession && !remote.isExportCurrent())) return;
+      if (!remote.isCurrentQuery() || (querySession && !remote.isExportCurrent())) return;
       const fileTime = new Date().toISOString().replace(/[:.]/g, '-');
       downloadBlob({
         filename: `usage-events-${fileTime}.${format}`,

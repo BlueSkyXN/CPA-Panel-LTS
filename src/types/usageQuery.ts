@@ -7,6 +7,8 @@ export interface UsageQuerySession {
   now_ms: number;
   models: string[];
   max_page_size: number;
+  export_version?: number;
+  max_export_page_size?: number;
   analytics_version?: number;
   max_analytics_rows?: number;
 }
@@ -118,12 +120,14 @@ export interface UsageQueryOptions {
   efforts: string[];
   metrics: UsageQueryMetrics;
 }
-export interface UsageQueryDetails {
+export interface UsageQueryPage {
   version: 1;
   bound: string;
   items: UsageQueryItem[];
   total: number;
   next_cursor?: string;
+}
+export interface UsageQueryDetails extends UsageQueryPage {
   metrics: UsageQueryMetrics;
   options?: UsageQueryOptions;
 }

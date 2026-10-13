@@ -1,4 +1,4 @@
-import type { UsageQueryDetails, UsageQueryItem, UsageQueryRequest } from '@/types/usageQuery';
+import type { UsageQueryPage, UsageQueryItem, UsageQueryRequest } from '@/types/usageQuery';
 
 export type UsageExportFailure = 'failed' | 'expired' | 'incomplete';
 export interface UsageExportProgress {
@@ -64,7 +64,7 @@ export class UsageDetailsExport<T> {
   }
 
   async run(
-    fetchPage: (request: UsageQueryRequest, signal: AbortSignal) => Promise<UsageQueryDetails>,
+    fetchPage: (request: UsageQueryRequest, signal: AbortSignal) => Promise<UsageQueryPage>,
     signal: AbortSignal,
     isCurrent: () => boolean,
     onProgress: (progress: UsageExportProgress) => void,
@@ -73,7 +73,7 @@ export class UsageDetailsExport<T> {
     checkActive(signal, isCurrent);
     onProgress(this.progress);
     while (!this.complete) {
-      let data: UsageQueryDetails;
+      let data: UsageQueryPage;
       for (let attempt = 0; ; attempt += 1) {
         checkActive(signal, isCurrent);
         try {
