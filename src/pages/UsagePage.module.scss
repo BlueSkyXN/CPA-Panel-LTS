@@ -1533,6 +1533,28 @@
   font-weight: 840;
 }
 
+:global([data-theme='aurora-nebula']) .requestEventsTable {
+  td.requestEventsCostCell[data-request-cost-tone='micro'] {
+    color: #5eead4;
+  }
+
+  td.requestEventsCostCell[data-request-cost-tone='low'] {
+    color: #93c5fd;
+  }
+
+  td.requestEventsCostCell[data-request-cost-tone='medium'] {
+    color: #c4b5fd;
+  }
+
+  td.requestEventsCostCell[data-request-cost-tone='elevated'] {
+    color: #fde047;
+  }
+
+  td.requestEventsCostCell[data-request-cost-tone='high'] {
+    color: #fdba74;
+  }
+}
+
 .requestEventsTokenHeaderHint {
   cursor: help;
   text-decoration: underline dotted;
