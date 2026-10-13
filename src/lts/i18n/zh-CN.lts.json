@@ -31,7 +31,9 @@
     "empty_window": "所选时间范围和筛选条件下没有请求记录。",
     "no_measurements": "没有可用于此指标的成功请求测量数据。",
     "basic_settings": "基本设置",
-    "rules_section": "流控规则"
+    "rules_section": "流控规则",
+    "scope_details": "统计范围与口径",
+    "flow_scope_short": "受控调用 · 本次观察"
   },
   "usage_stats": {
     "execution_blue_std": "BLUE",
