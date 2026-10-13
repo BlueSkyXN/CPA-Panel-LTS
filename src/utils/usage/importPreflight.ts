@@ -1,3 +1,4 @@
+import { normalizeTokenAccounting, tokenAccountingMatches } from './tokenAccounting';
 import { normalizeOutputTiming } from './performance';
 export type UsageImportPreflightIssue =
   | 'usage_version_unsupported'
@@ -219,6 +220,11 @@ const validateTimingMetadata = (
   detail: UnknownRecord,
   version: 1 | 2 | 3
 ): UsageImportPreflightIssue | null => {
+  if (hasOwn(detail, 'token_breakdown')) {
+    const issue = version === 1 ? 'usage_v1_token_contract_invalid' : version === 2 ? 'usage_v2_token_contract_invalid' : 'usage_v3_token_contract_invalid';
+    const b = normalizeTokenAccounting(detail.token_breakdown);
+    if (version !== 3 || !b || !tokenAccountingMatches(b, detail.tokens)) return issue;
+  }
   if (hasOwn(detail, 'output_timing')) {
     if (version !== 3) return version === 1 ? 'usage_v1_timing_semantics_ambiguous' : 'usage_v2_timing_semantics_ambiguous';
     const value = normalizeOutputTiming(detail.output_timing);

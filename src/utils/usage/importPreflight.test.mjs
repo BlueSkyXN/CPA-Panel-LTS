@@ -829,3 +829,15 @@ test('validates optional output window metadata without accepting it as legacy t
   }
   assert.deepEqual(analyzeUsageImport(v2Payload({ ...row, timing_version: undefined })).issues, ['usage_v2_timing_semantics_ambiguous']);
 });
+
+test('validates canonical output accounting and raw-counter correspondence', () => {
+  const token_breakdown = { schema_version: 2, quality: 'complete', total_tokens: 150, unclassified_tokens: 0, input: { total_tokens: 10, uncached_tokens: 10, cache_read_tokens: 0, cache_write_tokens: 0 }, output: { total_tokens: 140, non_reasoning_tokens: 100, reasoning_tokens: 40 } };
+  const row = detail(v2Tokens({ input_tokens: 10, output_tokens: 100, reasoning_tokens: 40, cached_tokens: 0, cache_read_tokens: 0, total_tokens: 150 }), { token_breakdown });
+  assert.equal(analyzeUsageImport(v3Payload(row)).valid, true);
+  for (const b of [null, {}, { ...token_breakdown, quality: 'guess' }, { ...token_breakdown, output: { ...token_breakdown.output, total_tokens: 141 } }]) {
+    assert.deepEqual(analyzeUsageImport(v3Payload({ ...row, token_breakdown: b })).issues, ['usage_v3_token_contract_invalid']);
+  }
+  assert.deepEqual(analyzeUsageImport(v3Payload({ ...row, tokens: { ...row.tokens, output_tokens: 60 } })).issues, ['usage_v3_token_contract_invalid']);
+  assert.deepEqual(analyzeUsageImport(v3Payload({ ...row, tokens: { ...row.tokens, input_tokens: 20 } })).issues, ['usage_v3_token_contract_invalid']);
+  assert.deepEqual(analyzeUsageImport(v2Payload(row)).issues, ['usage_v2_token_contract_invalid']);
+});

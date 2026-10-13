@@ -10,6 +10,7 @@
 
 import { buildAnalyticsBuckets, type AnalyticsGrain, type AnalyticsTimeWindow } from './analyticsBuckets';
 import { calculateDecodeDurationMs } from './performance';
+import { resolvePerformanceTokens } from './tokenAccounting';
 
 export interface ThroughputTrendPoint {
   timestampMs: number;
@@ -58,13 +59,14 @@ const toRow = (detail: unknown): ThroughputRow | null => {
   const timestampMs = readTimestampMs(record);
   const latencyMs = readNumber(record.latency_ms);
   if (timestampMs === null || latencyMs === null || latencyMs < 0) return null;
-  const tokens = isRecord(record.tokens) ? record.tokens : {};
+  const tokens = resolvePerformanceTokens(record.tokens, record.token_breakdown);
+  if (tokens.outputTokens === null || tokens.reasoningTokens === null) return null;
   const ttfbMs = readNumber(record.ttfb_ms);
   return {
     timestampMs,
     outputTiming: record.output_timing,
-    outputTokens: Math.max(readNumber(tokens.output_tokens) ?? 0, 0),
-    reasoningTokens: Math.max(readNumber(tokens.reasoning_tokens) ?? 0, 0),
+    outputTokens: tokens.outputTokens,
+    reasoningTokens: tokens.reasoningTokens,
     latencyMs,
     // 显式零测量保留为 0；字段缺失或非法保持 null，两者不能混为一谈。
     ttfbMs: ttfbMs !== null && ttfbMs >= 0 ? ttfbMs : null,

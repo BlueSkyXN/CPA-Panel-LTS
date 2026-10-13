@@ -34,6 +34,7 @@ import {
   calculateDecodeDurationMs,
   calculateFirstContentMs,
   calculateReasoningRatio,
+  resolvePerformanceTokens,
   calculateOutputTps,
   calculateVisibleAverageTps,
   collectUsageDetails,
@@ -352,7 +353,10 @@ type RequestEventRow = {
   inputTokens: number;
   nonCacheReadInputTokens: number;
   outputTokens: number;
-  displayedOutputTokens: number;
+  displayedOutputTokens: number | null;
+  performanceOutputTokens: number | null;
+  performanceReasoningTokens: number | null;
+  tokenBreakdown: UsageDetail['token_breakdown'];
   reasoningTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
@@ -380,7 +384,7 @@ const getRequestEventNumericValue = (
     case 'totalOutputTokens':
       return row.outputTokens;
     case 'displayedOutputTokens':
-      return row.displayedOutputTokens;
+      return row.displayedOutputTokens ?? Number.NaN;
     case 'reasoningTokens':
       return row.reasoningTokens;
     case 'cacheReadTokens':
@@ -1309,7 +1313,10 @@ export function RequestEventsDetailsCard({
       const reasoningTokens = Math.max(toNumber(detail.tokens?.reasoning_tokens), 0);
       const { cacheReadTokens, cacheWriteTokens } = getUsageCacheTokenCounts(detail.tokens);
       const nonCacheReadInputTokens = getUsageNonCacheReadInputTokenCount(detail.tokens);
-      const displayedOutputTokens = Math.max(outputTokens - reasoningTokens, 0);
+      const performanceTokens = resolvePerformanceTokens(detail.tokens, detail.token_breakdown);
+      const performanceOutputTokens = performanceTokens.outputTokens;
+      const performanceReasoningTokens = performanceTokens.reasoningTokens;
+      const displayedOutputTokens = performanceTokens.nonReasoningTokens;
       const cacheRate = resolveCacheRate(inputTokens, cacheReadTokens);
       const totalTokens = Math.max(
         toNumber(detail.tokens?.total_tokens),
@@ -1323,14 +1330,14 @@ export function RequestEventsDetailsCard({
       const firstContentMs = calculateFirstContentMs(ttftMs, ttfaMs);
       const outputTiming = detail.output_timing;
       const decodeDurationMs = calculateDecodeDurationMs(latencyMs, ttfbMs, outputTiming);
-      const outputTps = calculateOutputTps(outputTokens, latencyMs, ttfbMs, outputTiming);
-      const averageTps = calculateAverageTps(outputTokens, latencyMs);
+      const outputTps = calculateOutputTps(performanceOutputTokens, latencyMs, ttfbMs, outputTiming);
+      const averageTps = calculateAverageTps(performanceOutputTokens, latencyMs);
       const visibleAverageTps = calculateVisibleAverageTps(
-        outputTokens,
-        reasoningTokens,
+        performanceOutputTokens,
+        performanceReasoningTokens,
         latencyMs
       );
-      const reasoningRatio = calculateReasoningRatio(outputTokens, reasoningTokens);
+      const reasoningRatio = calculateReasoningRatio(performanceOutputTokens, performanceReasoningTokens);
       const costEstimate = calculateCostEstimate(detail, priceProfile);
       const longContext = costEstimate.contextBand === 'long';
       const costAmount = costEstimate.status === 'priced' ? costEstimate.amount : null;
@@ -1387,6 +1394,9 @@ export function RequestEventsDetailsCard({
         nonCacheReadInputTokens,
         outputTokens,
         displayedOutputTokens,
+        performanceOutputTokens,
+        performanceReasoningTokens,
+        tokenBreakdown: detail.token_breakdown,
         reasoningTokens,
         cacheReadTokens,
         cacheWriteTokens,
@@ -1997,8 +2007,8 @@ export function RequestEventsDetailsCard({
       }
       return summarizeUsagePerformance(
         filteredRows.map((row) => ({
-          outputTokens: row.outputTokens,
-          reasoningTokens: row.reasoningTokens,
+          outputTokens: row.performanceOutputTokens,
+          reasoningTokens: row.performanceReasoningTokens,
           latencyMs: row.latencyMs,
           ttfbMs: row.ttfbMs,
           outputTiming: row.outputTiming,
@@ -2166,6 +2176,8 @@ export function RequestEventsDetailsCard({
         'input_tokens',
       'non_cache_read_input_tokens',
       'output_tokens',
+      'tps_output_tokens',
+      'non_reasoning_output_tokens',
       'reasoning_tokens',
       'cached_tokens',
       'cache_read_tokens',
@@ -2217,6 +2229,8 @@ export function RequestEventsDetailsCard({
         row.inputTokens,
         row.nonCacheReadInputTokens,
         row.outputTokens,
+        row.performanceOutputTokens ?? '',
+        row.displayedOutputTokens ?? '',
         row.reasoningTokens,
         row.cacheReadTokens,
         row.cacheReadTokens,
@@ -2297,6 +2311,7 @@ export function RequestEventsDetailsCard({
       ...(hasLatencyData && row.latencyMs !== null ? { latency_ms: row.latencyMs } : {}),
       ...(hasTTFBData && row.ttfbMs !== null ? { ttfb_ms: row.ttfbMs } : {}),
       ...(row.outputTiming ? { output_timing: row.outputTiming } : {}),
+      ...(row.tokenBreakdown ? { token_breakdown: row.tokenBreakdown } : {}),
       first_content_ms: row.firstContentMs,
       timing_version: row.timingVersion,
       ttft_ms: row.ttftMs,
@@ -2311,6 +2326,8 @@ export function RequestEventsDetailsCard({
         input_tokens: row.inputTokens,
         non_cache_read_input_tokens: row.nonCacheReadInputTokens,
         output_tokens: row.outputTokens,
+        tps_output_tokens: row.performanceOutputTokens,
+        non_reasoning_output_tokens: row.displayedOutputTokens,
         reasoning_tokens: row.reasoningTokens,
         cached_tokens: row.cacheReadTokens,
         cache_read_tokens: row.cacheReadTokens,
@@ -3245,7 +3262,7 @@ export function RequestEventsDetailsCard({
                           title={
                             row.outputTps === null
                               ? outputTpsHint
-                              : `${outputTpsHint} (${formatDurationMs(row.decodeDurationMs)})`
+                              : `${outputTpsHint} (${row.performanceOutputTokens} tokens / ${formatDurationMs(row.decodeDurationMs)})`
                           }
                         >
                           {formatPerSecondValue(row.outputTps)}
@@ -3323,7 +3340,7 @@ export function RequestEventsDetailsCard({
                       {columnVisibility.displayedOutputTokens && (
                         <td className={styles.requestEventsTokenCell}>
                           <span className={styles.requestEventsTokenValue}>
-                            {row.displayedOutputTokens.toLocaleString()}
+                            {row.displayedOutputTokens === null ? '--' : row.displayedOutputTokens.toLocaleString()}
                           </span>
                         </td>
                       )}
