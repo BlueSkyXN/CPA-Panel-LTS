@@ -1,17 +1,10 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import ts from 'typescript';
+import * as esbuild from 'esbuild';
 
 const importTypeScriptModule = async (url) => {
-  const source = await readFile(url, 'utf8');
-  const compiled = ts.transpileModule(source, {
-    compilerOptions: {
-      module: ts.ModuleKind.ES2022,
-      target: ts.ScriptTarget.ES2020,
-    },
-  }).outputText;
-  return import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
+  const compiled = await esbuild.build({ entryPoints: [url.pathname], bundle: true, format: 'esm', platform: 'node', write: false, target: 'es2020' });
+  return import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].contents).toString('base64')}`);
 };
 
 const { analyzeUsageImport } = await importTypeScriptModule(
@@ -825,4 +818,14 @@ test('accepts Core request size fields and rejects only types Core cannot decode
       'usage_shape_invalid',
     ]);
   }
+});
+
+test('validates optional output window metadata without accepting it as legacy timing', () => {
+  const measured = { version: 1, streamed: true, duration_ms: 200 };
+  const row = detail(v2Tokens(), { latency_ms: 1000, ttfb_ms: 100, timing_version: 1, output_timing: measured });
+  assert.equal(analyzeUsageImport(v3Payload(row)).valid, true);
+  for (const output_timing of [null, {}, { version: 1, streamed: false, duration_ms: 0 }, { version: 1, streamed: true, duration_ms: 901 }, { version: 1, streamed: true, duration_ms: 1.5 }]) {
+    assert.deepEqual(analyzeUsageImport(v3Payload({ ...row, output_timing })).issues, ['usage_v3_timing_contract_invalid']);
+  }
+  assert.deepEqual(analyzeUsageImport(v2Payload({ ...row, timing_version: undefined })).issues, ['usage_v2_timing_semantics_ambiguous']);
 });

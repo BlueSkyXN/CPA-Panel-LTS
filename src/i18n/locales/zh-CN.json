@@ -1568,7 +1568,7 @@
     "request_events_ttfb": "上游首包（TTFB）",
     "request_events_ttfb_hint": "Core 字段 {{field}}（{{unit}}）：从本次上游尝试开始，到首次读到响应体字节或消息内容。不等于 HTTP 响应头、首文本或客户端收到数据的时间。",
     "request_events_output_tps": "输出 TPS（估算）",
-    "request_events_output_tps_hint": "估算输出 TPS = 总输出 Tokens /（总耗时 − 上游首包时间）。两个计时器的起点可能不同，不代表精确模型解码速度；上游报告的总输出可能包含推理 Tokens。",
+    "request_events_output_tps_hint": "估算输出 TPS 优先使用输出 Tokens / 上游首包至末包的观测时长；无测量元数据的历史记录沿用总耗时减首包时间。整包返回或窗口无法测量时显示 --。该值包含传输影响，不代表模型内部解码速度。",
     "request_events_average_tps": "平均 TPS",
     "request_events_average_tps_hint": "平均 TPS = 总输出 Tokens / Core reporter 记录的耗时；不是完整客户端端到端速率，也不是纯解码速率。",
     "request_events_first_content": "首文本（含推理）",

@@ -1,3 +1,4 @@
+import { normalizeOutputTiming } from './performance';
 export type UsageImportPreflightIssue =
   | 'usage_version_unsupported'
   | 'usage_shape_invalid'
@@ -218,6 +219,16 @@ const validateTimingMetadata = (
   detail: UnknownRecord,
   version: 1 | 2 | 3
 ): UsageImportPreflightIssue | null => {
+  if (hasOwn(detail, 'output_timing')) {
+    if (version !== 3) return version === 1 ? 'usage_v1_timing_semantics_ambiguous' : 'usage_v2_timing_semantics_ambiguous';
+    const value = normalizeOutputTiming(detail.output_timing);
+    if (!value) return 'usage_v3_timing_contract_invalid';
+    if (value.duration_ms !== undefined) {
+      const latency = readNonNegativeSafeInteger(detail, 'latency_ms');
+      const first = readNonNegativeSafeInteger(detail, 'ttfb_ms');
+      if (latency === null || first === null || first > latency || value.duration_ms > latency - first) return 'usage_v3_timing_contract_invalid';
+    }
+  }
   const hasTimingVersion = hasOwn(detail, 'timing_version');
   const hasTTFB = hasOwn(detail, 'ttfb_ms');
   const hasTTFT = hasOwn(detail, 'ttft_ms');
