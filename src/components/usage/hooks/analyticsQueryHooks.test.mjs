@@ -22,7 +22,10 @@ async function harness(file, respond) {
       }
     },
     useAuthStore: Object.assign((selector) => selector(auth), { getState: () => auth }),
-    usageQueryApi: { async details(request, signal) { requests.push({ request, signal }); return respond(request, signal); } },
+    usageQueryApi: {
+      async details(request, signal) { requests.push({ request, signal, path: 'details' }); return respond(request, signal); },
+      async exportPage(request, signal) { requests.push({ request, signal, path: 'export' }); return respond(request, signal); },
+    },
   };
   const exportSource = await readFile(new URL('./usageDetailsExport.ts', import.meta.url), 'utf8');
   const exportCode = ts.transpileModule(exportSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
@@ -365,4 +368,53 @@ test('converted export batches are atomic and resume without reprocessing comple
   const cancelled = new UsageDetailsExport({ bound: 'synthetic' }, () => { controller.abort(); return 'discard'; });
   await assert.rejects(runExport(cancelled, async () => page(['1'], 1), controller), { name: 'AbortError' });
   assert.equal(cancelled.progress.loaded, 0);
+});
+
+
+test('only advertised export v1 selects the bulk route and limit; failure never changes routes', async () => {
+  for (const version of [undefined, 1, 2]) {
+    const h = await harness('./useUsageQueryDetails.ts', async (q) => {
+      if (q.include_options) return page(['1'], 1, '', { options });
+      return page(['1'], 1);
+    });
+    const capabilities = { ...session, export_version: version, max_export_page_size: 1000 };
+    const filter = () => ({});
+    try {
+      h.render(capabilities, {}, filter); await tick();
+      const result = h.render(capabilities, {}, filter);
+      await result.exportDetails(exportText);
+      assert.equal(h.requests.at(-1).path, version === 1 ? 'export' : 'details');
+      assert.equal(h.requests.at(-1).request.limit, version === 1 ? 1000 : 100);
+    } finally { h.close(); }
+  }
+  const h = await harness('./useUsageQueryDetails.ts', async (q) => {
+    if (q.include_options) return page(['1'], 1, '', { options });
+    throw Object.assign(new Error('missing advertised endpoint'), { status: 404 });
+  });
+  try {
+    const capabilities = { ...session, export_version: 1, max_export_page_size: 1000 };
+    const filter = () => ({});
+    h.render(capabilities, {}, filter); await tick();
+    assert.equal(await h.render(capabilities, {}, filter).exportDetails(exportText), null);
+    assert.deepEqual(h.requests.map((call) => call.path), ['details', 'export']);
+  } finally { h.close(); }
+});
+
+
+test('legacy file generation guard expires on filter changes, connection changes and unmount', async () => {
+  const h = await harness('./useUsageQueryDetails.ts', async () => { throw new Error('legacy must not fetch'); });
+  try {
+    const previous = h.render(null, {}, () => ({}));
+    assert.equal(previous.isCurrentQuery(), true);
+    const current = h.render(null, {}, () => ({ model: 'changed' }));
+    assert.equal(previous.isCurrentQuery(), false);
+    assert.equal(current.isCurrentQuery(), true);
+    h.auth.apiBase = 'changed-instance';
+    assert.equal(current.isCurrentQuery(), false);
+    const latest = h.render(null, {}, () => ({}));
+    assert.equal(latest.isCurrentQuery(), true);
+    h.close();
+    assert.equal(latest.isCurrentQuery(), false);
+    assert.equal(h.requests.length, 0);
+  } finally { h.close(); }
 });

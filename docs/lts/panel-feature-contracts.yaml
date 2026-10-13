@@ -175,6 +175,8 @@ features:
       - src/types/usageQuery.ts
       - src/components/usage/hooks/useUsageQuery.ts
       - src/components/usage/hooks/useUsageQueryDetails.ts
+      - src/components/usage/hooks/usageDetailsExport.ts
+      - docs/lts/usage-export.md
       - src/utils/usage/queryView.ts
       - src/utils/usage/queryView.test.mjs
       - src/types/usage.ts
@@ -221,6 +223,7 @@ features:
       - /v0/management/usage/query/capabilities
       - /v0/management/usage/query/summary
       - /v0/management/usage/query/details
+      - /v0/management/usage/query/export
       - /v0/management/usage/query/pricing
       - /v0/management/usage-statistics-enabled
     required_markers:
@@ -228,6 +231,8 @@ features:
       - usageApi.exportUsage
       - usageApi.importUsage
       - usageQueryApi
+      - export_version
+      - max_export_page_size
       - usage-query-v1
       - buildQueryPriceRules
       - calculateStatusBarData
