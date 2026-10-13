@@ -3,7 +3,6 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
 const REGIONS = Object.freeze({
@@ -22,10 +21,11 @@ function parseArgs(args) {
   const options = { directories: [], remote: false, v4: false, allProjects: false };
   const values = new Map([
     ['--data-dir', 'directories'],
-    ['--app', 'app'],
-    ['--client-version', 'clientVersion'],
     ['--session-id', 'sessionId'],
     ['--region', 'region'],
+    ['--cipher-platform', 'cipherPlatform'],
+    ['--cipher-homedir', 'cipherHomedir'],
+    ['--cipher-username', 'cipherUsername'],
   ]);
   for (let index = 0; index < args.length; index++) {
     const arg = args[index];
@@ -44,11 +44,16 @@ function parseArgs(args) {
   }
   if (options.region && !Object.hasOwn(REGIONS, options.region)) throw failure('invalid_region');
   if (options.allProjects && !options.remote) throw failure('all_projects_requires_remote');
-  if (options.clientVersion && !/^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/.test(options.clientVersion)) {
-    throw failure('invalid_client_version');
-  }
   if (options.sessionId && !/^[\x21-\x7e]{1,256}$/.test(options.sessionId))
     throw failure('invalid_session_id');
+  const cipherFields = [options.cipherPlatform, options.cipherHomedir, options.cipherUsername];
+  if (cipherFields.some((value) => value !== undefined) && cipherFields.some((value) => !text(value)))
+    throw failure('incomplete_cipher_environment');
+  if (
+    options.cipherPlatform &&
+    !['darwin', 'win32', 'linux'].includes(options.cipherPlatform)
+  )
+    throw failure('invalid_cipher_platform');
   return options;
 }
 
@@ -83,18 +88,31 @@ async function readJson(file) {
   }
 }
 
-function localCipherKey(env = process.env) {
+function localCipherKey(env = process.env, origin = {}) {
   let username = 'unknown';
   try {
     username = os.userInfo().username;
   } catch {}
+  // Electron 在 Windows 上报 win32，不是 Node 之外的 windows。异地解密必须用加密时的这三个值。
+  const platform = text(origin.platform) || os.platform();
+  const homedir = text(origin.homedir) || os.homedir();
+  const account = text(origin.username) || username;
   return crypto
     .createHash('sha256')
     .update(
       env.ZCODE_CREDENTIAL_SECRET ||
-        `zcode-credential-fallback:${os.platform()}:${os.homedir()}:${username}`
+        `zcode-credential-fallback:${platform}:${homedir}:${account}`
     )
     .digest();
+}
+
+function cipherOrigin(options) {
+  if (!options.cipherPlatform) return {};
+  return {
+    platform: options.cipherPlatform,
+    homedir: options.cipherHomedir,
+    username: options.cipherUsername,
+  };
 }
 
 function decodeBase64(value, url = false) {
@@ -292,7 +310,7 @@ async function readSource(directory, name, report) {
 
 async function collectLocal(options, report) {
   const directories = await findDirectories(options, report);
-  const key = localCipherKey();
+  const key = localCipherKey(process.env, cipherOrigin(options));
   try {
     for (const directory of directories) {
       const credentialErrors = [];
@@ -409,34 +427,14 @@ async function collectLocal(options, report) {
   delete report.desktop_data_directory;
 }
 
-async function detectVersion(options) {
-  if (options.clientVersion) return { value: options.clientVersion, source: 'explicit' };
-  if (process.platform !== 'darwin') return { value: null, source: 'use_--client-version' };
-  const apps = options.app
-    ? [options.app]
-    : [
-        '/Applications/ZCode.app',
-        '/Applications/ZCodeself.app',
-        path.join(os.homedir(), 'Applications/ZCode.app'),
-        path.join(os.homedir(), 'Applications/ZCodeself.app'),
-      ];
-  for (const app of apps) {
-    const file = path.join(app, 'Contents/Info.plist');
-    try {
-      await fs.access(file);
-    } catch {
-      continue;
-    }
-    const result = spawnSync(
-      '/usr/bin/plutil',
-      ['-extract', 'CFBundleShortVersionString', 'raw', '-expect', 'string', file],
-      { encoding: 'utf8', timeout: 3000, maxBuffer: 65536 }
-    );
-    const value = text(result.stdout);
-    if (result.status === 0 && /^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/.test(value))
-      return { value, source: file };
-  }
-  return { value: null, source: 'use_--app_or_--client-version' };
+// 与插件 signing.go 的签名消息和 X-Client-Version 保持同一固定值，不读取本机安装版本。
+const PLUGIN_CLIENT_VERSION = '3.14.3';
+
+const RETRIABLE_REMOTE = new Set(['request_timeout', 'network_or_redirect_failed']);
+const REMOTE_ATTEMPTS = 6;
+
+function retryable(error) {
+  return RETRIABLE_REMOTE.has(errorCode(error));
 }
 
 async function requestJson(fetchImpl, region, kind, route, authorization, options = {}) {
@@ -447,9 +445,10 @@ async function requestJson(fetchImpl, region, kind, route, authorization, option
   if (url.origin !== origin || url.username || url.password) throw failure('untrusted_endpoint');
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
+  const transport = options.fetchImpl || fetchImpl;
   let reader;
   try {
-    const response = await fetchImpl(url.href, {
+    const response = await transport(url.href, {
       method: options.body ? 'POST' : 'GET',
       redirect: 'error',
       signal: controller.signal,
@@ -514,6 +513,28 @@ function projectsFrom(customer) {
   return projects;
 }
 
+async function requestJsonWithRetry(fetchImpl, region, kind, route, authorization, options = {}) {
+  let last;
+  for (let attempt = 1; attempt <= REMOTE_ATTEMPTS; attempt++) {
+    try {
+      return await requestJson(fetchImpl, region, kind, route, authorization, options);
+    } catch (error) {
+      last = error;
+      if (!retryable(error) || attempt === REMOTE_ATTEMPTS) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+    }
+  }
+  throw last;
+}
+
+function rememberRemoteError(report, remote, error, extra = {}) {
+  const code = errorCode(error);
+  const entry = { source: remote.directory, region: remote.region, error: code, ...extra };
+  report.errors.push(entry);
+  remote.errors.push(entry);
+  return code;
+}
+
 async function collectRemote(options, report, fetchImpl) {
   const processed = new Set();
   for (const source of report.local_sources) {
@@ -547,16 +568,23 @@ async function collectRemote(options, report, fetchImpl) {
           region,
           lookup: mode,
           status: 'pending',
+          attempts: 0,
           projects: [],
+          errors: [],
         };
         report.remote.push(remote);
+        const countedFetch = async (...args) => {
+          remote.attempts++;
+          return fetchImpl(...args);
+        };
         try {
-          const customer = await requestJson(
+          const customer = await requestJsonWithRetry(
             fetchImpl,
             region,
             'business',
             '/api/biz/customer/getCustomerInfo',
-            authorization
+            authorization,
+            { fetchImpl: countedFetch }
           );
           const projects = projectsFrom(customer.data);
           if (
@@ -567,11 +595,7 @@ async function collectRemote(options, report, fetchImpl) {
                 p.organizationId === selection.organizationId && p.projectId === selection.projectId
             )
           ) {
-            report.errors.push({
-              source: source.directory,
-              region,
-              error: 'selected_team_project_not_accessible',
-            });
+            rememberRemoteError(report, remote, failure('selected_team_project_not_accessible'));
           }
           const teamProject = (project) =>
             project.projectType === '2' ||
@@ -590,7 +614,7 @@ async function collectRemote(options, report, fetchImpl) {
             );
           });
           if (!targets.length)
-            report.errors.push({ source: source.directory, region, error: 'no_matching_projects' });
+            rememberRemoteError(report, remote, failure('no_matching_projects'));
           for (const project of targets) {
             const isTeam = teamProject(project);
             const projectReport = {
@@ -608,8 +632,8 @@ async function collectRemote(options, report, fetchImpl) {
                 }
               : {};
             try {
-              const listing = await requestJson(
-                fetchImpl,
+              const listing = await requestJsonWithRetry(
+                countedFetch,
                 region,
                 'business',
                 base,
@@ -626,16 +650,13 @@ async function collectRemote(options, report, fetchImpl) {
                     : item.name === 'zcode-api-key')
               );
               if (!keys.length)
-                report.errors.push({
-                  source: source.directory,
-                  region,
+                rememberRemoteError(report, remote, failure('no_existing_zcode_key'), {
                   project_id: project.projectId,
-                  error: 'no_existing_zcode_key',
                 });
               for (const item of keys) {
                 try {
-                  const copied = await requestJson(
-                    fetchImpl,
+                  const copied = await requestJsonWithRetry(
+                    countedFetch,
                     region,
                     'business',
                     `${base}/copy/${encodeURIComponent(item.apiKey)}`,
@@ -664,12 +685,7 @@ async function collectRemote(options, report, fetchImpl) {
                   );
                   projectReport.keys_found++;
                 } catch (error) {
-                  report.errors.push({
-                    source: source.directory,
-                    region,
-                    project_id: project.projectId,
-                    error: errorCode(error),
-                  });
+                  rememberRemoteError(report, remote, error, { project_id: project.projectId });
                 }
               }
               projectReport.status = keys.length
@@ -679,11 +695,8 @@ async function collectRemote(options, report, fetchImpl) {
                 : 'no_existing_zcode_key';
             } catch (error) {
               projectReport.status = 'error';
-              report.errors.push({
-                source: source.directory,
-                region,
+              projectReport.error = rememberRemoteError(report, remote, error, {
                 project_id: project.projectId,
-                error: errorCode(error),
               });
             }
           }
@@ -693,7 +706,7 @@ async function collectRemote(options, report, fetchImpl) {
               : 'partial';
         } catch (error) {
           remote.status = 'error';
-          report.errors.push({ source: source.directory, region, error: errorCode(error) });
+          remote.error = rememberRemoteError(report, remote, error);
         }
       }
     }
@@ -832,7 +845,14 @@ async function collect(options, fetchImpl = globalThis.fetch) {
     errors: [],
   };
   await collectLocal(options, report);
-  report.client_version = await detectVersion(options);
+  report.client_version = {
+    value: PLUGIN_CLIENT_VERSION,
+    source: 'plugin_signing_constant',
+  };
+  const origin = cipherOrigin(options);
+  report.cipher_environment = options.cipherPlatform
+    ? { source: 'explicit', platform: origin.platform }
+    : { source: 'local_process', platform: os.platform() };
   report.identity = {
     platform: `${os.platform()}-${os.arch()}`,
     os_category:
@@ -854,11 +874,6 @@ async function collect(options, fetchImpl = globalThis.fetch) {
       (options.region && candidate.region !== options.region)
     ) {
       candidate.v4.network_status = 'skipped_incomplete_untrusted_or_region_filter';
-      continue;
-    }
-    if (!report.client_version.value) {
-      candidate.v4.network_status = 'skipped_missing_client_version';
-      report.errors.push({ candidate: candidate.index, error: 'v4_requires_client_version' });
       continue;
     }
     try {
@@ -890,6 +905,8 @@ async function selfTest() {
   const { default: assert } = await import('node:assert/strict');
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'zcode-credentials-synthetic-'));
   const previousDesktopHome = process.env.ZCODE_DESKTOP_HOME_DIR;
+  const previousDataBase = process.env.ZCODE_DATA_BASE_DIR;
+  delete process.env.ZCODE_DATA_BASE_DIR;
   const desktopHome = path.join(directory, 'desktop-home');
   const desktopSettingsFile = path.join(desktopHome, '.zcode/v2/setting.json');
   await fs.mkdir(path.dirname(desktopSettingsFile), { recursive: true });
@@ -908,10 +925,11 @@ async function selfTest() {
     return { iv, tag: cipher.getAuthTag(), ciphertext };
   };
   const key = localCipherKey();
-  const encrypted = (value) => {
-    const sealed = seal(value, key);
+  const encryptedWith = (cipherKey, value) => {
+    const sealed = seal(value, cipherKey);
     return `enc:v1:${[sealed.iv, sealed.tag, sealed.ciphertext].map((part) => part.toString('base64url')).join('.')}`;
   };
+  const encrypted = (value) => encryptedWith(key, value);
   const write = (name, value) =>
     fs.writeFile(path.join(directory, name), JSON.stringify(value), { mode: 0o600 });
   const jsonResponse = (body) =>
@@ -924,7 +942,10 @@ async function selfTest() {
       assert.throws(() => parseArgs(['--region', 'unknown']));
       assert.throws(() => parseArgs(['--all-projects']));
       assert.throws(() => parseArgs(['--session-id', 'bad\nheader']));
-      assert.throws(() => parseArgs(['--client-version', 'bad']));
+      assert.throws(() => parseArgs(['--client-version', '3.14.4']));
+      assert.throws(() => parseArgs(['--app', '/Applications/ZCode.app']));
+      assert.throws(() => parseArgs(['--cipher-platform', 'win32']));
+      assert.throws(() => parseArgs(['--cipher-platform', 'windows', '--cipher-homedir', 'C:\\Users\\a', '--cipher-username', 'a']));
       assert.equal(parseArgs(['--remote', '--v4']).v4, true);
     });
     await test('authenticated decryption and nested failure isolation', () => {
@@ -988,7 +1009,7 @@ async function selfTest() {
         ],
       },
     });
-    const options = parseArgs(['--data-dir', directory, '--client-version', '3.14.3']);
+    const options = parseArgs(['--data-dir', directory]);
     let local;
     await test('multi-source discovery, plaintext, deduplication and zero default network', async () => {
       local = await collect(options, () => {
@@ -1003,6 +1024,8 @@ async function selfTest() {
       assert.equal(local.local_sources[0].device_id, 'synthetic-device');
       assert.equal(local.errors.length, 0);
       assert.equal(local.api_keys[0].v4.api_key_secret, 'secret');
+      assert.equal(local.client_version.value, PLUGIN_CLIENT_VERSION);
+      assert.equal(local.client_version.source, 'plugin_signing_constant');
     });
     await test('Start Plan credentials never enter Coding Plan candidates', async () => {
       const names = ['credentials.json', 'config.json', 'provider_config.json'];
@@ -1097,6 +1120,8 @@ async function selfTest() {
     await test('remote personal and selected team lookup without creation', async () => {
       const report = await collect({ ...options, remote: true }, remoteFetch);
       assert.equal(report.errors.length, 0);
+      assert.equal(report.remote[0].error, undefined);
+      assert.equal(report.remote[0].attempts, 5);
       assert.equal(calls.length, 5);
       assert.ok(report.api_keys.some((item) => item.api_key === 'team-id.remote-secret'));
       assert.ok(report.api_keys.some((item) => item.api_key === 'personal-id.remote-secret'));
@@ -1125,6 +1150,34 @@ async function selfTest() {
       } finally {
         await fs.rm(desktopSettingsFile);
       }
+    });
+    await test('customer lookup failure stays on the remote entry and only transport errors retry', async () => {
+      let attempts = 0;
+      const rejected = await collect({ ...options, remote: true }, async () => {
+        attempts++;
+        return jsonResponse({ code: 401, msg: 'sensitive expired token' });
+      });
+      assert.equal(attempts, 1);
+      assert.equal(rejected.remote[0].status, 'error');
+      assert.equal(rejected.remote[0].error, 'remote_rejected');
+      assert.equal(rejected.remote[0].projects.length, 0);
+      assert.ok(!JSON.stringify(rejected.remote).includes('sensitive'));
+      attempts = 0;
+      const exhausted = await collect({ ...options, remote: true }, async () => {
+        attempts++;
+        throw new Error('transient connection reset');
+      });
+      assert.equal(attempts, REMOTE_ATTEMPTS);
+      assert.equal(exhausted.remote[0].error, 'network_or_redirect_failed');
+      attempts = 0;
+      const recovered = await collect({ ...options, remote: true }, async (url, init) => {
+        attempts++;
+        if (attempts < REMOTE_ATTEMPTS) throw new Error('transient connection reset');
+        return remoteFetch(url, init);
+      });
+      assert.equal(recovered.remote[0].status, 'completed');
+      assert.equal(recovered.remote[0].attempts, REMOTE_ATTEMPTS + 4);
+      assert.ok(recovered.api_keys.some((item) => item.api_key === 'team-id.remote-secret'));
     });
     await test('missing project keys never trigger creation or personal fallback', async () => {
       const report = await collect({ ...options, remote: true }, async (url, init) => {
@@ -1217,6 +1270,37 @@ async function selfTest() {
       assert.equal(report.errors.length, 0);
       assert.ok(report.api_keys.some((item) => item.api_key === 'zai-team.zai-secret'));
       assert.ok(report.api_keys.some((item) => item.api_key === 'zai-personal.zai-secret'));
+    });
+    await test('copied credentials decrypt with the original platform home and username', async () => {
+      const origin = { platform: 'win32', homedir: 'C:\\Users\\synthetic', username: 'synthetic' };
+      const foreignKey = localCipherKey({}, origin);
+      const foreign = encryptedWith(foreignKey, 'foreign.secret');
+      foreignKey.fill(0);
+      const copiedDir = path.join(directory, 'copied-from-windows');
+      await fs.mkdir(copiedDir);
+      await fs.writeFile(
+        path.join(copiedDir, 'credentials.json'),
+        JSON.stringify({
+          'account-provider:coding-plan:account:bigmodel-coding-plan:account:synthetic:api-key':
+            foreign,
+        }),
+        { mode: 0o600 }
+      );
+      const withoutOrigin = await collect({ ...options, directories: [copiedDir] });
+      assert.ok(
+        withoutOrigin.errors.some((item) => item.error === 'decrypt_authentication_or_encoding_failed')
+      );
+      assert.ok(!withoutOrigin.api_keys.some((item) => item.api_key === 'foreign.secret'));
+      const report = await collect({
+        ...options,
+        directories: [copiedDir],
+        cipherPlatform: origin.platform,
+        cipherHomedir: origin.homedir,
+        cipherUsername: origin.username,
+      });
+      assert.equal(report.cipher_environment.source, 'explicit');
+      assert.equal(report.cipher_environment.platform, 'win32');
+      assert.ok(report.api_keys.some((item) => item.api_key === 'foreign.secret'));
     });
     await test('versioned provider config and custom local cipher secret', async () => {
       const prior = await fs.readFile(path.join(directory, 'provider_config.json'), 'utf8');
@@ -1321,6 +1405,8 @@ async function selfTest() {
         0
       );
       assert.equal(result.example_only_not_sent_to_model, true);
+      assert.equal(result.headers['X-Client-Version'], PLUGIN_CLIENT_VERSION);
+      assert.ok(result.signed_message.includes(`\n${PLUGIN_CLIENT_VERSION}\n`));
       await assert.rejects(
         collectV4(candidate, '3.14.3', 'synthetic-session', async () =>
           jsonResponse({ code: 200, data: { privateCipher: Buffer.alloc(40).toString('base64') } })
@@ -1342,6 +1428,8 @@ async function selfTest() {
     key.fill(0);
     if (previousDesktopHome === undefined) delete process.env.ZCODE_DESKTOP_HOME_DIR;
     else process.env.ZCODE_DESKTOP_HOME_DIR = previousDesktopHome;
+    if (previousDataBase === undefined) delete process.env.ZCODE_DATA_BASE_DIR;
+    else process.env.ZCODE_DATA_BASE_DIR = previousDataBase;
     await fs.rm(directory, { recursive: true, force: true });
   }
 }
@@ -1350,7 +1438,7 @@ async function main() {
   const options = parseArgs(process.argv.slice(2));
   if (options.help) {
     console.log(
-      'node scripts/zcode-credentials.mjs [--data-dir DIR] [--app APP | --client-version VERSION] [--remote] [--all-projects] [--v4] [--region bigmodel|zai] [--session-id ID]\n--remote: 查询已有项目 key，不创建。--v4: 握手并打印私钥及示例签名，不调用模型。\n默认完整明文输出本地凭据、device ID 和可本地派生的 V4 材料。--self-test: 仅运行合成测试。'
+      'node scripts/zcode-credentials.mjs [--data-dir DIR] [--cipher-platform darwin|win32|linux --cipher-homedir DIR --cipher-username USER] [--remote] [--all-projects] [--v4] [--region bigmodel|zai] [--session-id ID]\n--remote: 查询已有项目 key，不创建。--v4: 握手并打印私钥及示例签名，不调用模型；签名版本固定为插件使用的 3.14.3。\n异地解密凭据时，三个 --cipher-* 必须一起给出加密时的环境；未设置 ZCODE_CREDENTIAL_SECRET 时才生效。Windows 的平台值是 win32。\n默认完整明文输出本地凭据、device ID 和可本地派生的 V4 材料。--self-test: 仅运行合成测试。'
     );
     return;
   }
@@ -1364,7 +1452,15 @@ async function main() {
   if (report.errors.length || !report.api_keys.length) process.exitCode = 1;
 }
 
-export { parseArgs, collect, collectV4, decryptValue, selectionFor, requestJson, signingInputs };
+export {
+  parseArgs,
+  collect,
+  collectV4,
+  decryptValue,
+  selectionFor,
+  requestJson,
+  signingInputs,
+};
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   main().catch((error) => {
     console.error(`失败：${errorCode(error)}`);
