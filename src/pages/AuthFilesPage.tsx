@@ -1040,6 +1040,7 @@ export function AuthFilesPage() {
 
       <AuthFilesPrefixProxyEditorModal
         disableControls={disableControls}
+        modelPolicySupported={modelPolicyError === null}
         editor={prefixProxyEditor}
         updatedText={prefixProxyUpdatedText}
         dirty={prefixProxyDirty}

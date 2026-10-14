@@ -68,6 +68,7 @@ export function useAuthFilesOauth(options: UseAuthFilesOauthOptions): UseAuthFil
       modelAliasReadyRef.current = false;
       excludedLoadRequestRef.current += 1;
       modelAliasLoadRequestRef.current += 1;
+      modelPolicyLoadRequestRef.current += 1;
     },
     []
   );

@@ -365,7 +365,9 @@ export const normalizeOauthModelPolicy = (payload: unknown): OAuthModelPolicy =>
 };
 
 const serializeOauthModelPolicyList = (list: OAuthModelPolicyList | null | undefined) =>
-  list ? { enabled: list.enabled, models: list.models.map((model) => model.trim()).filter(Boolean) } : null;
+  list
+    ? { enabled: list.enabled, models: list.models.map((model) => model.trim()).filter(Boolean) }
+    : null;
 
 const normalizeOauthExcludedModels = (payload: unknown): Record<string, string[]> => {
   if (!payload || typeof payload !== 'object') return {};
@@ -587,7 +589,12 @@ export const authFilesApi = {
     const data = await apiClient.get<Record<string, unknown>>(
       `/auth-files/models/policy-preview?name=${encodeURIComponent(name)}`
     );
-    const status = typeof data.status === 'string' ? data.status : '';
+    const status =
+      typeof data.catalog_status === 'string'
+        ? data.catalog_status
+        : typeof data.status === 'string'
+          ? data.status
+          : '';
     if (status === 'catalog_unknown') return null;
     const evaluations = Array.isArray(data.evaluations) ? data.evaluations : [];
     return {

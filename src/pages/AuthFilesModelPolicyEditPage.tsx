@@ -29,9 +29,7 @@ type PolicyListDraft = { enabled: boolean; text: string };
 const emptyListDraft = (): PolicyListDraft => ({ enabled: false, text: '' });
 
 const draftFromList = (list: OAuthModelPolicyList | null | undefined): PolicyListDraft =>
-  list
-    ? { enabled: list.enabled, text: list.models.join('\n') }
-    : emptyListDraft();
+  list ? { enabled: list.enabled, text: list.models.join('\n') } : emptyListDraft();
 
 const parseListText = (text: string): string[] => {
   const seen = new Set<string>();
@@ -62,8 +60,15 @@ export function AuthFilesModelPolicyEditPage() {
   const providerFromParams = searchParams.get('provider') ?? '';
 
   const [provider, setProvider] = useState(providerFromParams);
-  const [files, setFiles] = useState<{ name: string; type?: string; provider?: string; disabled?: boolean }[]>([]);
-  const [policies, setPolicies] = useState<Record<string, { allowlist?: OAuthModelPolicyList | null; denylist?: OAuthModelPolicyList | null }>>({});
+  const [files, setFiles] = useState<
+    { name: string; type?: string; provider?: string; disabled?: boolean }[]
+  >([]);
+  const [policies, setPolicies] = useState<
+    Record<
+      string,
+      { allowlist?: OAuthModelPolicyList | null; denylist?: OAuthModelPolicyList | null }
+    >
+  >({});
   const [legacyExcluded, setLegacyExcluded] = useState<Record<string, string[]>>({});
   const [initialLoading, setInitialLoading] = useState(true);
   const [initialLoadError, setInitialLoadError] = useState<string | null>(null);
@@ -148,8 +153,7 @@ export function AuthFilesModelPolicyEditPage() {
 
   const entry = policies[resolvedProviderKey];
   const baselineSignature = useMemo(() => {
-    if (!entry) return 'none';
-    return `${draftSignature(draftFromList(entry.allowlist))}#${draftSignature(draftFromList(entry.denylist))}`;
+    return `${draftSignature(draftFromList(entry?.allowlist))}#${draftSignature(draftFromList(entry?.denylist))}`;
   }, [entry]);
   const currentSignature = useMemo(
     () => `${draftSignature(allowDraft)}#${draftSignature(denyDraft)}`,
@@ -159,9 +163,9 @@ export function AuthFilesModelPolicyEditPage() {
   useEffect(() => {
     setAllowDraft(draftFromList(entry?.allowlist));
     setDenyDraft(draftFromList(entry?.denylist));
-  }, [entry]);
+  }, [entry, resolvedProviderKey]);
 
-  const isDirty = baselineSignature !== currentSignature;
+  const isDirty = baselineReady && baselineSignature !== currentSignature;
 
   const unsavedChangesDialog = useMemo(
     () => ({
@@ -188,21 +192,40 @@ export function AuthFilesModelPolicyEditPage() {
 
   const swipeRef = useEdgeSwipeBack({ onBack: handleBack });
 
-  const legacyRules = legacyExcluded[resolvedProviderKey] ?? [];
+  const legacyRules = useMemo(
+    () => legacyExcluded[resolvedProviderKey] ?? [],
+    [legacyExcluded, resolvedProviderKey]
+  );
 
   const applyProviderChange = useCallback(
     (value: string) => {
-      setProvider(value);
-      const next = new URLSearchParams(searchParams);
-      const trimmed = value.trim();
-      if (trimmed) {
-        next.set('provider', trimmed);
-      } else {
-        next.delete('provider');
+      const apply = () => {
+        allowNextNavigation();
+        setProvider(value);
+        const next = new URLSearchParams(searchParams);
+        const trimmed = value.trim();
+        if (trimmed) {
+          next.set('provider', trimmed);
+        } else {
+          next.delete('provider');
+        }
+        setSearchParams(next, { replace: true });
+      };
+      if (isDirty && normalizeProviderKey(value) !== resolvedProviderKey) {
+        showConfirmation({ ...unsavedChangesDialog, onConfirm: apply });
+        return;
       }
-      setSearchParams(next, { replace: true });
+      apply();
     },
-    [searchParams, setSearchParams]
+    [
+      allowNextNavigation,
+      isDirty,
+      resolvedProviderKey,
+      searchParams,
+      setSearchParams,
+      showConfirmation,
+      unsavedChangesDialog,
+    ]
   );
 
   const handleSave = useCallback(async () => {
@@ -258,8 +281,7 @@ export function AuthFilesModelPolicyEditPage() {
     unsupported,
   ]);
 
-  // P3: legacy 一键迁移。把 oauth-excluded-models 旧键内容并入新 denylist，
-  // 同时删除旧键，一次原子写（先写新键成功后再删旧键，删除失败仅提示）。
+  // 两次写入按顺序执行：新 denylist 成功后再删旧键，第二步失败时旧限制仍保留。
   const handleMigrateLegacy = useCallback(() => {
     if (!resolvedProviderKey || legacyRules.length === 0) return;
     showConfirmation({
@@ -293,7 +315,7 @@ export function AuthFilesModelPolicyEditPage() {
   }, [
     allowDraft,
     denyDraft.text,
-    legacyRules.length,
+    legacyRules,
     loadInitialData,
     resolvedProviderKey,
     showConfirmation,
@@ -304,6 +326,8 @@ export function AuthFilesModelPolicyEditPage() {
   const canSave =
     !disableControls &&
     !saving &&
+    isDirty &&
+    Boolean(resolvedProviderKey) &&
     canWriteOAuthConfig({
       baselineReady,
       loadError: initialLoadError,
@@ -328,11 +352,13 @@ export function AuthFilesModelPolicyEditPage() {
             checked={draft.enabled}
             onChange={(checked) => onChange({ ...draft, enabled: checked })}
             disabled={disableControls || saving}
+            ariaLabel={label}
           />
         </div>
       </div>
       <textarea
         id={textareaId}
+        aria-label={label}
         className={styles.customRuleTextarea}
         rows={4}
         value={draft.text}
@@ -341,9 +367,11 @@ export function AuthFilesModelPolicyEditPage() {
         disabled={disableControls || saving}
         spellCheck={false}
       />
-      {draft.enabled && parseListText(draft.text).length === 0 && (
-        <div className={styles.settingsDesc}>{t('model_policy.allow_empty_warning')}</div>
-      )}
+      {textareaId === 'model-policy-allow' &&
+        draft.enabled &&
+        parseListText(draft.text).length === 0 && (
+          <div className={styles.settingsDesc}>{t('model_policy.allow_empty_warning')}</div>
+        )}
     </div>
   );
 
@@ -417,7 +445,8 @@ export function AuthFilesModelPolicyEditPage() {
               {providerOptions.length > 0 && (
                 <div className={styles.tagList}>
                   {providerOptions.map((option) => {
-                    const isActive = normalizeProviderKey(provider) === normalizeProviderKey(option);
+                    const isActive =
+                      normalizeProviderKey(provider) === normalizeProviderKey(option);
                     return (
                       <button
                         key={option}

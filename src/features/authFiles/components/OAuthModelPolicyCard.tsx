@@ -15,8 +15,10 @@ export type OAuthModelPolicyCardProps = {
   onEdit: (provider: string) => void;
 };
 
-const countEntryModels = (entry: { allowlist?: { models: string[] } | null; denylist?: { models: string[] } | null }): number =>
-  (entry.allowlist?.models.length ?? 0) + (entry.denylist?.models.length ?? 0);
+const countEntryModels = (entry: {
+  allowlist?: { models: string[] } | null;
+  denylist?: { models: string[] } | null;
+}): number => (entry.allowlist?.models.length ?? 0) + (entry.denylist?.models.length ?? 0);
 
 export function OAuthModelPolicyCard(props: OAuthModelPolicyCardProps) {
   const { t } = useTranslation();
@@ -48,7 +50,10 @@ export function OAuthModelPolicyCard(props: OAuthModelPolicyCardProps) {
       ) : policyError === 'loading' ? (
         <EmptyState title={t('common.loading')} />
       ) : Object.keys(policies).length === 0 ? (
-        <EmptyState title={t('model_policy.list_empty')} description={t('model_policy.card_desc')} />
+        <EmptyState
+          title={t('model_policy.list_empty')}
+          description={t('model_policy.card_desc')}
+        />
       ) : (
         <div className={styles.excludedList}>
           {Object.entries(policies).map(([provider, entry]) => {

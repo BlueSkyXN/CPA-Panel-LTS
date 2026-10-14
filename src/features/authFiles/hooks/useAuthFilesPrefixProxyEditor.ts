@@ -198,16 +198,14 @@ const parsePolicyModelsText = (text: string): string[] => {
   return models;
 };
 
-const readModelPolicyList = (
-  value: unknown
-): { enabled: boolean; models: string[] } | null => {
+const readModelPolicyList = (value: unknown): { enabled: boolean; models: string[] } | null => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const list = value as Record<string, unknown>;
-  if (typeof list.enabled !== 'boolean') return null;
+  if (list.enabled !== undefined && typeof list.enabled !== 'boolean') return null;
   const models = Array.isArray(list.models)
     ? list.models.map((item) => String(item ?? '').trim()).filter(Boolean)
     : [];
-  return { enabled: list.enabled, models };
+  return { enabled: list.enabled === true, models };
 };
 
 const buildModelPolicyPatch = (
@@ -601,7 +599,9 @@ export function useAuthFilesPrefixProxyEditor(
       }
 
       const rawPolicy =
-        json.model_policy && typeof json.model_policy === 'object' && !Array.isArray(json.model_policy)
+        json.model_policy &&
+        typeof json.model_policy === 'object' &&
+        !Array.isArray(json.model_policy)
           ? (json.model_policy as Record<string, unknown>)
           : null;
       const policyAllow = readModelPolicyList(rawPolicy?.allowlist);
@@ -626,17 +626,17 @@ export function useAuthFilesPrefixProxyEditor(
           websocketsTouched: false,
           usingApi,
           usingApiTouched: false,
-        note,
-        noteTouched: false,
-        headersText,
-        headersTouched: false,
-        headersError,
-        modelPolicyAllowText: policyAllow?.models.join('\n') ?? '',
-        modelPolicyAllowEnabled: policyAllow?.enabled ?? false,
-        modelPolicyDenyText: policyDeny?.models.join('\n') ?? '',
-        modelPolicyDenyEnabled: policyDeny?.enabled ?? false,
-        modelPolicyTouched: false,
-        error: null,
+          note,
+          noteTouched: false,
+          headersText,
+          headersTouched: false,
+          headersError,
+          modelPolicyAllowText: policyAllow?.models.join('\n') ?? '',
+          modelPolicyAllowEnabled: policyAllow?.enabled ?? false,
+          modelPolicyDenyText: policyDeny?.models.join('\n') ?? '',
+          modelPolicyDenyEnabled: policyDeny?.enabled ?? false,
+          modelPolicyTouched: false,
+          error: null,
         };
       });
     } catch (err: unknown) {
