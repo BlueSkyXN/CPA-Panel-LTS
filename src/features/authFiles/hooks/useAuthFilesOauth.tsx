@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { authFilesApi } from '@/services/api';
 import { useNotificationStore } from '@/stores';
-import type { AuthFileItem, OAuthModelAliasEntry } from '@/types';
+import type { AuthFileItem, OAuthModelAliasEntry, OAuthModelPolicy } from '@/types';
 import type { AuthFileModelItem, OAuthConfigLoadError } from '@/features/authFiles/constants';
 import { normalizeProviderKey } from '@/features/authFiles/constants';
 
@@ -11,11 +11,14 @@ type ViewMode = 'diagram' | 'list';
 export type UseAuthFilesOauthResult = {
   excluded: Record<string, string[]>;
   excludedError: OAuthConfigLoadError;
+  modelPolicy: OAuthModelPolicy;
+  modelPolicyError: OAuthConfigLoadError;
   modelAlias: Record<string, OAuthModelAliasEntry[]>;
   modelAliasError: OAuthConfigLoadError;
   allProviderModels: Record<string, AuthFileModelItem[]>;
   providerList: string[];
   loadExcluded: () => Promise<void>;
+  loadModelPolicy: () => Promise<void>;
   loadModelAlias: () => Promise<void>;
   deleteExcluded: (provider: string) => void;
   deleteModelAlias: (provider: string) => void;
@@ -43,6 +46,8 @@ export function useAuthFilesOauth(options: UseAuthFilesOauthOptions): UseAuthFil
 
   const [excluded, setExcluded] = useState<Record<string, string[]>>({});
   const [excludedError, setExcludedError] = useState<OAuthConfigLoadError>('loading');
+  const [modelPolicy, setModelPolicy] = useState<OAuthModelPolicy>({});
+  const [modelPolicyError, setModelPolicyError] = useState<OAuthConfigLoadError>('loading');
   const [modelAlias, setModelAlias] = useState<Record<string, OAuthModelAliasEntry[]>>({});
   const [modelAliasError, setModelAliasError] = useState<OAuthConfigLoadError>('loading');
   const [allProviderModels, setAllProviderModels] = useState<Record<string, AuthFileModelItem[]>>(
@@ -54,6 +59,7 @@ export function useAuthFilesOauth(options: UseAuthFilesOauthOptions): UseAuthFil
   const excludedReadyRef = useRef(false);
   const modelAliasReadyRef = useRef(false);
   const excludedLoadRequestRef = useRef(0);
+  const modelPolicyLoadRequestRef = useRef(0);
   const modelAliasLoadRequestRef = useRef(0);
 
   useEffect(
@@ -158,6 +164,29 @@ export function useAuthFilesOauth(options: UseAuthFilesOauthOptions): UseAuthFil
       setExcludedError('load');
     }
   }, [showNotification, t]);
+
+  const loadModelPolicy = useCallback(async () => {
+    const requestId = ++modelPolicyLoadRequestRef.current;
+    setModelPolicyError('loading');
+    try {
+      const res = await authFilesApi.getOauthModelPolicy();
+      if (requestId !== modelPolicyLoadRequestRef.current) return;
+      setModelPolicy(res || {});
+      setModelPolicyError(null);
+    } catch (err: unknown) {
+      if (requestId !== modelPolicyLoadRequestRef.current) return;
+      const status =
+        typeof err === 'object' && err !== null && 'status' in err
+          ? (err as { status?: unknown }).status
+          : undefined;
+      if (status === 404) {
+        setModelPolicy({});
+        setModelPolicyError('unsupported');
+        return;
+      }
+      setModelPolicyError('load');
+    }
+  }, []);
 
   const loadModelAlias = useCallback(async () => {
     const requestId = ++modelAliasLoadRequestRef.current;
@@ -543,11 +572,14 @@ export function useAuthFilesOauth(options: UseAuthFilesOauthOptions): UseAuthFil
   return {
     excluded,
     excludedError,
+    modelPolicy,
+    modelPolicyError,
     modelAlias,
     modelAliasError,
     allProviderModels,
     providerList,
     loadExcluded,
+    loadModelPolicy,
     loadModelAlias,
     deleteExcluded,
     deleteModelAlias,

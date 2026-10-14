@@ -15,6 +15,7 @@ import { AiProvidersOpenAIModelsPage } from '@/pages/AiProvidersOpenAIModelsPage
 import { AiProvidersVertexEditPage } from '@/pages/AiProvidersVertexEditPage';
 import { AuthFilesPage } from '@/pages/AuthFilesPage';
 import { AuthFilesOAuthExcludedEditPage } from '@/pages/AuthFilesOAuthExcludedEditPage';
+import { AuthFilesModelPolicyEditPage } from '@/pages/AuthFilesModelPolicyEditPage';
 import { AuthFilesOAuthModelAliasEditPage } from '@/pages/AuthFilesOAuthModelAliasEditPage';
 import { OAuthPage } from '@/pages/OAuthPage';
 import { QuotaPage } from '@/pages/QuotaPage';
@@ -158,6 +159,7 @@ const mainRoutes = [
   { path: '/ai-providers/*', element: <Navigate to="/ai-providers" replace /> },
   { path: '/auth-files', element: <AuthFilesPage /> },
   { path: '/auth-files/oauth-excluded', element: <AuthFilesOAuthExcludedEditPage /> },
+  { path: '/auth-files/model-policy', element: <AuthFilesModelPolicyEditPage /> },
   { path: '/auth-files/oauth-model-alias', element: <AuthFilesOAuthModelAliasEditPage /> },
   { path: '/oauth', element: <OAuthPage /> },
   { path: '/quota', element: <QuotaPage /> },

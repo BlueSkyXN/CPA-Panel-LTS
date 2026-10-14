@@ -3111,5 +3111,33 @@
     "action_quota": "配額",
     "action_behavior": "行為",
     "action_all_pools": "全部池"
+  },
+  "model_policy": {
+    "card_title": "渠道模型策略",
+    "card_desc": "按渠道設定模型黑白名單；舊版排除模型始終生效。",
+    "list_empty": "尚未設定渠道模型策略",
+    "entry_summary": "{{count}} 條規則：白名單 {{allow}}，黑名單 {{deny}}",
+    "entry_all_disabled": "已儲存 {{count}} 條規則，均未啟用",
+    "edit_title": "渠道模型策略",
+    "title": "模型策略",
+    "description": "白名單在渠道與帳號之間取交集；黑名單取聯集且始終優先生效。舊版排除模型繼續生效並與黑名單合併。",
+    "upgrade_required_desc": "目前 Core 版本不支援 oauth-model-policy，請升級 Core 後使用模型策略。",
+    "provider_required": "必須選擇渠道",
+    "models_placeholder": "每行一個模型 ID 或萬用字元，如 gpt-5-codex、*-preview",
+    "allowlist_label": "白名單",
+    "allowlist_hint": "啟用後本渠道只發布匹配的模型；關閉時保留已填名單但不生效。",
+    "denylist_label": "黑名單",
+    "denylist_hint": "啟用後匹配的模型在本渠道被排除，並與舊版排除模型合併。",
+    "allow_empty_warning": "白名單已啟用但名單為空：該渠道/帳號將不開放任何模型。",
+    "save_success": "模型策略已儲存",
+    "save_failed": "模型策略儲存失敗",
+    "legacy_title": "舊版排除模型",
+    "legacy_desc": "已有 {{count}} 條舊版排除規則始終生效。可遷移合併到新黑名單並移除舊鍵。",
+    "migrate_button": "遷移到黑名單",
+    "migrate_title": "遷移舊版排除規則",
+    "migrate_message": "將 {{count}} 條舊版排除規則併入新黑名單並刪除舊鍵？遷移後黑名單將啟用。",
+    "migrate_success": "舊版排除規則已遷移",
+    "account_section_label": "模型策略（本帳號）",
+    "account_section_hint": "帳號名單只會在渠道策略基礎上進一步收窄，不能越過渠道限制。"
   }
 }
