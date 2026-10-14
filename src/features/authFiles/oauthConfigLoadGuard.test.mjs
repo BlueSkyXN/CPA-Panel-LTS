@@ -19,7 +19,7 @@ const [
   { OAuthExcludedCard },
   { OAuthModelAliasCard },
   { canWriteOAuthConfig },
-  { normalizeOauthModelAlias, serializeOauthModelAliases },
+  { normalizeOauthModelAlias, serializeOauthModelAliases, normalizeOauthModelPolicy, authFilesApi },
   excludedRules,
   editorState,
 ] = await Promise.all([
@@ -33,6 +33,32 @@ const [
 
 const noop = () => {};
 const noopAsync = async () => {};
+
+test('model policy preserves disabled lists and enabled empty allowlists', () => {
+  assert.deepEqual(normalizeOauthModelPolicy({ 'oauth-model-policy': {
+    Codex: { allowlist: { enabled: true, models: [] }, denylist: { enabled: false, models: ['GPT-*', 'gpt-*'] } },
+  }}), { codex: { allowlist: { enabled: true, models: [] }, denylist: { enabled: false, models: ['GPT-*'] } } });
+  assert.deepEqual(normalizeOauthModelPolicy({ 'oauth-model-policy': null }), {});
+});
+
+test('model policy client preserves Core preview status and empty-list payload', async () => {
+  const { apiClient } = await vite.ssrLoadModule('/src/services/api/client.ts');
+  const originalGet = apiClient.get;
+  const originalPatch = apiClient.patch;
+  try {
+    apiClient.get = async () => ({ auth_id: 'fixture', provider: 'codex', catalog_status: 'snapshot', evaluations: [] });
+    assert.equal((await authFilesApi.getModelPolicyPreview('fixture')).catalog_status, 'snapshot');
+    apiClient.get = async () => ({ catalog_status: 'catalog_unknown', evaluations: [] });
+    assert.equal(await authFilesApi.getModelPolicyPreview('fixture'), null);
+    let captured;
+    apiClient.patch = async (path, body) => { captured = {path, body}; };
+    await authFilesApi.saveOauthModelPolicy('Codex', { allowlist: { enabled: true, models: [] } });
+    assert.deepEqual(captured, { path: '/oauth-model-policy', body: { provider: 'codex', policy: { allowlist: { enabled: true, models: [] }, denylist: null } } });
+  } finally {
+    apiClient.get = originalGet;
+    apiClient.patch = originalPatch;
+  }
+});
 
 test.after(async () => {
   await vite.close();

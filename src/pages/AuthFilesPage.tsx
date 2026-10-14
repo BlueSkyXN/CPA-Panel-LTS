@@ -52,6 +52,7 @@ import { ProviderIcon } from '@/features/authFiles/components/ProviderIcon';
 import { AuthFileModelsModal } from '@/features/authFiles/components/AuthFileModelsModal';
 import { AuthFilesPrefixProxyEditorModal } from '@/features/authFiles/components/AuthFilesPrefixProxyEditorModal';
 import { OAuthExcludedCard } from '@/features/authFiles/components/OAuthExcludedCard';
+import { OAuthModelPolicyCard } from '@/features/authFiles/components/OAuthModelPolicyCard';
 import { OAuthModelAliasCard } from '@/features/authFiles/components/OAuthModelAliasCard';
 import { invalidateAuthFileDerivedCaches } from '@/features/authFiles/cacheInvalidation';
 import {
@@ -177,10 +178,13 @@ export function AuthFilesPage() {
   const {
     excluded,
     excludedError,
+    modelPolicy,
+    modelPolicyError,
     modelAlias,
     modelAliasError,
     allProviderModels,
     loadExcluded,
+    loadModelPolicy,
     loadModelAlias,
     deleteExcluded,
     deleteModelAlias,
@@ -395,8 +399,8 @@ export function AuthFilesPage() {
   );
 
   const handleHeaderRefresh = useCallback(async () => {
-    await Promise.all([loadFiles(), loadExcluded(), loadModelAlias()]);
-  }, [loadFiles, loadExcluded, loadModelAlias]);
+    await Promise.all([loadFiles(), loadExcluded(), loadModelPolicy(), loadModelAlias()]);
+  }, [loadFiles, loadExcluded, loadModelPolicy, loadModelAlias]);
 
   useHeaderRefresh(handleHeaderRefresh);
 
@@ -404,8 +408,9 @@ export function AuthFilesPage() {
     if (!isCurrentLayer) return;
     loadFiles();
     loadExcluded();
+    loadModelPolicy();
     loadModelAlias();
-  }, [isCurrentLayer, loadFiles, loadExcluded, loadModelAlias]);
+  }, [isCurrentLayer, loadFiles, loadExcluded, loadModelPolicy, loadModelAlias]);
 
   useInterval(
     () => {
@@ -527,6 +532,21 @@ export function AuthFilesPage() {
       }
       const nextSearch = params.toString();
       navigate(`/auth-files/oauth-excluded${nextSearch ? `?${nextSearch}` : ''}`, {
+        state: { fromAuthFiles: true },
+      });
+    },
+    [filter, navigate]
+  );
+
+  const openModelPolicyEditor = useCallback(
+    (provider?: string) => {
+      const providerValue = (provider || (filter !== 'all' ? String(filter) : '')).trim();
+      const params = new URLSearchParams();
+      if (providerValue) {
+        params.set('provider', providerValue);
+      }
+      const nextSearch = params.toString();
+      navigate(`/auth-files/model-policy${nextSearch ? `?${nextSearch}` : ''}`, {
         state: { fromAuthFiles: true },
       });
     },
@@ -951,6 +971,15 @@ export function AuthFilesPage() {
         onDelete={deleteExcluded}
       />
 
+      <OAuthModelPolicyCard
+        disableControls={disableControls}
+        policyError={modelPolicyError}
+        policies={modelPolicy}
+        onRetry={loadModelPolicy}
+        onAdd={() => openModelPolicyEditor()}
+        onEdit={openModelPolicyEditor}
+      />
+
       <OAuthModelAliasCard
         disableControls={disableControls}
         viewMode={viewMode}
@@ -1011,6 +1040,7 @@ export function AuthFilesPage() {
 
       <AuthFilesPrefixProxyEditorModal
         disableControls={disableControls}
+        modelPolicySupported={modelPolicyError === null}
         editor={prefixProxyEditor}
         updatedText={prefixProxyUpdatedText}
         dirty={prefixProxyDirty}

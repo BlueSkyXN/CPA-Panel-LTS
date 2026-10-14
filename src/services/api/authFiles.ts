@@ -3,8 +3,16 @@
  */
 
 import { apiClient } from './client';
-import type { AuthFilesResponse } from '@/types/authFile';
-import type { OAuthModelAliasEntry } from '@/types';
+import type {
+  AuthFilesResponse,
+  AuthFileModelPolicy,
+  ModelPolicyEvaluation,
+  ModelPolicyPreview,
+  OAuthModelAliasEntry,
+  OAuthModelPolicy,
+  OAuthModelPolicyEntry,
+  OAuthModelPolicyList,
+} from '@/types';
 import { normalizeOAuthProviderKey } from '@/utils/providerKeys';
 import {
   normalizeRecentRequestAuthIndex,
@@ -26,6 +34,7 @@ export type AuthFileFieldsPatch = {
   websockets?: boolean;
   using_api?: boolean;
   note?: string;
+  model_policy?: AuthFileModelPolicy | null;
 };
 type AuthFileBatchFailure = { name: string; error: string };
 type AuthFileBatchUploadResponse = {
@@ -315,6 +324,51 @@ const saveAuthFileText = async (name: string, text: string) => {
 export const isAuthFileInvalidJsonObjectError = (err: unknown): boolean =>
   err instanceof Error && err.message === AUTH_FILE_INVALID_JSON_OBJECT_ERROR;
 
+// OAuth 模型策略（LTS oauth-model-policy）
+export const normalizeOauthModelPolicy = (payload: unknown): OAuthModelPolicy => {
+  if (!payload || typeof payload !== 'object') return {};
+
+  const record = payload as Record<string, unknown>;
+  const source = record['oauth-model-policy'] ?? record.items ?? payload;
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return {};
+
+  const result: OAuthModelPolicy = {};
+  const normalizeList = (value: unknown): OAuthModelPolicyList | null => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const list = value as Record<string, unknown>;
+    if (typeof list.enabled !== 'boolean') return null;
+    const rawModels = Array.isArray(list.models) ? list.models : [];
+    const models: string[] = [];
+    const seen = new Set<string>();
+    rawModels.forEach((item) => {
+      const trimmed = String(item ?? '').trim();
+      if (!trimmed) return;
+      const key = trimmed.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      models.push(trimmed);
+    });
+    return { enabled: list.enabled, models };
+  };
+
+  Object.entries(source as Record<string, unknown>).forEach(([provider, entry]) => {
+    const key = normalizeOAuthProviderKey(String(provider ?? ''));
+    if (!key) return;
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return;
+    const rawEntry = entry as Record<string, unknown>;
+    const allowlist = rawEntry.allowlist === null ? null : normalizeList(rawEntry.allowlist);
+    const denylist = rawEntry.denylist === null ? null : normalizeList(rawEntry.denylist);
+    result[key] = { allowlist, denylist };
+  });
+
+  return result;
+};
+
+const serializeOauthModelPolicyList = (list: OAuthModelPolicyList | null | undefined) =>
+  list
+    ? { enabled: list.enabled, models: list.models.map((model) => model.trim()).filter(Boolean) }
+    : null;
+
 const normalizeOauthExcludedModels = (payload: unknown): Record<string, string[]> => {
   if (!payload || typeof payload !== 'object') return {};
 
@@ -512,6 +566,50 @@ export const authFilesApi = {
     return normalizeOauthModelAlias(data);
   },
 
+  // OAuth 模型策略（LTS）：渠道级黑白名单
+  async getOauthModelPolicy(): Promise<OAuthModelPolicy> {
+    const data = await apiClient.get('/oauth-model-policy');
+    return normalizeOauthModelPolicy(data);
+  },
+
+  saveOauthModelPolicy: (provider: string, policy: OAuthModelPolicyEntry | null) =>
+    apiClient.patch('/oauth-model-policy', {
+      provider: normalizeOAuthProviderKey(provider),
+      policy:
+        policy === null
+          ? {}
+          : {
+              allowlist: serializeOauthModelPolicyList(policy.allowlist),
+              denylist: serializeOauthModelPolicyList(policy.denylist),
+            },
+    }),
+
+  // 模型策略预览（只读，不联网发现）
+  async getModelPolicyPreview(name: string): Promise<ModelPolicyPreview | null> {
+    const data = await apiClient.get<Record<string, unknown>>(
+      `/auth-files/models/policy-preview?name=${encodeURIComponent(name)}`
+    );
+    const status =
+      typeof data.catalog_status === 'string'
+        ? data.catalog_status
+        : typeof data.status === 'string'
+          ? data.status
+          : '';
+    if (status === 'catalog_unknown') return null;
+    const evaluations = Array.isArray(data.evaluations) ? data.evaluations : [];
+    return {
+      auth_id: typeof data.auth_id === 'string' ? data.auth_id : '',
+      provider: typeof data.provider === 'string' ? data.provider : '',
+      catalog_status: status || 'snapshot',
+      evaluations: evaluations.filter(
+        (item): item is ModelPolicyEvaluation =>
+          Boolean(item) &&
+          typeof item === 'object' &&
+          typeof (item as ModelPolicyEvaluation).model_id === 'string' &&
+          typeof (item as ModelPolicyEvaluation).allowed === 'boolean'
+      ),
+    };
+  },
   saveOauthModelAlias: async (channel: string, aliases: OAuthModelAliasEntry[]) => {
     const normalizedChannel = normalizeOAuthProviderKey(String(channel ?? ''));
     const normalizedAliases =

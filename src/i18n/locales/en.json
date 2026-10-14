@@ -3085,5 +3085,33 @@
     "action_quota": "Quota",
     "action_behavior": "Behavior",
     "action_all_pools": "All pools"
+  },
+  "model_policy": {
+    "card_title": "Channel Model Policy",
+    "card_desc": "Allow/deny model lists per provider channel; legacy excluded models always stay in effect.",
+    "list_empty": "No channel model policy configured",
+    "entry_summary": "{{count}} rule(s): allow {{allow}}, deny {{deny}}",
+    "entry_all_disabled": "{{count}} rule(s) stored, all disabled",
+    "edit_title": "Channel Model Policy",
+    "title": "Model Policy",
+    "description": "Allowlist intersects across channel and account; denylist unions and always wins. Legacy excluded models stay in effect and union with the denylist.",
+    "upgrade_required_desc": "This Core version does not support oauth-model-policy. Upgrade Core to use model policy.",
+    "provider_required": "Provider is required",
+    "models_placeholder": "One model ID or pattern per line, e.g. gpt-5-codex, *-preview",
+    "allowlist_label": "Allowlist",
+    "allowlist_hint": "When enabled, only matching models are published for this channel. Disabled keeps the stored list without applying it.",
+    "denylist_label": "Denylist",
+    "denylist_hint": "When enabled, matching models are removed for this channel; unions with legacy excluded models.",
+    "allow_empty_warning": "Allowlist is enabled with an empty list: this channel/account will publish zero models.",
+    "save_success": "Model policy saved",
+    "save_failed": "Failed to save model policy",
+    "legacy_title": "Legacy excluded models",
+    "legacy_desc": "{{count}} legacy exclusion rule(s) always apply. Migrate them into the new denylist and remove the legacy key.",
+    "migrate_button": "Migrate to denylist",
+    "migrate_title": "Migrate legacy exclusions",
+    "migrate_message": "Move {{count}} legacy exclusion rule(s) into the new denylist and delete the legacy key? The denylist will be enabled after migration.",
+    "migrate_success": "Legacy exclusions migrated",
+    "account_section_label": "Model policy (this account)",
+    "account_section_hint": "Account lists further narrow the channel policy; they never override it."
   }
 }
