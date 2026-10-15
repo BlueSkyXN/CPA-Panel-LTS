@@ -37,10 +37,11 @@ const vite = await createServer({
   server: { middlewareMode: true },
 });
 
-const [{ RequestEventsDetailsCard }, pricingModule, i18nModule] = await Promise.all([
+const [{ RequestEventsDetailsCard }, pricingModule, i18nModule, { buildRequestEventFilterOptions }] = await Promise.all([
   vite.ssrLoadModule('/src/components/usage/RequestEventsDetailsCard.tsx'),
   vite.ssrLoadModule('/src/utils/usage/pricing/index.ts'),
   vite.ssrLoadModule('/src/i18n/index.ts'),
+  vite.ssrLoadModule('/src/components/usage/requestEventFilterOptions.ts'),
 ]);
 const i18n = i18nModule.default;
 
@@ -487,6 +488,60 @@ test('fully redacts short caller keys instead of exposing every original charact
   assert.doesNotMatch(markup, /x\*+z/);
 });
 
+const allFilterOption = { value: '__all__', label: '全部' };
+
+test('model filter options are unique, naturally sorted, and keep All first', () => {
+  const models = Object.freeze([
+    'gpt-5.10', 'glm-5.3-flash', 'gpt-5.9', 'glm-5.3',
+    'Doubao-Seed-2.1-Pro', 'glm-5.3', '__all__',
+  ]);
+  const expected = [
+    allFilterOption,
+    ...['Doubao-Seed-2.1-Pro', 'glm-5.3', 'glm-5.3-flash', 'gpt-5.9', 'gpt-5.10']
+      .map((value) => ({ value, label: value })),
+  ];
+
+  for (const selection of ['__all__', 'glm-5.3', 'gpt-5.10']) {
+    assert.deepEqual(buildRequestEventFilterOptions(models, selection, allFilterOption), expected);
+    assert.deepEqual(buildRequestEventFilterOptions([...models].reverse(), selection, allFilterOption), expected);
+  }
+});
+
+test('filter ordering ignores case but preserves exact model identities and deterministic ties', () => {
+  const models = ['gpt-5.9', 'GLM-5.3', 'glm-5.3', 'GPT-5.10', 'glm-5.3'];
+  const expected = ['__all__', 'GLM-5.3', 'glm-5.3', 'gpt-5.9', 'GPT-5.10'];
+
+  for (const values of [models, [...models].reverse()]) {
+    assert.deepEqual(
+      buildRequestEventFilterOptions(values, 'glm-5.3', allFilterOption).map(({ value }) => value),
+      expected
+    );
+  }
+});
+
+test('missing selected models stay in sorted position even with empty window options', () => {
+  assert.deepEqual(
+    buildRequestEventFilterOptions(['gpt-5.10', 'Doubao-Seed-2.1-Pro'], 'glm-5.3', allFilterOption)
+      .map(({ value }) => value),
+    ['__all__', 'Doubao-Seed-2.1-Pro', 'glm-5.3', 'gpt-5.10']
+  );
+  assert.deepEqual(buildRequestEventFilterOptions([], 'glm-5.3', allFilterOption), [
+    allFilterOption, { value: 'glm-5.3', label: 'glm-5.3' },
+  ]);
+  assert.deepEqual(buildRequestEventFilterOptions([], '__all__', allFilterOption), [allFilterOption]);
+});
+
+test('auth index filter options retain missing selections without duplicates or selection pinning', () => {
+  const values = ['10', '2', '-', '1', '2'];
+  const options = buildRequestEventFilterOptions(values, '2', allFilterOption);
+  assert.deepEqual(options.map(({ value }) => value), ['__all__', '-', '1', '2', '10']);
+  assert.deepEqual(buildRequestEventFilterOptions(values, '-', allFilterOption), options);
+  assert.deepEqual(
+    buildRequestEventFilterOptions(['10', '1'], '2', allFilterOption).map(({ value }) => value),
+    ['__all__', '1', '2', '10']
+  );
+});
+
 test('previously selected filters survive a workspace remount via the session draft', async () => {
   await i18n.changeLanguage('en');
   const usage = {
@@ -507,7 +562,7 @@ test('previously selected filters survive a workspace remount via the session dr
   };
   sessionStorage.setItem(
     'cpa-request-event-filters-v1',
-    JSON.stringify({ model: 'gpt-b', serviceTier: '__service_tier_fast__' })
+    JSON.stringify({ model: 'gpt-b', authIndex: 'missing-auth-index', serviceTier: '__service_tier_fast__' })
   );
   try {
     const markup = renderToStaticMarkup(
@@ -527,7 +582,9 @@ test('previously selected filters survive a workspace remount via the session dr
     );
     // The restored selection stays visible instead of silently resetting to All.
     assert.match(markup, />gpt-b</);
+    assert.match(markup, />missing-auth-index</);
     assert.match(markup, /Fast</);
+    assert.equal((markup.match(/data-request-cost-status=/g) ?? []).length, 0);
   } finally {
     sessionStorage.removeItem('cpa-request-event-filters-v1');
   }
