@@ -74,6 +74,7 @@ import { logsApi } from '@/services/api/logs';
 import styles from '@/pages/UsagePage.module.scss';
 import type { UsageQuerySession, UsageQueryFilter } from '@/types/usageQuery';
 import { queryItemDetail, useUsageQueryDetails } from './hooks/useUsageQueryDetails';
+import { buildRequestEventFilterOptions } from './requestEventFilterOptions';
 import { analyticsQueryFilter, type AnalyticsFilters } from '@/utils/usage/analyticsFilters';
 import { useNotificationStore } from '@/stores/useNotificationStore';
 
@@ -1507,16 +1508,12 @@ export function RequestEventsDetailsCard({
   );
 
   const modelOptions = useMemo(
-    () => [
-      { value: ALL_FILTER, label: t('usage_stats.filter_all') },
-      // 已选值不随窗口收窄消失：丢失选项会让用户以为筛选被重置，
-      // 实际上下推仍在生效，窗口内无匹配时显示真实的 0 条。
-      ...(modelFilter !== ALL_FILTER ? [{ value: modelFilter, label: modelFilter }] : []),
-      ...Array.from(new Set(querySession ? remote.options?.models ?? [] : timeScopedRows.map((row) => row.model))).map((model) => ({
-        value: model,
-        label: model,
-      })),
-    ],
+    () =>
+      buildRequestEventFilterOptions(
+        querySession ? remote.options?.models ?? [] : timeScopedRows.map((row) => row.model),
+        modelFilter,
+        { value: ALL_FILTER, label: t('usage_stats.filter_all') }
+      ),
     [t, timeScopedRows, querySession, remote.options, modelFilter]
   );
 
@@ -1601,14 +1598,14 @@ export function RequestEventsDetailsCard({
   }, [t, timeScopedRows, querySession, remoteSources, sourceFilter, initialAnalyticsFilters]);
 
   const authIndexOptions = useMemo(
-    () => [
-      { value: ALL_FILTER, label: t('usage_stats.filter_all') },
-      ...(authIndexFilter !== ALL_FILTER ? [{ value: authIndexFilter, label: authIndexFilter }] : []),
-      ...Array.from(new Set(querySession ? (remote.options?.auth_indices ?? []).map((id) => id || '-') : timeScopedRows.map((row) => row.authIndex))).map((authIndex) => ({
-        value: authIndex,
-        label: authIndex,
-      })),
-    ],
+    () =>
+      buildRequestEventFilterOptions(
+        querySession
+          ? (remote.options?.auth_indices ?? []).map((id) => id || '-')
+          : timeScopedRows.map((row) => row.authIndex),
+        authIndexFilter,
+        { value: ALL_FILTER, label: t('usage_stats.filter_all') }
+      ),
     [t, timeScopedRows, querySession, remote.options, authIndexFilter]
   );
 
