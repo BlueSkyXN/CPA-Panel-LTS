@@ -339,7 +339,7 @@ def build_usage_payload() -> dict[str, Any]:
                 "output_tokens": 8,
                 "reasoning_tokens": 2,
                 "cached_tokens": 1,
-                "cache_read_tokens": 3,
+                "cache_read_tokens": 12,
                 "cache_creation_tokens": 4,
                 "total_tokens": 23,
             },
@@ -398,8 +398,8 @@ def build_usage_payload() -> dict[str, Any]:
                 "input_tokens": 11,
                 "output_tokens": 7,
                 "reasoning_tokens": 1,
-                "cached_tokens": 7,
-                "cache_read_tokens": 7,
+                "cached_tokens": 10,
+                "cache_read_tokens": 10,
                 "total_tokens": 19,
             },
             "failed": False,
@@ -452,7 +452,7 @@ def build_usage_payload() -> dict[str, Any]:
             "reasoning_effort": "medium",
             "tokens": {
                 "input_tokens": 272_000,
-                "cache_read_tokens": 163_200,
+                "cache_read_tokens": 258_400,
                 "output_tokens": 0,
                 "total_tokens": 272_000,
             },
@@ -4413,7 +4413,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     priority_row = rows.filter(has_text="12").filter(has_text="Fast").first
     priority_cells = [text.strip() for text in priority_row.locator("td").all_inner_texts()]
     priority_token_values = [cell.splitlines()[0] for cell in priority_cells[-9:-1]]
-    if priority_token_values != ["12", "9", "8", "6", "2", "3", "4", "23"]:
+    if priority_token_values != ["12", "0", "8", "6", "2", "12", "4", "23"]:
         raise AssertionError(
             "Combined service-tier/cache row rendered the wrong token values: "
             f"{priority_cells!r}"
@@ -4444,7 +4444,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         'td[data-cache-rate-tone="low"][data-cache-token-count="0"]'
     )
     if zero_cache_cells.count() == 0:
-        raise AssertionError("A known 0% cache-read share was not classified as Low")
+        raise AssertionError("A known 0% cache-read share was not classified as abnormal")
     anomaly_cache_cells = rows.locator('td[data-cache-rate-tone="anomaly"]')
     if anomaly_cache_cells.count() != 1:
         raise AssertionError(
@@ -4544,9 +4544,9 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         )
     priority_csv = priority_csv_rows[0]
     expected_priority_csv_tokens = {
-        "non_cache_read_input_tokens": "9",
-        "cached_tokens": "3",
-        "cache_read_tokens": "3",
+        "non_cache_read_input_tokens": "0",
+        "cached_tokens": "12",
+        "cache_read_tokens": "12",
         "cache_creation_tokens": "4",
         "total_tokens": "23",
     }
@@ -4647,13 +4647,13 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     priority_json_tokens = priority_json_rows[0].get("tokens", {})
     expected_priority_json_tokens = {
         "input_tokens": 12,
-        "non_cache_read_input_tokens": 9,
+        "non_cache_read_input_tokens": 0,
         "output_tokens": 8,
         "tps_output_tokens": 8,
         "non_reasoning_output_tokens": 6,
         "reasoning_tokens": 2,
-        "cached_tokens": 3,
-        "cache_read_tokens": 3,
+        "cached_tokens": 12,
+        "cache_read_tokens": 12,
         "cache_creation_tokens": 4,
         "total_tokens": 23,
     }
@@ -4738,10 +4738,10 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     }
     expected_cache_tone_labels = {
         "unavailable": "Not set",
-        "low": "Low",
-        "medium": "Moderate",
-        "high": "High",
-        "anomaly": "Anomaly",
+        "low": "Abnormal",
+        "medium": "Borderline",
+        "high": "Normal",
+        "anomaly": "Data anomaly",
     }
     original_theme = page.evaluate(
         "() => document.documentElement.getAttribute('data-theme')"
@@ -4795,8 +4795,8 @@ def run_usage_service_tier_smoke(page: Any) -> None:
             f"{cache_tone_signatures!r}"
         )
     cache_rate_boundaries = {
-        "medium": ('td[data-cache-rate-tone="medium"][data-cache-token-count="3"]', "25%"),
-        "high": ('td[data-cache-rate-tone="high"][data-cache-token-count="163200"]', "60%"),
+        "medium": ('td[data-cache-rate-tone="medium"][data-cache-token-count="10"]', "90.9%"),
+        "high": ('td[data-cache-rate-tone="high"][data-cache-token-count="258400"]', "95%"),
     }
     for tone, (selector, expected_rate) in cache_rate_boundaries.items():
         boundary_cell = card.locator(selector)
@@ -4900,8 +4900,16 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     result_select.click()
     page.get_by_role("option", name="Failure", exact=True).click()
     wait_for_row_count(1)
-    if "Failure" not in rows.first.inner_text():
-        raise AssertionError("Result filter returned a successful request")
+    failed_result_cell = rows.first.locator('td[data-request-result="failed"]')
+    failure_badge = failed_result_cell.locator('[data-failure-status="429"]')
+    if failure_badge.count() != 1:
+        raise AssertionError("Failed request lost its HTTP failure-status badge")
+    badge_label = failure_badge.first.get_attribute("aria-label") or ""
+    if "Failure" not in badge_label or "429" not in badge_label:
+        raise AssertionError(
+            "Failure-status badge is not announced as a failure to screen readers: "
+            f"{badge_label!r}"
+        )
 
     card.get_by_role("button", name="Clear Filters", exact=True).click()
     wait_for_row_count(8)

@@ -38,6 +38,8 @@ import {
   calculateOutputTps,
   calculateVisibleAverageTps,
   collectUsageDetails,
+  extractFailureReason,
+  extractFailureStatus,
   extractLatencyMs,
   extractTTFAMs,
   extractTTFBMs,
@@ -151,8 +153,9 @@ const PAGE_TIME_RANGE_LABEL_KEYS: Record<UsageTimeRange, string> = {
   all: 'usage_stats.range_all',
 };
 
-const CACHE_RATE_LOW_THRESHOLD = 0.25;
-const CACHE_RATE_HIGH_THRESHOLD = 0.6;
+// Below 90% is abnormal. 90% up to 95% is only the floor; 95% and above is normal.
+const CACHE_RATE_ABNORMAL_THRESHOLD = 0.9;
+const CACHE_RATE_NORMAL_THRESHOLD = 0.95;
 
 const REQUEST_EVENT_COLUMN_IDS = [
   'timestamp',
@@ -333,6 +336,8 @@ type RequestEventRow = {
   reasoningEffortFilterValue: string;
   reasoningEffortLabel: string;
   failed: boolean;
+  failureStatus: number | null;
+  failureReason: string | null;
   traceId: string | null;
   upstreamTransport: string | null;
   upstreamRequestBytes: number | null;
@@ -572,8 +577,8 @@ const getCacheRateTone = (
   }
   if (inputTokens <= 0) return 'unavailable';
   if (cacheRate === null) return 'unavailable';
-  if (cacheRate < CACHE_RATE_LOW_THRESHOLD) return 'low';
-  if (cacheRate < CACHE_RATE_HIGH_THRESHOLD) return 'medium';
+  if (cacheRate < CACHE_RATE_ABNORMAL_THRESHOLD) return 'low';
+  if (cacheRate < CACHE_RATE_NORMAL_THRESHOLD) return 'medium';
   return 'high';
 };
 
@@ -1374,6 +1379,8 @@ export function RequestEventsDetailsCard({
         reasoningEffortFilterValue,
         reasoningEffortLabel,
         failed: detail.failed === true,
+        failureStatus: detail.failed === true ? extractFailureStatus(detail) : null,
+        failureReason: detail.failed === true ? extractFailureReason(detail) : null,
         traceId: detail.trace_id ?? null,
         upstreamTransport: detail.upstream_transport ?? null,
         upstreamRequestBytes: upstreamPayloadBytes(detail),
@@ -2174,6 +2181,8 @@ export function RequestEventsDetailsCard({
       'estimated_cost_usd',
       'pricing_status',
       'trace_id',
+      'failure_status',
+      'failure_reason',
     ];
 
     const csvRows = exportRows.map((row) =>
@@ -2227,6 +2236,8 @@ export function RequestEventsDetailsCard({
         row.costAmount ?? '',
         row.costStatus,
         row.traceId ?? '',
+        row.failureStatus ?? '',
+        row.failureReason ?? '',
       ]
         .map((value) => encodeCsv(value))
         .join(',')
@@ -2283,6 +2294,8 @@ export function RequestEventsDetailsCard({
       service_tier_evidence: row.resolvedServiceTier.evidence,
       reasoning_effort: row.reasoningEffort,
       failed: row.failed,
+      failure_status: row.failureStatus,
+      failure_reason: row.failureReason,
       upstream_transport: row.upstreamTransport,
       upstream_request_bytes: row.upstreamRequestBytes,
       upstream_request_wire_bytes: row.upstreamRequestWireBytes,
@@ -3206,16 +3219,38 @@ export function RequestEventsDetailsCard({
                         </td>
                       )}
                       {columnVisibility.result && (
-                        <td>
+                        <td data-request-result={row.failed ? 'failed' : 'success'}>
                           <span
+                            data-failure-status={row.failureStatus ?? undefined}
+                            title={
+                              row.failureStatus !== null
+                                ? t('usage_stats.request_events_failure_status', { status: row.failureStatus })
+                                : undefined
+                            }
+                            aria-label={
+                              row.failureStatus !== null
+                                ? `${t('stats.failure')} · ${t('usage_stats.request_events_failure_status', { status: row.failureStatus })}`
+                                : undefined
+                            }
                             className={
                               row.failed
                                 ? styles.requestEventsResultFailed
                                 : styles.requestEventsResultSuccess
                             }
                           >
-                            {row.failed ? t('stats.failure') : t('stats.success')}
+                            {row.failed ? row.failureStatus ?? t('stats.failure') : t('stats.success')}
                           </span>
+                          {row.failureReason && (
+                            <span
+                              className={styles.requestEventsFailureReason}
+                              data-failure-reason={row.failureReason}
+                              title={t('usage_stats.request_events_failure_reason', {
+                                reason: row.failureReason,
+                              })}
+                            >
+                              {row.failureReason}
+                            </span>
+                          )}
                           {row.largeConnectFailure && (
                             <span
                               className={styles.requestEventsResultHint}

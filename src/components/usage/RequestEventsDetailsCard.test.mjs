@@ -748,3 +748,113 @@ test('transition drilldown keeps effort and excludes pure tiers from both conver
     assert.ok(html.slice(html.indexOf('<tbody')).includes(`>${tokens}<`));
   }
 });
+
+test('classifies cache-read share below 90% as abnormal and 95% or above as normal', async () => {
+  await i18n.changeLanguage('en');
+  const cases = [
+    [0, 0, 'unavailable'],
+    [0, 5, 'anomaly'],
+    [100, 0, 'low'],
+    [100, 89, 'low'],
+    [100, 90, 'medium'],
+    [100, 94, 'medium'],
+    [100, 95, 'high'],
+    [100, 99, 'high'],
+    [100, 100, 'high'],
+    [9, 12, 'anomaly'],
+  ];
+  const details = cases.map(([input, cache], index) => ({
+    timestamp: `2026-10-16T00:${String(index).padStart(2, '0')}:00Z`,
+    source: 'synthetic-source',
+    auth_index: '1',
+    failed: false,
+    tokens: { input_tokens: input, cache_read_tokens: cache, total_tokens: Math.max(input, cache) },
+  }));
+  const markup = renderToStaticMarkup(createElement(RequestEventsDetailsCard, {
+    usage: { apis: { app: { models: { 'gpt-5.6-sol': { details } } } } },
+    loading: false,
+    pageTimeRange: 'all',
+    referenceNowMs: Date.parse('2026-10-16T01:00:00Z'),
+    priceProfile: pricingModule.createDefaultPriceProfileV3(),
+    requestApiKeys: [],
+    geminiKeys: [],
+    claudeConfigs: [],
+    codexConfigs: [],
+    vertexConfigs: [],
+    openaiProviders: [],
+  }));
+  for (const [, cache, tone] of cases) {
+    assert.match(markup, new RegExp(`data-cache-rate-tone="${tone}" data-cache-token-count="${cache}"`));
+  }
+  assert.match(markup, /aria-label="[^"]*below 90%[^"]*"/);
+  assert.match(markup, /aria-label="0 cache-read tokens, 0%, Abnormal"/);
+  assert.match(markup, /aria-label="90 cache-read tokens, 90%, Borderline"/);
+  assert.match(markup, /aria-label="95 cache-read tokens, 95%, Normal"/);
+  assert.match(markup, /aria-label="99 cache-read tokens, 99%, Normal"/);
+  assert.match(markup, /aria-label="12 cache-read tokens, [^"]*Data anomaly[^"]*exceed total input tokens \(9\)\."/);
+  assert.equal((markup.match(/data-cache-rate-tone="anomaly"/g) ?? []).length, 2);
+});
+
+test('shows the failure status code badge and reason on failed request events', async () => {
+  await i18n.changeLanguage('en');
+  const details = [
+    {
+      timestamp: '2026-10-16T00:00:00Z',
+      source: 'synthetic-source',
+      auth_index: '1',
+      failed: true,
+      failure_status: 429,
+      failure_reason: 'rate_limit_error',
+      tokens: { input_tokens: 10, output_tokens: 0, total_tokens: 10 },
+    },
+    {
+      timestamp: '2026-10-16T00:01:00Z',
+      source: 'synthetic-source',
+      auth_index: '1',
+      failed: true,
+      failure_status: 700,
+      tokens: { input_tokens: 10, output_tokens: 0, total_tokens: 10 },
+    },
+    {
+      timestamp: '2026-10-16T00:02:00Z',
+      source: 'synthetic-source',
+      auth_index: '1',
+      failed: true,
+      tokens: { input_tokens: 10, output_tokens: 0, total_tokens: 10 },
+    },
+    {
+      timestamp: '2026-10-16T00:03:00Z',
+      source: 'synthetic-source',
+      auth_index: '1',
+      failed: false,
+      failure_status: 429,
+      failure_reason: 'rate_limit_error',
+      tokens: { input_tokens: 10, output_tokens: 2, total_tokens: 12 },
+    },
+  ];
+  const markup = renderToStaticMarkup(createElement(RequestEventsDetailsCard, {
+    usage: { apis: { app: { models: { 'gpt-5.6-sol': { details } } } } },
+    loading: false,
+    pageTimeRange: 'all',
+    referenceNowMs: Date.parse('2026-10-16T01:00:00Z'),
+    priceProfile: pricingModule.createDefaultPriceProfileV3(),
+    requestApiKeys: [],
+    geminiKeys: [],
+    claudeConfigs: [],
+    codexConfigs: [],
+    vertexConfigs: [],
+    openaiProviders: [],
+  }));
+  // 429 失败：显示纯错误码徽标 + 错误原因 + 可访问标签。
+  assert.match(markup, /data-request-result="failed"[^>]*>/);
+  assert.match(markup, /data-failure-status="429"[^>]*aria-label="Failure · HTTP 429"/);
+  assert.match(markup, /data-failure-reason="rate_limit_error"/);
+  // 越界状态码（700 > 599）被丢弃，保留纯「失败」文案。
+  assert.doesNotMatch(markup, /data-failure-status="700"/);
+  const failedCells = markup.match(/data-request-result="failed"[\s\S]*?<\/td>/g) ?? [];
+  assert.ok(failedCells.length >= 3);
+  assert.ok(failedCells.some((cell) => cell.includes('>Failure<')));
+  // 成功记录即便带失败字段也不显示错误徽标。
+  assert.match(markup, /data-request-result="success"/);
+  assert.equal((markup.match(/data-failure-status=/g) ?? []).length, 1);
+});
