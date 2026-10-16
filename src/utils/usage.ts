@@ -511,7 +511,8 @@ const extractReasoningEffort = (detail: Record<string, unknown>): string | null 
 const extractUpstreamModel = (detail: Record<string, unknown>): string | null =>
   typeof detail.upstream_model === 'string' ? detail.upstream_model : null;
 
-const extractFailureStatus = (detail: Record<string, unknown>): number | null => {
+export const extractFailureStatus = (detail: unknown): number | null => {
+  if (!isRecord(detail)) return null;
   const raw = detail.failure_status ?? detail.failureStatus ?? detail.FailureStatus;
   if (raw === null || raw === undefined) return null;
   const parsed = Number(raw);
@@ -521,7 +522,8 @@ const extractFailureStatus = (detail: Record<string, unknown>): number | null =>
 
 const FAILURE_REASON_MAX_LENGTH = 200;
 
-const extractFailureReason = (detail: Record<string, unknown>): string | null => {
+export const extractFailureReason = (detail: unknown): string | null => {
+  if (!isRecord(detail)) return null;
   const raw = detail.failure_reason ?? detail.failureReason ?? detail.FailureReason;
   if (typeof raw !== 'string') return null;
   const trimmed = raw.trim();
