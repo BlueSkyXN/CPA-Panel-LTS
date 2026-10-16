@@ -12,6 +12,7 @@ import {
   sparsePointRadius,
 } from '@/utils/usage/chartConfig';
 import styles from '@/pages/UsagePage.module.scss';
+import { bucketRangeAt, type AnalyticsBucketRange } from './analyticsBucketDrill';
 
 const SERIES_COLORS = {
   p50: '#10B981',
@@ -24,9 +25,11 @@ export interface LatencyTrendChartProps {
   data: UsageAnalyticsData;
   loading: boolean;
   isMobile: boolean;
+  /** 点击时间桶时下钻到该桶的请求明细；未提供时图表仅展示。 */
+  onBucketClick?: ((bucket: AnalyticsBucketRange) => void) | null;
 }
 
-export function LatencyTrendChart({ data, loading, isMobile }: LatencyTrendChartProps) {
+export function LatencyTrendChart({ data, loading, isMobile, onBucketClick }: LatencyTrendChartProps) {
   const { t } = useTranslation();
   const [period, setPeriod] = useState<'hour' | 'day'>('hour');
 
@@ -85,8 +88,18 @@ export function LatencyTrendChart({ data, loading, isMobile }: LatencyTrendChart
       const first = items[0];
       return first ? series.sampleCounts[first.dataIndex] : null;
     };
+    const bucketTimes = series.times;
+    const grain = period;
     const options: ChartOptions<'line'> = {
       ...baseOptions,
+      onClick: onBucketClick
+        ? (_elements, elements) => {
+            const first = elements[0];
+            if (!first) return;
+            const bucket = bucketRangeAt(bucketTimes, first.index, grain);
+            if (bucket) onBucketClick(bucket);
+          }
+        : undefined,
       elements: {
         ...baseOptions.elements,
         point: {
@@ -127,7 +140,7 @@ export function LatencyTrendChart({ data, loading, isMobile }: LatencyTrendChart
       chartOptions: options,
       hasSamples: series.sampleCounts.some((count) => count > 0),
     };
-  }, [data, period, isMobile, t]);
+  }, [data, period, isMobile, t, onBucketClick]);
 
   const labels = chartData.labels ?? [];
 

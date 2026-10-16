@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { AnalyticsSection } from '@/components/common/AnalyticsSection';
 import type { UsageAnalyticsData } from '@/types/usageAnalytics';
+import type { AnalyticsBucketRange } from './analyticsBucketDrill';
 import { CacheEfficiencyCard } from './CacheEfficiencyCard';
 import { ErrorAnalysisCard } from './ErrorAnalysisCard';
 import { LatencyDistributionCard } from './LatencyDistributionCard';
@@ -13,10 +14,13 @@ export function UsageAnalyticsCharts({
   data,
   loading,
   isMobile,
+  onBucketClick,
 }: {
   data: UsageAnalyticsData;
   loading: boolean;
   isMobile: boolean;
+  /** 点击趋势图时间桶时触发；null 表示该卡不支持下钻。 */
+  onBucketClick?: ((bucket: AnalyticsBucketRange) => void) | null;
 }) {
   const { t } = useTranslation();
   return (
@@ -26,8 +30,8 @@ export function UsageAnalyticsCharts({
         description={t('analytics.group_performance_hint')}
       >
         <div className={styles.analyticsGrid}>
-          <LatencyTrendChart data={data} loading={loading} isMobile={isMobile} />
-          <ThroughputTrendChart data={data} loading={loading} isMobile={isMobile} />
+          <LatencyTrendChart data={data} loading={loading} isMobile={isMobile} onBucketClick={onBucketClick} />
+          <ThroughputTrendChart data={data} loading={loading} isMobile={isMobile} onBucketClick={onBucketClick} />
         </div>
       </AnalyticsSection>
       <AnalyticsSection
@@ -35,8 +39,8 @@ export function UsageAnalyticsCharts({
         description={t('analytics.group_reliability_hint')}
       >
         <div className={styles.analyticsGrid}>
-          <CacheEfficiencyCard data={data} loading={loading} isMobile={isMobile} />
-          <ErrorAnalysisCard data={data} loading={loading} isMobile={isMobile} />
+          <CacheEfficiencyCard data={data} loading={loading} isMobile={isMobile} onBucketClick={onBucketClick} />
+          <ErrorAnalysisCard data={data} loading={loading} isMobile={isMobile} onBucketClick={onBucketClick} />
         </div>
       </AnalyticsSection>
       <AnalyticsSection

@@ -13,6 +13,7 @@ import {
 } from '@/utils/usage/chartConfig';
 import { throughputRate, type ThroughputTrendPoint } from '@/utils/usage/throughputAnalytics';
 import styles from '@/pages/UsagePage.module.scss';
+import { bucketRangeAt, type AnalyticsBucketRange } from './analyticsBucketDrill';
 
 const SERIES_COLORS = {
   output: '#3B82F6',
@@ -27,9 +28,11 @@ export interface ThroughputTrendChartProps {
   data: UsageAnalyticsData;
   loading: boolean;
   isMobile: boolean;
+  /** 点击时间桶时下钻到该桶的请求明细；未提供时图表仅展示。 */
+  onBucketClick?: ((bucket: AnalyticsBucketRange) => void) | null;
 }
 
-export function ThroughputTrendChart({ data, loading, isMobile }: ThroughputTrendChartProps) {
+export function ThroughputTrendChart({ data, loading, isMobile, onBucketClick }: ThroughputTrendChartProps) {
   const { t } = useTranslation();
   const [period, setPeriod] = useState<'hour' | 'day'>('hour');
 
@@ -72,8 +75,18 @@ export function ThroughputTrendChart({ data, loading, isMobile }: ThroughputTren
     };
 
     const baseOptions = buildChartOptions({ period, labels, isMobile });
+    const bucketTimes = points.map((point) => point.timestampMs);
+    const grain = period;
     const options: ChartOptions<'line'> = {
       ...baseOptions,
+      onClick: onBucketClick
+        ? (_elements, elements) => {
+            const first = elements[0];
+            if (!first) return;
+            const bucket = bucketRangeAt(bucketTimes, first.index, grain);
+            if (bucket) onBucketClick(bucket);
+          }
+        : undefined,
       elements: {
         ...baseOptions.elements,
         point: {
@@ -114,7 +127,7 @@ export function ThroughputTrendChart({ data, loading, isMobile }: ThroughputTren
       chartOptions: options,
       hasSamples: points.some((point) => point.averageSamples > 0),
     };
-  }, [data, period, isMobile, t]);
+  }, [data, period, isMobile, t, onBucketClick]);
 
   const labels = chartData.labels ?? [];
 

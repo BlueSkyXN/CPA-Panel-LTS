@@ -949,6 +949,22 @@
   color: var(--text-tertiary);
 }
 
+.summaryChipButton {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: $radius-full;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+
+  &:hover { border-color: var(--text-secondary); }
+  &:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
+}
+
 .errorStatusGrid {
   display: grid;
   gap: 16px;
@@ -2475,4 +2491,41 @@
   margin-block: $spacing-sm;
   font-size: 13px;
   overflow-wrap: anywhere;
+}
+
+.requestEventsRowExpanded {
+  background: var(--bg-secondary);
+}
+
+.requestEventsDetailRow > td {
+  padding: 10px 14px;
+  background: var(--bg-secondary);
+  border-top: 1px dashed var(--border-color);
+}
+
+.requestEventsDetailGrid {
+  dl {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+    gap: 10px 20px;
+    margin: 0;
+  }
+  dt {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    margin-bottom: 4px;
+  }
+  dd {
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    font-size: 12.5px;
+    align-items: baseline;
+  }
+}
+
+.requestEventsDetailItem {
+  white-space: nowrap;
 }

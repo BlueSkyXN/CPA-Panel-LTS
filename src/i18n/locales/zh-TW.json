@@ -1688,7 +1688,17 @@
     "share_other_models": "其他（{{count}} 個模型）",
     "share_metric_requests": "請求數",
     "share_metric_tokens": "Token 數",
-    "share_metric_cost": "費用"
+    "share_metric_cost": "費用",
+    "request_events_compact_view": "緊湊視圖",
+    "request_events_compact_view_hint": "只保留定位單一問題所需的核心欄位；切換回完整視圖會恢復你的欄位設定",
+    "request_events_full_view": "完整視圖",
+    "request_events_full_view_hint": "恢復之前的完整欄位設定",
+    "request_events_detail_result": "結果",
+    "request_events_detail_timing": "時間",
+    "request_events_detail_tokens": "用量",
+    "request_events_detail_diagnostics": "診斷",
+    "request_events_detail_auth_index": "認證索引",
+    "request_events_detail_trace_id": "關聯 ID"
   },
   "service_health": {
     "title": "服務健康監測",

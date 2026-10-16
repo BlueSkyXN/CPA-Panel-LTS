@@ -41,6 +41,9 @@ export function UsageEventsPage() {
     if (!isRecord(location.state) || !location.state.analyticsSession) return null;
     try { return decodeUsageQuerySession(location.state.analyticsSession); } catch { return null; }
   }, [location.state]);
+  // 可观测看板摘要带的失败下钻用 failed=1 表达"只看失败记录"，
+  // 复用事件页已有的结果筛选语义，不引入并行的一套参数。
+  const initialResultFailed = searchParams.get('failed') === '1';
   const [releasedSnapshot, setReleasedSnapshot] = useState<string | null>(null);
   const selectedSession = pinnedSession && releasedSnapshot !== pinnedSession.bound ? pinnedSession : querySession;
   const refresh = useCallback(async () => {
@@ -99,8 +102,9 @@ export function UsageEventsPage() {
       {error && <div className={styles.errorBox}>{error}</div>}
       {!scope.valid && <div className={styles.errorBox}>{t('usage_stats.request_events_invalid_scope')}</div>}
       <RequestEventsDetailsCard
-        key={JSON.stringify(initialAnalyticsFilters)}
+        key={JSON.stringify([initialAnalyticsFilters, initialResultFailed])}
         initialAnalyticsFilters={initialAnalyticsFilters}
+        initialResultFailed={initialResultFailed}
         querySession={scope.valid ? selectedSession : null}
         usage={scope.valid ? usage : null}
         loading={loading}

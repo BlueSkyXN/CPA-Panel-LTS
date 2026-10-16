@@ -18,6 +18,7 @@ import {
   sparsePointRadius,
 } from '@/utils/usage/chartConfig';
 import styles from '@/pages/UsagePage.module.scss';
+import { bucketRangeAt, type AnalyticsBucketRange } from './analyticsBucketDrill';
 
 const CACHE_RATE_COLOR = '#0E9F6E';
 
@@ -25,9 +26,11 @@ export interface CacheEfficiencyCardProps {
   data: UsageAnalyticsData;
   loading: boolean;
   isMobile: boolean;
+  /** 点击时间桶时下钻到该桶的请求明细；未提供时图表仅展示。 */
+  onBucketClick?: ((bucket: AnalyticsBucketRange) => void) | null;
 }
 
-export function CacheEfficiencyCard({ data, loading, isMobile }: CacheEfficiencyCardProps) {
+export function CacheEfficiencyCard({ data, loading, isMobile, onBucketClick }: CacheEfficiencyCardProps) {
   const { t, i18n } = useTranslation();
   const [period, setPeriod] = useState<'hour' | 'day'>('hour');
 
@@ -64,8 +67,18 @@ export function CacheEfficiencyCard({ data, loading, isMobile }: CacheEfficiency
     };
 
     const baseOptions = buildChartOptions({ period, labels, isMobile });
+    const bucketTimes = points.map((point) => point.timestampMs);
+    const grain = period;
     const options: ChartOptions<'line'> = {
       ...baseOptions,
+      onClick: onBucketClick
+        ? (_elements, elements) => {
+            const first = elements[0];
+            if (!first) return;
+            const bucket = bucketRangeAt(bucketTimes, first.index, grain);
+            if (bucket) onBucketClick(bucket);
+          }
+        : undefined,
       elements: {
         ...baseOptions.elements,
         point: {
@@ -113,7 +126,7 @@ export function CacheEfficiencyCard({ data, loading, isMobile }: CacheEfficiency
       summary,
       hasData: points.some((point) => point.requests > 0),
     };
-  }, [data, period, isMobile, percentFormatter, t]);
+  }, [data, period, isMobile, percentFormatter, t, onBucketClick]);
 
   return (
     <Card

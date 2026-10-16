@@ -6,6 +6,7 @@ import { getConnectionFrameElement } from '@/services/connectionRuntime';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { AnalyticsFiltersBar } from '@/components/usage/AnalyticsFiltersBar';
 import { useUsageAnalyticsOptions } from '@/components/usage/hooks/useUsageAnalyticsOptions';
+import { AnalyticsSummaryStrip } from '@/components/usage/AnalyticsSummaryStrip';
 import {
   analyticsQueryFilter,
   readAnalyticsNavigationState,
@@ -150,6 +151,33 @@ export function ObservabilityPage() {
     next.set(field, value ? String(Date.parse(value)) : '');
     setParams(next, { replace: true, state: { analyticsFilters: filters } });
   };
+  // Drill-down navigation keeps the analytics filters, the visible window, and
+  // the aggregate snapshot (bound / now_ms) so the event workspace lists the
+  // same population the charts summarized.
+  const drillDownSearch = (extra: Record<string, string>) => {
+    const search = buildUsageEventsSearch(
+      visibleWindow ? 'custom' : 'all',
+      visibleWindow ?? null
+    );
+    // buildUsageEventsSearch 返回带 "?" 前缀；解析回纯参数再附加下钻条件。
+    const next = new URLSearchParams(search.replace(/^\?/, ''));
+    for (const [key, value] of Object.entries(extra)) next.set(key, value);
+    return `?${next.toString()}`;
+  };
+  const buildDrillDownState = () => ({
+    analyticsFilters: filters,
+    analyticsSession:
+      visibleResult && querySession
+        ? {
+            ...querySession,
+            bound: visibleResult.bound,
+            now_ms: visibleResult.now_ms,
+          }
+        : querySession,
+  });
+  const buildFailedDrillDown = () => `/usage/events${drillDownSearch({ failed: '1' })}`;
+  const bucketDrillDownWindow = (bucket: { startMs: number; endMs: number }) =>
+    `/usage/events${buildUsageEventsSearch('custom', { startMs: bucket.startMs, endMs: bucket.endMs })}`;
 
   return (
     <AnalyticsLayout>
@@ -320,9 +348,32 @@ export function ObservabilityPage() {
               })}
             </p>
           )}
+          {visibleResult && visibleResult.total > 0 && (
+            <AnalyticsSummaryStrip
+              data={visibleResult.data}
+              totalRecords={visibleResult.total}
+              loading={analytics.loading}
+              canOpenFailed={Boolean(visibleWindow)}
+              onOpenFailed={
+                visibleWindow
+                  ? () =>
+                      navigate(buildFailedDrillDown(), {
+                        state: buildDrillDownState(),
+                      })
+                  : undefined
+              }
+            />
+          )}
           {visibleResult &&
             (visibleResult.total > 0 ? (
-              <UsageAnalyticsCharts data={visibleResult.data} loading={false} isMobile={isMobile} />
+              <UsageAnalyticsCharts
+                data={visibleResult.data}
+                loading={false}
+                isMobile={isMobile}
+                onBucketClick={(bucket) =>
+                  navigate(bucketDrillDownWindow(bucket), { state: buildDrillDownState() })
+                }
+              />
             ) : (
               <p className={styles.note}>{t('analytics.empty_window')}</p>
             ))}

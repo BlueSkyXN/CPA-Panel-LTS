@@ -42,7 +42,16 @@
     "group_reliability": "效率与可靠性",
     "group_reliability_hint": "查看缓存利用与失败分布。",
     "group_distribution": "请求与延迟分布",
-    "group_distribution_hint": "比较请求大小和响应耗时的分布。"
+    "group_distribution_hint": "比较请求大小和响应耗时的分布。",
+    "summary_records": "执行记录",
+    "summary_records_hint": "当前筛选与时间窗内的使用统计记录总数",
+    "summary_failures": "失败执行",
+    "summary_failures_hint": "点击查看当前条件下的失败记录",
+    "summary_latency": "总耗时 P95",
+    "summary_ttfa": "首回答文本 P95",
+    "summary_samples": "{{count}} 条样本",
+    "summary_cache": "缓存读取率",
+    "summary_cache_meta": "{{read}} / {{input}} 读取/输入"
   },
   "usage_stats": {
     "execution_blue_std": "BLUE",

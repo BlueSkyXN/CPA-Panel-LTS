@@ -302,6 +302,22 @@ const DEFAULT_COLUMN_VISIBILITY: RequestEventColumnVisibility = {
   requestLog: false,
 };
 
+const COLUMN_VISIBILITY_CUSTOM_BACKUP_KEY = 'cli-proxy-usage-request-event-columns-custom-backup';
+// 紧凑排查视图：默认列集合里挑出定位单条问题所需的最小集合；
+// 完整列集合与用户自定义配置不受影响。
+const COMPACT_COLUMN_VISIBILITY: RequestEventColumnVisibility = {
+  ...DEFAULT_COLUMN_VISIBILITY,
+  ttfb: false,
+  firstContent: false,
+  ttft: false,
+  outputTps: false,
+  averageTps: false,
+  nonCacheReadInputTokens: false,
+  displayedOutputTokens: false,
+  reasoningTokens: false,
+  cacheWriteTokens: false,
+};
+
 type RequestEventRow = {
   id: string;
   timestamp: string;
@@ -447,6 +463,8 @@ const numericFilterPopoverStylesEqual = (
 
 export interface RequestEventsDetailsCardProps {
   initialAnalyticsFilters?: AnalyticsFilters | null;
+  /** 下钻携带的初始结果筛选：只显示失败记录。 */
+  initialResultFailed?: boolean;
   querySession?: UsageQuerySession | null;
   usage: unknown;
   loading: boolean;
@@ -643,6 +661,7 @@ export function RequestEventsDetailsCard({
   loading: parentLoading,
   querySession = null,
   initialAnalyticsFilters = null,
+  initialResultFailed = false,
   pageTimeRange,
   pageTimeRangeCustom = null,
   referenceNowMs,
@@ -703,6 +722,7 @@ export function RequestEventsDetailsCard({
         initialAnalyticsFilters.effort === undefined
           ? ALL_FILTER
           : getReasoningEffortFilterValue(normalizeReasoningEffort(initialAnalyticsFilters.effort)),
+      ...(initialResultFailed ? { result: RESULT_FAILED_FILTER } : {}),
     };
     try {
       const raw = sessionStorage.getItem(REQUEST_EVENT_FILTERS_STORAGE_KEY);
@@ -819,6 +839,15 @@ export function RequestEventsDetailsCard({
     () => new Set()
   );
   const [columnSettingsOpen, setColumnSettingsOpen] = useState(false);
+  const [expandedRows, setExpandedRows] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleExpandedRow = (rowId: string) => {
+    setExpandedRows((current) => {
+      const next = new Set(current);
+      if (next.has(rowId)) next.delete(rowId);
+      else next.add(rowId);
+      return next;
+    });
+  };
   const [activeHeaderTooltip, setActiveHeaderTooltip] =
     useState<RequestEventHeaderTooltipState | null>(null);
   const [storedColumnVisibility, setStoredColumnVisibility] = useLocalStorage<unknown>(
@@ -829,6 +858,36 @@ export function RequestEventsDetailsCard({
     () => normalizeColumnVisibility(storedColumnVisibility),
     [storedColumnVisibility]
   );
+  // 视图模式从当前列配置推导：与紧凑预设完全一致即视为紧凑视图，
+  // 其余（默认或自定义）都是完整视图，避免第二份可能漂移的状态。
+  const compactView =
+    REQUEST_EVENT_COLUMN_IDS.every((columnId) =>
+      columnId === 'requestLog'
+        ? !columnVisibility[columnId]
+        : columnVisibility[columnId] === COMPACT_COLUMN_VISIBILITY[columnId]
+    );
+  const applyCompactView = (compact: boolean) => {
+    if (compact) {
+      // 备份当前自定义配置，切回完整视图时恢复。
+      window.localStorage.setItem(
+        COLUMN_VISIBILITY_CUSTOM_BACKUP_KEY,
+        JSON.stringify(columnVisibility)
+      );
+      setStoredColumnVisibility(COMPACT_COLUMN_VISIBILITY);
+    } else {
+      let restored: RequestEventColumnVisibility | null = null;
+      try {
+        const raw = window.localStorage.getItem(COLUMN_VISIBILITY_CUSTOM_BACKUP_KEY);
+        const parsed: unknown = raw ? JSON.parse(raw) : null;
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          restored = normalizeColumnVisibility(parsed);
+        }
+      } catch {
+        /* 损坏的备份退回默认列。 */
+      }
+      setStoredColumnVisibility(restored ?? DEFAULT_COLUMN_VISIBILITY);
+    }
+  };
   const columnSettingsId = useId();
   const headerTooltipId = useId();
   const numericFilterId = useId();
@@ -2552,6 +2611,24 @@ export function RequestEventsDetailsCard({
           >
             {t('usage_stats.export_filtered_json')}
           </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            aria-pressed={compactView}
+            title={
+              compactView
+                ? t('usage_stats.request_events_full_view_hint')
+                : t('usage_stats.request_events_compact_view_hint')
+            }
+            onClick={() => applyCompactView(!compactView)}
+          >
+            {t(
+              compactView
+                ? 'usage_stats.request_events_full_view'
+                : 'usage_stats.request_events_compact_view'
+            )}
+          </Button>
           <div
             ref={columnSettingsRef}
             className={styles.requestEventsColumnSettings}
@@ -3091,8 +3168,19 @@ export function RequestEventsDetailsCard({
                     ? `${inputTokensLabel} · ${longContextLabel}`
                     : undefined;
 
+                  const rowExpanded = expandedRows.has(row.id);
                   return (
-                    <tr key={row.id}>
+                    <>
+                    <tr
+                      key={row.id}
+                      data-request-row-expanded={rowExpanded}
+                      className={rowExpanded ? styles.requestEventsRowExpanded : undefined}
+                      onClick={() => {
+                        // 选中文本时点击视为复制操作，不触发展开。
+                        if (window.getSelection()?.toString()) return;
+                        toggleExpandedRow(row.id);
+                      }}
+                    >
                       {columnVisibility.timestamp && (
                         <td title={row.timestamp} className={styles.requestEventsTimestamp}>
                           {row.timestampLabel}
@@ -3503,6 +3591,109 @@ export function RequestEventsDetailsCard({
                         </td>
                       )}
                     </tr>
+                    {rowExpanded && (
+                      <tr key={`${row.id}-detail`} className={styles.requestEventsDetailRow}>
+                        <td colSpan={stableVisibleColumnCount + 1}>
+                          <div className={styles.requestEventsDetailGrid} data-testid="request-event-detail">
+                            <dl>
+                              <dt>{t('usage_stats.request_events_detail_result')}</dt>
+                              <dd>
+                                <span
+                                  className={
+                                    row.failed
+                                      ? styles.requestEventsResultFailed
+                                      : styles.requestEventsResultSuccess
+                                  }
+                                >
+                                  {row.failed
+                                    ? row.failureStatus ?? t('stats.failure')
+                                    : t('stats.success')}
+                                </span>
+                                {row.failureReason && (
+                                  <span className={styles.requestEventsFailureReason}>
+                                    {row.failureReason}
+                                  </span>
+                                )}
+                                {row.upstreamModel && row.upstreamModel !== row.model && (
+                                  <span className={styles.upstreamModelDiff}>
+                                    {t('usage_stats.request_events_upstream_model', {
+                                      model: row.upstreamModel,
+                                    })}
+                                  </span>
+                                )}
+                              </dd>
+                              <dt>{t('usage_stats.request_events_detail_timing')}</dt>
+                              <dd>
+                                {[
+                                  ['usage_stats.time', row.latencyMs],
+                                  ['usage_stats.request_events_ttfb', row.ttfbMs],
+                                  [
+                                    'usage_stats.request_events_ttft',
+                                    row.ttftMs,
+                                  ],
+                                  [
+                                    'usage_stats.request_events_ttfa',
+                                    row.ttfaMs,
+                                  ],
+                                ].map(([label, value]) => (
+                                  <span key={String(label)} className={styles.requestEventsDetailItem}>
+                                    {t(String(label))}:{' '}
+                                    {value === null || value === undefined
+                                      ? '—'
+                                      : formatDurationMs(Number(value))}
+                                  </span>
+                                ))}
+                              </dd>
+                              <dt>{t('usage_stats.request_events_detail_tokens')}</dt>
+                              <dd>
+                                {[
+                                  ['usage_stats.request_events_total_input_tokens', row.inputTokens],
+                                  [
+                                    'usage_stats.cache_read_tokens',
+                                    row.cacheReadTokens,
+                                  ],
+                                  [
+                                    'usage_stats.cache_write_tokens',
+                                    row.cacheWriteTokens,
+                                  ],
+                                  ['usage_stats.request_events_total_output_tokens', row.outputTokens],
+                                  [
+                                    'usage_stats.reasoning_tokens',
+                                    row.reasoningTokens,
+                                  ],
+                                ].map(([label, value]) => (
+                                  <span key={String(label)} className={styles.requestEventsDetailItem}>
+                                    {t(String(label))}: {Number(value).toLocaleString()}
+                                  </span>
+                                ))}
+                              </dd>
+                              <dt>{t('usage_stats.request_events_detail_diagnostics')}</dt>
+                              <dd>
+                                <span className={styles.requestEventsDetailItem}>
+                                  {t('usage_stats.request_events_detail_auth_index')}:{' '}
+                                  {row.authIndex || '—'}
+                                </span>
+                                <span className={styles.requestEventsDetailItem}>
+                                  {t('usage_stats.request_events_detail_trace_id')}:{' '}
+                                  {row.traceId ?? '—'}
+                                </span>
+                                {row.upstreamTransport && (
+                                  <span className={styles.requestEventsDetailItem}>
+                                    {t('usage_stats.request_events_transport')}:{' '}
+                                    {t(
+                                      row.upstreamTransport === 'websocket'
+                                        ? 'usage_stats.request_events_transport_websocket'
+                                        : 'usage_stats.request_events_transport_http'
+                                    )}
+                                  </span>
+                                )}
+                              </dd>
+                            </dl>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </>
                   );
                 })}
               </tbody>

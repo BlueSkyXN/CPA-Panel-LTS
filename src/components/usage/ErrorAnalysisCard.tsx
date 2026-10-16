@@ -19,6 +19,7 @@ import {
   sparsePointRadius,
 } from '@/utils/usage/chartConfig';
 import styles from '@/pages/UsagePage.module.scss';
+import { bucketRangeAt, type AnalyticsBucketRange } from './analyticsBucketDrill';
 
 const FAILURE_RATE_COLOR = '#EF4444';
 
@@ -33,9 +34,11 @@ export interface ErrorAnalysisCardProps {
   data: UsageAnalyticsData;
   loading: boolean;
   isMobile: boolean;
+  /** 点击时间桶时下钻到该桶的请求明细；未提供时图表仅展示。 */
+  onBucketClick?: ((bucket: AnalyticsBucketRange) => void) | null;
 }
 
-export function ErrorAnalysisCard({ data, loading, isMobile }: ErrorAnalysisCardProps) {
+export function ErrorAnalysisCard({ data, loading, isMobile, onBucketClick }: ErrorAnalysisCardProps) {
   const { t, i18n } = useTranslation();
   const [period, setPeriod] = useState<'hour' | 'day'>('hour');
 
@@ -73,8 +76,18 @@ export function ErrorAnalysisCard({ data, loading, isMobile }: ErrorAnalysisCard
 
     const baseOptions = buildChartOptions({ period, labels, isMobile });
     const axis = buildStaticAxisTheme(isMobile ? 10 : 11);
+    const bucketTimes = trend.map((point) => point.timestampMs);
+    const grain = period;
     const trendOptions: ChartOptions<'line'> = {
       ...baseOptions,
+      onClick: onBucketClick
+        ? (_elements, elements) => {
+            const first = elements[0];
+            if (!first) return;
+            const bucket = bucketRangeAt(bucketTimes, first.index, grain);
+            if (bucket) onBucketClick(bucket);
+          }
+        : undefined,
       elements: {
         ...baseOptions.elements,
         point: {
@@ -179,7 +192,7 @@ export function ErrorAnalysisCard({ data, loading, isMobile }: ErrorAnalysisCard
       summary,
       hasTrend: trend.some((point) => point.requests > 0),
     };
-  }, [data, period, isMobile, percentFormatter, t]);
+  }, [data, period, isMobile, percentFormatter, t, onBucketClick]);
 
   return (
     <Card

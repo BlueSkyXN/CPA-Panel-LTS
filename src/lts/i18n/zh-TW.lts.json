@@ -42,7 +42,16 @@
     "group_reliability": "效率與可靠性",
     "group_reliability_hint": "查看快取利用與失敗分佈。",
     "group_distribution": "請求與延遲分佈",
-    "group_distribution_hint": "比較請求大小和回應耗時的分佈。"
+    "group_distribution_hint": "比較請求大小和回應耗時的分佈。",
+    "summary_records": "執行記錄",
+    "summary_records_hint": "目前篩選與時間窗內的使用統計記錄總數",
+    "summary_failures": "失敗執行",
+    "summary_failures_hint": "點擊查看目前條件下的失敗記錄",
+    "summary_latency": "總耗時 P95",
+    "summary_ttfa": "首回答文字 P95",
+    "summary_samples": "{{count}} 條樣本",
+    "summary_cache": "快取讀取率",
+    "summary_cache_meta": "{{read}} / {{input}} 讀取/輸入"
   },
   "usage_stats": {
     "execution_blue_std": "BLUE",
