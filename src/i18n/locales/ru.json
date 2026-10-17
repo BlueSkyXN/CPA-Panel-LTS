@@ -1663,7 +1663,17 @@
     "share_other_models": "Другие ({{count}})",
     "share_metric_requests": "Запросы",
     "share_metric_tokens": "Токены",
-    "share_metric_cost": "Расходы"
+    "share_metric_cost": "Расходы",
+    "request_events_compact_view": "Компактный вид",
+    "request_events_compact_view_hint": "Оставить только ключевые столбцы для локализации одной проблемы; возврат восстановит ваши настройки столбцов",
+    "request_events_full_view": "Полный вид",
+    "request_events_full_view_hint": "Восстановить предыдущие полные настройки столбцов",
+    "request_events_detail_result": "Результат",
+    "request_events_detail_timing": "Время",
+    "request_events_detail_tokens": "Токены",
+    "request_events_detail_diagnostics": "Диагностика",
+    "request_events_detail_auth_index": "Индекс аутентификации",
+    "request_events_detail_trace_id": "Trace ID"
   },
   "service_health": {
     "title": "Состояние сервиса",

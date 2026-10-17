@@ -1,5 +1,5 @@
 import type { UsageAnalyticsData } from '@/types/usageAnalytics';
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ChartData, ChartOptions } from 'chart.js';
 import { Line } from 'react-chartjs-2';
@@ -12,6 +12,9 @@ import {
   sparsePointRadius,
 } from '@/utils/usage/chartConfig';
 import styles from '@/pages/UsagePage.module.scss';
+import { bucketRangeAt, type AnalyticsBucketRange } from './analyticsBucketDrill';
+import { AnalyticsBucketDrillControl } from './AnalyticsBucketDrillControl';
+import type { AnalyticsGrain, AnalyticsTimeWindow } from '@/utils/usage/analyticsBuckets';
 
 const SERIES_COLORS = {
   p50: '#10B981',
@@ -24,11 +27,25 @@ export interface LatencyTrendChartProps {
   data: UsageAnalyticsData;
   loading: boolean;
   isMobile: boolean;
+  /** 当前查询窗口；用于把最后一个桶的下钻终点收敛到可见范围。 */
+  window?: AnalyticsTimeWindow | null;
+  /** 时间粒度由 UsageAnalyticsCharts 统一持有，四张趋势图共用。 */
+  grain: AnalyticsGrain;
+  onGrainChange: (grain: AnalyticsGrain) => void;
+  /** 点击时间桶时下钻到该桶的请求明细；未提供时图表仅展示。 */
+  onBucketClick?: ((bucket: AnalyticsBucketRange) => void) | null;
 }
 
-export function LatencyTrendChart({ data, loading, isMobile }: LatencyTrendChartProps) {
+export function LatencyTrendChart({
+  data,
+  loading,
+  isMobile,
+  window,
+  grain: period,
+  onGrainChange: setPeriod,
+  onBucketClick,
+}: LatencyTrendChartProps) {
   const { t } = useTranslation();
-  const [period, setPeriod] = useState<'hour' | 'day'>('hour');
 
   const { chartData, chartOptions, hasSamples } = useMemo(() => {
     const series = data[period].latency;
@@ -85,8 +102,18 @@ export function LatencyTrendChart({ data, loading, isMobile }: LatencyTrendChart
       const first = items[0];
       return first ? series.sampleCounts[first.dataIndex] : null;
     };
+    const bucketTimes = series.times;
+    const grain = period;
     const options: ChartOptions<'line'> = {
       ...baseOptions,
+      onClick: onBucketClick
+        ? (_elements, elements) => {
+            const first = elements[0];
+            if (!first) return;
+            const bucket = bucketRangeAt(bucketTimes, first.index, grain, window);
+            if (bucket) onBucketClick(bucket);
+          }
+        : undefined,
       elements: {
         ...baseOptions.elements,
         point: {
@@ -127,7 +154,7 @@ export function LatencyTrendChart({ data, loading, isMobile }: LatencyTrendChart
       chartOptions: options,
       hasSamples: series.sampleCounts.some((count) => count > 0),
     };
-  }, [data, period, isMobile, t]);
+  }, [data, period, isMobile, t, window, onBucketClick]);
 
   const labels = chartData.labels ?? [];
 
@@ -140,6 +167,8 @@ export function LatencyTrendChart({ data, loading, isMobile }: LatencyTrendChart
             variant={period === 'hour' ? 'primary' : 'secondary'}
             size="sm"
             onClick={() => setPeriod('hour')}
+            data-testid="analytics-latency-hour"
+            aria-pressed={period === 'hour'}
           >
             {t('usage_stats.by_hour')}
           </Button>
@@ -147,6 +176,8 @@ export function LatencyTrendChart({ data, loading, isMobile }: LatencyTrendChart
             variant={period === 'day' ? 'primary' : 'secondary'}
             size="sm"
             onClick={() => setPeriod('day')}
+            data-testid="analytics-latency-day"
+            aria-pressed={period === 'day'}
           >
             {t('usage_stats.by_day')}
           </Button>
@@ -186,6 +217,16 @@ export function LatencyTrendChart({ data, loading, isMobile }: LatencyTrendChart
         </div>
       ) : (
         <div className={styles.hint}>{t('analytics.no_measurements')}</div>
+      )}
+      {onBucketClick && !loading && hasSamples && (
+        <AnalyticsBucketDrillControl
+          key={period}
+          id="latency"
+          times={data[period].latency.times}
+          grain={period}
+          window={window}
+          onOpen={onBucketClick}
+        />
       )}
     </Card>
   );

@@ -1662,7 +1662,17 @@
     "share_other_models": "其他（{{count}} 个模型）",
     "share_metric_requests": "请求数",
     "share_metric_tokens": "Token 数",
-    "share_metric_cost": "费用"
+    "share_metric_cost": "费用",
+    "request_events_compact_view": "紧凑视图",
+    "request_events_compact_view_hint": "只保留定位单条问题所需的核心列；切换回完整视图会恢复你的列配置",
+    "request_events_full_view": "完整视图",
+    "request_events_full_view_hint": "恢复之前的完整列配置",
+    "request_events_detail_result": "结果",
+    "request_events_detail_timing": "时间",
+    "request_events_detail_tokens": "用量",
+    "request_events_detail_diagnostics": "诊断",
+    "request_events_detail_auth_index": "认证索引",
+    "request_events_detail_trace_id": "关联 ID"
   },
   "service_health": {
     "title": "服务健康监测",

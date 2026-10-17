@@ -1,5 +1,5 @@
 import type { UsageAnalyticsData } from '@/types/usageAnalytics';
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ChartData, ChartOptions } from 'chart.js';
 import { Line } from 'react-chartjs-2';
@@ -13,6 +13,9 @@ import {
 } from '@/utils/usage/chartConfig';
 import { throughputRate, type ThroughputTrendPoint } from '@/utils/usage/throughputAnalytics';
 import styles from '@/pages/UsagePage.module.scss';
+import { bucketRangeAt, type AnalyticsBucketRange } from './analyticsBucketDrill';
+import { AnalyticsBucketDrillControl } from './AnalyticsBucketDrillControl';
+import type { AnalyticsGrain, AnalyticsTimeWindow } from '@/utils/usage/analyticsBuckets';
 
 const SERIES_COLORS = {
   output: '#3B82F6',
@@ -27,16 +30,32 @@ export interface ThroughputTrendChartProps {
   data: UsageAnalyticsData;
   loading: boolean;
   isMobile: boolean;
+  /** 当前查询窗口；用于把最后一个桶的下钻终点收敛到可见范围。 */
+  window?: AnalyticsTimeWindow | null;
+  /** 时间粒度由 UsageAnalyticsCharts 统一持有，四张趋势图共用。 */
+  grain: AnalyticsGrain;
+  onGrainChange: (grain: AnalyticsGrain) => void;
+  /** 点击时间桶时下钻到该桶的请求明细；未提供时图表仅展示。 */
+  onBucketClick?: ((bucket: AnalyticsBucketRange) => void) | null;
 }
 
-export function ThroughputTrendChart({ data, loading, isMobile }: ThroughputTrendChartProps) {
+export function ThroughputTrendChart({
+  data,
+  loading,
+  isMobile,
+  window,
+  grain: period,
+  onGrainChange: setPeriod,
+  onBucketClick,
+}: ThroughputTrendChartProps) {
   const { t } = useTranslation();
-  const [period, setPeriod] = useState<'hour' | 'day'>('hour');
 
   const { chartData, chartOptions, hasSamples } = useMemo(() => {
     const points: ThroughputTrendPoint[] = data[period].throughput;
     const labels = points.map((point) =>
-      period === 'hour' ? formatHourLabel(new Date(point.timestampMs)) : formatDayLabel(new Date(point.timestampMs))
+      period === 'hour'
+        ? formatHourLabel(new Date(point.timestampMs))
+        : formatDayLabel(new Date(point.timestampMs))
     );
     const series = [
       {
@@ -72,8 +91,18 @@ export function ThroughputTrendChart({ data, loading, isMobile }: ThroughputTren
     };
 
     const baseOptions = buildChartOptions({ period, labels, isMobile });
+    const bucketTimes = points.map((point) => point.timestampMs);
+    const grain = period;
     const options: ChartOptions<'line'> = {
       ...baseOptions,
+      onClick: onBucketClick
+        ? (_elements, elements) => {
+            const first = elements[0];
+            if (!first) return;
+            const bucket = bucketRangeAt(bucketTimes, first.index, grain, window);
+            if (bucket) onBucketClick(bucket);
+          }
+        : undefined,
       elements: {
         ...baseOptions.elements,
         point: {
@@ -102,7 +131,9 @@ export function ThroughputTrendChart({ data, loading, isMobile }: ThroughputTren
               const first = items[0];
               if (!first) return '';
               const count = series[first.datasetIndex]?.samples[first.dataIndex];
-              return count !== undefined ? t('usage_stats.analytics_samples_in_bucket', { count }) : '';
+              return count !== undefined
+                ? t('usage_stats.analytics_samples_in_bucket', { count })
+                : '';
             },
           },
         },
@@ -114,7 +145,7 @@ export function ThroughputTrendChart({ data, loading, isMobile }: ThroughputTren
       chartOptions: options,
       hasSamples: points.some((point) => point.averageSamples > 0),
     };
-  }, [data, period, isMobile, t]);
+  }, [data, period, isMobile, t, window, onBucketClick]);
 
   const labels = chartData.labels ?? [];
 
@@ -127,6 +158,8 @@ export function ThroughputTrendChart({ data, loading, isMobile }: ThroughputTren
             variant={period === 'hour' ? 'primary' : 'secondary'}
             size="sm"
             onClick={() => setPeriod('hour')}
+            data-testid="analytics-throughput-hour"
+            aria-pressed={period === 'hour'}
           >
             {t('usage_stats.by_hour')}
           </Button>
@@ -134,6 +167,8 @@ export function ThroughputTrendChart({ data, loading, isMobile }: ThroughputTren
             variant={period === 'day' ? 'primary' : 'secondary'}
             size="sm"
             onClick={() => setPeriod('day')}
+            data-testid="analytics-throughput-day"
+            aria-pressed={period === 'day'}
           >
             {t('usage_stats.by_day')}
           </Button>
@@ -173,6 +208,16 @@ export function ThroughputTrendChart({ data, loading, isMobile }: ThroughputTren
         </div>
       ) : (
         <div className={styles.hint}>{t('analytics.no_measurements')}</div>
+      )}
+      {onBucketClick && !loading && hasSamples && (
+        <AnalyticsBucketDrillControl
+          key={period}
+          id="throughput"
+          times={data[period].throughput.map((point) => point.timestampMs)}
+          grain={period}
+          window={window}
+          onOpen={onBucketClick}
+        />
       )}
     </Card>
   );
