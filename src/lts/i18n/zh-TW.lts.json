@@ -37,6 +37,7 @@
     "filter_title": "篩選範圍",
     "active_filters": "已選條件：{{count}} 項",
     "result_scope": "結果時間範圍",
+    "remove_filter": "移除篩選：{{filter}}",
     "group_performance": "吞吐與回應",
     "group_performance_hint": "結合請求量與回應耗時觀察負載變化。",
     "group_reliability": "效率與可靠性",

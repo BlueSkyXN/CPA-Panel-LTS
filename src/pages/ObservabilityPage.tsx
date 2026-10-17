@@ -370,6 +370,7 @@ export function ObservabilityPage() {
                 data={visibleResult.data}
                 loading={false}
                 isMobile={isMobile}
+                window={visibleWindow}
                 onBucketClick={(bucket) =>
                   navigate(bucketDrillDownWindow(bucket), { state: buildDrillDownState() })
                 }

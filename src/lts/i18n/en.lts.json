@@ -37,6 +37,7 @@
     "filter_title": "Filter scope",
     "active_filters": "Active filters: {{count}}",
     "result_scope": "Result window",
+    "remove_filter": "Remove filter: {{filter}}",
     "group_performance": "Throughput and response",
     "group_performance_hint": "Inspect request volume and response timing together.",
     "group_reliability": "Efficiency and reliability",

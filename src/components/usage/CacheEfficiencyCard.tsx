@@ -1,5 +1,5 @@
 import type { UsageAnalyticsData } from '@/types/usageAnalytics';
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ChartData, ChartOptions } from 'chart.js';
 import { Line } from 'react-chartjs-2';
@@ -19,6 +19,7 @@ import {
 } from '@/utils/usage/chartConfig';
 import styles from '@/pages/UsagePage.module.scss';
 import { bucketRangeAt, type AnalyticsBucketRange } from './analyticsBucketDrill';
+import type { AnalyticsGrain, AnalyticsTimeWindow } from '@/utils/usage/analyticsBuckets';
 
 const CACHE_RATE_COLOR = '#0E9F6E';
 
@@ -26,13 +27,25 @@ export interface CacheEfficiencyCardProps {
   data: UsageAnalyticsData;
   loading: boolean;
   isMobile: boolean;
+  /** 当前查询窗口；用于把最后一个桶的下钻终点收敛到可见范围。 */
+  window?: AnalyticsTimeWindow | null;
+  /** 时间粒度由 UsageAnalyticsCharts 统一持有，四张趋势图共用。 */
+  grain: AnalyticsGrain;
+  onGrainChange: (grain: AnalyticsGrain) => void;
   /** 点击时间桶时下钻到该桶的请求明细；未提供时图表仅展示。 */
   onBucketClick?: ((bucket: AnalyticsBucketRange) => void) | null;
 }
 
-export function CacheEfficiencyCard({ data, loading, isMobile, onBucketClick }: CacheEfficiencyCardProps) {
+export function CacheEfficiencyCard({
+  data,
+  loading,
+  isMobile,
+  window,
+  grain: period,
+  onGrainChange: setPeriod,
+  onBucketClick,
+}: CacheEfficiencyCardProps) {
   const { t, i18n } = useTranslation();
-  const [period, setPeriod] = useState<'hour' | 'day'>('hour');
 
   const percentFormatter = useMemo(
     () =>
@@ -75,7 +88,7 @@ export function CacheEfficiencyCard({ data, loading, isMobile, onBucketClick }: 
         ? (_elements, elements) => {
             const first = elements[0];
             if (!first) return;
-            const bucket = bucketRangeAt(bucketTimes, first.index, grain);
+            const bucket = bucketRangeAt(bucketTimes, first.index, grain, window);
             if (bucket) onBucketClick(bucket);
           }
         : undefined,
@@ -126,7 +139,7 @@ export function CacheEfficiencyCard({ data, loading, isMobile, onBucketClick }: 
       summary,
       hasData: points.some((point) => point.requests > 0),
     };
-  }, [data, period, isMobile, percentFormatter, t, onBucketClick]);
+  }, [data, period, isMobile, percentFormatter, t, window, onBucketClick]);
 
   return (
     <Card

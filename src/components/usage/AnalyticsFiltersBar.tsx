@@ -95,6 +95,45 @@ export function AnalyticsFiltersBar({
     Number(!!selected) +
     Number(filters.tier !== undefined) +
     Number(filters.effort !== undefined);
+  // 逐个可移除的条件标签：下钻到达本页时直接看到当前生效的条件并单独撤销。
+  const tierLabels: Record<string, string> = {
+    fast: t('usage_stats.request_events_tier_fast'),
+    std: t('usage_stats.request_events_tier_standard'),
+    fast_to_std: t('usage_stats.request_events_tier_fast_to_std'),
+    std_to_fast: t('usage_stats.request_events_tier_std_to_fast'),
+  };
+  const removableTags = [
+    filters.model !== undefined
+      ? {
+          key: 'model',
+          label: `${t('usage_stats.request_events_filter_model')}: ${filters.model || '—'}`,
+          remove: () => onChange({ ...filters, model: undefined }),
+        }
+      : null,
+    selected
+      ? {
+          key: 'source',
+          label: `${t('usage_stats.request_events_filter_source')}: ${selected.label}`,
+          remove: () => onChange({ ...filters, source: undefined }),
+        }
+      : null,
+    filters.tier !== undefined
+      ? {
+          key: 'tier',
+          label: `${t('usage_stats.request_events_filter_tier')}: ${tierLabels[filters.tier] ?? filters.tier}`,
+          remove: () => onChange({ ...filters, tier: undefined }),
+        }
+      : null,
+    filters.effort !== undefined
+      ? {
+          key: 'effort',
+          label: `${t('usage_stats.request_events_filter_effort')}: ${
+            filters.effort || t('usage_stats.request_events_effort_legacy_unknown')
+          }`,
+          remove: () => onChange({ ...filters, effort: undefined }),
+        }
+      : null,
+  ].filter((tag): tag is { key: string; label: string; remove: () => void } => tag !== null);
   return (
     <>
       <div className={styles.filterField}>
@@ -167,6 +206,22 @@ export function AnalyticsFiltersBar({
           {t('usage_stats.clear_filters')}
         </Button>
       </div>
+      {removableTags.length > 0 && (
+        <ul className={styles.filterTags} data-testid="analytics-filter-tags">
+          {removableTags.map((tag) => (
+            <li key={tag.key}>
+              <span>{tag.label}</span>
+              <button
+                type="button"
+                onClick={tag.remove}
+                aria-label={t('analytics.remove_filter', { filter: tag.label })}
+              >
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
       {current?.failed && (
         <span className={styles.filterMessage} role="status">
           {t('analytics.source_names_unavailable')}{' '}

@@ -1,6 +1,6 @@
 import type { AnalyticsGrain, AnalyticsTimeWindow } from '@/utils/usage/analyticsBuckets';
 
-/** 一个可下钻的时间桶：[startMs, endMs)，endMs 为下一桶起点或窗口终点。 */
+/** 一个可下钻的时间桶：[startMs, endMs]，两端均含，与 Core 的 from_ms/to_ms 闭区间一致。 */
 export interface AnalyticsBucketRange {
   startMs: number;
   endMs: number;
@@ -34,11 +34,23 @@ export function bucketRangeAt(
 ): AnalyticsBucketRange | null {
   const start = times[index];
   if (!Number.isFinite(start) || start <= 0) return null;
+  // Core 的 from_ms/to_ms 两端均含（query.go matchesRequest），而桶语义是
+  // [start, 下一桶起点)：终点统一收回 1ms，整点记录不会同时落进相邻两桶。
   const next = times[index + 1];
-  const end = Number.isFinite(next) && next > start ? next : nextBucketStart(start, grain);
+  let end: number;
+  if (Number.isFinite(next) && next > start) end = next - 1;
+  // 序列截断（最后一桶）没有下一桶可参照，退回本地推进规则再收敛。
+  else {
+    const advanced = nextBucketStart(start, grain);
+    if (!Number.isFinite(advanced) || advanced <= start) return null;
+    end = advanced - 1;
+  }
   if (!Number.isFinite(end) || end <= start) return null;
-  // 窗口内最后一个桶可能超出 endMs（例如自定义窗口止于桶中间）；
-  // 与 Core 的 from_ms/to_ms 闭区间语义对齐，收敛到窗口终点。
-  const endMs = window ? Math.min(end, Math.max(window.endMs, start)) : end;
-  return { startMs: start, endMs };
+  // 窗口内最后一个桶可能止于桶中间；把终点收敛到可见窗口终点，
+  // 下钻明细与图表描述同一批记录。
+  if (window && Number.isFinite(window.endMs)) {
+    if (window.endMs < start) return null;
+    end = Math.min(end, window.endMs);
+  }
+  return { startMs: start, endMs: end };
 }

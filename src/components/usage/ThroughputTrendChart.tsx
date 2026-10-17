@@ -1,5 +1,5 @@
 import type { UsageAnalyticsData } from '@/types/usageAnalytics';
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ChartData, ChartOptions } from 'chart.js';
 import { Line } from 'react-chartjs-2';
@@ -14,6 +14,7 @@ import {
 import { throughputRate, type ThroughputTrendPoint } from '@/utils/usage/throughputAnalytics';
 import styles from '@/pages/UsagePage.module.scss';
 import { bucketRangeAt, type AnalyticsBucketRange } from './analyticsBucketDrill';
+import type { AnalyticsGrain, AnalyticsTimeWindow } from '@/utils/usage/analyticsBuckets';
 
 const SERIES_COLORS = {
   output: '#3B82F6',
@@ -28,13 +29,25 @@ export interface ThroughputTrendChartProps {
   data: UsageAnalyticsData;
   loading: boolean;
   isMobile: boolean;
+  /** 当前查询窗口；用于把最后一个桶的下钻终点收敛到可见范围。 */
+  window?: AnalyticsTimeWindow | null;
+  /** 时间粒度由 UsageAnalyticsCharts 统一持有，四张趋势图共用。 */
+  grain: AnalyticsGrain;
+  onGrainChange: (grain: AnalyticsGrain) => void;
   /** 点击时间桶时下钻到该桶的请求明细；未提供时图表仅展示。 */
   onBucketClick?: ((bucket: AnalyticsBucketRange) => void) | null;
 }
 
-export function ThroughputTrendChart({ data, loading, isMobile, onBucketClick }: ThroughputTrendChartProps) {
+export function ThroughputTrendChart({
+  data,
+  loading,
+  isMobile,
+  window,
+  grain: period,
+  onGrainChange: setPeriod,
+  onBucketClick,
+}: ThroughputTrendChartProps) {
   const { t } = useTranslation();
-  const [period, setPeriod] = useState<'hour' | 'day'>('hour');
 
   const { chartData, chartOptions, hasSamples } = useMemo(() => {
     const points: ThroughputTrendPoint[] = data[period].throughput;
@@ -83,7 +96,7 @@ export function ThroughputTrendChart({ data, loading, isMobile, onBucketClick }:
         ? (_elements, elements) => {
             const first = elements[0];
             if (!first) return;
-            const bucket = bucketRangeAt(bucketTimes, first.index, grain);
+            const bucket = bucketRangeAt(bucketTimes, first.index, grain, window);
             if (bucket) onBucketClick(bucket);
           }
         : undefined,
@@ -127,7 +140,7 @@ export function ThroughputTrendChart({ data, loading, isMobile, onBucketClick }:
       chartOptions: options,
       hasSamples: points.some((point) => point.averageSamples > 0),
     };
-  }, [data, period, isMobile, t, onBucketClick]);
+  }, [data, period, isMobile, t, window, onBucketClick]);
 
   const labels = chartData.labels ?? [];
 

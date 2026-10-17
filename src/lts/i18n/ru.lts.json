@@ -37,6 +37,7 @@
     "filter_title": "Область фильтрации",
     "active_filters": "Активные фильтры: {{count}}",
     "result_scope": "Период результатов",
+    "remove_filter": "Убрать фильтр: {{filter}}",
     "group_performance": "Нагрузка и время ответа",
     "group_performance_hint": "Сопоставьте объём запросов и время ответа.",
     "group_reliability": "Эффективность и надёжность",

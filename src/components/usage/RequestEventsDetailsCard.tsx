@@ -3663,7 +3663,10 @@ export function RequestEventsDetailsCard({
                                   ],
                                 ].map(([label, value]) => (
                                   <span key={String(label)} className={styles.requestEventsDetailItem}>
-                                    {t(String(label))}: {Number(value).toLocaleString()}
+                                    {t(String(label))}:{' '}
+                                    {value === null || value === undefined
+                                      ? '—'
+                                      : Number(value).toLocaleString()}
                                   </span>
                                 ))}
                               </dd>
