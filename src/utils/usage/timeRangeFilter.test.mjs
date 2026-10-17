@@ -224,3 +224,16 @@ for (const [name, window, timestamps] of [
     assert.ok(requests.labels.length <= 24 * 90 + 1, 'large custom ranges must not allocate unbounded empty buckets');
   });
 }
+
+test('a closed time window can select exactly one millisecond at a bucket boundary', () => {
+  const exact = { startMs: now, endMs: now };
+  assert.deepEqual(workspace.resolveUsageEventsScope(new URLSearchParams(
+    workspace.buildUsageEventsSearch('custom', exact)
+  )), { range: 'custom', customRange: exact, valid: true });
+  assert.deepEqual(usage.resolveUsageTimeRangeWindow(exact, now), exact);
+  const snapshot = { apis: { synthetic: { models: { 'synthetic-model': { details: [now - 1, now, now + 1].map(ms => ({
+    timestamp: new Date(ms).toISOString(), failed: false,
+    tokens: { input_tokens: 10, output_tokens: 2, total_tokens: 12 },
+  })) } } } } };
+  assert.equal(usage.filterUsageByTimeRange(snapshot, exact, now).total_requests, 1);
+});

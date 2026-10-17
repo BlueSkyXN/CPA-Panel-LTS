@@ -32,25 +32,26 @@ export function bucketRangeAt(
   grain: AnalyticsGrain,
   window?: AnalyticsTimeWindow | null
 ): AnalyticsBucketRange | null {
-  const start = times[index];
-  if (!Number.isFinite(start) || start <= 0) return null;
-  // Core 的 from_ms/to_ms 两端均含（query.go matchesRequest），而桶语义是
-  // [start, 下一桶起点)：终点统一收回 1ms，整点记录不会同时落进相邻两桶。
+  if (!Number.isInteger(index) || index < 0) return null;
+  const bucketStart = times[index];
+  if (!Number.isFinite(bucketStart) || bucketStart <= 0) return null;
+  const advanced = nextBucketStart(bucketStart, grain);
+  if (!Number.isFinite(advanced) || advanced <= bucketStart) return null;
   const next = times[index + 1];
-  let end: number;
-  if (Number.isFinite(next) && next > start) end = next - 1;
-  // 序列截断（最后一桶）没有下一桶可参照，退回本地推进规则再收敛。
-  else {
-    const advanced = nextBucketStart(start, grain);
-    if (!Number.isFinite(advanced) || advanced <= start) return null;
-    end = advanced - 1;
+  // 高基数窗口可能省略空桶，不能把下一观测桶之前的空档并入当前桶。
+  const endExclusive =
+    Number.isFinite(next) && next > bucketStart ? Math.min(next, advanced) : advanced;
+  let startMs = bucketStart;
+  let endMs = endExclusive - 1;
+  if (window) {
+    if (
+      !Number.isFinite(window.startMs) ||
+      !Number.isFinite(window.endMs) ||
+      window.startMs > window.endMs
+    )
+      return null;
+    startMs = Math.max(startMs, window.startMs);
+    endMs = Math.min(endMs, window.endMs);
   }
-  if (!Number.isFinite(end) || end <= start) return null;
-  // 窗口内最后一个桶可能止于桶中间；把终点收敛到可见窗口终点，
-  // 下钻明细与图表描述同一批记录。
-  if (window && Number.isFinite(window.endMs)) {
-    if (window.endMs < start) return null;
-    end = Math.min(end, window.endMs);
-  }
-  return { startMs: start, endMs: end };
+  return endMs >= startMs ? { startMs, endMs } : null;
 }

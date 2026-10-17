@@ -105,3 +105,27 @@ for (const [name, dates] of [
     }
   });
 }
+
+test('first partial bucket excludes records before the visible window', () => {
+  const start = Date.parse('2026-10-17T01:00:00Z');
+  assert.deepEqual(bucketRangeAt([start, start + 3600000], 0, 'hour', {
+    startMs: start + 1800000, endMs: start + 5400000,
+  }), { startMs: start + 1800000, endMs: start + 3599999 });
+});
+
+test('sparse observed series does not absorb missing empty buckets', () => {
+  const start = Date.parse('2026-10-17T01:00:00Z');
+  assert.deepEqual(bucketRangeAt([start, start + 3 * 3600000], 0, 'hour'), {
+    startMs: start, endMs: start + 3599999,
+  });
+});
+
+test('a one-millisecond intersection is valid and disjoint or invalid windows are rejected', () => {
+  const start = Date.parse('2026-10-17T01:00:00Z');
+  assert.deepEqual(bucketRangeAt([start], 0, 'hour', { startMs: start, endMs: start }), {
+    startMs: start, endMs: start,
+  });
+  assert.equal(bucketRangeAt([start], 0, 'hour', { startMs: start + 3600000, endMs: start + 7200000 }), null);
+  assert.equal(bucketRangeAt([start], 0, 'hour', { startMs: start + 1, endMs: start }), null);
+  assert.equal(bucketRangeAt([start], 0.5, 'hour'), null);
+});

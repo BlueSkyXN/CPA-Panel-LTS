@@ -20,6 +20,7 @@ import {
 } from '@/utils/usage/chartConfig';
 import styles from '@/pages/UsagePage.module.scss';
 import { bucketRangeAt, type AnalyticsBucketRange } from './analyticsBucketDrill';
+import { AnalyticsBucketDrillControl } from './AnalyticsBucketDrillControl';
 import type { AnalyticsGrain, AnalyticsTimeWindow } from '@/utils/usage/analyticsBuckets';
 
 const FAILURE_RATE_COLOR = '#EF4444';
@@ -216,6 +217,8 @@ export function ErrorAnalysisCard({
             variant={period === 'hour' ? 'primary' : 'secondary'}
             size="sm"
             onClick={() => setPeriod('hour')}
+            data-testid="analytics-errors-hour"
+            aria-pressed={period === 'hour'}
           >
             {t('usage_stats.by_hour')}
           </Button>
@@ -223,6 +226,8 @@ export function ErrorAnalysisCard({
             variant={period === 'day' ? 'primary' : 'secondary'}
             size="sm"
             onClick={() => setPeriod('day')}
+            data-testid="analytics-errors-day"
+            aria-pressed={period === 'day'}
           >
             {t('usage_stats.by_day')}
           </Button>
@@ -302,6 +307,16 @@ export function ErrorAnalysisCard({
         </div>
       ) : (
         <div className={styles.hint}>{t('usage_stats.no_data')}</div>
+      )}
+      {onBucketClick && !loading && hasTrend && (
+        <AnalyticsBucketDrillControl
+          key={period}
+          id="errors"
+          times={data[period].errors.map((point) => point.timestampMs)}
+          grain={period}
+          window={window}
+          onOpen={onBucketClick}
+        />
       )}
     </Card>
   );

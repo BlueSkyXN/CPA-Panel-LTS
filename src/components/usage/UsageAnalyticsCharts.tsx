@@ -17,6 +17,8 @@ export function UsageAnalyticsCharts({
   loading,
   isMobile,
   window,
+  grain: controlledGrain,
+  onGrainChange,
   onBucketClick,
 }: {
   data: UsageAnalyticsData;
@@ -24,12 +26,15 @@ export function UsageAnalyticsCharts({
   isMobile: boolean;
   /** 当前查询窗口；随点击传入各趋势卡。 */
   window?: AnalyticsTimeWindow | null;
+  grain?: AnalyticsGrain;
+  onGrainChange?: (grain: AnalyticsGrain) => void;
   /** 点击趋势图时间桶时触发；null 表示该卡不支持下钻。 */
   onBucketClick?: ((bucket: AnalyticsBucketRange) => void) | null;
 }) {
   const { t } = useTranslation();
-  // 四张趋势图共用同一时间粒度，切换一张图时其余同步，跨图对照无需重复操作。
-  const [grain, setGrain] = useState<AnalyticsGrain>('hour');
+  const [localGrain, setLocalGrain] = useState<AnalyticsGrain>('hour');
+  const grain = controlledGrain ?? localGrain;
+  const setGrain = onGrainChange ?? setLocalGrain;
   return (
     <div className={styles.analyticsGroups}>
       <AnalyticsSection
@@ -38,23 +43,23 @@ export function UsageAnalyticsCharts({
       >
         <div className={styles.analyticsGrid}>
           <LatencyTrendChart
-          data={data}
-          loading={loading}
-          isMobile={isMobile}
-          window={window}
-          grain={grain}
-          onGrainChange={setGrain}
-          onBucketClick={onBucketClick}
-        />
+            data={data}
+            loading={loading}
+            isMobile={isMobile}
+            window={window}
+            grain={grain}
+            onGrainChange={setGrain}
+            onBucketClick={onBucketClick}
+          />
           <ThroughputTrendChart
-          data={data}
-          loading={loading}
-          isMobile={isMobile}
-          window={window}
-          grain={grain}
-          onGrainChange={setGrain}
-          onBucketClick={onBucketClick}
-        />
+            data={data}
+            loading={loading}
+            isMobile={isMobile}
+            window={window}
+            grain={grain}
+            onGrainChange={setGrain}
+            onBucketClick={onBucketClick}
+          />
         </div>
       </AnalyticsSection>
       <AnalyticsSection
@@ -63,23 +68,23 @@ export function UsageAnalyticsCharts({
       >
         <div className={styles.analyticsGrid}>
           <CacheEfficiencyCard
-          data={data}
-          loading={loading}
-          isMobile={isMobile}
-          window={window}
-          grain={grain}
-          onGrainChange={setGrain}
-          onBucketClick={onBucketClick}
-        />
+            data={data}
+            loading={loading}
+            isMobile={isMobile}
+            window={window}
+            grain={grain}
+            onGrainChange={setGrain}
+            onBucketClick={onBucketClick}
+          />
           <ErrorAnalysisCard
-          data={data}
-          loading={loading}
-          isMobile={isMobile}
-          window={window}
-          grain={grain}
-          onGrainChange={setGrain}
-          onBucketClick={onBucketClick}
-        />
+            data={data}
+            loading={loading}
+            isMobile={isMobile}
+            window={window}
+            grain={grain}
+            onGrainChange={setGrain}
+            onBucketClick={onBucketClick}
+          />
         </div>
       </AnalyticsSection>
       <AnalyticsSection

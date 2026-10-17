@@ -14,6 +14,7 @@ import {
 import { throughputRate, type ThroughputTrendPoint } from '@/utils/usage/throughputAnalytics';
 import styles from '@/pages/UsagePage.module.scss';
 import { bucketRangeAt, type AnalyticsBucketRange } from './analyticsBucketDrill';
+import { AnalyticsBucketDrillControl } from './AnalyticsBucketDrillControl';
 import type { AnalyticsGrain, AnalyticsTimeWindow } from '@/utils/usage/analyticsBuckets';
 
 const SERIES_COLORS = {
@@ -52,7 +53,9 @@ export function ThroughputTrendChart({
   const { chartData, chartOptions, hasSamples } = useMemo(() => {
     const points: ThroughputTrendPoint[] = data[period].throughput;
     const labels = points.map((point) =>
-      period === 'hour' ? formatHourLabel(new Date(point.timestampMs)) : formatDayLabel(new Date(point.timestampMs))
+      period === 'hour'
+        ? formatHourLabel(new Date(point.timestampMs))
+        : formatDayLabel(new Date(point.timestampMs))
     );
     const series = [
       {
@@ -128,7 +131,9 @@ export function ThroughputTrendChart({
               const first = items[0];
               if (!first) return '';
               const count = series[first.datasetIndex]?.samples[first.dataIndex];
-              return count !== undefined ? t('usage_stats.analytics_samples_in_bucket', { count }) : '';
+              return count !== undefined
+                ? t('usage_stats.analytics_samples_in_bucket', { count })
+                : '';
             },
           },
         },
@@ -153,6 +158,8 @@ export function ThroughputTrendChart({
             variant={period === 'hour' ? 'primary' : 'secondary'}
             size="sm"
             onClick={() => setPeriod('hour')}
+            data-testid="analytics-throughput-hour"
+            aria-pressed={period === 'hour'}
           >
             {t('usage_stats.by_hour')}
           </Button>
@@ -160,6 +167,8 @@ export function ThroughputTrendChart({
             variant={period === 'day' ? 'primary' : 'secondary'}
             size="sm"
             onClick={() => setPeriod('day')}
+            data-testid="analytics-throughput-day"
+            aria-pressed={period === 'day'}
           >
             {t('usage_stats.by_day')}
           </Button>
@@ -199,6 +208,16 @@ export function ThroughputTrendChart({
         </div>
       ) : (
         <div className={styles.hint}>{t('analytics.no_measurements')}</div>
+      )}
+      {onBucketClick && !loading && hasSamples && (
+        <AnalyticsBucketDrillControl
+          key={period}
+          id="throughput"
+          times={data[period].throughput.map((point) => point.timestampMs)}
+          grain={period}
+          window={window}
+          onOpen={onBucketClick}
+        />
       )}
     </Card>
   );

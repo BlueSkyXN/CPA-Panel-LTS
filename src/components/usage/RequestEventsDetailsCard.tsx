@@ -1526,7 +1526,7 @@ export function RequestEventsDetailsCard({
   const pageTimeRangeWindow = useMemo(() => {
     if (pageTimeRange === 'all') return null;
     if (pageTimeRange === 'custom') {
-      if (!pageTimeRangeCustom || pageTimeRangeCustom.endMs <= pageTimeRangeCustom.startMs) {
+      if (!pageTimeRangeCustom || pageTimeRangeCustom.endMs < pageTimeRangeCustom.startMs) {
         return null;
       }
       return pageTimeRangeCustom;

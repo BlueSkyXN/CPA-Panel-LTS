@@ -101,6 +101,7 @@ export function AnalyticsSummaryStrip({
           <button
             key={chip.key}
             type="button"
+            data-testid={`analytics-summary-${chip.key}`}
             className={styles.summaryChipButton}
             title={chip.title}
             onClick={chip.onClick}

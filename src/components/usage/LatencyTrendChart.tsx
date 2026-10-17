@@ -13,6 +13,7 @@ import {
 } from '@/utils/usage/chartConfig';
 import styles from '@/pages/UsagePage.module.scss';
 import { bucketRangeAt, type AnalyticsBucketRange } from './analyticsBucketDrill';
+import { AnalyticsBucketDrillControl } from './AnalyticsBucketDrillControl';
 import type { AnalyticsGrain, AnalyticsTimeWindow } from '@/utils/usage/analyticsBuckets';
 
 const SERIES_COLORS = {
@@ -166,6 +167,8 @@ export function LatencyTrendChart({
             variant={period === 'hour' ? 'primary' : 'secondary'}
             size="sm"
             onClick={() => setPeriod('hour')}
+            data-testid="analytics-latency-hour"
+            aria-pressed={period === 'hour'}
           >
             {t('usage_stats.by_hour')}
           </Button>
@@ -173,6 +176,8 @@ export function LatencyTrendChart({
             variant={period === 'day' ? 'primary' : 'secondary'}
             size="sm"
             onClick={() => setPeriod('day')}
+            data-testid="analytics-latency-day"
+            aria-pressed={period === 'day'}
           >
             {t('usage_stats.by_day')}
           </Button>
@@ -212,6 +217,16 @@ export function LatencyTrendChart({
         </div>
       ) : (
         <div className={styles.hint}>{t('analytics.no_measurements')}</div>
+      )}
+      {onBucketClick && !loading && hasSamples && (
+        <AnalyticsBucketDrillControl
+          key={period}
+          id="latency"
+          times={data[period].latency.times}
+          grain={period}
+          window={window}
+          onOpen={onBucketClick}
+        />
       )}
     </Card>
   );

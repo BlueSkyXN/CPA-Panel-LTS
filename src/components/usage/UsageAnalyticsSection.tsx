@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import type { UsageQueryFilter, UsageQuerySession } from '@/types/usageQuery';
 import type { AnalyticsFilters } from '@/utils/usage/analyticsFilters';
 import type { AnalyticsTimeWindow } from '@/utils/usage';
+import type { AnalyticsGrain } from '@/utils/usage/analyticsBuckets';
 import type { UsagePayload } from './hooks/useUsageData';
 import { useUsageAnalyticsDetails } from './hooks/useUsageAnalyticsDetails';
 import styles from '@/pages/UsagePage.module.scss';
@@ -21,6 +22,8 @@ export interface UsageAnalyticsSectionProps {
   filter?: UsageQueryFilter;
   filters?: AnalyticsFilters;
   empty?: boolean;
+  grain?: AnalyticsGrain;
+  onGrainChange?: (grain: AnalyticsGrain) => void;
 }
 
 export function UsageAnalyticsSection({
@@ -34,6 +37,8 @@ export function UsageAnalyticsSection({
   filter,
   filters,
   empty,
+  grain,
+  onGrainChange,
 }: UsageAnalyticsSectionProps) {
   const { t } = useTranslation();
   const {
@@ -103,7 +108,14 @@ export function UsageAnalyticsSection({
         <p className={styles.hint}>{t('analytics.empty_window')}</p>
       )}
       {(hasSamples || pending) && (
-        <UsageAnalyticsCharts data={data} loading={pending && !hasSamples} isMobile={isMobile} />
+        <UsageAnalyticsCharts
+          data={data}
+          loading={pending && !hasSamples}
+          isMobile={isMobile}
+          window={timeWindow}
+          grain={grain}
+          onGrainChange={onGrainChange}
+        />
       )}
     </section>
   );

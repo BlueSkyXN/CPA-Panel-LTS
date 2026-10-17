@@ -19,6 +19,7 @@ import {
 } from '@/utils/usage/chartConfig';
 import styles from '@/pages/UsagePage.module.scss';
 import { bucketRangeAt, type AnalyticsBucketRange } from './analyticsBucketDrill';
+import { AnalyticsBucketDrillControl } from './AnalyticsBucketDrillControl';
 import type { AnalyticsGrain, AnalyticsTimeWindow } from '@/utils/usage/analyticsBuckets';
 
 const CACHE_RATE_COLOR = '#0E9F6E';
@@ -150,6 +151,8 @@ export function CacheEfficiencyCard({
             variant={period === 'hour' ? 'primary' : 'secondary'}
             size="sm"
             onClick={() => setPeriod('hour')}
+            data-testid="analytics-cache-hour"
+            aria-pressed={period === 'hour'}
           >
             {t('usage_stats.by_hour')}
           </Button>
@@ -157,6 +160,8 @@ export function CacheEfficiencyCard({
             variant={period === 'day' ? 'primary' : 'secondary'}
             size="sm"
             onClick={() => setPeriod('day')}
+            data-testid="analytics-cache-day"
+            aria-pressed={period === 'day'}
           >
             {t('usage_stats.by_day')}
           </Button>
@@ -222,6 +227,16 @@ export function CacheEfficiencyCard({
         </div>
       ) : (
         <div className={styles.hint}>{t('usage_stats.no_data')}</div>
+      )}
+      {onBucketClick && !loading && hasData && (
+        <AnalyticsBucketDrillControl
+          key={period}
+          id="cache"
+          times={data[period].cache.map((point) => point.timestampMs)}
+          grain={period}
+          window={window}
+          onOpen={onBucketClick}
+        />
       )}
     </Card>
   );

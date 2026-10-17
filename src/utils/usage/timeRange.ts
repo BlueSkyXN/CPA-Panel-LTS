@@ -78,7 +78,7 @@ export const isUsageCustomTimeRange = (value: unknown): value is UsageCustomTime
     Number.isFinite(startMs) &&
     typeof endMs === 'number' &&
     Number.isFinite(endMs) &&
-    endMs > startMs
+    endMs >= startMs
   );
 };
 
@@ -146,7 +146,7 @@ export function filterUsageByTimeRange<T>(
 
   const windowStart = window.startMs;
   const windowEnd = window.endMs;
-  if (!Number.isFinite(windowStart) || !Number.isFinite(windowEnd) || windowEnd <= windowStart) {
+  if (!Number.isFinite(windowStart) || !Number.isFinite(windowEnd) || windowEnd < windowStart) {
     return usageData;
   }
   const filteredApis: Record<string, unknown> = {};
