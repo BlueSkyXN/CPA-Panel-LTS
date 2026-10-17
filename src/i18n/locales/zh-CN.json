@@ -1539,6 +1539,8 @@
     "request_events_result": "结果",
     "request_events_failure_status": "HTTP {{status}}",
     "request_events_failure_reason": "错误原因：{{reason}}",
+    "request_events_content_safety_block": "内容审核拦截",
+    "request_events_content_safety_block_hint": "上游报告输入或生成内容触发内容安全审核，未提供具体触发类别。",
     "request_events_transport": "传输",
     "request_events_transport_hint": "最终一次上游尝试的传输方式（Core 开启请求体积统计后记录）",
     "request_events_transport_http": "HTTP",

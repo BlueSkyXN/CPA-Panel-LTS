@@ -1539,6 +1539,8 @@
     "request_events_result": "Result",
     "request_events_failure_status": "HTTP {{status}}",
     "request_events_failure_reason": "Failure reason: {{reason}}",
+    "request_events_content_safety_block": "Content safety block",
+    "request_events_content_safety_block_hint": "The provider reported that input or generated content triggered a safety check. No specific category was supplied.",
     "request_events_transport": "Transport",
     "request_events_transport_hint": "Upstream transport of the final attempt, recorded by Core with request size tracking",
     "request_events_transport_http": "HTTP",
