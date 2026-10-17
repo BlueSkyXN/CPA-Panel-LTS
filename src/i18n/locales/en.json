@@ -1664,7 +1664,17 @@
     "share_other_models": "Other ({{count}})",
     "share_metric_requests": "Requests",
     "share_metric_tokens": "Tokens",
-    "share_metric_cost": "Cost"
+    "share_metric_cost": "Cost",
+    "request_events_compact_view": "Compact view",
+    "request_events_compact_view_hint": "Keep only the core columns for locating a single issue; switching back restores your column setup",
+    "request_events_full_view": "Full view",
+    "request_events_full_view_hint": "Restore your previous full column setup",
+    "request_events_detail_result": "Result",
+    "request_events_detail_timing": "Timing",
+    "request_events_detail_tokens": "Tokens",
+    "request_events_detail_diagnostics": "Diagnostics",
+    "request_events_detail_auth_index": "Auth index",
+    "request_events_detail_trace_id": "Trace ID"
   },
   "service_health": {
     "title": "Service Health",

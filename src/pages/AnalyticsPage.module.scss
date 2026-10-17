@@ -79,6 +79,40 @@
   color: var(--text-secondary); font-size: 12px;
 }
 .filterMessage { grid-column: 1 / -1; color: var(--text-secondary); font-size: 12px; }
+.filterTags {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+    padding: 2px 6px 2px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    overflow-wrap: anywhere;
+
+    button {
+      border: none;
+      background: none;
+      padding: 0 2px;
+      color: inherit;
+      font-size: 14px;
+      line-height: 1;
+      cursor: pointer;
+
+      &:hover { color: var(--text-primary); }
+    }
+  }
+}
 .customTimeField { grid-column: 1 / -1; }
 .resultMeta {
   display: flex; flex-wrap: wrap; gap: 8px 24px; color: var(--text-secondary); font-size: 12px;
