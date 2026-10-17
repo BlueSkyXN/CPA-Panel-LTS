@@ -2416,7 +2416,8 @@ def run_oauth_load_failure_smoke(
         page.goto(f"{app_url}?route=oauth-load-failure#/auth-files", wait_until="domcontentloaded")
         page.wait_for_function("() => window.location.hash.endsWith('/auth-files')")
         page.get_by_text("Refresh failed", exact=True).first.wait_for()
-        if not page.get_by_role("button", name="Add Disablement", exact=True).is_disabled():
+        disablement_buttons = page.get_by_role("button", name="Add Disablement", exact=True)
+        if disablement_buttons.count() == 0 or not all(button.is_disabled() for button in disablement_buttons.all()):
             raise AssertionError("OAuth excluded-model writes stayed enabled after a load failure")
         if not page.get_by_role("button", name="Add Alias", exact=True).is_disabled():
             raise AssertionError("OAuth model-alias writes stayed enabled after a load failure")

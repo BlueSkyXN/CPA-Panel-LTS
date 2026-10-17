@@ -594,13 +594,15 @@
       },
       "pages": {
         "codex-policy_cache": "快取最佳化",
-        "codex-policy_outbound": "出站策略"
+        "codex-policy_outbound": "出站策略",
+        "codex-policy_context": "上下文計數"
       },
       "guidance": {
         "pages": {
           "codex-policy": {
             "cache": "協助連續對話重用上游快取，適配 ZCode 等用戶端的請求方式。僅適用於透過 ChatGPT 帳號登入接入的 Codex；使用 API Key 接入的模型不受影響。",
-            "outbound": "設定 Codex 請求以什麼方式送往上游。只對透過 ChatGPT 帳號登入接入的 Codex 生效；切換傳輸方式還要求憑據開啟 WebSocket。"
+            "outbound": "設定 Codex 請求以什麼方式送往上游。只對透過 ChatGPT 帳號登入接入的 Codex 生效；切換傳輸方式還要求憑據開啟 WebSocket。",
+            "context": "適用於透過 zcode-coding-plan 接入 GLM 的 Codex 用戶端。先觀察計數差異，確認後可啟用校正。"
           },
           "headers": {
             "codex": "設定 Codex 請求身分資訊；快取最佳化、異常偵測、重試與對沖在「Codex 最佳化」中設定。"
@@ -686,6 +688,25 @@
           "label": "舊行為",
           "description": "請求 gzip 回應並自動解壓，即此選項出現之前的行為。"
         }
+      }
+    }
+  },
+  "codex_zcode_context_usage": {
+    "title": "GLM 搜尋上下文計數",
+    "unknown_hint": "無法識別目前模式。請選擇一種模式，或在 YAML 中檢查設定。",
+    "count_hint": "觀察與校正模式會在搜尋完成後額外請求一次原生 token 計數，最多等待 5 秒，可能占用上游請求額度。需要 Core 與外掛支援；計數失敗時保留原值。",
+    "options": {
+      "disabled": {
+        "label": "關閉（預設）",
+        "description": "沿用上游 usage，不額外計數。"
+      },
+      "observe": {
+        "label": "觀察",
+        "description": "記錄上下文計數與上游用量的差異，保留用戶端數值。"
+      },
+      "correct": {
+        "label": "校正",
+        "description": "以原生計數更新 Codex 的上下文總量；後台用量與快取分項仍按上游統計。"
       }
     }
   }

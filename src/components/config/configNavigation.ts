@@ -210,6 +210,13 @@ export const CONFIG_FIELDS = {
     heading: false,
     aliases: ['cache', '缓存', 'ZCode', 'ChatGPT'],
   },
+  codexZcodeContextUsage: {
+    labelKey: 'codex_zcode_context_usage.title',
+    yamlKey: 'codex.zcode-context-usage',
+    fullWidth: true,
+    heading: false,
+    aliases: ['token', 'context', '压缩', '上下文', 'GLM', 'zcode'],
+  },
   codexOutboundTransport: {
     labelKey: 'codex_outbound.transport.title',
     yamlKey: 'codex.outbound.transport',
@@ -607,6 +614,7 @@ export const CONFIG_DOMAINS = [
     group: 'features',
     pages: [
       { id: 'cache', fields: ['codexCacheAffinityStrategy'] },
+      { id: 'context', fields: ['codexZcodeContextUsage'] },
       {
         id: 'outbound',
         fields: [

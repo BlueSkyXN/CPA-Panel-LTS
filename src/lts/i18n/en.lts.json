@@ -594,13 +594,15 @@
       },
       "pages": {
         "codex-policy_cache": "Cache optimization",
-        "codex-policy_outbound": "Outbound strategy"
+        "codex-policy_outbound": "Outbound strategy",
+        "codex-policy_context": "Context counting"
       },
       "guidance": {
         "pages": {
           "codex-policy": {
             "cache": "Help consecutive conversation turns reuse upstream cache with clients such as ZCode. Applies only to Codex connected through ChatGPT account sign-in; API key connections are unaffected.",
-            "outbound": "Choose how Codex requests reach the upstream. Applies only to Codex connected through ChatGPT account sign-in; the transport switch also requires WebSocket to be enabled on the credential."
+            "outbound": "Choose how Codex requests reach the upstream. Applies only to Codex connected through ChatGPT account sign-in; the transport switch also requires WebSocket to be enabled on the credential.",
+            "context": "For Codex clients using GLM through zcode-coding-plan. Observe count differences before enabling correction."
           },
           "headers": {
             "codex": "Configure Codex request identity; cache optimization, anomaly detection, retries and hedging are configured under Codex optimization."
@@ -686,6 +688,25 @@
           "label": "Legacy",
           "description": "Request gzip responses and decode them transparently, the behavior before this option."
         }
+      }
+    }
+  },
+  "codex_zcode_context_usage": {
+    "title": "GLM search context counting",
+    "unknown_hint": "The current mode is unsupported. Choose a mode or check the YAML configuration.",
+    "count_hint": "Observe and correct make one extra native token count request after search, waiting up to 5 seconds. This may consume upstream request quota. Requires Core and plugin support; a failed count keeps the original value.",
+    "options": {
+      "disabled": {
+        "label": "Disabled (default)",
+        "description": "Use upstream usage without an extra count request."
+      },
+      "observe": {
+        "label": "Observe",
+        "description": "Log the context count and upstream usage while preserving client values."
+      },
+      "correct": {
+        "label": "Correct",
+        "description": "Update the Codex context total with the native count; backend usage and cache fields retain upstream accounting."
       }
     }
   }

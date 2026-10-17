@@ -10,6 +10,33 @@ status_definitions:
   experimental: Optional surface that may be gated or hidden when backend support is missing.
 
 features:
+  - id: codex-zcode-context-usage-config
+    status: experimental
+    reason: Optional native context counting for Codex clients using zcode search keeps client compaction totals separate from full provider usage accounting.
+    routes:
+      - /config
+    panel_files:
+      - src/services/api/configFile.ts
+      - src/lts/codexPolicy/zcodeContextUsage.ts
+      - src/lts/codexPolicy/zcodeContextUsage.test.mjs
+      - src/lts/codexPolicy/useCodexPolicyControls.tsx
+      - src/lts/i18n/
+      - src/hooks/useVisualConfig.ts
+      - src/types/visualConfig.ts
+      - src/components/config/configNavigation.ts
+      - scripts/smoke-config-editor.py
+    core_endpoints:
+      - /v0/management/config.yaml
+    required_markers:
+      - codexZcodeContextUsage
+      - zcode-context-usage
+      - codex_zcode_context_usage
+      - codex-policy_context
+    validation:
+      - npm run test:config
+      - npm run smoke:config
+      - npm run check:lts
+
   - id: codex-cache-affinity-config
     status: lts-maintained
     reason: ChatGPT OAuth cache affinity needs understandable controls while preserving absent defaults, unknown YAML and upstream cache semantics.
