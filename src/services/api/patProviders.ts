@@ -36,9 +36,15 @@ export const patProvidersApi = {
     );
     if (!list.pluginsEnabled || !plugin) throw new Error('plugin_unavailable');
     if (provider === 'zcode-coding-plan') {
+      const config = await pluginsApi.getConfig(plugin.id);
+      const region = config.upstream ?? 'bigmodel';
+      if (region !== 'bigmodel' && region !== 'zai') throw new Error('plugin_unavailable');
       return {
         transport: 'direct_anthropic',
-        endpoint: 'https://open.bigmodel.cn/api/anthropic/v1/messages',
+        endpoint:
+          region === 'zai'
+            ? 'https://api.z.ai/api/anthropic/v1/messages'
+            : 'https://open.bigmodel.cn/api/anthropic/v1/messages',
         supportsExtraModels: pluginVersionAtLeast(plugin.metadata?.version, '0.6.0'),
       };
     }

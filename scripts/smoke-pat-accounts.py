@@ -24,6 +24,7 @@ def main():
     plugin_enabled = True
     quota_rejected = False
     zcode_version = "0.6.0"
+    zcode_upstream = "bigmodel"
     fail_auth_download = False
     secrets_used = ["pt-fixture-create-only", "pt-fixture-update-only"]
 
@@ -43,6 +44,8 @@ def main():
             ] + [{"id": "zcode-coding-plan", "registered": plugin_enabled, "effective_enabled": plugin_enabled,
                   "enabled": plugin_enabled, "configured": True,
                   "metadata": {"name": "zcode-coding-plan", "version": zcode_version, "author": "Fixture"}}]}
+        elif path == "/plugins/zcode-coding-plan/config":
+            result = {"upstream": zcode_upstream}
         elif path.startswith("/plugins/") and path.endswith("/config"):
             result = {"transport": "direct_openai", "openapi_endpoint": "https://openapi.qoder.com.cn"}
         elif path.endswith("/summary"):
@@ -231,6 +234,11 @@ def main():
                 page.get_by_test_id("auth-file-card").filter(has_text="ZCode fixture").get_by_role("button", name="Update credentials", exact=True).click()
                 return page.get_by_role("dialog", name="Update credentials", exact=True)
 
+            for zcode_upstream, endpoint in [("zai", "https://api.z.ai/api/anthropic/v1/messages"), ("bigmodel", "https://open.bigmodel.cn/api/anthropic/v1/messages")]:
+                dialog = open_zcode_editor()
+                dialog.get_by_text(re.compile(re.escape(endpoint))).wait_for()
+                dialog.get_by_role("button", name="Cancel", exact=True).click()
+
             for value, expected in [("glm-5.3-flashx", ["glm-5.3-flashx"]), ("", [])]:
                 dialog = open_zcode_editor()
                 dialog.get_by_label("Extra models", exact=True).fill(value)
@@ -292,6 +300,12 @@ def main():
                 zcode_dialog.get_by_label(catalog["pat_accounts"]["api_key_label"], exact=True).fill("invalid-fixture")
                 zcode_dialog.get_by_role("button", name=catalog["common"]["save"], exact=True).click()
                 zcode_dialog.get_by_text(catalog["pat_accounts"]["invalid_api_key"], exact=True).wait_for()
+                before_count = len(auths)
+                zcode_dialog.get_by_label(catalog["pat_accounts"]["api_key_label"], exact=True).fill("synthetic.fixture")
+                zcode_dialog.get_by_label(catalog["pat_accounts"]["device_id_label"], exact=True).fill("<invalid-device>")
+                zcode_dialog.get_by_role("button", name=catalog["common"]["save"], exact=True).click()
+                zcode_dialog.get_by_text(catalog["pat_accounts"]["invalid_device_id"], exact=True).wait_for()
+                assert len(auths) == before_count
                 zcode_dialog.get_by_role("button", name=catalog["common"]["cancel"], exact=True).click()
                 page.get_by_role("button", name="ZCode 1", exact=True).click()
                 page.get_by_test_id("auth-file-card").filter(has_text="ZCode fixture").get_by_role("button", name=catalog["pat_accounts"]["update"], exact=True).click()
@@ -299,6 +313,10 @@ def main():
                 provider = update_dialog.get_by_role("button", name=catalog["pat_accounts"]["provider"], exact=True)
                 assert provider.inner_text() == "ZCode" and provider.is_disabled()
                 assert "Coding Plan" not in update_dialog.inner_text()
+                update_dialog.get_by_label(catalog["pat_accounts"]["device_id_label"], exact=True).fill("<invalid-device>")
+                update_dialog.get_by_role("button", name=catalog["common"]["save"], exact=True).click()
+                update_dialog.get_by_text(catalog["pat_accounts"]["invalid_device_id"], exact=True).wait_for()
+                assert auths[zcode_name]["device_id"] == original_device
                 update_dialog.get_by_role("button", name=catalog["common"]["cancel"], exact=True).click()
             assert not errors, "Browser reported JavaScript errors"
             browser.close()

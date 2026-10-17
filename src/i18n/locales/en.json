@@ -52,6 +52,7 @@
     },
     "invalid_api_key": "Enter a valid ZCode API key (two non-empty parts separated by a dot).",
     "api_key_label": "API key",
+    "invalid_device_id": "Enter a valid device ID without line breaks, null characters or <.",
     "device_id_label": "Device ID",
     "device_id_hint": "Optional. Leave blank to keep the existing value or auto-generate one.",
     "hint_zcode-coding-plan": "Use the API key configured in ZCode. It is stored in this account file on the server, not in browser storage.",

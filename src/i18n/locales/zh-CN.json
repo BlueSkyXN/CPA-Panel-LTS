@@ -52,6 +52,7 @@
     },
     "invalid_api_key": "请输入有效的 ZCode API key（两段以点分隔且均非空）。",
     "api_key_label": "API key",
+    "invalid_device_id": "请填写有效的设备标识，不得包含换行、空字符或 <。",
     "device_id_label": "设备标识（device ID）",
     "device_id_hint": "可选。留空时保留原有值，新建账号时自动生成。",
     "hint_zcode-coding-plan": "填写 ZCode 中配置的 API key。凭据保存在服务器上的本账户文件中，不会保存在浏览器存储中。",
