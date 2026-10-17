@@ -111,7 +111,9 @@ export function buildAccountAuth(
     };
     // 编辑既有账号且未改动设备标识时保留原值，避免静默轮换设备身份。
     const previousDeviceId = typeof previous?.device_id === 'string' ? previous.device_id : '';
-    auth.device_id = deviceId.trim() || previousDeviceId || generateDeviceId();
+    const device = deviceId.trim() || previousDeviceId.trim() || generateDeviceId();
+    if (/[\r\n\0<]/.test(device)) throw new Error('invalid_device_id');
+    auth.device_id = device;
     // undefined 表示未编辑（例如旧插件）；显式空数组表示清除额外模型。
     if (extraModels !== undefined) auth.exmodel = normalizeAccountExtraModels(extraModels);
     // 已改为内联凭据；保留旧引用会被插件拒绝，其他账号设置继续沿用。

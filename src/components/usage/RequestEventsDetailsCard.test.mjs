@@ -795,6 +795,41 @@ test('classifies cache-read share below 90% as abnormal and 95% or above as norm
   assert.equal((markup.match(/data-cache-rate-tone="anomaly"/g) ?? []).length, 2);
 });
 
+test('shows provider-scoped content safety explanations without rewriting raw reasons', async () => {
+  for (const [locale, label] of [
+    ['en', 'Content safety block'],
+    ['zh-CN', '内容审核拦截'],
+    ['zh-TW', '內容審核攔截'],
+    ['ru', 'Блокировка контента'],
+  ]) {
+    await i18n.changeLanguage(locale);
+    const reasons = ['bigmodel_1301', 'zai_1301', '1301', 'other_1301', 'bigmodel_1399', 'upstream_error'];
+    const details = reasons.map((reason, index) => ({
+      timestamp: `2026-10-16T00:0${index}:00Z`,
+      source: 'synthetic-source',
+      auth_index: '1',
+      failed: true,
+      failure_status: index === 0 ? 400 : 502,
+      failure_reason: reason,
+      tokens: { input_tokens: 10, output_tokens: 0, total_tokens: 10 },
+    }));
+    const markup = renderToStaticMarkup(createElement(RequestEventsDetailsCard, {
+      usage: { apis: { app: { models: { 'glm-5.3': { details } } } } },
+      loading: false,
+      pageTimeRange: 'all',
+      referenceNowMs: Date.parse('2026-10-16T01:00:00Z'),
+      priceProfile: pricingModule.createDefaultPriceProfileV3(),
+      requestApiKeys: [], geminiKeys: [], claudeConfigs: [], codexConfigs: [], vertexConfigs: [], openaiProviders: [],
+    }));
+    assert.equal(markup.split(`1301 · ${label}`).length - 1, 2);
+    for (const reason of reasons) assert.ok(markup.includes(`data-failure-reason="${reason}"`));
+    for (const reason of reasons.slice(2)) assert.ok(markup.includes(`>${reason}</span>`));
+    assert.match(markup, /data-failure-status="400"/);
+    assert.match(markup, /data-failure-status="502"/);
+    assert.deepEqual(details.map((detail) => detail.failure_reason), reasons);
+  }
+});
+
 test('shows the failure status code badge and reason on failed request events', async () => {
   await i18n.changeLanguage('en');
   const details = [

@@ -69,6 +69,7 @@ import {
   getUsageNonCacheReadInputTokenCount,
 } from '@/utils/usage/cacheTokens';
 import { normalizeReasoningEffort } from '@/utils/usage/reasoningEffort';
+import { describeFailureReason } from '@/utils/usage/failureReason';
 import { SERVICE_TIER_FLOWS, serviceTierFlow } from '@/utils/usage/serviceTier';
 import { normalizeResponseCyberProgram } from '@/utils/usage/cyberProgram';
 import { downloadBlob } from '@/utils/download';
@@ -3332,11 +3333,9 @@ export function RequestEventsDetailsCard({
                             <span
                               className={styles.requestEventsFailureReason}
                               data-failure-reason={row.failureReason}
-                              title={t('usage_stats.request_events_failure_reason', {
-                                reason: row.failureReason,
-                              })}
+                              title={describeFailureReason(row.failureReason, t).title}
                             >
-                              {row.failureReason}
+                              {describeFailureReason(row.failureReason, t).label}
                             </span>
                           )}
                           {row.largeConnectFailure && (

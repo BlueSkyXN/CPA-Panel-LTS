@@ -34,7 +34,9 @@ test('ZCode extra model editing requires the loaded plugin feature version', asy
   const { pluginsApi } = await vite.ssrLoadModule('/src/services/api/plugins.ts');
   const { patProvidersApi } = await vite.ssrLoadModule('/src/services/api/patProviders.ts');
   const originalList = pluginsApi.list;
+  const originalGetConfig = pluginsApi.getConfig;
   try {
+    pluginsApi.getConfig = async () => ({});
     for (const [version, supported] of [[undefined, false], ['0.5.0', false], ['0.6.0', true], ['0.6.1', true]]) {
       pluginsApi.list = async () => ({ pluginsEnabled: true, plugins: [{ id: 'zcode-coding-plan', registered: true, effectiveEnabled: true, metadata: { version } }] });
       const config = await patProvidersApi.configuration('zcode-coding-plan');
@@ -44,7 +46,45 @@ test('ZCode extra model editing requires the loaded plugin feature version', asy
     await assert.rejects(() => patProvidersApi.configuration('zcode-coding-plan'), /plugin_unavailable/);
   } finally {
     pluginsApi.list = originalList;
+    pluginsApi.getConfig = originalGetConfig;
   }
+});
+
+test('ZCode account configuration reflects the configured upstream and rejects unknown values', async () => {
+  const { pluginsApi } = await vite.ssrLoadModule('/src/services/api/plugins.ts');
+  const { patProvidersApi } = await vite.ssrLoadModule('/src/services/api/patProviders.ts');
+  const originalList = pluginsApi.list;
+  const originalGetConfig = pluginsApi.getConfig;
+  try {
+    pluginsApi.list = async () => ({ pluginsEnabled: true, plugins: [{ id: 'zcode-coding-plan', registered: true, effectiveEnabled: true, metadata: { version: '0.6.1' } }] });
+    for (const upstream of [undefined, null, 'bigmodel', 'zai']) {
+      pluginsApi.getConfig = async () => ({ upstream });
+      const config = await patProvidersApi.configuration('zcode-coding-plan');
+      assert.equal(config.endpoint, upstream === 'zai'
+        ? 'https://api.z.ai/api/anthropic/v1/messages'
+        : 'https://open.bigmodel.cn/api/anthropic/v1/messages');
+      assert.equal(config.supportsExtraModels, true);
+    }
+    for (const upstream of ['unknown', '', ' ZAI ', 1, {}]) {
+      pluginsApi.getConfig = async () => ({ upstream });
+      await assert.rejects(() => patProvidersApi.configuration('zcode-coding-plan'), /plugin_unavailable/);
+    }
+    pluginsApi.getConfig = async () => { throw new Error('synthetic_config_unavailable'); };
+    await assert.rejects(() => patProvidersApi.configuration('zcode-coding-plan'), /synthetic_config_unavailable/);
+  } finally {
+    pluginsApi.list = originalList;
+    pluginsApi.getConfig = originalGetConfig;
+  }
+});
+
+test('ZCode device validation matches the plugin and preserves valid saved identities', () => {
+  for (const device of ['a\nb', 'a\rb', 'a\0b', '<device>']) {
+    assert.throws(() => buildAccountAuth('zcode-coding-plan', 'Main', 'fixture.secret', device), /invalid_device_id/);
+    assert.throws(() => buildAccountAuth('zcode-coding-plan', 'Main', '', '', { type: 'zcode-coding-plan', api_key: 'fixture.secret', device_id: device }), /invalid_device_id/);
+  }
+  const previous = Object.freeze({ type: 'zcode-coding-plan', api_key: 'fixture.secret', device_id: ' stable-device ' });
+  assert.equal(buildAccountAuth('zcode-coding-plan', 'Main', '', '', previous).device_id, 'stable-device');
+  assert.equal(previous.device_id, ' stable-device ');
 });
 
 test('new accounts receive unique path-safe filenames without using the label', () => {

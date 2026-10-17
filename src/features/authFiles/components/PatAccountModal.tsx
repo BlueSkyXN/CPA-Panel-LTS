@@ -145,9 +145,11 @@ export function PatAccountModal({ file, onClose, onSaved }: Props) {
         t(
           error instanceof Error && error.message === 'invalid_extra_models'
             ? 'pat_accounts.invalid_extra_models'
-            : provider === 'zcode-coding-plan'
-              ? 'pat_accounts.invalid_api_key'
-              : 'pat_accounts.invalid_pat'
+            : error instanceof Error && error.message === 'invalid_device_id'
+              ? 'pat_accounts.invalid_device_id'
+              : provider === 'zcode-coding-plan'
+                ? 'pat_accounts.invalid_api_key'
+                : 'pat_accounts.invalid_pat'
         )
       );
       return;
@@ -193,11 +195,13 @@ export function PatAccountModal({ file, onClose, onSaved }: Props) {
     } catch (error) {
       if (current === generation.current) {
         const validationKey =
-          error instanceof Error && error.message === 'invalid_api_key'
-            ? 'pat_accounts.invalid_api_key'
-            : error instanceof Error && error.message === 'invalid_pat'
-              ? 'pat_accounts.invalid_pat'
-              : 'pat_accounts.save_failed';
+          error instanceof Error && error.message === 'invalid_device_id'
+            ? 'pat_accounts.invalid_device_id'
+            : error instanceof Error && error.message === 'invalid_api_key'
+              ? 'pat_accounts.invalid_api_key'
+              : error instanceof Error && error.message === 'invalid_pat'
+                ? 'pat_accounts.invalid_pat'
+                : 'pat_accounts.save_failed';
         setError(t(validationKey));
       }
     } finally {
