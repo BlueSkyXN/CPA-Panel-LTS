@@ -1,4 +1,5 @@
 import { CODEX_CACHE_AFFINITY_STRATEGIES, isCodexCacheAffinityStrategy } from './cacheAffinity';
+import { ZCODE_CONTEXT_USAGE_MODES, isZcodeContextUsageMode } from './zcodeContextUsage';
 import {
   CODEX_OUTBOUND_ACCEPT_ENCODINGS,
   CODEX_OUTBOUND_DEFAULT_WEBSOCKET_THRESHOLD_BYTES,
@@ -91,7 +92,7 @@ const ABNORMAL_RETRY_HEDGED_MODE_HINT_KEYS = {
 
 type CodexPolicyFieldId = Extract<
   ConfigFieldId,
-  `codexAbnormalReasoningRetry${string}` | 'codexCacheAffinityStrategy' | `codexOutbound${string}`
+  `codexAbnormalReasoningRetry${string}` | 'codexCacheAffinityStrategy' | 'codexZcodeContextUsage' | `codexOutbound${string}`
 >;
 export function useCodexPolicyControls({
   values,
@@ -304,6 +305,27 @@ export function useCodexPolicyControls({
   );
 
   return {
+    codexZcodeContextUsage: (
+      <div data-testid="codex-zcode-context-usage-control">
+        <ConfigChoiceGroup
+          label={t('codex_zcode_context_usage.title')}
+          value={values.codexZcodeContextUsage || 'disabled'}
+          options={ZCODE_CONTEXT_USAGE_MODES.map((mode) => ({
+            value: mode,
+            label: t(`codex_zcode_context_usage.options.${mode}.label`),
+            description: t(`codex_zcode_context_usage.options.${mode}.description`),
+          }))}
+          disabled={disabled}
+          onChange={(mode) => {
+            if (isZcodeContextUsageMode(mode)) onChange({ codexZcodeContextUsage: mode });
+          }}
+        />
+        {values.codexZcodeContextUsage && !isZcodeContextUsageMode(values.codexZcodeContextUsage) && (
+          <p role="alert">{t('codex_zcode_context_usage.unknown_hint')}</p>
+        )}
+        <p>{t('codex_zcode_context_usage.count_hint')}</p>
+      </div>
+    ),
     codexOutboundTransport: outboundChoice(
       'codex-outbound-transport-control',
       'transport',

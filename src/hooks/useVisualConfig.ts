@@ -1,4 +1,5 @@
 import { readCodexCacheAffinity, isCodexCacheAffinityStrategy } from '@/lts/codexPolicy/cacheAffinity';
+import { readZcodeContextUsage, isZcodeContextUsageMode } from '@/lts/codexPolicy/zcodeContextUsage';
 import {
   isCodexOutboundAcceptEncoding,
   isCodexOutboundRequestCompression,
@@ -1347,6 +1348,7 @@ function getNextDirtyFields(
       'codexHeaderUserAgent',
       'codexHeaderBetaFeatures',
       'codexIdentityConfuse',
+      'codexZcodeContextUsage',
       'codexCacheAffinityStrategy',
       'codexOutboundTransport',
       'codexOutboundWebsocketThresholdBytes',
@@ -1704,6 +1706,7 @@ export function useVisualConfig() {
             ? codexHeaderDefaults['beta-features']
             : '',
         codexIdentityConfuse: Boolean(codex?.['identity-confuse']),
+        codexZcodeContextUsage: readZcodeContextUsage(codex?.['zcode-context-usage']),
         codexCacheAffinityStrategy: readCodexCacheAffinity(codex?.['cache-affinity']),
         ...(() => {
           const outbound = readCodexOutbound(codex?.outbound);
@@ -2095,8 +2098,15 @@ export function useVisualConfig() {
         const abnormalReasoningRetryDirty =
           hasCodexAbnormalReasoningRetryDirtyFields(dirtyFields);
         const outboundDirty = CODEX_OUTBOUND_FIELDS.some(([field]) => dirtyFields.has(field));
-        const codexDirty = dirtyFields.has('codexIdentityConfuse') || dirtyFields.has('codexCacheAffinityStrategy') || outboundDirty || abnormalReasoningRetryDirty;
+        const contextUsageDirty = dirtyFields.has('codexZcodeContextUsage');
+        const codexDirty = dirtyFields.has('codexIdentityConfuse') || dirtyFields.has('codexCacheAffinityStrategy') || contextUsageDirty || outboundDirty || abnormalReasoningRetryDirty;
         if (codexDirty) {
+          if (contextUsageDirty) {
+            const codexNode = doc.getIn(['codex'], true);
+            if (codexNode && !isMap(codexNode) && !(isScalar(codexNode) && codexNode.value == null)) {
+              throw new VisualConfigApplyError('visual_apply_failed');
+            }
+          }
           if (outboundDirty &&
               (isAlias(doc.getIn(['codex'], true)) || isAlias(doc.getIn(['codex', 'outbound'], true)))) {
             throw new VisualConfigApplyError('visual_apply_failed');
@@ -2106,6 +2116,12 @@ export function useVisualConfig() {
             throw new VisualConfigApplyError('visual_apply_failed');
           }
           ensureMapInDoc(doc, ['codex']);
+          if (contextUsageDirty) {
+            if (!isZcodeContextUsageMode(values.codexZcodeContextUsage)) {
+              throw new VisualConfigApplyError('visual_apply_failed');
+            }
+            doc.setIn(['codex', 'zcode-context-usage'], values.codexZcodeContextUsage);
+          }
           if (dirtyFields.has('codexCacheAffinityStrategy')) {
             if (!isCodexCacheAffinityStrategy(values.codexCacheAffinityStrategy)) {
               throw new VisualConfigApplyError('visual_apply_failed');

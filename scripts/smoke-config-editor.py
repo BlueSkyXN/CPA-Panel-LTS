@@ -321,6 +321,48 @@ def run_codex_outbound_smoke(page, state):
         load(original)
 
 
+def run_zcode_context_usage_smoke(page, state):
+    original = state.config_yaml
+
+    def load(source):
+        state.config_yaml = source
+        page.reload()
+        page.get_by_role('button', name='Visual Editor', exact=True).click()
+        locate(page, 'codexZcodeContextUsage', 'codex.zcode-context-usage')
+        return page.get_by_test_id('codex-zcode-context-usage-control')
+
+    try:
+        field = load(original)
+        assert field.get_by_role('radio', name='Disabled (default)', exact=True).is_checked()
+        assert page.locator('button[aria-label="Save"]').is_disabled()
+        assert 'extra native token count' in field.inner_text()
+        source = original.replace('codex:\n', 'codex:\n  zcode-context-usage: disabled # context-policy\n  future-context: preserve\n', 1)
+        field = load(source)
+        for label, mode in [('Observe', 'observe'), ('Correct', 'correct'), ('Disabled (default)', 'disabled')]:
+            field.get_by_role('radio', name=label, exact=True).check()
+            before = len(state.config_yaml_puts)
+            page.locator('button[aria-label="Save"]').click()
+            page.get_by_role('button', name='Confirm Save', exact=True).click()
+            deadline = time.monotonic() + 15
+            while len(state.config_yaml_puts) == before and time.monotonic() < deadline:
+                page.wait_for_timeout(50)
+            assert len(state.config_yaml_puts) == before + 1
+            assert re.search(r'zcode-context-usage: ' + mode + r'\b', state.config_yaml)
+            assert '# context-policy' in state.config_yaml and 'future-context: preserve' in state.config_yaml
+            field = load(state.config_yaml)
+            assert field.get_by_role('radio', name=label, exact=True).is_checked()
+        for width in [1440, 320]:
+            page.set_viewport_size({'width': width, 'height': 900})
+            check_layout(page)
+            page.screenshot(path=str(OUTPUT / f'zcode-context-{width}.png'))
+        page.set_viewport_size({'width': 1440, 'height': 900})
+        field = load(source.replace('zcode-context-usage: disabled', 'zcode-context-usage: future'))
+        assert field.get_by_role('alert').is_visible()
+        assert field.locator('input:checked').count() == 0
+    finally:
+        load(original)
+
+
 def run():
     OUTPUT.mkdir(parents=True, exist_ok=True)
     app_port, api_port = base.find_free_port(), base.find_free_port()
@@ -547,6 +589,7 @@ def run():
         run_payload_integrity_smoke(page, state)
         run_cache_affinity_smoke(page, state)
         run_codex_outbound_smoke(page, state)
+        run_zcode_context_usage_smoke(page, state)
 
         for width, height in [(1440,900),(1280,800),(1024,768),(768,1024),(390,844),(320,844)]:
             page.set_viewport_size({'width':width,'height':height})
@@ -608,7 +651,7 @@ def run():
                 assert page.get_by_test_id('config-page-introduction').inner_text().strip()
                 check_layout(page)
                 visited_pages.append(path)
-        assert len(visited_pages) == len(set(visited_pages)) == 28
+        assert len(visited_pages) == len(set(visited_pages)) == 29
         assert not errors, errors
         context.close()
         browser.close()
