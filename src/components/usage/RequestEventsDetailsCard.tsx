@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useEffect,
   useCallback,
   useId,
@@ -2176,6 +2177,14 @@ export function RequestEventsDetailsCard({
     (count, columnId) => count + (columnId !== 'latency' && columnVisibility[columnId] ? 1 : 0),
     0
   );
+  const visibleColumnCount = REQUEST_EVENT_COLUMN_IDS.filter(
+    (columnId) =>
+      columnVisibility[columnId] &&
+      (columnId !== 'latency' || hasLatencyData) &&
+      (columnId !== 'ttfb' || hasTTFBData) &&
+      (columnId !== 'outputTps' || hasOutputTpsData) &&
+      (columnId !== 'averageTps' || hasAverageTpsData)
+  ).length;
 
   const handleToggleColumn = (columnId: RequestEventColumnId) => {
     setStoredColumnVisibility({
@@ -3171,9 +3180,8 @@ export function RequestEventsDetailsCard({
 
                   const rowExpanded = expandedRows.has(row.id);
                   return (
-                    <>
+                    <Fragment key={row.id}>
                     <tr
-                      key={row.id}
                       data-request-row-expanded={rowExpanded}
                       className={rowExpanded ? styles.requestEventsRowExpanded : undefined}
                       onClick={() => {
@@ -3294,10 +3302,16 @@ export function RequestEventsDetailsCard({
                             <span
                               className={`${styles.requestEventsTierBadge} ${
                                 row.responseCyberProgram === 'daybreak_blue'
-                                  ? styles.requestEventsTierBlue
-                                  : row.resolvedServiceTier.tier === 'fast'
-                                    ? styles.requestEventsTierFast
-                                    : styles.requestEventsTierStd
+                                  ? row.resolvedServiceTier.tier === 'fast'
+                                    ? styles.requestEventsTierBlueFast
+                                    : styles.requestEventsTierBlue
+                                  : row.responseCyberProgram === 'standard'
+                                    ? row.resolvedServiceTier.tier === 'fast'
+                                      ? styles.requestEventsTierFast
+                                      : styles.requestEventsTierStd
+                                    : row.resolvedServiceTier.tier === 'fast'
+                                      ? styles.requestEventsTierFastUnknown
+                                      : styles.requestEventsTierStdUnknown
                               }`}
                               data-cyber-program={row.responseCyberProgram ?? 'missing'}
                               aria-hidden="true"
@@ -3591,10 +3605,10 @@ export function RequestEventsDetailsCard({
                       )}
                     </tr>
                     {rowExpanded && (
-                      <tr key={`${row.id}-detail`} className={styles.requestEventsDetailRow}>
-                        <td colSpan={stableVisibleColumnCount + 1}>
-                          <div className={styles.requestEventsDetailGrid} data-testid="request-event-detail">
-                            <dl>
+                      <tr className={styles.requestEventsDetailRow}>
+                        <td colSpan={visibleColumnCount}>
+                          <dl className={styles.requestEventsDetailGrid} data-testid="request-event-detail">
+                            <div>
                               <dt>{t('usage_stats.request_events_detail_result')}</dt>
                               <dd>
                                 <span
@@ -3621,6 +3635,8 @@ export function RequestEventsDetailsCard({
                                   </span>
                                 )}
                               </dd>
+                            </div>
+                            <div>
                               <dt>{t('usage_stats.request_events_detail_timing')}</dt>
                               <dd>
                                 {[
@@ -3643,6 +3659,8 @@ export function RequestEventsDetailsCard({
                                   </span>
                                 ))}
                               </dd>
+                            </div>
+                            <div>
                               <dt>{t('usage_stats.request_events_detail_tokens')}</dt>
                               <dd>
                                 {[
@@ -3669,6 +3687,8 @@ export function RequestEventsDetailsCard({
                                   </span>
                                 ))}
                               </dd>
+                            </div>
+                            <div>
                               <dt>{t('usage_stats.request_events_detail_diagnostics')}</dt>
                               <dd>
                                 <span className={styles.requestEventsDetailItem}>
@@ -3690,12 +3710,12 @@ export function RequestEventsDetailsCard({
                                   </span>
                                 )}
                               </dd>
-                            </dl>
-                          </div>
+                            </div>
+                          </dl>
                         </td>
                       </tr>
                     )}
-                    </>
+                    </Fragment>
                   );
                 })}
               </tbody>
