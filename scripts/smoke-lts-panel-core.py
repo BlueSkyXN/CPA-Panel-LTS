@@ -2798,7 +2798,7 @@ def run_browser_smoke(
                         events_card.locator('[data-performance-summary-key="output-tps"]').wait_for()
                         events_card.locator('[data-performance-summary-key="reasoning-ratio"]').wait_for()
                     resolved_fast_flows = events_card.locator(
-                        '[data-service-tier-flow][aria-label*="Resolved: Fast"]'
+                        '[data-service-tier-flow][aria-label*="Resolved: FAST"]'
                     )
                     resolved_fast_flows.first.wait_for()
                     if resolved_fast_flows.count() != 1:
@@ -2807,7 +2807,7 @@ def run_browser_smoke(
                     if core_usage_version == 3:
                         expected_std_rows += 1
                     resolved_std_flows = events_card.locator(
-                        '[data-service-tier-flow][aria-label*="Resolved: Std"]'
+                        '[data-service-tier-flow][aria-label*="Resolved: STD"]'
                     )
                     if resolved_std_flows.count() != expected_std_rows:
                         raise AssertionError(
@@ -2815,7 +2815,7 @@ def run_browser_smoke(
                         )
                     assumed_std_flows = events_card.locator(
                         '[data-service-tier-flow]'
-                        '[aria-label*="Resolved: Std (evidence: assumed fallback)"]'
+                        '[aria-label*="Resolved: STD (evidence: assumed fallback)"]'
                     )
                     expected_assumed_std = 2 if core_usage_version in {2, 3} else 1
                     if core_usage_version == 3:
@@ -2829,8 +2829,8 @@ def run_browser_smoke(
                     assumed_std_flows.first.wait_for()
                     tier_select = events_card.get_by_label("Tier", exact=True)
                     tier_select.click()
-                    page.get_by_role("option", name="Fast", exact=True).wait_for()
-                    page.get_by_role("option", name="Std", exact=True).wait_for()
+                    page.get_by_role("option", name="FAST", exact=True).wait_for()
+                    page.get_by_role("option", name="STD", exact=True).wait_for()
                     if page.get_by_role("option", name=re.compile("Priority|Other|Unknown", re.I)).count():
                         raise AssertionError("Real Core tier filter exposed more than Fast and Std")
                     page.keyboard.press("Escape")
