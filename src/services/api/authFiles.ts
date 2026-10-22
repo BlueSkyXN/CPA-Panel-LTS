@@ -4,6 +4,8 @@ import { normalizeAuthFileCooldowns, normalizeCooldownTimestamp } from './authFi
  */
 
 import { apiClient, ltsExtensionClient } from './client';
+import { isMap, isScalar, parseDocument } from 'yaml';
+import { configFileApi, type ConfigYamlSnapshot } from './configFile';
 import {
   getConfigValue,
   guardConfigConnection,
@@ -486,6 +488,41 @@ export const serializeOauthModelAliases = (
 const OAUTH_MODEL_ALIAS_ENDPOINT = '/config/oauth/model-alias';
 const OAUTH_EXCLUDED_MODELS_ENDPOINT = '/config/oauth/excluded-models';
 
+function oauthPolicyDocument(content: string) {
+  const doc = parseDocument(content);
+  const oauth = doc.get('oauth', true);
+  if (
+    doc.errors.length ||
+    !isMap(doc.contents) ||
+    (oauth !== undefined && !isMap(oauth) && !(isScalar(oauth) && oauth.value === null))
+  ) {
+    throw new Error('Invalid OAuth configuration map');
+  }
+  return doc;
+}
+
+// 在原始 YAML 节点上只修改指定渠道，保留其他 OAuth 字段的注释和 anchor。
+function updatePolicyProvider(
+  doc: ReturnType<typeof oauthPolicyDocument>,
+  field: string,
+  provider: string,
+  value?: unknown
+) {
+  const path = ['oauth', field];
+  let map = doc.getIn(path, true);
+  if (map === undefined || (isScalar(map) && map.value === null)) {
+    if (value === undefined) return;
+    if (!isMap(doc.get('oauth', true))) doc.set('oauth', doc.createNode({}));
+    doc.setIn(path, doc.createNode({}));
+    map = doc.getIn(path, true);
+  }
+  if (!isMap(map)) throw new Error('Invalid OAuth configuration map');
+  for (const pair of [...map.items]) {
+    if (normalizeOAuthProviderKey(String(pair.key)) === provider) map.delete(pair.key);
+  }
+  if (value !== undefined) map.set(provider, doc.createNode(value));
+}
+
 const oauthMapWrites = new Map<string, Promise<void>>();
 
 // v8 replaces a whole provider map. Serialize local read/modify/write operations
@@ -630,20 +667,21 @@ export const authFilesApi = {
     return normalizeOauthModelAlias(data);
   },
 
-  // 用现有 LTS 路由判断功能支持；配置内容和写入版本来自同一次 V8 读取。
+  // 用现有 LTS 路由判断功能支持；策略和写入版本来自同一次 V8 YAML 读取。
   async getOauthModelPolicySnapshot() {
     const assertConnection = guardConfigConnection();
-    const connectionRevision = apiClient.getConnectionRevision();
     await ltsExtensionClient.get('/oauth-model-policy');
-    const snapshot = await readConfigSnapshot<Record<string, unknown>>('/config/oauth', {});
+    const snapshot = await configFileApi.fetchConfigYaml();
     assertConnection();
-    if (!isRecord(snapshot.value)) throw new Error('Invalid OAuth configuration map');
+    const doc = oauthPolicyDocument(snapshot.content);
+    const oauth = doc.get('oauth', true);
+    const raw: unknown = isMap(oauth) ? oauth.toJS(doc) : {};
+    if (!isRecord(raw)) throw new Error('Invalid OAuth configuration map');
     return {
-      revision: snapshot.revision,
-      connectionRevision,
-      raw: snapshot.value,
-      value: normalizeOauthModelPolicy(snapshot.value['model-policy'] ?? {}),
-      excludedModels: normalizeOauthExcludedModels(snapshot.value['excluded-models'] ?? {}),
+      ...snapshot,
+      raw,
+      value: normalizeOauthModelPolicy(raw['model-policy'] ?? {}),
+      excludedModels: normalizeOauthExcludedModels(raw['excluded-models'] ?? {}),
     };
   },
 
@@ -654,35 +692,29 @@ export const authFilesApi = {
   async saveOauthModelPolicy(
     provider: string,
     policy: OAuthModelPolicyEntry | null,
-    snapshot: { revision: string; connectionRevision: number; raw: Record<string, unknown> },
+    snapshot: ConfigYamlSnapshot,
     moveExcludedModels = false
   ) {
-    if (snapshot.connectionRevision !== apiClient.getConnectionRevision()) {
+    if (!apiClient.isCurrentConnection(snapshot.generation)) {
       throw new DOMException('The management connection changed.', 'AbortError');
     }
     const key = normalizeOAuthProviderKey(provider);
     if (!key) throw new Error('Invalid OAuth provider');
-    const withoutProvider = (map: unknown): Record<string, unknown> => {
-      if (map !== undefined && !isRecord(map)) throw new Error('Invalid OAuth configuration map');
-      return Object.fromEntries(
-        Object.entries(map ?? {}).filter(([name]) => normalizeOAuthProviderKey(name) !== key)
-      );
-    };
-    const policies = withoutProvider(snapshot.raw['model-policy']);
-    if (policy !== null) {
-      Object.defineProperty(policies, key, {
-        enumerable: true,
-        value: {
-          allowlist: serializeOauthModelPolicyList(policy.allowlist),
-          denylist: serializeOauthModelPolicyList(policy.denylist),
-        },
-      });
-    }
-    const next: Record<string, unknown> = { ...snapshot.raw, 'model-policy': policies };
+    const doc = oauthPolicyDocument(snapshot.content);
+    updatePolicyProvider(
+      doc,
+      'model-policy',
+      key,
+      policy === null
+        ? undefined
+        : {
+            allowlist: serializeOauthModelPolicyList(policy.allowlist),
+            denylist: serializeOauthModelPolicyList(policy.denylist),
+          }
+    );
     // 将旧排除规则并入 denylist 时，一次带版本的 PUT 同时保存新规则并删除旧项。
-    if (moveExcludedModels)
-      next['excluded-models'] = withoutProvider(snapshot.raw['excluded-models']);
-    await putConfigValue('/config/oauth', next, snapshot.revision);
+    if (moveExcludedModels) updatePolicyProvider(doc, 'excluded-models', key);
+    await configFileApi.saveConfigYaml(doc.toString({ lineWidth: 120 }), snapshot);
   },
 
   // 模型策略预览（只读，不联网发现）

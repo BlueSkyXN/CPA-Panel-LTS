@@ -3,6 +3,8 @@ import test from 'node:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createServer } from 'vite';
+import { AxiosError } from 'axios';
+import { parseDocument, stringify } from 'yaml';
 import { installFakeV8Core } from '../../services/api/testing/fakeV8Core.mjs';
 
 const originalWindow = globalThis.window;
@@ -35,6 +37,42 @@ const [
 const noop = () => {};
 const noopAsync = async () => {};
 
+// 此编辑器提交原始 YAML；保留文本才能检查注释、anchor 和非 JSON 节点。
+function installPolicyCore(apiClient, initial) {
+  const content = typeof initial === 'string' ? initial : stringify({ 'config-version': 8, ...initial });
+  const core = installFakeV8Core(apiClient, parseDocument(content).toJS());
+  core.yaml = content;
+  const delegate = apiClient.instance.defaults.adapter;
+  const concurrentEdit = core.concurrentEdit;
+  core.concurrentEdit = (mutate) => {
+    concurrentEdit(mutate);
+    core.yaml = stringify(core.doc);
+  };
+  apiClient.instance.defaults.adapter = async (config) => {
+    if (config.url !== '/config.yaml') return delegate(config);
+    const method = config.method.toUpperCase();
+    const call = { method, url: config.url, base: config.baseURL, ifMatch: config.headers.get('If-Match'), data: config.data };
+    core.calls.push(call);
+    const respond = (status, data, etag = core.etag()) => {
+      const response = { status, data, headers: { etag }, config, statusText: String(status) };
+      if (status >= 400) throw new AxiosError('Configuration conflict', 'ERR_BAD_REQUEST', config, null, response);
+      return response;
+    };
+    if (method === 'GET') return respond(200, core.yaml);
+    if (!call.ifMatch) return respond(428, { error: 'config_revision_required' });
+    if (call.ifMatch !== core.etag()) return respond(412, { error: 'config_revision_conflict' });
+    assert.equal(method, 'PUT');
+    const doc = parseDocument(config.data);
+    assert.deepEqual(doc.errors, []);
+    core.yaml = config.data;
+    core.doc = doc.toJS();
+    core.writes.push(call);
+    core.revision++;
+    return respond(200, { status: 'ok' }, '');
+  };
+  return core;
+}
+
 test('model policy preserves disabled lists and enabled empty allowlists', () => {
   assert.deepEqual(normalizeOauthModelPolicy({ 'oauth-model-policy': {
     Codex: { allowlist: { enabled: true, models: [] }, denylist: { enabled: false, models: ['GPT-*', 'gpt-*'] } },
@@ -45,7 +83,7 @@ test('model policy preserves disabled lists and enabled empty allowlists', () =>
 test('V8 model policy uses the original snapshot and moves exclusions in one conditional write', async () => {
   const { apiClient, ltsExtensionClient } = await vite.ssrLoadModule('/src/services/api/client.ts');
   const originalGet = ltsExtensionClient.get;
-  const core = installFakeV8Core(apiClient, { oauth: {
+  const core = installPolicyCore(apiClient, { oauth: {
     'auth-dir': 'fixture',
     'model-alias': { kimi: [{ name: 'real', alias: 'public' }] },
     'excluded-models': { codex: ['old'], kimi: ['keep'] },
@@ -65,7 +103,7 @@ test('V8 model policy uses the original snapshot and moves exclusions in one con
     const fresh = await authFilesApi.getOauthModelPolicySnapshot();
     await authFilesApi.saveOauthModelPolicy('Codex', { allowlist: { enabled: true, models: [] }, denylist: { enabled: true, models: ['old'] } }, fresh, true);
     assert.equal(core.writes.length, 1);
-    assert.equal(core.writes[0].url, '/config/oauth');
+    assert.equal(core.writes[0].url, '/config.yaml');
     assert.deepEqual(core.doc.oauth['model-policy'].codex.allowlist, { enabled: true, models: [] });
     assert.deepEqual(core.doc.oauth['excluded-models'], { kimi: ['keep'] });
     assert.deepEqual(core.doc.oauth['model-policy'].kimi, fresh.raw['model-policy'].kimi);
@@ -83,6 +121,84 @@ test('V8 model policy uses the original snapshot and moves exclusions in one con
     core.restore();
     apiClient.clearConfig();
   }
+});
+
+test('V8 policy saves initialize absent and explicitly null OAuth maps', async () => {
+  const { apiClient, ltsExtensionClient } = await vite.ssrLoadModule('/src/services/api/client.ts');
+  const originalGet = ltsExtensionClient.get;
+  ltsExtensionClient.get = async () => ({});
+  try {
+    for (const initial of [{}, { oauth: null }, { oauth: {} }, { oauth: { 'model-policy': null, 'excluded-models': null } }]) {
+      const core = installPolicyCore(apiClient, initial);
+      try {
+        const snapshot = await authFilesApi.getOauthModelPolicySnapshot();
+        await authFilesApi.saveOauthModelPolicy('codex', { allowlist: { enabled: true, models: [] } }, snapshot, true);
+        assert.deepEqual(core.doc.oauth['model-policy'].codex.allowlist, { enabled: true, models: [] });
+        assert.equal(core.writes.length, 1);
+      } finally { core.restore(); }
+    }
+  } finally { ltsExtensionClient.get = originalGet; apiClient.clearConfig(); }
+});
+
+test('V8 policy saves preserve unrelated YAML comments, anchors and opaque keys', async () => {
+  const { apiClient, ltsExtensionClient } = await vite.ssrLoadModule('/src/services/api/client.ts');
+  const originalGet = ltsExtensionClient.get;
+  const core = installPolicyCore(apiClient, `config-version: 8
+oauth:
+  auth-dir: fixture # keep OAuth comment
+  model-alias:
+    kimi: &aliases [{name: real, alias: public}]
+  excluded-models:
+    Codex: [old]
+    kimi: [keep] # keep provider comment
+plugins:
+  configs:
+    fixture:
+      aliases: *aliases
+      opaque: {7: value}
+# keep document foot comment
+`);
+  ltsExtensionClient.get = async () => ({});
+  try {
+    const snapshot = await authFilesApi.getOauthModelPolicySnapshot();
+    await authFilesApi.saveOauthModelPolicy('codex', { denylist: { enabled: true, models: ['old'] } }, snapshot, true);
+    for (const text of ['# keep OAuth comment', '# keep provider comment', '# keep document foot comment', '&aliases', '*aliases']) assert.ok(core.yaml.includes(text), text);
+    assert.deepEqual(core.doc.plugins.configs.fixture.aliases, [{ name: 'real', alias: 'public' }]);
+    assert.deepEqual(core.doc.oauth['excluded-models'], { kimi: ['keep'] });
+    assert.equal(parseDocument(core.yaml).getIn(['plugins', 'configs', 'fixture', 'opaque'], true).items[0].key.value, 7);
+    assert.equal(core.writes[0].ifMatch, snapshot.revision);
+  } finally { core.restore(); ltsExtensionClient.get = originalGet; apiClient.clearConfig(); }
+});
+
+test('V8 policy saves reject unsupported and alias target maps without a write', async () => {
+  const { apiClient, ltsExtensionClient } = await vite.ssrLoadModule('/src/services/api/client.ts');
+  const originalGet = ltsExtensionClient.get;
+  ltsExtensionClient.get = async () => ({});
+  try {
+    for (const value of ['wrong', '[]', '*rules']) {
+      const core = installPolicyCore(apiClient, `config-version: 8\nplugins: {configs: {fixture: {rules: &rules {}}}}\noauth: {model-policy: ${value}}\n`);
+      try {
+        const snapshot = await authFilesApi.getOauthModelPolicySnapshot();
+        await assert.rejects(authFilesApi.saveOauthModelPolicy('codex', { allowlist: { enabled: true, models: [] } }, snapshot), /Invalid OAuth configuration map/);
+        assert.equal(core.writes.length, 0);
+      } finally { core.restore(); }
+    }
+  } finally { ltsExtensionClient.get = originalGet; apiClient.clearConfig(); }
+});
+
+test('two V8 policy writes from one revision commit at most once', async () => {
+  const { apiClient, ltsExtensionClient } = await vite.ssrLoadModule('/src/services/api/client.ts');
+  const originalGet = ltsExtensionClient.get;
+  const core = installPolicyCore(apiClient, { oauth: {} });
+  ltsExtensionClient.get = async () => ({});
+  try {
+    const snapshot = await authFilesApi.getOauthModelPolicySnapshot();
+    const results = await Promise.allSettled(['codex', 'kimi'].map(provider => authFilesApi.saveOauthModelPolicy(provider, { allowlist: { enabled: true, models: [] } }, snapshot)));
+    assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
+    assert.equal(results.find(result => result.status === 'rejected').reason.status, 412);
+    assert.equal(core.writes.length, 1);
+    assert.equal(Object.keys(core.doc.oauth['model-policy']).length, 1);
+  } finally { core.restore(); ltsExtensionClient.get = originalGet; apiClient.clearConfig(); }
 });
 
 test.after(async () => {
