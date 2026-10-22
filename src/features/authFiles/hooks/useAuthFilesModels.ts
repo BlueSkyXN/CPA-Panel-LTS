@@ -80,8 +80,22 @@ export function useAuthFilesModels(): UseAuthFilesModelsResult {
 
       setModelsLoading(true);
       try {
-        const models = await authFilesApi.getModelsForAuthFile(item.name);
+        let models = await authFilesApi.getModelsForAuthFile(item.name);
         if (isCacheCurrent()) {
+          if (models.length === 0) {
+            // 空快照可能是注册失败留下的（如 PAT 过期后厂商侧续期），
+            // 补一次 refresh 让 Core 重新发现；旧版 Core 无此路由时保持空态。
+            try {
+              models = await authFilesApi.refreshModelsForAuthFile(item.name);
+            } catch (err: unknown) {
+              const status =
+                typeof err === 'object' && err !== null && 'status' in err ? err.status : undefined;
+              // 仅旧版缺少路由时保留空态，其他失败交给外层提示且不缓存。
+              if (status !== 404) throw err;
+            }
+          }
+          // refresh 期间凭据可能已更新，旧响应不能重新填回失效的缓存。
+          if (!isCacheCurrent()) return;
           modelsCacheRef.current.set(cacheKey, models);
           if (isRequestCurrent()) setModelsList(models);
         }

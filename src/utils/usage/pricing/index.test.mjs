@@ -148,6 +148,71 @@ test('catalog is versioned, self-describing, exact, and keeps provider rate boun
   assert.equal(grok46.sourceUrl, 'https://docs.x.ai/developers/models/grok-4.6');
   assert.equal(grok46.pricingNotesUrl, undefined);
   assert.equal(grok46.asOf, '2026-08-18');
+
+  const grok43 = pricing.findCatalogEntry('grok-4.3');
+  assert.equal(grok43.currency, 'USD');
+  assert.deepEqual(grok43.aliases, []);
+  assert.deepEqual(grok43.standard.short, { input: 1.25, cachedInput: 0.2, output: 2.5 });
+  assert.deepEqual(grok43.standard.long, {
+    thresholdTokens: 200_000,
+    basis: 'inputTokens',
+    appliesTo: 'entireRequest',
+    rates: { input: 2.5, cachedInput: 0.4, output: 5 },
+  });
+  assert.equal(grok43.fast, undefined);
+  assert.equal(grok43.sourceUrl, 'https://docs.x.ai/developers/models/grok-4.3');
+  assert.equal(grok43.pricingNotesUrl, undefined);
+  assert.equal(grok43.asOf, '2026-10-10');
+
+  const grok47 = pricing.findCatalogEntry('grok-4.7');
+  assert.equal(grok47.currency, 'USD');
+  assert.deepEqual(grok47.aliases, []);
+  assert.deepEqual(grok47.standard.short, { input: 2, cachedInput: 0.5, output: 6 });
+  assert.deepEqual(grok47.standard.long, {
+    thresholdTokens: 200_000,
+    basis: 'inputTokens',
+    appliesTo: 'entireRequest',
+    rates: { input: 4, cachedInput: 1, output: 12 },
+  });
+  assert.equal(grok47.fast, undefined);
+  assert.equal(grok47.sourceUrl, 'https://docs.x.ai/developers/models/grok-4.7');
+  assert.equal(grok47.pricingNotesUrl, undefined);
+  assert.equal(grok47.asOf, '2026-10-10');
+
+  const grok47Fast = pricing.findCatalogEntry('grok-4.7-fast');
+  assert.equal(grok47Fast.currency, 'USD');
+  assert.deepEqual(grok47Fast.aliases, []);
+  assert.deepEqual(grok47Fast.standard.short, { input: 4, cachedInput: 1, output: 12 });
+  assert.deepEqual(grok47Fast.standard.long, {
+    thresholdTokens: 200_001,
+    basis: 'inputTokens',
+    appliesTo: 'entireRequest',
+    rates: { input: 6, cachedInput: 1.5, output: 18 },
+  });
+  assert.equal(grok47Fast.fast, undefined);
+  assert.equal(grok47Fast.sourceUrl, 'https://docs.x.ai/developers/pricing#grok-47-fast-pricing-cursor-and-grok-build-only');
+  assert.equal(grok47Fast.pricingNotesUrl, undefined);
+  assert.equal(grok47Fast.asOf, '2026-10-13');
+
+  const doubao = pricing.findCatalogEntry('doubao-seed-2.1-pro');
+  assert.equal(doubao.currency, 'USD');
+  assert.deepEqual(doubao.aliases, []);
+  assert.deepEqual(doubao.standard.short, { input: 0.882, cachedInput: 0.176, output: 4.412 });
+  assert.equal(doubao.standard.long, undefined);
+  assert.equal(doubao.fast, undefined);
+  assert.equal(doubao.sourceUrl, 'https://www.volcengine.com/docs/82379/1099320');
+  assert.equal(doubao.pricingNotesUrl, undefined);
+  assert.equal(doubao.asOf, '2026-10-10');
+
+  const doubaoEstimate = pricing.estimateUsageCost(
+    'doubao-seed-2.1-pro',
+    { input_tokens: 1_000, cache_read_tokens: 500, output_tokens: 2_000 },
+    undefined,
+    tier()
+  );
+  assert.equal(doubaoEstimate.status, 'priced');
+  assert.equal(doubaoEstimate.contextBand, 'short');
+  assert.deepEqual(doubaoEstimate.rates, { input: 0.882, cachedInput: 0.176, output: 4.412 });
 });
 
 test('September GPT-5.6 rates price Standard and Fast in both context bands', () => {
@@ -801,6 +866,65 @@ test('Grok 4.6 switches the entire request to long-context rates at 200K prompt 
   assert.equal(fast.status, 'unsupported');
   assert.equal(fast.amount, null);
   assert.equal(fast.rates, null);
+});
+
+test('Grok 4.3 and Grok 4.7 switch the entire request to long-context rates at 200K prompt tokens', () => {
+  for (const [model, shortRates, longRates] of [
+    ['grok-4.3', { input: 1.25, cachedInput: 0.2, output: 2.5 }, { input: 2.5, cachedInput: 0.4, output: 5 }],
+    ['grok-4.7', { input: 2, cachedInput: 0.5, output: 6 }, { input: 4, cachedInput: 1, output: 12 }],
+  ]) {
+    for (const [inputTokens, contextBand, rates] of [
+      [199_999, 'short', shortRates],
+      [200_000, 'long', longRates],
+      [200_001, 'long', longRates],
+    ]) {
+      const estimate = pricing.estimateUsageCost(
+        model,
+        { input_tokens: inputTokens, cache_read_tokens: 1_000, output_tokens: 10_000 },
+        undefined,
+        tier()
+      );
+      assert.equal(estimate.status, 'priced');
+      assert.equal(estimate.contextBand, contextBand);
+      assert.deepEqual(estimate.rates, rates);
+    }
+
+    const fast = pricing.estimateUsageCost(
+      model,
+      { input_tokens: 1_000 },
+      undefined,
+      tier('fast', 'request')
+    );
+    assert.equal(fast.status, 'unsupported');
+    assert.equal(fast.amount, null);
+    assert.equal(fast.rates, null);
+  }
+});
+
+test('Grok 4.7 Fast changes rates strictly above 200K prompt tokens without implying API Priority', () => {
+  const shortRates = { input: 4, cachedInput: 1, output: 12 };
+  const longRates = { input: 6, cachedInput: 1.5, output: 18 };
+  for (const [inputTokens, contextBand, rates] of [
+    [199_999, 'short', shortRates],
+    [200_000, 'short', shortRates],
+    [200_001, 'long', longRates],
+  ]) {
+    const estimate = pricing.estimateUsageCost(
+      'grok-4.7-fast',
+      { input_tokens: inputTokens, cache_read_tokens: 1_000, output_tokens: 10_000 },
+      undefined,
+      tier()
+    );
+    assert.equal(estimate.status, 'priced');
+    assert.equal(estimate.contextBand, contextBand);
+    assert.deepEqual(estimate.rates, rates);
+  }
+  const priority = pricing.estimateUsageCost(
+    'grok-4.7-fast', { input_tokens: 1_000 }, undefined, tier('fast', 'request')
+  );
+  assert.equal(priority.status, 'unsupported');
+  assert.equal(priority.amount, null);
+  assert.equal(pricing.findCatalogEntry('grok-4.7-fast-latest'), null);
 });
 
 test('Fast long context is estimated by default and only restricted under the official policy', () => {

@@ -1,6 +1,6 @@
 # Flow Control Panel：当前入口
 
-面板入口是左侧「观测」分组的一级页面 `/flow-control`（能力门控见 `useAuthStore` 的 `supportsFlowControl` 探测），由 `src/pages/FlowControlPage.tsx` 挂载本目录 sidecar 并持有独立可视化草稿；配置编辑器不再包含 flow-control 分区，旧深链自动重定向。
+面板入口在「观测 → 高级分析」下：`/analytics/flow` 为只读看板，`/analytics/flow/config` 为配置页。两者均经过 `supportsFlowControl` 能力门控。`FlowDashboardPage.tsx` 只加载运行状态；`FlowControlPage.tsx` 持有独立可视化草稿且不挂载实时观察。旧 `/flow-control` 与配置编辑器深链自动重定向至流控配置。
 
 配套 [Core 产品指南](https://github.com/BlueSkyXN/CPA-Core-LTS/blob/main/docs/lts/flow-control.md) 与 [Panel 使用及发布指南](../../../docs/lts/flow-control.md)。本目录实现通用规则编辑与只读运行解释，不再维护一套不同的后端调度说明。
 

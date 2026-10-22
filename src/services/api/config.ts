@@ -1,5 +1,5 @@
 import i18n from 'i18next';
-import { apiClient } from './client';
+import { apiClient, ltsExtensionClient } from './client';
 import type { ApiError, Config } from '@/types';
 import { guardConfigConnection, putConfigValue, readConfigSnapshot } from './configValue';
 import { configRevisionFromHeaders } from './configRevision';
@@ -61,7 +61,15 @@ async function readConfigProjection(revision: string): Promise<Config> {
   return config;
 }
 
+export type ProxyProbeStatus = 'ok' | 'skipped' | 'error';
+export interface ProxyProbeResponse {
+  status?: ProxyProbeStatus | string;
+  code?: string;
+}
+
 export const configApi = {
+  testProxyUrl: (proxyUrl: string) =>
+    ltsExtensionClient.post<ProxyProbeResponse>('/proxy-url/test', { value: proxyUrl }),
   async getConfig(): Promise<Config> {
     const assertConnection = guardConfigConnection();
     try {

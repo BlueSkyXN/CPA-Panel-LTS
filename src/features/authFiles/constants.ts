@@ -142,6 +142,7 @@ export const HEALTHY_AUTH_FILE_STATUS_MESSAGES = new Set([
 ]);
 
 export const hasAuthFileStatusWarning = (file: AuthFileItem): boolean => {
+  if (file.reauthRequired === true) return true;
   const message = getAuthFileStatusMessage(file);
   return Boolean(message) && !HEALTHY_AUTH_FILE_STATUS_MESSAGES.has(message.toLowerCase());
 };

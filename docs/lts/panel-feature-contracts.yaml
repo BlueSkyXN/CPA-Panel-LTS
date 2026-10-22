@@ -10,6 +10,33 @@ status_definitions:
   experimental: Optional surface that may be gated or hidden when backend support is missing.
 
 features:
+  - id: codex-zcode-context-usage-config
+    status: experimental
+    reason: Optional native context counting for Codex clients using zcode search keeps client compaction totals separate from full provider usage accounting.
+    routes:
+      - /config
+    panel_files:
+      - src/services/api/configFile.ts
+      - src/lts/codexPolicy/zcodeContextUsage.ts
+      - src/lts/codexPolicy/zcodeContextUsage.test.mjs
+      - src/lts/codexPolicy/useCodexPolicyControls.tsx
+      - src/lts/i18n/
+      - src/hooks/useVisualConfig.ts
+      - src/types/visualConfig.ts
+      - src/components/config/configNavigation.ts
+      - scripts/smoke-config-editor.py
+    core_endpoints:
+      - /v0/management/config.yaml
+    required_markers:
+      - codexZcodeContextUsage
+      - zcode-context-usage
+      - codex_zcode_context_usage
+      - codex-policy_context
+    validation:
+      - npm run test:config
+      - npm run smoke:config
+      - npm run check:lts
+
   - id: codex-cache-affinity-config
     status: lts-maintained
     reason: ChatGPT OAuth cache affinity needs understandable controls while preserving absent defaults, unknown YAML and upstream cache semantics.
@@ -42,6 +69,75 @@ features:
       - npm run type-check
       - npm run build
       - npm run smoke:config
+
+  - id: codex-outbound-config
+    status: lts-maintained
+    reason: Core codex.outbound selects the upstream transport for HTTP clients and aligns request-body compression and Accept-Encoding with the official Codex client; operators need visual controls that keep absent defaults, unknown values and unrelated YAML intact.
+    routes:
+      - /config
+    panel_files:
+      - src/services/api/configFile.ts
+      - src/lts/codexPolicy/outbound.ts
+      - src/lts/codexPolicy/outbound.test.mjs
+      - src/lts/codexPolicy/useCodexPolicyControls.tsx
+      - src/lts/i18n/
+      - src/hooks/useVisualConfig.ts
+      - src/types/visualConfig.ts
+      - src/components/config/configNavigation.ts
+    core_endpoints:
+      - /v0/management/config.yaml
+    required_markers:
+      - codexOutboundTransport
+      - codexOutboundWebsocketThresholdBytes
+      - codexOutboundRequestCompression
+      - codexOutboundAcceptEncoding
+      - websocket-threshold-bytes
+      - request-compression
+      - accept-encoding
+      - codex_outbound
+      - codex-policy_outbound
+    validation:
+      - npm run test:config
+      - npm run type-check
+      - npm run build
+
+  - id: usage-request-size
+    status: lts-maintained
+    reason: Core size_version 1 usage details record request body size and upstream transport; the usage page shows them per request, flags upstream connection failures on large requests, and the analytics views show the request size distribution, while older Cores and exports without these fields keep working.
+    routes:
+      - /usage
+    panel_files:
+      - src/services/api/usageAnalytics.ts
+      - src/utils/usage.ts
+      - src/utils/usage/requestSize.ts
+      - src/utils/usage/requestSize.test.mjs
+      - src/utils/usage/requestSizeAnalytics.ts
+      - src/utils/usage/requestSizeAnalytics.test.mjs
+      - src/utils/usage/analyticsModel.ts
+      - src/utils/usage/importPreflight.ts
+      - src/types/usageAnalytics.ts
+      - src/components/usage/RequestEventsDetailsCard.tsx
+      - src/components/usage/RequestSizeDistributionCard.tsx
+      - src/components/usage/UsageAnalyticsCharts.tsx
+    core_endpoints:
+      - /usage/query/analytics
+    required_markers:
+      - size_version
+      - upstream_transport
+      - upstream_request_bytes
+      - upstream_request_wire_bytes
+      - upstream_request_encoding
+      - requestSize
+      - isRequestSizeDistribution
+      - isLargeRequestConnectFailure
+      - upstream_connect_failure
+      - request_size_title
+      - downloadRequestLogById
+      - request_events_request_log
+    validation:
+      - npm run test:usage
+      - npm run type-check
+      - npm run build
 
   - id: multi-instance-connections
     status: lts-maintained
@@ -106,6 +202,8 @@ features:
       - src/types/usageQuery.ts
       - src/components/usage/hooks/useUsageQuery.ts
       - src/components/usage/hooks/useUsageQueryDetails.ts
+      - src/components/usage/hooks/usageDetailsExport.ts
+      - docs/lts/usage-export.md
       - src/utils/usage/queryView.ts
       - src/utils/usage/queryView.test.mjs
       - src/types/usage.ts
@@ -152,6 +250,7 @@ features:
       - /v0/management/usage/query/capabilities
       - /v0/management/usage/query/summary
       - /v0/management/usage/query/details
+      - /v0/management/usage/query/export
       - /v0/management/usage/query/pricing
       - /v0/management/usage-statistics-enabled
     required_markers:
@@ -159,6 +258,8 @@ features:
       - usageApi.exportUsage
       - usageApi.importUsage
       - usageQueryApi
+      - export_version
+      - max_export_page_size
       - usage-query-v1
       - buildQueryPriceRules
       - calculateStatusBarData
@@ -206,9 +307,17 @@ features:
       - KIMI_PRICING_SOURCE_URL
       - grok-4.5
       - grok-4.6
+      - grok-4.3
+      - grok-4.7
+      - grok-4.7-fast
       - XAI_PRICING_SOURCE_URL
       - XAI_GROK_46_PRICING_SOURCE_URL
+      - XAI_GROK_43_PRICING_SOURCE_URL
+      - XAI_GROK_47_PRICING_SOURCE_URL
+      - XAI_GROK_47_FAST_PRICING_SOURCE_URL
       - XAI_LONG_CONTEXT_INPUT_TOKEN_THRESHOLD
+      - doubao-seed-2.1-pro
+      - DOUBAO_PRICING_SOURCE_URL
       - claude-haiku-4-5-20251001
       - claude-haiku-4-5
       - claude-sonnet-4-5-20250929
@@ -250,6 +359,9 @@ features:
       - request_identity_type
       - request_key_hint
       - ttfb_ms
+      - output_timing
+      - token_breakdown
+      - resolvePerformanceTokens
       - extractTTFBMs
       - calculateFirstContentMs
       - calculateOutputTps
@@ -906,6 +1018,8 @@ features:
       - src/utils/quota/upstreamQuotaPort.test.mjs
       - src/hooks/useUnsavedChangesGuard.ts
       - src/services/api/authFiles.ts
+      - src/features/authFiles/constants.ts
+      - src/features/authFiles/reauthRequired.test.mjs
       - src/services/api/oauth.ts
       - src/lts/codexRemoteCloudConnect/
       - src/i18n/locales/
@@ -960,6 +1074,8 @@ features:
       - weight_invalid_max
       - accepts WRR strategy aliases and enforces credential weight bounds
       - Auth file credential weight round-tripped through Core
+      - reauth_required
+      - reauthRequired
     validation:
       - npm run test:auth-files
       - npm run smoke:lts
@@ -1157,13 +1273,14 @@ features:
 
   - id: local-flow-control-config
     status: lts-maintained
-    reason: Opt-in multi-dimensional local admission settings must preserve old YAML and be editable only with a Core that provides the read-only capability/status API. Editing and observation live on the dedicated /flow-control page, capability-gated like plugin management.
+    reason: Opt-in multi-dimensional local admission settings must preserve old YAML and be editable only with a Core that provides the read-only capability/status API. Editing and observation are separate capability-gated pages under /analytics; /flow-control remains a configuration redirect.
     panel_files:
       - src/lts/flowControl/
       - src/services/api/flowControl.ts
       - src/types/visualConfig.ts
       - src/hooks/useVisualConfig.ts
       - src/pages/FlowControlPage.tsx
+      - src/pages/FlowDashboardPage.tsx
       - src/pages/FlowControlPage.module.scss
       - src/router/MainRoutes.tsx
       - src/stores/useAuthStore.ts
@@ -1171,6 +1288,8 @@ features:
       - docs/lts/flow-control.md
     routes:
       - /flow-control
+      - /analytics/flow
+      - /analytics/flow/config
     capability_gates:
       - supportsFlowControl
       - flowSupportKnown
@@ -1197,3 +1316,46 @@ features:
       - npm run type-check
       - npm run build
       - npm run smoke:config
+
+  - id: advanced-analytics-workspace
+    status: lts-maintained
+    reason: Historical request analysis stays independent of Flow capabilities; the full usage overview retains model share, pricing, events and import/export.
+    panel_files:
+      - src/pages/AnalyticsLayout.tsx
+      - src/pages/AnalyticsPage.module.scss
+      - src/pages/ObservabilityPage.tsx
+      - src/services/api/usage.ts
+      - src/services/api/usageAnalytics.ts
+      - src/services/api/usageAnalytics.test.mjs
+      - src/stores/usageAnalyticsCache.ts
+      - src/types/usageAnalytics.ts
+      - src/utils/usage/analyticsModel.ts
+      - src/components/usage/UsageAnalyticsCharts.tsx
+      - src/components/usage/hooks/useUsageAnalytics.ts
+      - src/services/api/usageQuery.ts
+      - src/components/usage/UsageAnalyticsSection.tsx
+      - src/components/usage/hooks/useUsageAnalyticsDetails.ts
+      - src/pages/UsagePage.tsx
+      - src/router/MainRoutes.tsx
+      - src/components/layout/MainLayout.tsx
+      - src/services/connectionSession.ts
+      - src/lts/i18n/
+      - docs/lts/advanced-analytics.md
+    routes:
+      - /analytics
+      - /analytics/observability
+    core_endpoints:
+      - /v0/management/usage
+      - /v0/management/usage/query/analytics
+      - /v0/management/usage/query/details
+    required_markers:
+      - analytics_version
+      - UsageAnalyticsSection
+      - ModelShareCard
+      - USAGE_ANALYTICS_AUTO_LOAD_WINDOW_HOURS
+    validation:
+      - npm run test:usage-analytics
+      - npm run test:connections
+      - npm run check:lts
+      - npm run type-check
+      - npm run build

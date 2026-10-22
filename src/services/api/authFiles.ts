@@ -11,8 +11,16 @@ import {
   readConfigSnapshot,
 } from './configValue';
 import { isRecord } from '@/utils/helpers';
-import type { AuthFilesResponse } from '@/types/authFile';
-import type { OAuthModelAliasEntry } from '@/types';
+import type {
+  AuthFilesResponse,
+  AuthFileModelPolicy,
+  ModelPolicyEvaluation,
+  ModelPolicyPreview,
+  OAuthModelAliasEntry,
+  OAuthModelPolicy,
+  OAuthModelPolicyEntry,
+  OAuthModelPolicyList,
+} from '@/types';
 import { normalizeOAuthProviderKey } from '@/utils/providerKeys';
 import {
   normalizeRecentRequestAuthIndex,
@@ -33,6 +41,7 @@ export type AuthFileFieldsPatch = {
   websockets?: boolean;
   using_api?: boolean;
   note?: string;
+  model_policy?: AuthFileModelPolicy | null;
 };
 type AuthFileBatchFailure = { name: string; error: string };
 type AuthFileBatchUploadResponse = {
@@ -245,6 +254,9 @@ const normalizeAuthFileEntry = (
   const modified = readDateField(entry);
   const priority = readIntegerField(entry['priority']);
   const weight = readCredentialWeight(entry['weight']);
+  // Core sets reauth_required once the token endpoint rejected the refresh token; the access token
+  // may still work until it expires.
+  const reauthRequired = entry['reauth_required'] === true || entry.reauthRequired === true;
 
   return {
     ...entry,
@@ -259,6 +271,7 @@ const normalizeAuthFileEntry = (
     ...(priority !== undefined ? { priority } : {}),
     ...(weight !== undefined ? { weight } : {}),
     ...(note ? { note } : {}),
+    ...(reauthRequired ? { reauthRequired: true } : {}),
   };
 };
 
@@ -322,6 +335,51 @@ const saveAuthFileText = async (name: string, text: string) => {
 
 export const isAuthFileInvalidJsonObjectError = (err: unknown): boolean =>
   err instanceof Error && err.message === AUTH_FILE_INVALID_JSON_OBJECT_ERROR;
+
+// OAuth 模型策略（LTS oauth-model-policy）
+export const normalizeOauthModelPolicy = (payload: unknown): OAuthModelPolicy => {
+  if (!payload || typeof payload !== 'object') return {};
+
+  const record = payload as Record<string, unknown>;
+  const source = record['oauth-model-policy'] ?? record.items ?? payload;
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return {};
+
+  const result: OAuthModelPolicy = {};
+  const normalizeList = (value: unknown): OAuthModelPolicyList | null => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const list = value as Record<string, unknown>;
+    if (typeof list.enabled !== 'boolean') return null;
+    const rawModels = Array.isArray(list.models) ? list.models : [];
+    const models: string[] = [];
+    const seen = new Set<string>();
+    rawModels.forEach((item) => {
+      const trimmed = String(item ?? '').trim();
+      if (!trimmed) return;
+      const key = trimmed.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      models.push(trimmed);
+    });
+    return { enabled: list.enabled, models };
+  };
+
+  Object.entries(source as Record<string, unknown>).forEach(([provider, entry]) => {
+    const key = normalizeOAuthProviderKey(String(provider ?? ''));
+    if (!key) return;
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return;
+    const rawEntry = entry as Record<string, unknown>;
+    const allowlist = rawEntry.allowlist === null ? null : normalizeList(rawEntry.allowlist);
+    const denylist = rawEntry.denylist === null ? null : normalizeList(rawEntry.denylist);
+    result[key] = { allowlist, denylist };
+  });
+
+  return result;
+};
+
+const serializeOauthModelPolicyList = (list: OAuthModelPolicyList | null | undefined) =>
+  list
+    ? { enabled: list.enabled, models: list.models.map((model) => model.trim()).filter(Boolean) }
+    : null;
 
 const normalizeOauthExcludedModels = (payload: unknown): Record<string, string[]> => {
   if (!payload || typeof payload !== 'object') return {};
@@ -572,6 +630,87 @@ export const authFilesApi = {
     return normalizeOauthModelAlias(data);
   },
 
+  // 用现有 LTS 路由判断功能支持；配置内容和写入版本来自同一次 V8 读取。
+  async getOauthModelPolicySnapshot() {
+    const assertConnection = guardConfigConnection();
+    const connectionRevision = apiClient.getConnectionRevision();
+    await ltsExtensionClient.get('/oauth-model-policy');
+    const snapshot = await readConfigSnapshot<Record<string, unknown>>('/config/oauth', {});
+    assertConnection();
+    if (!isRecord(snapshot.value)) throw new Error('Invalid OAuth configuration map');
+    return {
+      revision: snapshot.revision,
+      connectionRevision,
+      raw: snapshot.value,
+      value: normalizeOauthModelPolicy(snapshot.value['model-policy'] ?? {}),
+      excludedModels: normalizeOauthExcludedModels(snapshot.value['excluded-models'] ?? {}),
+    };
+  },
+
+  async getOauthModelPolicy(): Promise<OAuthModelPolicy> {
+    return (await authFilesApi.getOauthModelPolicySnapshot()).value;
+  },
+
+  async saveOauthModelPolicy(
+    provider: string,
+    policy: OAuthModelPolicyEntry | null,
+    snapshot: { revision: string; connectionRevision: number; raw: Record<string, unknown> },
+    moveExcludedModels = false
+  ) {
+    if (snapshot.connectionRevision !== apiClient.getConnectionRevision()) {
+      throw new DOMException('The management connection changed.', 'AbortError');
+    }
+    const key = normalizeOAuthProviderKey(provider);
+    if (!key) throw new Error('Invalid OAuth provider');
+    const withoutProvider = (map: unknown): Record<string, unknown> => {
+      if (map !== undefined && !isRecord(map)) throw new Error('Invalid OAuth configuration map');
+      return Object.fromEntries(
+        Object.entries(map ?? {}).filter(([name]) => normalizeOAuthProviderKey(name) !== key)
+      );
+    };
+    const policies = withoutProvider(snapshot.raw['model-policy']);
+    if (policy !== null) {
+      Object.defineProperty(policies, key, {
+        enumerable: true,
+        value: {
+          allowlist: serializeOauthModelPolicyList(policy.allowlist),
+          denylist: serializeOauthModelPolicyList(policy.denylist),
+        },
+      });
+    }
+    const next: Record<string, unknown> = { ...snapshot.raw, 'model-policy': policies };
+    // 将旧排除规则并入 denylist 时，一次带版本的 PUT 同时保存新规则并删除旧项。
+    if (moveExcludedModels)
+      next['excluded-models'] = withoutProvider(snapshot.raw['excluded-models']);
+    await putConfigValue('/config/oauth', next, snapshot.revision);
+  },
+
+  // 模型策略预览（只读，不联网发现）
+  async getModelPolicyPreview(name: string): Promise<ModelPolicyPreview | null> {
+    const data = await ltsExtensionClient.get<Record<string, unknown>>(
+      `/auth-files/models/policy-preview?name=${encodeURIComponent(name)}`
+    );
+    const status =
+      typeof data.catalog_status === 'string'
+        ? data.catalog_status
+        : typeof data.status === 'string'
+          ? data.status
+          : '';
+    if (status === 'catalog_unknown') return null;
+    const evaluations = Array.isArray(data.evaluations) ? data.evaluations : [];
+    return {
+      auth_id: typeof data.auth_id === 'string' ? data.auth_id : '',
+      provider: typeof data.provider === 'string' ? data.provider : '',
+      catalog_status: status || 'snapshot',
+      evaluations: evaluations.filter(
+        (item): item is ModelPolicyEvaluation =>
+          Boolean(item) &&
+          typeof item === 'object' &&
+          typeof (item as ModelPolicyEvaluation).model_id === 'string' &&
+          typeof (item as ModelPolicyEvaluation).allowed === 'boolean'
+      ),
+    };
+  },
   saveOauthModelAlias: async (channel: string, aliases: OAuthModelAliasEntry[]) => {
     const normalizedChannel = normalizeOAuthProviderKey(String(channel ?? ''));
     const normalizedAliases =

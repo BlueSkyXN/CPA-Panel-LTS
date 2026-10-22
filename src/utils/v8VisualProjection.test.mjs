@@ -249,3 +249,21 @@ test('canonical v8 structs project field by field and explicit empty resets them
   );
   assert.throws(() => projectConfigForVisual('access: {api-keys: {bad: true}}\n'));
 });
+
+test('main Codex controls round-trip through shared V8 scope', () => {
+  const result = parse(apply(grouped, () => ({
+    codexZcodeContextUsage: 'correct',
+    codexOutboundTransport: 'auto',
+    codexOutboundWebsocketThresholdBytes: '42',
+    codexOutboundRequestCompression: 'none',
+    codexOutboundAcceptEncoding: 'legacy',
+  })));
+  assert.equal(result.upstream.codex['zcode-context-usage'], 'correct');
+  assert.deepEqual(result.upstream.codex.outbound, {
+    transport: 'auto', 'websocket-threshold-bytes': 42,
+    'request-compression': 'none', 'accept-encoding': 'legacy',
+  });
+  assert.equal(result.oauth?.providers?.codex?.outbound, undefined);
+  assert.equal(result.codex, undefined);
+  assert.deepEqual(result['api-keys'], parse(grouped)['api-keys']);
+});

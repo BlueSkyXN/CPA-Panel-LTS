@@ -13,6 +13,7 @@ import {
   buildAccountAuth,
   isAccountFormProvider,
   newPatAuthFileName,
+  normalizeAccountExtraModels,
   type AccountFormProvider,
 } from '../patProviders';
 import { CodingPlanLocalCredentialsHelp } from './CodingPlanLocalCredentialsHelp';
@@ -38,6 +39,8 @@ export function PatAccountModal({ file, onClose, onSaved }: Props) {
   const [label, setLabel] = useState(String(file?.label || file?.name || ''));
   const [pat, setPat] = useState('');
   const [deviceId, setDeviceId] = useState('');
+  const [extraModels, setExtraModels] = useState('');
+  const [initialExtraModels, setInitialExtraModels] = useState<string | null>(null);
   const [prefix, setPrefix] = useState('');
   const [priority, setPriority] = useState('');
   const [weight, setWeight] = useState('');
@@ -47,6 +50,7 @@ export function PatAccountModal({ file, onClose, onSaved }: Props) {
   const [error, setError] = useState('');
   const [config, setConfig] = useState<Awaited<ReturnType<typeof patProvidersApi.configuration>>>();
   const [configError, setConfigError] = useState(false);
+  const [accountLoadError, setAccountLoadError] = useState(false);
   const [retry, setRetry] = useState(0);
   const generation = useRef(0);
   const enabled = useAuthStore(
@@ -60,9 +64,14 @@ export function PatAccountModal({ file, onClose, onSaved }: Props) {
   useEffect(
     () =>
       registerSessionLeaveCheck(() =>
-        Boolean(pat || deviceId.trim() || label !== String(file?.label || file?.name || ''))
+        Boolean(
+          pat ||
+          deviceId.trim() ||
+          label !== String(file?.label || file?.name || '') ||
+          (initialExtraModels !== null && extraModels !== initialExtraModels)
+        )
       ),
-    [pat, deviceId, label, file]
+    [pat, deviceId, label, file, extraModels, initialExtraModels]
   );
 
   useEffect(() => {
@@ -74,32 +83,74 @@ export function PatAccountModal({ file, onClose, onSaved }: Props) {
     const current = ++generation.current;
     setConfig(undefined);
     setConfigError(false);
+    setAccountLoadError(false);
+    setInitialExtraModels(null);
     if (enabled) {
-      void patProvidersApi
-        .configuration(provider)
-        .then((value) => {
-          if (current === generation.current) setConfig(value);
+      void Promise.all([
+        patProvidersApi.configuration(provider),
+        file && provider === 'zcode-coding-plan'
+          ? authFilesApi
+              .downloadJsonObject(file.name)
+              .then((previous) => {
+                if (previous.type !== provider) throw new Error('provider_mismatch');
+                return normalizeAccountExtraModels(previous.exmodel).join(', ');
+              })
+              .catch(() => {
+                throw new Error('account_load_failed');
+              })
+          : Promise.resolve(''),
+      ])
+        .then(([value, models]) => {
+          if (current === generation.current) {
+            setConfig(value);
+            setExtraModels(models);
+            setInitialExtraModels(models);
+          }
         })
-        .catch(() => {
-          if (current === generation.current) setConfigError(true);
+        .catch((error) => {
+          if (current === generation.current) {
+            setConfigError(true);
+            setAccountLoadError(error instanceof Error && error.message === 'account_load_failed');
+          }
         });
     }
     return () => {
       generation.current = current + 1;
     };
-  }, [provider, enabled, base, key, retry]);
+  }, [provider, enabled, base, key, retry, file]);
 
   const save = async () => {
     if (saving || !enabled || !config) return;
     const current = generation.current;
     setError('');
     setWeightError('');
-    let auth: Record<string, unknown>;
+    let auth: Record<string, unknown> = {};
+    let models: string[] | undefined;
     try {
-      auth = buildAccountAuth(provider, label, pat, deviceId);
-    } catch {
+      if (
+        provider === 'zcode-coding-plan' &&
+        config.supportsExtraModels &&
+        (!file || extraModels !== initialExtraModels)
+      ) {
+        models = normalizeAccountExtraModels(
+          extraModels
+            .split(/[,\n]/)
+            .map((model) => model.trim())
+            .filter(Boolean)
+        );
+      }
+      if (!file) auth = buildAccountAuth(provider, label, pat, deviceId, undefined, models);
+    } catch (error) {
       setError(
-        t(provider === 'zcode-coding-plan' ? 'pat_accounts.invalid_api_key' : 'pat_accounts.invalid_pat')
+        t(
+          error instanceof Error && error.message === 'invalid_extra_models'
+            ? 'pat_accounts.invalid_extra_models'
+            : error instanceof Error && error.message === 'invalid_device_id'
+              ? 'pat_accounts.invalid_device_id'
+              : provider === 'zcode-coding-plan'
+                ? 'pat_accounts.invalid_api_key'
+                : 'pat_accounts.invalid_pat'
+        )
       );
       return;
     }
@@ -134,15 +185,25 @@ export function PatAccountModal({ file, onClose, onSaved }: Props) {
       if (file) {
         const previous = await authFilesApi.downloadJsonObject(file.name);
         if (current !== generation.current) return;
-        auth = buildAccountAuth(provider, label, pat, deviceId, previous);
+        auth = buildAccountAuth(provider, label, pat, deviceId, previous, models);
       }
       const name = file?.name ?? newPatAuthFileName(provider);
       await authFilesApi.saveJsonObject(name, auth);
       if (current !== generation.current) return;
       setPat('');
       onSaved(name);
-    } catch {
-      if (current === generation.current) setError(t('pat_accounts.save_failed'));
+    } catch (error) {
+      if (current === generation.current) {
+        const validationKey =
+          error instanceof Error && error.message === 'invalid_device_id'
+            ? 'pat_accounts.invalid_device_id'
+            : error instanceof Error && error.message === 'invalid_api_key'
+              ? 'pat_accounts.invalid_api_key'
+              : error instanceof Error && error.message === 'invalid_pat'
+                ? 'pat_accounts.invalid_pat'
+                : 'pat_accounts.save_failed';
+        setError(t(validationKey));
+      }
     } finally {
       if (current === generation.current) setSaving(false);
     }
@@ -163,7 +224,9 @@ export function PatAccountModal({ file, onClose, onSaved }: Props) {
           <Button
             onClick={() => void save()}
             loading={saving}
-            disabled={!enabled || !config || !pat.trim()}
+            disabled={
+              !enabled || !config || (!pat.trim() && !(file && provider === 'zcode-coding-plan'))
+            }
           >
             {t('common.save')}
           </Button>
@@ -176,7 +239,7 @@ export function PatAccountModal({ file, onClose, onSaved }: Props) {
           options={[
             { value: 'codebuddy', label: 'CodeBuddy' },
             { value: 'qoder', label: 'Qoder' },
-            { value: 'zcode-coding-plan', label: 'Coding Plan' },
+            { value: 'zcode-coding-plan', label: t('auth_files.filter_zcode-coding-plan') },
           ]}
           ariaLabel={t('pat_accounts.provider')}
           disabled={Boolean(file) || saving}
@@ -185,6 +248,8 @@ export function PatAccountModal({ file, onClose, onSaved }: Props) {
               setProvider(value);
               setPat('');
               setDeviceId('');
+              setExtraModels('');
+              setConfig(undefined);
               setError('');
             }
           }}
@@ -206,7 +271,11 @@ export function PatAccountModal({ file, onClose, onSaved }: Props) {
         spellCheck={false}
         disabled={saving}
         onChange={(e) => setPat(e.target.value)}
-        hint={t(`pat_accounts.hint_${provider}`)}
+        hint={t(
+          file && provider === 'zcode-coding-plan'
+            ? 'pat_accounts.keep_api_key_hint'
+            : `pat_accounts.hint_${provider}`
+        )}
       />
       {provider === 'zcode-coding-plan' && (
         <Input
@@ -218,6 +287,22 @@ export function PatAccountModal({ file, onClose, onSaved }: Props) {
           disabled={saving}
           onChange={(e) => setDeviceId(e.target.value)}
           hint={t('pat_accounts.device_id_hint')}
+        />
+      )}
+      {provider === 'zcode-coding-plan' && (
+        <Input
+          label={t('pat_accounts.extra_models_label')}
+          value={extraModels}
+          placeholder="glm-5.3-highspeed, glm-5.3-flashx"
+          autoComplete="off"
+          spellCheck={false}
+          disabled={saving || !config?.supportsExtraModels}
+          onChange={(e) => setExtraModels(e.target.value)}
+          hint={t(
+            config && !config.supportsExtraModels
+              ? 'pat_accounts.extra_models_upgrade'
+              : 'pat_accounts.extra_models_hint'
+          )}
         />
       )}
       {provider === 'zcode-coding-plan' && <CodingPlanLocalCredentialsHelp />}
@@ -272,7 +357,16 @@ export function PatAccountModal({ file, onClose, onSaved }: Props) {
         </details>
       )}
       <p className="hint">{t('pat_accounts.storage_hint')}</p>
-      {file && <p className="hint">{t('pat_accounts.replace_hint', { name: file.name })}</p>}
+      {file && (
+        <p className="hint">
+          {t(
+            provider === 'zcode-coding-plan'
+              ? 'pat_accounts.zcode_edit_hint'
+              : 'pat_accounts.replace_hint',
+            { name: file.name }
+          )}
+        </p>
+      )}
       {config && (
         <p className="hint" style={{ overflowWrap: 'anywhere' }}>
           {t('pat_accounts.configuration', {
@@ -284,10 +378,14 @@ export function PatAccountModal({ file, onClose, onSaved }: Props) {
       {enabled && !config && !configError && <p role="status">{t('pat_accounts.loading')}</p>}
       {(!enabled || configError) && (
         <div className="error-box" role="alert">
-          {t('pat_accounts.plugin_unavailable')}
+          {t(
+            accountLoadError
+              ? 'pat_accounts.account_load_failed'
+              : 'pat_accounts.plugin_unavailable'
+          )}
           {enabled && (
             <Button variant="secondary" size="sm" onClick={() => setRetry((value) => value + 1)}>
-                {t('pat_accounts.retry')}
+              {t('pat_accounts.retry')}
             </Button>
           )}
         </div>

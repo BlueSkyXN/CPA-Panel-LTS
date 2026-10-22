@@ -1,0 +1,6 @@
+.section { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.header {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px;
+  h2, h3 { margin: 0; color: var(--text-primary); font-size: 15px; line-height: 1.5; }
+  p { margin: 0; color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
+}

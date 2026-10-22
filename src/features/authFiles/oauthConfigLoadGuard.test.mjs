@@ -3,6 +3,7 @@ import test from 'node:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createServer } from 'vite';
+import { installFakeV8Core } from '../../services/api/testing/fakeV8Core.mjs';
 
 const originalWindow = globalThis.window;
 globalThis.window = new EventTarget();
@@ -19,7 +20,7 @@ const [
   { OAuthExcludedCard },
   { OAuthModelAliasCard },
   { canWriteOAuthConfig },
-  { normalizeOauthModelAlias, serializeOauthModelAliases },
+  { normalizeOauthModelAlias, serializeOauthModelAliases, normalizeOauthModelPolicy, authFilesApi },
   excludedRules,
   editorState,
 ] = await Promise.all([
@@ -33,6 +34,56 @@ const [
 
 const noop = () => {};
 const noopAsync = async () => {};
+
+test('model policy preserves disabled lists and enabled empty allowlists', () => {
+  assert.deepEqual(normalizeOauthModelPolicy({ 'oauth-model-policy': {
+    Codex: { allowlist: { enabled: true, models: [] }, denylist: { enabled: false, models: ['GPT-*', 'gpt-*'] } },
+  }}), { codex: { allowlist: { enabled: true, models: [] }, denylist: { enabled: false, models: ['GPT-*'] } } });
+  assert.deepEqual(normalizeOauthModelPolicy({ 'oauth-model-policy': null }), {});
+});
+
+test('V8 model policy uses the original snapshot and moves exclusions in one conditional write', async () => {
+  const { apiClient, ltsExtensionClient } = await vite.ssrLoadModule('/src/services/api/client.ts');
+  const originalGet = ltsExtensionClient.get;
+  const core = installFakeV8Core(apiClient, { oauth: {
+    'auth-dir': 'fixture',
+    'model-alias': { kimi: [{ name: 'real', alias: 'public' }] },
+    'excluded-models': { codex: ['old'], kimi: ['keep'] },
+    'model-policy': { kimi: { denylist: { enabled: true, models: ['keep'] } } },
+  }});
+  try {
+    ltsExtensionClient.get = async (path) => {
+      if (path === '/oauth-model-policy') return {};
+      assert.match(path, /^\/auth-files\/models\/policy-preview/);
+      return { auth_id: 'fixture', provider: 'codex', catalog_status: 'snapshot', evaluations: [] };
+    };
+    assert.equal((await authFilesApi.getModelPolicyPreview('fixture')).catalog_status, 'snapshot');
+    const stale = await authFilesApi.getOauthModelPolicySnapshot();
+    core.concurrentEdit((doc) => { doc.oauth['auth-dir'] = 'changed'; });
+    await assert.rejects(authFilesApi.saveOauthModelPolicy('codex', { allowlist: { enabled: true, models: [] } }, stale), (e) => e.status === 412);
+    assert.equal(core.writes.length, 0);
+    const fresh = await authFilesApi.getOauthModelPolicySnapshot();
+    await authFilesApi.saveOauthModelPolicy('Codex', { allowlist: { enabled: true, models: [] }, denylist: { enabled: true, models: ['old'] } }, fresh, true);
+    assert.equal(core.writes.length, 1);
+    assert.equal(core.writes[0].url, '/config/oauth');
+    assert.deepEqual(core.doc.oauth['model-policy'].codex.allowlist, { enabled: true, models: [] });
+    assert.deepEqual(core.doc.oauth['excluded-models'], { kimi: ['keep'] });
+    assert.deepEqual(core.doc.oauth['model-policy'].kimi, fresh.raw['model-policy'].kimi);
+    assert.deepEqual(core.doc.oauth['model-alias'], fresh.raw['model-alias']);
+    assert.equal(core.doc.oauth['auth-dir'], 'changed');
+    assert.equal(core.calls.filter((c) => c.method === 'PUT').every((c) => c.base.endsWith('/v8/management')), true);
+    const oldConnection = await authFilesApi.getOauthModelPolicySnapshot();
+    apiClient.setConfig({ apiBase: 'https://another.invalid', managementKey: 'synthetic' });
+    await assert.rejects(authFilesApi.saveOauthModelPolicy('codex', null, oldConnection), { name: 'AbortError' });
+    assert.equal(core.writes.length, 1);
+    ltsExtensionClient.get = async () => { throw Object.assign(new Error('unsupported'), { status: 404 }); };
+    await assert.rejects(authFilesApi.getOauthModelPolicySnapshot(), (e) => e.status === 404);
+  } finally {
+    ltsExtensionClient.get = originalGet;
+    core.restore();
+    apiClient.clearConfig();
+  }
+});
 
 test.after(async () => {
   await vite.close();

@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { ProxyUrlField } from '@/components/common/ProxyUrlField';
 import { Input } from '@/components/ui/Input';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import type {
@@ -18,6 +19,7 @@ import styles from '@/pages/AuthFilesPage.module.scss';
 
 export type AuthFilesPrefixProxyEditorModalProps = {
   disableControls: boolean;
+  modelPolicySupported: boolean;
   editor: PrefixProxyEditorState | null;
   updatedText: string;
   dirty: boolean;
@@ -29,8 +31,17 @@ export type AuthFilesPrefixProxyEditorModalProps = {
 
 export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEditorModalProps) {
   const { t } = useTranslation();
-  const { disableControls, editor, updatedText, dirty, onClose, onCopyText, onSave, onChange } =
-    props;
+  const {
+    disableControls,
+    modelPolicySupported,
+    editor,
+    updatedText,
+    dirty,
+    onClose,
+    onCopyText,
+    onSave,
+    onChange,
+  } = props;
   const formatJsonText = (text: string) => {
     if (!text) return '';
     try {
@@ -142,12 +153,12 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                     disabled={disableControls || editor.saving || !editor.json}
                     onChange={(e) => onChange('prefix', e.target.value)}
                   />
-                  <Input
+                  <ProxyUrlField
                     label={t('auth_files.proxy_url_label')}
                     value={editor.proxyUrl}
                     placeholder={t('auth_files.proxy_url_placeholder')}
                     disabled={disableControls || editor.saving || !editor.json}
-                    onChange={(e) => onChange('proxyUrl', e.target.value)}
+                    onChange={(proxyUrl) => onChange('proxyUrl', proxyUrl)}
                   />
                   <Input
                     label={t('auth_files.priority_label')}
@@ -207,6 +218,59 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                     {editor.headersError && <div className="error-box">{editor.headersError}</div>}
                     <div className="hint">{t('auth_files.headers_hint')}</div>
                   </div>
+                  {modelPolicySupported && (
+                    <>
+                      <div className="form-group">
+                        <label>{t('model_policy.account_section_label')}</label>
+                        <div className="hint">{t('model_policy.account_section_hint')}</div>
+                      </div>
+                      <div className="form-group">
+                        <label>{t('model_policy.allowlist_label')}</label>
+                        <ToggleSwitch
+                          checked={editor.modelPolicyAllowEnabled}
+                          onChange={(value) => onChange('modelPolicyAllowEnabled', value)}
+                          disabled={disableControls || editor.saving || !editor.json}
+                          ariaLabel={t('model_policy.allowlist_label')}
+                        />
+                        <div className="hint">{t('model_policy.allowlist_hint')}</div>
+                        <textarea
+                          className="input"
+                          value={editor.modelPolicyAllowText}
+                          aria-label={t('model_policy.allowlist_label')}
+                          placeholder={t('model_policy.models_placeholder')}
+                          rows={3}
+                          disabled={disableControls || editor.saving || !editor.json}
+                          onChange={(e) => onChange('modelPolicyAllowText', e.target.value)}
+                        />
+                        {editor.modelPolicyAllowEnabled &&
+                          editor.modelPolicyAllowText
+                            .split(/[\n,]+/)
+                            .map((entry) => entry.trim())
+                            .filter(Boolean).length === 0 && (
+                            <div className="hint">{t('model_policy.allow_empty_warning')}</div>
+                          )}
+                      </div>
+                      <div className="form-group">
+                        <label>{t('model_policy.denylist_label')}</label>
+                        <ToggleSwitch
+                          checked={editor.modelPolicyDenyEnabled}
+                          onChange={(value) => onChange('modelPolicyDenyEnabled', value)}
+                          disabled={disableControls || editor.saving || !editor.json}
+                          ariaLabel={t('model_policy.denylist_label')}
+                        />
+                        <div className="hint">{t('model_policy.denylist_hint')}</div>
+                        <textarea
+                          className="input"
+                          value={editor.modelPolicyDenyText}
+                          aria-label={t('model_policy.denylist_label')}
+                          placeholder={t('model_policy.models_placeholder')}
+                          rows={3}
+                          disabled={disableControls || editor.saving || !editor.json}
+                          onChange={(e) => onChange('modelPolicyDenyText', e.target.value)}
+                        />
+                      </div>
+                    </>
+                  )}
                   <Input
                     label={t('auth_files.note_label')}
                     value={editor.note}

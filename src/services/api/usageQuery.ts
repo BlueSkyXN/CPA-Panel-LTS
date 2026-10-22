@@ -2,6 +2,7 @@ import { ltsExtensionClient } from './client';
 import { isRecord } from '@/utils/helpers';
 import type {
   UsageQueryDetails,
+  UsageQueryPage,
   UsageQueryMetrics,
   UsageQueryRequest,
   UsageQuerySession,
@@ -82,7 +83,20 @@ const detail = (v: unknown) => {
   );
 };
 export function decodeUsageQuerySession(v: unknown): UsageQuerySession {
-  if (!envelope(v) || !number(v.now_ms) || !number(v.max_page_size) || !strings(v.models))
+  if (
+    !envelope(v) ||
+    !number(v.now_ms) ||
+    !number(v.max_page_size) ||
+    !strings(v.models) ||
+    (v.export_version !== undefined &&
+      (!Number.isSafeInteger(v.export_version) || Number(v.export_version) < 1)) ||
+    (v.max_export_page_size !== undefined &&
+      (!Number.isSafeInteger(v.max_export_page_size) || Number(v.max_export_page_size) < 1)) ||
+    (v.export_version === 1 && v.max_export_page_size === undefined) ||
+    (v.analytics_version !== undefined &&
+      (!number(v.analytics_version) || !Number.isSafeInteger(v.analytics_version))) ||
+    (v.max_analytics_rows !== undefined && !number(v.max_analytics_rows))
+  )
     return invalid();
   return v as unknown as UsageQuerySession;
 }
@@ -106,13 +120,12 @@ export function decodeUsageQuerySummary(v: unknown): UsageQuerySummary {
   }
   return v as unknown as UsageQuerySummary;
 }
-export function decodeUsageQueryDetails(v: unknown): UsageQueryDetails {
+function decodeUsageQueryPage(v: unknown, maxItems: number): UsageQueryPage {
   if (
     !envelope(v) ||
     !number(v.total) ||
-    !isUsageQueryMetrics(v.metrics) ||
     !Array.isArray(v.items) ||
-    v.items.length > 200 ||
+    v.items.length > maxItems ||
     (v.next_cursor !== undefined && typeof v.next_cursor !== 'string')
   )
     return invalid();
@@ -127,6 +140,12 @@ export function decodeUsageQueryDetails(v: unknown): UsageQueryDetails {
     )
   )
     return invalid();
+  return v as unknown as UsageQueryPage;
+}
+export const decodeUsageQueryExport = (v: unknown): UsageQueryPage => decodeUsageQueryPage(v, 1000);
+export function decodeUsageQueryDetails(v: unknown): UsageQueryDetails {
+  decodeUsageQueryPage(v, 200);
+  if (!isRecord(v) || !isUsageQueryMetrics(v.metrics)) return invalid();
   if (v.options !== undefined) {
     const o = v.options;
     if (
@@ -153,6 +172,10 @@ export const usageQueryApi = {
   pricing: async (q: UsageQueryRequest, signal?: AbortSignal) =>
     decodeUsageQuerySummary(
       await ltsExtensionClient.post<unknown>('/usage/query/pricing', q, { signal, timeout: 30_000 })
+    ),
+  exportPage: async (q: UsageQueryRequest, signal?: AbortSignal) =>
+    decodeUsageQueryExport(
+      await ltsExtensionClient.post<unknown>('/usage/query/export', q, { signal, timeout: 30_000 })
     ),
   details: async (q: UsageQueryRequest, signal?: AbortSignal) =>
     decodeUsageQueryDetails(

@@ -1,4 +1,64 @@
 {
+  "analytics": {
+    "capacity_error": "The selected range exceeds the exact-analysis capacity. Narrow the time range or filters; no samples were omitted.",
+    "snapshot_expired": "The query snapshot has expired. Refresh to create a new snapshot.",
+    "busy_error": "Core is processing other analyses. Try again shortly.",
+    "updating": "Updating; the last complete result remains visible.",
+    "stale_error": "Refresh failed; the last complete result remains visible.",
+    "aggregated_ready": "Analyzed {{count}} matching requests.",
+    "invalid_timestamps": "{{count}} matching records have no valid timestamp and are excluded from charts.",
+    "configured_policy": "Saved desired configuration",
+    "title": "Advanced analytics",
+    "navigation_hint": "Request performance, flow status and policies",
+    "observability": "Observability",
+    "flow_dashboard": "Flow dashboard",
+    "flow_config": "Flow configuration",
+    "observability_hint": "Analyze request latency, cache efficiency and failures in the selected time range.",
+    "flow_dashboard_hint": "Inspect controlled requests, queues and the applied policy without changing server configuration.",
+    "flow_config_hint": "Edit flow rules, queue capacity and observation settings. Review the diff before saving, then verify the applied policy separately.",
+    "flow_scope_hint": "Concurrency and queues cover flow-controlled calls, not all traffic. Trends belong to this observation session, not historical storage. Pausing observation does not disable flow control.",
+    "overview_entry_hint": "Latency, cache efficiency and error analysis now live in Advanced analytics. The current time range is carried over.",
+    "open_observability": "Open performance and reliability analysis",
+    "samples_deferred": "This time range requires loading request samples manually.",
+    "samples_loading": "Loaded {{count}} / {{total}} samples; results are incomplete.",
+    "samples_ready": "Loaded {{count}} / {{total}} samples.",
+    "samples_error": "Sample loading failed; retained {{count}} / {{total}} samples.",
+    "samples_stopped": "Loading stopped; retained {{count}} / {{total}} samples.",
+    "retry_samples": "Reload samples",
+    "stop_samples": "Stop loading",
+    "partial_results": "Charts currently use only loaded samples and do not represent final results for the entire time range.",
+    "source_names_unavailable": "Credential names could not be loaded; source identifiers are shown instead.",
+    "empty_window": "No requests match the selected time range and filters.",
+    "no_measurements": "No successful requests have usable measurements for this metric.",
+    "basic_settings": "Basic settings",
+    "rules_section": "Flow rules",
+    "scope_details": "Scope and counting",
+    "flow_scope_short": "Controlled calls · current observation",
+    "filter_title": "Filter scope",
+    "active_filters": "Active filters: {{count}}",
+    "result_scope": "Result window",
+    "remove_filter": "Remove filter: {{filter}}",
+    "bucket_label": "Time bucket",
+    "select_bucket": "Select a time bucket",
+    "open_bucket_records": "View records in this bucket",
+    "back_to_dashboard": "Back to dashboard",
+    "back_to_dashboard_hint": "Return to the observability board with its filters and time range",
+    "group_performance": "Throughput and response",
+    "group_performance_hint": "Inspect request volume and response timing together.",
+    "group_reliability": "Efficiency and reliability",
+    "group_reliability_hint": "Review cache reuse alongside failure patterns.",
+    "group_distribution": "Request and latency distributions",
+    "group_distribution_hint": "Compare request sizes and the spread of response times.",
+    "summary_records": "Records",
+    "summary_records_hint": "Total usage records in the current filters and time window",
+    "summary_failures": "Failed executions",
+    "summary_failures_hint": "Click to view failed records under the current conditions",
+    "summary_latency": "Latency P95",
+    "summary_ttfa": "First answer text P95",
+    "summary_samples": "{{count}} samples",
+    "summary_cache": "Cache read rate",
+    "summary_cache_meta": "{{read}} / {{input}} read/input"
+  },
   "usage_stats": {
     "execution_blue_std": "BLUE",
     "execution_blue_fast": "BLUE FAST",
@@ -6,7 +66,24 @@
     "cyber_program_standard": "Standard safeguards (confirmed by upstream response)",
     "cyber_program_missing": "Unknown: upstream did not report an access program / legacy record",
     "cyber_program_unknown": "Unknown or unsupported access program (not assumed Standard)",
-    "cyber_program_response": "Cyber access program: {{value}}. Speed tier and pricing remain independent."
+    "cyber_program_response": "Cyber access program: {{value}}. Speed tier and pricing remain independent.",
+    "export_backup": "Export full backup",
+    "export_backup_hint": "Exports all usage for backup and restore, regardless of the current filters.",
+    "export_filtered_csv": "Export filtered CSV",
+    "export_filtered_json": "Export filtered JSON",
+    "export_filtered_scope": "CSV / JSON exports all {{count}} matching records in the selected time range and filters.",
+    "query_as_of": "Data as of {{time}}",
+    "export_progress": "Read {{loaded}} / {{total}} records",
+    "export_retrying": "Retrying this batch ({{attempt}}/2)…",
+    "export_generating": "Generating file…",
+    "export_cancelled": "Export cancelled. Start a new export to try again.",
+    "export_error_failed": "Export failed. No file was downloaded.",
+    "export_error_expired": "The query snapshot expired. Refresh the page and start a new export.",
+    "export_error_incomplete": "Export stopped because records, count or cursor were inconsistent. No file was downloaded.",
+    "export_resume": "Continue export",
+    "page_load_failed": "Could not load page {{page}}.",
+    "page_retry": "Retry page",
+    "page_loading": "Loading page {{page}}; the last successful page remains visible."
   },
   "login": {
     "saved_connections": "Saved instance connections",
@@ -501,7 +578,12 @@
     "applied_on": "Applied: on",
     "applied_off": "Applied: off",
     "queue_section": "Queue & capacity",
-    "waiting_split": "{{requests}} requests · {{attempts}} attempts"
+    "waiting_split": "{{requests}} requests · {{attempts}} attempts",
+    "trend_title": "Observation trend",
+    "trend_scope": "Current session only. Gaps indicate pauses or missing samples.",
+    "trend_empty": "Start live observation to collect samples. No history has been recorded in this view.",
+    "trend_collecting": "One sample received; waiting for the next sample.",
+    "trend_readings": "View sample readings"
   },
   "config_management": {
     "visual": {
@@ -514,12 +596,16 @@
         "codex-policy": "Codex optimization"
       },
       "pages": {
-        "codex-policy_cache": "Cache optimization"
+        "codex-policy_cache": "Cache optimization",
+        "codex-policy_outbound": "Outbound strategy",
+        "codex-policy_context": "Context counting"
       },
       "guidance": {
         "pages": {
           "codex-policy": {
-            "cache": "Help consecutive conversation turns reuse upstream cache with clients such as ZCode. Applies only to Codex connected through ChatGPT account sign-in; API key connections are unaffected."
+            "cache": "Help consecutive conversation turns reuse upstream cache with clients such as ZCode. Applies only to Codex connected through ChatGPT account sign-in; API key connections are unaffected.",
+            "outbound": "Choose how Codex requests reach the upstream. Applies only to Codex connected through ChatGPT account sign-in; the transport switch also requires WebSocket to be enabled on the credential.",
+            "context": "For Codex clients using GLM through zcode-coding-plan. Observe count differences before enabling correction."
           },
           "headers": {
             "codex": "Configure Codex request identity; cache optimization, anomaly detection, retries and hedging are configured under Codex optimization."
@@ -552,6 +638,78 @@
       "legacy": {
         "label": "Disable enhanced optimization",
         "description": "Turn off session compatibility fixes and history matching while keeping regular request processing. The upstream service may still use its own cache."
+      }
+    }
+  },
+  "codex_outbound": {
+    "unknown_hint": "The configured value is not recognized. It is preserved unless you edit this setting.",
+    "transport": {
+      "title": "Upstream transport for HTTP requests",
+      "default_hint": "Using the default: Follow the client.",
+      "options": {
+        "follow": {
+          "label": "Follow the client",
+          "description": "HTTP requests go upstream over HTTP; WebSocket sessions stay on WebSocket."
+        },
+        "websocket": {
+          "label": "Always WebSocket",
+          "description": "Send HTTP requests upstream over WebSocket, like the official Codex client. Each request opens its own upstream connection."
+        },
+        "auto": {
+          "label": "WebSocket for large requests",
+          "description": "Use WebSocket only when a request reaches the threshold below; smaller requests stay on HTTP. Use this when large requests over HTTP fail."
+        }
+      }
+    },
+    "threshold": {
+      "label": "WebSocket threshold (bytes)",
+      "hint": "Used by \"WebSocket for large requests\". Empty or 0 uses the default 786432 (768 KiB)."
+    },
+    "request_compression": {
+      "title": "Request body compression",
+      "default_hint": "Using the default: zstd, like the official client.",
+      "options": {
+        "auto": {
+          "label": "zstd (official)",
+          "description": "Compress HTTP requests to the Codex backend with zstd. A 415 response is retried once uncompressed."
+        },
+        "none": {
+          "label": "Off",
+          "description": "Send request bodies uncompressed."
+        }
+      }
+    },
+    "accept_encoding": {
+      "title": "Response compression negotiation (Accept-Encoding)",
+      "default_hint": "Using the default: like the official client.",
+      "options": {
+        "official": {
+          "label": "Like the official client",
+          "description": "Send no Accept-Encoding to chatgpt.com; responses arrive uncompressed."
+        },
+        "legacy": {
+          "label": "Legacy",
+          "description": "Request gzip responses and decode them transparently, the behavior before this option."
+        }
+      }
+    }
+  },
+  "codex_zcode_context_usage": {
+    "title": "GLM search context counting",
+    "unknown_hint": "The current mode is unsupported. Choose a mode or check the YAML configuration.",
+    "count_hint": "Observe and correct make one extra native token count request after search, waiting up to 5 seconds. This may consume upstream request quota. Requires Core and plugin support; a failed count keeps the original value.",
+    "options": {
+      "disabled": {
+        "label": "Disabled (default)",
+        "description": "Use upstream usage without an extra count request."
+      },
+      "observe": {
+        "label": "Observe",
+        "description": "Log the context count and upstream usage while preserving client values."
+      },
+      "correct": {
+        "label": "Correct",
+        "description": "Update the Codex context total with the native count; backend usage and cache fields retain upstream accounting."
       }
     }
   }

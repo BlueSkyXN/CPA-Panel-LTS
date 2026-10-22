@@ -1,4 +1,13 @@
 export type DisplayServiceTier = 'fast' | 'std';
+export type ServiceTierFlow = DisplayServiceTier | 'fast_to_std' | 'std_to_fast';
+
+export const SERVICE_TIER_FLOWS: readonly ServiceTierFlow[] = [
+  'fast', 'std', 'fast_to_std', 'std_to_fast',
+];
+
+export function isServiceTierFlow(value: unknown): value is ServiceTierFlow {
+  return SERVICE_TIER_FLOWS.some((flow) => flow === value);
+}
 
 export type ServiceTierEvidence = 'effective' | 'response' | 'outbound' | 'request' | 'assumed';
 
@@ -17,6 +26,14 @@ export interface ResolvedServiceTier {
   rawOutbound: string | null;
   rawResponse: string | null;
   rawEffective: string | null;
+}
+
+// 与请求明细的箭头一致：客户端请求档位 → 按现有证据解析的生效档位。
+export function serviceTierFlow(resolved: ResolvedServiceTier): ServiceTierFlow {
+  const request = classifyServiceTier(resolved.rawRequest);
+  if (request === 'fast' && resolved.tier === 'std') return 'fast_to_std';
+  if (request === 'std' && resolved.tier === 'fast') return 'std_to_fast';
+  return resolved.tier;
 }
 
 export function normalizeServiceTier(value: unknown): string | null {

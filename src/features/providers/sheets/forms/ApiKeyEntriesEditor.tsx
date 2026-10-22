@@ -8,6 +8,7 @@ import {
   IconPlus,
   IconX,
 } from '@/components/ui/icons';
+import { ProxyUrlField } from '@/components/common/ProxyUrlField';
 import { maskApiKey } from '@/utils/format';
 import { MAX_CREDENTIAL_WEIGHT } from '@/utils/credentialWeight';
 import type { ApiKeyEntryInput } from '../../types';
@@ -228,16 +229,15 @@ export function ApiKeyEntriesEditor({
                     </button>
                   </div>
                 </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>{t('providersPage.form.proxyUrl')}</label>
-                  <input
-                    className={styles.input}
-                    value={entry.proxyUrl}
-                    onChange={(e) => onUpdate(idx, { proxyUrl: e.target.value })}
-                    disabled={mutating}
-                    placeholder="http://127.0.0.1:7890"
-                  />
-                </div>
+                <ProxyUrlField
+                  label={t('providersPage.form.proxyUrl')}
+                  value={entry.proxyUrl}
+                  onChange={(proxyUrl) => onUpdate(idx, { proxyUrl })}
+                  disabled={mutating}
+                  placeholder="http://127.0.0.1:7890"
+                  className={styles.field}
+                  inputClassName={styles.input}
+                />
                 <div className={styles.field}>
                   <label className={styles.label}>{t('providersPage.form.weight')}</label>
                   <input

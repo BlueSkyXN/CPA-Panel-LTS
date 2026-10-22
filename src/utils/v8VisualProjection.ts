@@ -1,4 +1,4 @@
-import { isMap, isNode, isSeq, parseDocument } from 'yaml';
+import { isMap, isNode, isScalar, isSeq, parseDocument } from 'yaml';
 type ConfigDocument = ReturnType<typeof parseDocument>;
 
 /**
@@ -20,6 +20,7 @@ const paths: [string, string][] = [
   ['auth-auto-refresh-workers', 'oauth.auth-auto-refresh-workers'],
   ['oauth-model-alias', 'oauth.model-alias'],
   ['oauth-excluded-models', 'oauth.excluded-models'],
+  ['oauth-model-policy', 'oauth.model-policy'],
   ['oauth-request-scoped-errors', 'oauth.request-scoped-errors'],
   ['oauth-settings', 'oauth.settings'],
   ['credential-concurrency', 'credentials.concurrency'],
@@ -72,6 +73,8 @@ const paths: [string, string][] = [
     'response-steering',
     'cache-affinity',
     'identity-confuse',
+    'outbound',
+    'zcode-context-usage',
     'client-metadata',
     'desktop-tool-overlay',
     'model-fallback',
@@ -141,12 +144,24 @@ export function applyVisualProjection(
           ...path,
           key,
         ]);
+      if (b === undefined) {
+        const target = mappedPath(path);
+        const remaining = original.getIn(target, true);
+        if (isMap(remaining) && remaining.items.length === 0) original.deleteIn(target);
+      }
       return;
     }
     if (String(a) === String(b) && JSON.stringify(a) === JSON.stringify(b)) return;
     if (path[0] === 'enable-gemini-cli-endpoint')
       throw new Error('Unsupported configuration field');
     const target = mappedPath(path);
+    for (let length = 1; length < target.length; length++) {
+      const parent = target.slice(0, length);
+      const node = original.getIn(parent, true);
+      if (node !== undefined && !isMap(node) && !(isScalar(node) && node.value === null)) {
+        throw new Error('Unsupported configuration mapping');
+      }
+    }
     if (b === undefined) {
       if (original.hasIn(target)) original.deleteIn(target);
     } else {

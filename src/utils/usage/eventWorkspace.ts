@@ -58,7 +58,7 @@ export function resolveUsageEventsScope(
       endMs = Date.parse(draft.end);
     }
   }
-  const valid = Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs &&
+  const valid = Number.isFinite(startMs) && Number.isFinite(endMs) && endMs >= startMs &&
     Number.isFinite(new Date(startMs).getTime()) && Number.isFinite(new Date(endMs).getTime());
   return { range, customRange: valid ? { startMs, endMs } : null, valid };
 }

@@ -162,6 +162,7 @@ export function useConnectivityTest(
       apiKey ?? '',
       fallbackApiKey ?? '',
       authIndex ?? '',
+      proxyUrl ?? '',
       h,
       m,
     ].join('||');
@@ -257,6 +258,7 @@ export function useConnectivityTest(
             proxy_url: entry?.proxyUrl?.trim() || undefined,
             method: 'POST',
             url: endpoint,
+            proxyUrl: entry?.proxyUrl?.trim() || undefined,
             header: headerObj,
             data: JSON.stringify({
               model,
@@ -362,6 +364,7 @@ export function useConnectivityTest(
           proxy_url: proxyUrl?.trim() || undefined,
           method: 'POST',
           url: endpoint,
+          proxyUrl: proxyUrl?.trim() || undefined,
           header: headerObj,
           data: JSON.stringify({
             model,
@@ -456,6 +459,7 @@ export function useConnectivityTest(
           proxy_url: proxyUrl?.trim() || undefined,
           method: 'POST',
           url: endpoint,
+          proxyUrl: proxyUrl?.trim() || undefined,
           header: headerObj,
           data: JSON.stringify(
             brand === 'interactions'
@@ -548,6 +552,7 @@ export function useConnectivityTest(
           proxy_url: proxyUrl?.trim() || undefined,
           method: 'POST',
           url: endpoint,
+          proxyUrl: proxyUrl?.trim() || undefined,
           header: headerObj,
           data: JSON.stringify({
             model,

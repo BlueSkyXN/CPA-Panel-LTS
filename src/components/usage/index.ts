@@ -46,6 +46,7 @@ export type { CostTrendChartProps } from './CostTrendChart';
 export { ServiceHealthCard } from './ServiceHealthCard';
 export type { ServiceHealthCardProps } from './ServiceHealthCard';
 
+export { ModelShareCard } from './ModelShareCard';
 export { UsageAnalyticsSection } from './UsageAnalyticsSection';
 export type { UsageAnalyticsSectionProps } from './UsageAnalyticsSection';
 

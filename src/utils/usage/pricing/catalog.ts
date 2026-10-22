@@ -15,6 +15,15 @@ export const KIMI_PRICING_SOURCE_URL = 'https://platform.kimi.ai/docs/pricing/ch
 export const XAI_PRICING_SOURCE_URL = 'https://docs.x.ai/developers/models/grok-4.5';
 export const XAI_GROK_46_PRICING_SOURCE_URL = 'https://docs.x.ai/developers/models/grok-4.6';
 export const XAI_GROK_46_CATALOG_AS_OF = '2026-08-18';
+export const XAI_GROK_43_PRICING_SOURCE_URL = 'https://docs.x.ai/developers/models/grok-4.3';
+export const XAI_GROK_43_CATALOG_AS_OF = '2026-10-10';
+export const XAI_GROK_47_PRICING_SOURCE_URL = 'https://docs.x.ai/developers/models/grok-4.7';
+export const XAI_GROK_47_CATALOG_AS_OF = '2026-10-10';
+export const XAI_GROK_47_FAST_PRICING_SOURCE_URL =
+  'https://docs.x.ai/developers/pricing#grok-47-fast-pricing-cursor-and-grok-build-only';
+export const XAI_GROK_47_FAST_CATALOG_AS_OF = '2026-10-13';
+export const DOUBAO_PRICING_SOURCE_URL = 'https://www.volcengine.com/docs/82379/1099320';
+export const DOUBAO_CATALOG_AS_OF = '2026-10-10';
 export const ANTHROPIC_PRICING_SOURCE_URL =
   'https://platform.claude.com/docs/en/about-claude/pricing';
 export const ANTHROPIC_MODEL_IDS_SOURCE_URL =
@@ -439,5 +448,51 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
     },
     sourceUrl: XAI_GROK_46_PRICING_SOURCE_URL,
     asOf: XAI_GROK_46_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'grok-4.3',
+    aliases: [],
+    currency: 'USD',
+    standard: {
+      short: rateCard(1.25, 0.2, undefined, 2.5),
+      long: longCard(rateCard(2.5, 0.4, undefined, 5), XAI_LONG_CONTEXT_INPUT_TOKEN_THRESHOLD),
+    },
+    sourceUrl: XAI_GROK_43_PRICING_SOURCE_URL,
+    asOf: XAI_GROK_43_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'grok-4.7',
+    aliases: [],
+    currency: 'USD',
+    standard: {
+      short: rateCard(2, 0.5, undefined, 6),
+      long: longCard(rateCard(4, 1, undefined, 12), XAI_LONG_CONTEXT_INPUT_TOKEN_THRESHOLD),
+    },
+    sourceUrl: XAI_GROK_47_PRICING_SOURCE_URL,
+    asOf: XAI_GROK_47_CATALOG_AS_OF,
+  },
+  {
+    // Cursor / Grok Build 的独立产品价格；不表示公共 API 的 Priority 档。
+    // 官方规定超过 200K 提示词 token 才提价；引擎使用包含边界的门槛。
+    canonicalModel: 'grok-4.7-fast',
+    aliases: [],
+    currency: 'USD',
+    standard: {
+      short: rateCard(4, 1, undefined, 12),
+      long: longCard(rateCard(6, 1.5, undefined, 18), XAI_LONG_CONTEXT_INPUT_TOKEN_THRESHOLD + 1),
+    },
+    sourceUrl: XAI_GROK_47_FAST_PRICING_SOURCE_URL,
+    asOf: XAI_GROK_47_FAST_CATALOG_AS_OF,
+  },
+  {
+    // Volcano Ark quotes CNY list prices; these USD rates are the confirmed
+    // CNY 6 / 1.2 / 30 per 1M tokens converted at 6.8, standard
+    // online-inference tier (the cheaper low-priority tier is not applied).
+    canonicalModel: 'doubao-seed-2.1-pro',
+    aliases: [],
+    currency: 'USD',
+    standard: { short: rateCard(0.882, 0.176, undefined, 4.412) },
+    sourceUrl: DOUBAO_PRICING_SOURCE_URL,
+    asOf: DOUBAO_CATALOG_AS_OF,
   },
 ];

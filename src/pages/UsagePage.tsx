@@ -35,7 +35,7 @@ import {
   TokenBreakdownChart,
   CostTrendChart,
   ServiceHealthCard,
-  UsageAnalyticsSection,
+  ModelShareCard,
   useUsageData,
   useSparklines,
   useChartData,
@@ -414,10 +414,11 @@ export function UsagePage() {
             variant="secondary"
             size="sm"
             onClick={handleExport}
+            title={t('usage_stats.export_backup_hint')}
             loading={exporting}
             disabled={loading || importing}
           >
-            {t('usage_stats.export')}
+            {t('usage_stats.export_backup')}
           </Button>
           <Button
             variant="secondary"
@@ -531,16 +532,13 @@ export function UsagePage() {
             timeWindow={effectiveWindow}
           />
 
-          {/* Performance & Reliability Analytics */}
-          <UsageAnalyticsSection
-            querySession={querySession}
-            legacyUsage={querySession ? null : legacyFilteredUsage}
-            timeWindow={effectiveWindow}
-            loading={loading}
-            isMobile={isMobile}
-            modelStats={modelStats}
-            showPricing={showPricing}
-          />
+          <ModelShareCard modelStats={modelStats} loading={loading} showPricing={showPricing} isMobile={isMobile} />
+          <Card title={t('usage_stats.analytics_section_title')}>
+            <p className={styles.hint}>{t('analytics.overview_entry_hint')}</p>
+            <Button variant="secondary" onClick={() => navigate(
+              `/analytics/observability${buildUsageEventsSearch(timeRange, customWindow)}`
+            )}>{t('analytics.open_observability')}</Button>
+          </Card>
 
           {/* Details Grid */}
           <div className={styles.detailsGrid}>

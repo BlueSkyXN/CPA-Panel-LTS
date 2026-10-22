@@ -1649,6 +1649,16 @@ def run_browser_config_save_smoke(page: Any, api_url: str, config_path: Path) ->
     page.get_by_role(
         "option", name="passthrough (preserve client tools)", exact=True
     ).click()
+    locate_config_field(page, "codexOutboundTransport", "outbound.transport")
+    page.get_by_test_id("codex-outbound-transport-control").get_by_role("radio", name="WebSocket for large requests", exact=True).check()
+    locate_config_field(page, "codexOutboundWebsocketThresholdBytes", "websocket-threshold-bytes")
+    page.get_by_label("WebSocket threshold (bytes)", exact=True).fill("123456")
+    locate_config_field(page, "codexOutboundRequestCompression", "outbound.request-compression")
+    page.get_by_test_id("codex-outbound-request-compression-control").get_by_role("radio", name="Off", exact=True).check()
+    locate_config_field(page, "codexOutboundAcceptEncoding", "outbound.accept-encoding")
+    page.get_by_test_id("codex-outbound-accept-encoding-control").get_by_role("radio", name="Legacy", exact=True).check()
+    locate_config_field(page, "codexZcodeContextUsage", "zcode-context-usage")
+    page.get_by_test_id("codex-zcode-context-usage-control").get_by_role("radio", name="Observe", exact=True).check()
     locate_config_field(page, "codexAbnormalReasoningRetryAction", "abnormal-reasoning-retry.action")
     page.get_by_role("group", name="Retry action", exact=True).get_by_role("radio", name="Retry", exact=True).check()
     locate_config_field(page, "codexAbnormalReasoningRetryStreamBufferMaxBytes", "stream-buffer-max-bytes")
@@ -1704,6 +1714,11 @@ def run_browser_config_save_smoke(page: Any, api_url: str, config_path: Path) ->
         ("routing.cooldown.transient-error-cooldown-seconds", 0),
         ("multimedia.disable-image-generation", "passthrough"),
         ("upstream.codex.abnormal-reasoning-retry.action", "retry"),
+        ("upstream.codex.outbound.transport", "auto"),
+        ("upstream.codex.outbound.websocket-threshold-bytes", 123456),
+        ("upstream.codex.outbound.request-compression", "none"),
+        ("upstream.codex.outbound.accept-encoding", "legacy"),
+        ("upstream.codex.zcode-context-usage", "observe"),
     ]:
         if config_at(on_disk, dotted) != expected:
             raise AssertionError(
@@ -1902,9 +1917,12 @@ def run_browser_flow_control_smoke(page: Any, app_url: str, api_url: str) -> lis
         raise AssertionError("Management previews must not create model activity")
 
     flow.get_by_role("button", name="Refresh status and references", exact=True).click()
-    flow.get_by_role("button", name="Observe live", exact=True).click()
-    flow.locator('[data-state="live"]').wait_for()
-    flow.get_by_role("button", name="Stop live updates", exact=True).click()
+    # 配置页只编辑策略，实时观测在独立的流控看板中验证。
+    page.get_by_role("button", name="Flow dashboard", exact=True).click()
+    monitor = page.get_by_role("region", name="Runtime status", exact=True)
+    monitor.get_by_role("button", name="Observe live", exact=True).click()
+    monitor.locator('[data-state="live"]').wait_for()
+    monitor.get_by_role("button", name="Stop live updates", exact=True).click()
     # Change the actual policy while observation is stopped. Its first resumed
     # summary must refresh the full policy, not only its counters/revision.
     current_yaml, revision = read_config_yaml(api_url)
@@ -1920,11 +1938,20 @@ def run_browser_flow_control_smoke(page: Any, app_url: str, api_url: str) -> lis
         raise AssertionError("Paused Flow policy update was not applied")
     with page.expect_response(lambda response: response.request.method == "GET"
                               and response.url.endswith(endpoint)) as refreshed:
-        flow.get_by_role("button", name="Observe live", exact=True).click()
+        monitor.get_by_role("button", name="Observe live", exact=True).click()
     if refreshed.value.json()["policy"]["rules"][0]["max-concurrent"] != 3:
         raise AssertionError("Resumed Flow observation did not reload the latest policy")
-    flow.locator('[data-state="live"]').wait_for()
-    flow.get_by_role("button", name="Stop live updates", exact=True).click()
+    monitor.locator('[data-state="live"]').wait_for()
+    monitor.get_by_role("button", name="Stop live updates", exact=True).click()
+    for width in (1440, 390):
+        page.set_viewport_size({"width": width, "height": 1000})
+        monitor.scroll_into_view_if_needed()
+        if page.evaluate("document.documentElement.scrollWidth > window.innerWidth + 1"):
+            raise AssertionError(f"Flow dashboard overflows the page at {width}px")
+    page.set_viewport_size({"width": 1440, "height": 1000})
+    page.get_by_role("button", name="Flow configuration", exact=True).click()
+    flow = page.get_by_test_id("flow-control-settings")
+    flow.wait_for()
     for width in (1440, 390):
         page.set_viewport_size({"width": width, "height": 1000})
         flow.scroll_into_view_if_needed()
@@ -2797,7 +2824,7 @@ def run_browser_smoke(
         ("/lts/providers", "AI Providers", "/ai-providers"),
         ("/lts/ampcode", "Configure Ampcode", "/ai-providers/ampcode"),
         ("/ai-providers/legacy", "AI Providers", "/ai-providers"),
-        ("/flow-control", "Flow", None),
+        ("/flow-control", "Flow", "/analytics/flow/config"),
         ("/logs", "Logs Viewer", None),
     ]
     if supports_plugin:

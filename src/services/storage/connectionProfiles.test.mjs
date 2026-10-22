@@ -169,7 +169,10 @@ test('top-level page routes survive session path restoration', async () => {
       .map((entry) => /^\s*'(\/[a-z-]+)'/.exec(entry)?.[1])
       .filter((path) => path && path !== '/')
   );
-  assert.ok(pages.has('/flow-control'), [...pages]);
+  assert.ok(pages.has('/usage'), [...pages]);
+  for (const path of ['/flow-control', '/analytics', '/analytics/observability', '/analytics/flow', '/analytics/flow/config']) {
+    assert.equal(lifecycle.safeSessionPath(path), path, `${path} is not restorable`);
+  }
   for (const path of pages) {
     assert.equal(lifecycle.safeSessionPath(path), path, `${path} is not restorable`);
   }

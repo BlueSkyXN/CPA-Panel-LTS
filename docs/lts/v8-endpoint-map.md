@@ -25,6 +25,7 @@ re-reads before every write. Panel never writes configuration through `/v0/manag
 | Provider families (Workbench) | `GET` / `PUT /config/api-keys/{family}` | ETag of the same family read; explicit group updates also read back |
 | Source / visual YAML editor, Flow page | `GET` / `PUT /config.yaml` | ETag of the editor's `GET /config.yaml` |
 | Client API keys | `GET` / `PUT /config/access/api-keys` | ETag of the same node read |
+| OAuth channel model policy | `GET` / `PUT /config/oauth` | Original OAuth snapshot ETag; policy changes and moving excluded rules use one PUT |
 | OAuth excluded models / model alias | `GET` / `PUT /config/oauth/excluded-models`, `/config/oauth/model-alias` | ETag of the same node read (writes serialized per map) |
 | Ampcode (LTS) | `GET` / `PUT /config/ampcode` (single PUT of the whole node) | ETag of the editor's node read |
 | Plugin enabled / plugin config | `PUT /config/plugins/configs/{id}/enabled`, `GET` / `PUT /config/plugins/configs/{id}` | node read (config) / fresh revision (independent scalar) |
@@ -60,11 +61,13 @@ Response-only `auth_index` / `auth-index` are stripped from groups and keys befo
 | Surface | Endpoint(s) | Why not v8 |
 |---|---|---|
 | Full usage statistics | `/usage`, `/usage/export`, `/usage/import` | LTS protected; no v8 route |
-| Usage query workspace | `/usage/query/capabilities`, `/summary`, `/details`, `/pricing` | no v8 route |
+| Usage query workspace | `/usage/query/capabilities`, `/summary`, `/details`, `/pricing`, `/analytics`, `/export` | no v8 route |
 | Old-Core usage probe | `GET /usage-statistics-enabled` (read only) | probe only; no write |
 | Flow control V3 | `/flow-control`, `/events` (raw SSE `fetch` via `computeLtsExtensionApiUrl`), `/explain`, `/summary`, `/details`, `/preview`, `/migration-preview` | no v8 route |
 | Plugin readiness | `/plugins/:id/readiness` | no v8 route |
 | Plugin-owned management routes | `/plugins/copilot/login-info`, `/plugins/{pat}/summary` | pluginhost serves only under `/v0/management` |
+| Model policy capability probe and preview | `GET /oauth-model-policy`, `GET /auth-files/models/policy-preview` | Existing LTS read-only operations; configuration writes use v8 |
+| Proxy probe | `POST /proxy-url/test` | Read-only probe; no v8 route |
 | Per-credential model refresh | `POST /auth-files/models/refresh` | no v8 route |
 | Home runtime probe | `GET /nodes` | Home control-plane, not a Core v8 route |
 | Legacy-backend diagnosis | `GET /v0/management/config` via a bare axios call | only after v8 `/config.yaml` returns 404; never used as data |
