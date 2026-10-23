@@ -38,6 +38,8 @@ def run():
         page.wait_for_url(re.compile(r'#/$'))
         page.get_by_role('link',name='Config Panel',exact=True).click()
         expect(page.get_by_role('searchbox')).to_be_visible()
+        with page.expect_response(lambda response:'/uat/v0/management/usage' in response.url):
+            page.evaluate("location.hash='/usage'")
         paths=[path for _,path in requests]
         assert any(p.startswith('/uat/v8/management/config.yaml') for p in paths)
         assert any(p.startswith('/uat/v0/management/usage') for p in paths)
