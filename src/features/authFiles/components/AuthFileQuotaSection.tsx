@@ -9,6 +9,8 @@ import {
   KIMI_CONFIG,
   XAI_CONFIG,
   PLUGIN_CONFIG,
+  DEVIN_CONFIG,
+  META_CONFIG,
 } from '@/components/quota';
 import {
   captureQuotaCacheGeneration,
@@ -35,6 +37,8 @@ const getQuotaConfig = (type: QuotaProviderType) => {
   if (type === 'codex') return CODEX_CONFIG;
   if (type === 'kimi') return KIMI_CONFIG;
   if (type === 'xai') return XAI_CONFIG;
+  if (type === 'devin') return DEVIN_CONFIG;
+  if (type === 'meta') return META_CONFIG;
   if (type === 'plugin') return PLUGIN_CONFIG;
   return GEMINI_CLI_CONFIG;
 };
@@ -58,6 +62,8 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
     if (quotaType === 'codex') return state.codexQuota[file.name] as QuotaState;
     if (quotaType === 'kimi') return state.kimiQuota[file.name] as QuotaState;
     if (quotaType === 'xai') return state.xaiQuota[file.name] as QuotaState;
+    if (quotaType === 'devin') return state.devinQuota[file.name] as QuotaState;
+    if (quotaType === 'meta') return state.metaQuota[file.name] as QuotaState;
     if (quotaType === 'plugin') return state.pluginQuota[file.name] as QuotaState;
     return state.geminiCliQuota[file.name] as QuotaState;
   });
@@ -70,6 +76,8 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
     if (quotaType === 'codex') return state.setCodexQuota as unknown as (updater: unknown) => void;
     if (quotaType === 'kimi') return state.setKimiQuota as unknown as (updater: unknown) => void;
     if (quotaType === 'xai') return state.setXaiQuota as unknown as (updater: unknown) => void;
+    if (quotaType === 'devin') return state.setDevinQuota as unknown as (updater: unknown) => void;
+    if (quotaType === 'meta') return state.setMetaQuota as unknown as (updater: unknown) => void;
     if (quotaType === 'plugin') return state.setPluginQuota as unknown as (updater: unknown) => void;
     return state.setGeminiCliQuota as unknown as (updater: unknown) => void;
   });

@@ -4,6 +4,7 @@ import { normalizeAuthFileCooldowns, normalizeCooldownTimestamp } from './authFi
  */
 
 import { apiClient, ltsExtensionClient } from './client';
+import { normalizeRefreshResults, validateRefreshResponse, validateCooldownResponse } from '@/features/authFiles/runtimeActions';
 import { isMap, isScalar, parseDocument } from 'yaml';
 import { configFileApi, type ConfigYamlSnapshot } from './configFile';
 import {
@@ -582,6 +583,17 @@ async function updateOauthProviderMap(path: string, provider: string, value?: un
 }
 
 export const authFilesApi = {
+  async requestManualRefresh(name: string, authIndex?: string): Promise<void> {
+    const result = await apiClient.post<unknown>('/credentials/refresh', { name, ...(authIndex ? { auth_index: authIndex } : {}) });
+    validateRefreshResponse(result);
+  },
+  async requestAllManualRefresh() {
+    return normalizeRefreshResults(await apiClient.post<unknown>('/credentials/refresh', { all: true }, { timeout: 300_000 }));
+  },
+  async resetCooldown(authIndex: string): Promise<void> {
+    if (!authIndex.trim()) throw new Error('Missing auth index');
+    validateCooldownResponse(await apiClient.post<unknown>('/routing/cooldown/reset', { auth_index: authIndex }), authIndex);
+  },
   list: async () =>
     normalizeAuthFilesResponse(await apiClient.get<AuthFilesResponse>('/credentials')),
 

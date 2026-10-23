@@ -38,3 +38,5 @@ export function createSharedClock(options: SharedClockOptions = {}) {
     subscriberCount: () => listeners.size,
   };
 }
+
+export const MINUTE_CLOCK = createSharedClock();

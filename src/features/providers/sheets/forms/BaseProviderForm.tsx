@@ -83,7 +83,7 @@ function buildInitialForm(
       apiKey: '',
       name: '',
       baseUrl:
-        brand === 'claudeApi' ? CLAUDE_API_BASE_URL : brand === 'xai' ? XAI_API_BASE_URL : '',
+        brand === 'claudeApi' ? CLAUDE_API_BASE_URL : brand === 'meta' ? 'https://api.meta.ai/v1' : brand === 'xai' ? XAI_API_BASE_URL : '',
       proxyUrl: '',
       prefix: '',
       disabled: false,
@@ -103,6 +103,7 @@ function buildInitialForm(
         brand === 'openaiCompatibility' ||
         brand === 'codex' ||
         brand === 'xai' ||
+      brand === 'meta' ||
         isClaudeLikeBrand(brand) ||
         brand === 'gemini' ||
         brand === 'interactions'
@@ -193,7 +194,7 @@ function buildInitialForm(
       : [emptyHeader()],
     excludedModelsText: excludedList.join('\n'),
     websockets:
-      brand === 'codex' || brand === 'xai'
+      brand === 'codex' || brand === 'meta' || brand === 'xai'
         ? (cfg as ProviderKeyConfig).websockets === true
         : undefined,
     cloak: isClaudeLikeBrand(brand)
@@ -210,6 +211,7 @@ function buildInitialForm(
     testModel:
       brand === 'codex' ||
       brand === 'xai' ||
+      brand === 'meta' ||
       isClaudeLikeBrand(brand) ||
       brand === 'gemini' ||
       brand === 'interactions'
@@ -450,7 +452,7 @@ export function BaseProviderForm({
   const actualApiKeyEntries = form.apiKeyEntries ?? [];
   const supportsImageModels = brand === 'openaiCompatibility';
   const singleConnectivity =
-    brand === 'codex' || brand === 'xai'
+    brand === 'codex' || brand === 'meta' || brand === 'xai'
       ? { status: connectivity.codexStatus, run: connectivity.runCodex }
       : brand === 'gemini' || brand === 'interactions'
         ? { status: connectivity.geminiStatus, run: connectivity.runGemini }
@@ -641,6 +643,7 @@ export function BaseProviderForm({
               {t('providersPage.form.testModel')}
               {brand === 'codex' ||
               brand === 'xai' ||
+              brand === 'meta' ||
               isClaudeLikeBrand(brand) ||
               brand === 'gemini' ||
               brand === 'interactions' ? (

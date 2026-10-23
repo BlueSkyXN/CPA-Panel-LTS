@@ -687,3 +687,37 @@ export interface PluginQuotaState {
   error?: string;
   errorStatus?: number;
 }
+
+export interface DevinQuotaWindow {
+  id: 'daily' | 'weekly';
+  label?: string;
+  remainingPercent: number | null;
+  resetAtMs: number | null;
+  periodHours: number;
+}
+
+export interface DevinQuotaData {
+  windows: DevinQuotaWindow[];
+  observedAtMs: number | null;
+  plan: string | null;
+  planStartMs: number | null;
+  planEndMs: number | null;
+}
+
+export interface MetaQuotaWindow {
+  id: 'window' | 'weekly';
+  usedPercent: number | null;
+  /** Reset instant as Unix seconds, matching the upstream contract. */
+  resetAt?: number;
+  durationMinutes?: number;
+}
+
+export interface MetaQuotaData {
+  planName?: string;
+  isSubscriptionActive?: boolean;
+  windows: MetaQuotaWindow[];
+}
+
+export interface DevinQuotaState { status: 'idle' | 'loading' | 'success' | 'error'; data?: DevinQuotaData; error?: string; errorStatus?: number }
+
+export interface MetaQuotaState { status: 'idle' | 'loading' | 'success' | 'error'; data?: MetaQuotaData; error?: string; errorStatus?: number }

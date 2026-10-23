@@ -24,6 +24,7 @@ import {
   openaiToResource,
   qiniuCloudToResource,
   vertexToResource,
+  metaToResource,
   xaiToResource,
 } from './adapters';
 import { PROVIDER_BRAND_ORDER, PROVIDER_DESCRIPTORS } from './descriptors';
@@ -189,7 +190,7 @@ export const buildCloakConfig = (
 };
 
 const buildProviderKeyConfig = (
-  brand: 'gemini' | 'interactions' | 'codex' | 'xai' | 'claude' | 'vertex',
+  brand: 'gemini' | 'interactions' | 'codex' | 'meta' | 'xai' | 'claude' | 'vertex',
   input: ProviderEntryFormInput,
   existing?: ProviderKeyConfig | GeminiKeyConfig | null
 ): ProviderKeyConfig | GeminiKeyConfig => {
@@ -571,6 +572,9 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
             []
           );
           break;
+        case 'meta':
+          resources = (config.metaApiKeys ?? []).map((c, i) => metaToResource(c, i));
+          break;
         case 'vertex':
           resources = (config.vertexApiKeys ?? []).map((c, i) => vertexToResource(c, i));
           break;
@@ -775,6 +779,10 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           );
         } else if (brand === 'claudeApi') {
           await providersApi.createClaudeConfig(buildClaudeApiConfig(input));
+        } else if (brand === 'meta') {
+          await providersApi.createMetaConfig(
+            buildProviderKeyConfig('meta', input) as ProviderKeyConfig
+          );
         } else if (brand === 'vertex') {
           await providersApi.createVertexConfig(
             buildProviderKeyConfig('vertex', input) as ProviderKeyConfig
@@ -847,6 +855,13 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
             selector.apiKey,
             selector.baseUrl,
             buildClaudeApiConfig(input, resource.raw as ProviderKeyConfig)
+          );
+        } else if (brand === 'meta' && selector.brand === 'meta') {
+          const existing = resource.raw as ProviderKeyConfig;
+          await providersApi.updateMetaConfig(
+            selector.apiKey,
+            selector.baseUrl,
+            buildProviderKeyConfig('meta', input, existing) as ProviderKeyConfig
           );
         } else if (brand === 'vertex' && selector.brand === 'vertex') {
           const existing = resource.raw as ProviderKeyConfig;
@@ -921,6 +936,12 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           );
         } else if (sel.brand === 'claudeApi') {
           await providersApi.deleteClaudeConfig(
+            sel.apiKey,
+            sel.baseUrl,
+            (resource.raw as ProviderKeyConfig).source
+          );
+        } else if (sel.brand === 'meta') {
+          await providersApi.deleteMetaConfig(
             sel.apiKey,
             sel.baseUrl,
             (resource.raw as ProviderKeyConfig).source
@@ -1014,6 +1035,7 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           (brand === 'xai' && selector.brand === 'xai') ||
           (brand === 'claude' && selector.brand === 'claude') ||
           (brand === 'claudeApi' && selector.brand === 'claudeApi') ||
+          (brand === 'meta' && selector.brand === 'meta') ||
           (brand === 'vertex' && selector.brand === 'vertex')
         ) {
           const current = resource.raw as ProviderKeyConfig;
@@ -1027,6 +1049,8 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
             await providersApi.updateXAIConfig(selector.apiKey, selector.baseUrl, next);
           } else if (selector.brand === 'claude' || selector.brand === 'claudeApi') {
             await providersApi.updateClaudeConfig(selector.apiKey, selector.baseUrl, next);
+          } else if (selector.brand === 'meta') {
+            await providersApi.updateMetaConfig(selector.apiKey, selector.baseUrl, next);
           } else if (selector.brand === 'vertex') {
             await providersApi.updateVertexConfig(selector.apiKey, selector.baseUrl, next);
           }

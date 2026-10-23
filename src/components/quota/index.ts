@@ -16,3 +16,5 @@ export {
 export type { QuotaConfig } from './quotaConfigs';
 
 export { PLUGIN_CONFIG } from './pluginQuota';
+
+export { DEVIN_CONFIG, META_CONFIG } from './additionalQuota';

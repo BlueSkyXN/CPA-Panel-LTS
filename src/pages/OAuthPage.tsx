@@ -5,6 +5,10 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { useAuthStore, useNotificationStore } from '@/stores';
+import { apiClient } from '@/services/api/client';
+import { validateDevinCallback } from './devinOAuth';
+import iconDevin from '@/assets/icons/devin.svg';
+import iconMeta from '@/assets/icons/meta.svg';
 import { oauthApi, type OAuthProvider } from '@/services/api/oauth';
 import { vertexApi, type VertexImportResponse } from '@/services/api/vertex';
 import { copyToClipboard } from '@/utils/clipboard';
@@ -64,6 +68,8 @@ const PROVIDERS: {
   urlLabelKey: string;
   icon: string;
 }[] = [
+  { id: 'devin', titleKey: 'auth_login.devin_oauth_title', hintKey: 'auth_login.devin_oauth_hint', urlLabelKey: 'auth_login.devin_oauth_url_label', icon: iconDevin },
+  { id: 'meta', titleKey: 'auth_login.meta_oauth_title', hintKey: 'auth_login.meta_oauth_hint', urlLabelKey: 'auth_login.meta_oauth_url_label', icon: iconMeta },
   {
     id: 'codex',
     titleKey: 'auth_login.codex_oauth_title',
@@ -123,6 +129,7 @@ const PROVIDERS: {
 ];
 
 const CALLBACK_SUPPORTED: OAuthProvider[] = [
+  'devin',
   'codex',
   'anthropic',
   'antigravity',
@@ -203,6 +210,7 @@ const resolveCallbackUrl = (
   input: string,
   state?: string
 ): string | null => {
+  if (provider === 'devin' && validateDevinCallback(input, state)) return null;
   if (provider !== 'xai') return input.trim();
   return buildXaiCallbackUrl(input, state);
 };
@@ -227,6 +235,7 @@ export function OAuthPage() {
     location: '',
     loading: false,
   });
+  const sessionCleanup = useRef(new Map<OAuthProvider, () => Promise<unknown>>());
   const attempts = useRef(
     createOAuthAttempts({
       setTimeout: (callback, delay) => window.setTimeout(callback, delay),
@@ -254,6 +263,8 @@ export function OAuthPage() {
 
   const clearTimers = useCallback(() => {
     attempts.current.invalidateAll();
+    for (const cancel of sessionCleanup.current.values()) void cancel().catch(() => {});
+    sessionCleanup.current.clear();
   }, []);
 
   useEffect(() => {
@@ -292,6 +303,9 @@ export function OAuthPage() {
   };
 
   const resetProviderAttempt = (provider: OAuthProvider) => {
+    const cancel = sessionCleanup.current.get(provider);
+    sessionCleanup.current.delete(provider);
+    if (cancel) void cancel().catch(() => showNotification(t('alignment_quota.cancel_failed'), 'error'));
     attempts.current.get(provider)?.invalidate();
     setStates((prev) => {
       const current = prev[provider] ?? {};
@@ -307,6 +321,7 @@ export function OAuthPage() {
   };
 
   const completeProviderAuth = (provider: OAuthProvider) => {
+    sessionCleanup.current.delete(provider);
     const resetAttempt = attempts.current.begin(provider);
     updateProviderState(provider, {
       url: undefined,
@@ -352,6 +367,7 @@ export function OAuthPage() {
   };
 
   const startAuth = async (provider: OAuthProvider) => {
+    const client = apiClient.captureConnection();
     const attempt = attempts.current.begin(provider);
     const geminiState = provider === 'gemini-cli' ? states[provider] : undefined;
     const rawProjectId = provider === 'gemini-cli' ? (geminiState?.projectId || '').trim() : '';
@@ -378,9 +394,17 @@ export function OAuthPage() {
     });
     try {
       const res = await oauthApi.startAuth(provider, {
+        client,
         projectId: provider === 'gemini-cli' ? projectId : undefined,
         signal: attempt.signal,
       });
+      if (provider === 'devin' || provider === 'meta') {
+        if (res.state) {
+          const cancel = () => client.delete('/oauth/session', { params: { state: res.state } });
+          if (!attempt.isCurrent()) { void cancel().catch(() => {}); return; }
+          sessionCleanup.current.set(provider, cancel);
+        }
+      }
       if (!attempt.isCurrent()) return;
       if (!res.state) {
         const message = t('auth_login.missing_state');
@@ -397,6 +421,7 @@ export function OAuthPage() {
       updateProviderState(provider, {
         url: res.url,
         state: res.state,
+        userCode: res.user_code,
         status: 'waiting',
         polling: true,
       });
@@ -634,10 +659,10 @@ export function OAuthPage() {
                       </div>
                     </div>
                   )}
-                  {provider.id === 'copilot' && state.userCode && (
+                  {state.userCode && (
                     <div className={styles.authUrlBox}>
                       <div className={styles.authUrlLabel}>
-                        {t('auth_login.copilot_user_code_label')}
+                        {t('alignment_quota.device_code')}
                       </div>
                       <div className={styles.authUrlValue}>{state.userCode}</div>
                       <div className={styles.authUrlActions}>
@@ -657,6 +682,7 @@ export function OAuthPage() {
                       </div>
                     </div>
                   )}
+                  {(provider.id === 'devin' || provider.id === 'meta') && state.state && state.status !== 'success' && <Button variant="secondary" onClick={() => resetProviderAttempt(provider.id)}>{t('common.cancel')}</Button>}
                   {canSubmitCallback && (
                     <div className={styles.callbackSection}>
                       <Input

@@ -66,7 +66,7 @@ const truncateForId = (value: string | undefined | null): string => {
 };
 
 function providerKeyToResource(
-  brand: 'gemini' | 'interactions' | 'codex' | 'xai' | 'claude' | 'claudeApi' | 'vertex',
+  brand: 'gemini' | 'interactions' | 'codex' | 'meta' | 'xai' | 'claude' | 'claudeApi' | 'vertex',
   config: GeminiKeyConfig | ProviderKeyConfig,
   index: number
 ): ProviderResource {
@@ -369,3 +369,5 @@ export function kimiToResource(raw: SponsorProviderRaw): ProviderResource | null
     getProtocolUrls: getKimiProtocolUrls,
   });
 }
+
+export function metaToResource(config: ProviderKeyConfig, index: number): ProviderResource { return providerKeyToResource('meta', config, index); }

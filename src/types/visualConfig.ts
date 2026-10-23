@@ -122,6 +122,7 @@ export type VisualConfigValues = FlowControlValues & {
   tlsKey: string;
   rmAllowRemote: boolean;
   rmSecretKey: string;
+  githubToken: string;
   rmDisableControlPanel: boolean;
   rmDisableAutoUpdatePanel: boolean;
   rmPanelRepo: string;
@@ -158,6 +159,7 @@ export type VisualConfigValues = FlowControlValues & {
   enableGeminiCliEndpoint: boolean;
   antigravitySignatureCacheEnabled: boolean;
   antigravitySensitiveWords: string[];
+  devinSensitiveWords: string[];
   antigravitySignatureBypassStrict: boolean;
   claudeHeaderUserAgent: string;
   claudeHeaderPackageVersion: string;
@@ -217,6 +219,7 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   tlsKey: '',
   rmAllowRemote: false,
   rmSecretKey: '',
+  githubToken: '',
   rmDisableControlPanel: false,
   rmDisableAutoUpdatePanel: false,
   rmPanelRepo: '',
@@ -253,6 +256,7 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   enableGeminiCliEndpoint: false,
   antigravitySignatureCacheEnabled: true,
   antigravitySensitiveWords: [],
+  devinSensitiveWords: [],
   antigravitySignatureBypassStrict: false,
   claudeHeaderUserAgent: '',
   claudeHeaderPackageVersion: '',

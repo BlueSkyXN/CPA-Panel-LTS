@@ -18,6 +18,8 @@ import {
   KIMI_CONFIG,
   XAI_CONFIG,
   PLUGIN_CONFIG,
+  DEVIN_CONFIG,
+  META_CONFIG,
 } from '@/components/quota';
 import { ProviderTabs } from '@/features/authFiles/components/ProviderTabs';
 import type { QuotaProviderType } from '@/features/authFiles/constants';
@@ -34,6 +36,8 @@ const QUOTA_PROVIDERS = [
   { id: 'gemini-cli', config: GEMINI_CLI_CONFIG },
   { id: 'kimi', config: KIMI_CONFIG },
   { id: 'plugin', config: PLUGIN_CONFIG },
+  { id: 'devin', config: DEVIN_CONFIG },
+  { id: 'meta', config: META_CONFIG },
 ] as const;
 
 const QUOTA_TAB_IDS: string[] = ['all', ...QUOTA_PROVIDERS.map(({ id }) => id)];
@@ -57,6 +61,8 @@ export function QuotaPage() {
   const claudeQuota = useQuotaStore((state) => state.claudeQuota);
   const codexQuota = useQuotaStore((state) => state.codexQuota);
   const geminiCliQuota = useQuotaStore((state) => state.geminiCliQuota);
+  const devinQuota = useQuotaStore((state) => state.devinQuota);
+  const metaQuota = useQuotaStore((state) => state.metaQuota);
   const kimiQuota = useQuotaStore((state) => state.kimiQuota);
   const xaiQuota = useQuotaStore((state) => state.xaiQuota);
 
@@ -123,8 +129,10 @@ export function QuotaPage() {
       kimi: kimiQuota,
       xai: xaiQuota,
       plugin: pluginQuota,
+      devin: devinQuota,
+      meta: metaQuota,
     }),
-    [antigravityQuota, claudeQuota, codexQuota, geminiCliQuota, kimiQuota, xaiQuota, pluginQuota]
+    [antigravityQuota, claudeQuota, codexQuota, geminiCliQuota, kimiQuota, xaiQuota, pluginQuota, devinQuota, metaQuota]
   );
 
   const { loadedCount, attentionCount } = useMemo(() => {
@@ -236,6 +244,8 @@ export function QuotaPage() {
       {pluginSupported && <div hidden={!showProvider('plugin')}>
         <QuotaSection config={PLUGIN_CONFIG} files={files} loading={loading} disabled={disableControls}/>
       </div>}
+      <div hidden={!showProvider('devin')}><QuotaSection config={DEVIN_CONFIG} files={files} loading={loading} disabled={disableControls} /></div>
+      <div hidden={!showProvider('meta')}><QuotaSection config={META_CONFIG} files={files} loading={loading} disabled={disableControls} /></div>
       <div hidden={!showProvider('kimi')}>
         <QuotaSection
           config={KIMI_CONFIG}
