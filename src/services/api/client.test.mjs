@@ -328,3 +328,22 @@ test('frozen connection allows only targeted OAuth session cleanup on the captur
     assert.equal(lifecycle.hasActiveWrites(), false);
   } finally { lifecycle.setSessionFrozen(false); }
 });
+
+
+test('deployed management.html detects its reverse proxy prefix without query or hash', async () => {
+  const { detectApiBaseFromLocation } = await vite.ssrLoadModule('/src/utils/connection.ts');
+  const previous = window.location;
+  try {
+    for (const [url, expected] of [
+      ['https://test.example/uat/management.html?view=1#/login','https://test.example/uat'],
+      ['http://localhost:8317/team/dev/management.html#/config','http://localhost:8317/team/dev'],
+      ['http://localhost:8317/management.html','http://localhost:8317'],
+      ['http://localhost:5173/index.html','http://localhost:5173'],
+      ['file:///tmp/management.html',''],
+      ['about:blank',''],
+    ]) {
+      window.location = new URL(url);
+      assert.equal(detectApiBaseFromLocation(), expected, url);
+    }
+  } finally { window.location = previous; }
+});

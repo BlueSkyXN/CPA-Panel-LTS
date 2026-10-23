@@ -26,11 +26,15 @@ export const computeLtsExtensionApiUrl = (base: string): string => {
 
 export const detectApiBaseFromLocation = (): string => {
   try {
-    const { protocol, hostname, port } = window.location;
+    const { protocol, hostname, port, pathname } = window.location;
     // file:/about: 文档推断不出实例地址；返回空串让登录页要求手工填写。
     if (protocol !== 'http:' && protocol !== 'https:') return '';
     const normalizedPort = port ? `:${port}` : '';
-    return normalizeApiBase(`${protocol}//${hostname}${normalizedPort}`);
+    // management.html and the Management API share the reverse proxy prefix.
+    const prefix = typeof pathname === 'string' && /\/management\.html$/i.test(pathname)
+      ? pathname.replace(/\/management\.html$/i, '')
+      : '';
+    return normalizeApiBase(`${protocol}//${hostname}${normalizedPort}${prefix}`);
   } catch (error) {
     console.warn('Failed to detect api base from location, fallback to default', error);
     return normalizeApiBase(`http://localhost:${DEFAULT_API_PORT}`);
