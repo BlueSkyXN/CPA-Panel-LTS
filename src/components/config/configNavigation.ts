@@ -70,6 +70,7 @@ export const CONFIG_FIELDS = {
     yamlKey: 'remote-management.disable-auto-update-panel',
     fullWidth: false,
   },
+  githubToken: { labelKey: 'credential_actions.github_token', yamlKey: 'server.github-token', fullWidth: true },
   rmSecretKey: {
     labelKey: 'config_management.visual.sections.remote.secret_key',
     yamlKey: 'remote-management.secret-key',
@@ -140,6 +141,11 @@ export const CONFIG_FIELDS = {
   antigravitySensitiveWords: {
     labelKey: 'config_management.visual.sections.system.antigravity_sensitive_words',
     yamlKey: 'antigravity.sensitive-words',
+    fullWidth: true,
+  },
+  devinSensitiveWords: {
+    labelKey: 'config_management.visual.sections.system.devin_sensitive_words',
+    yamlKey: 'devin.sensitive-words',
     fullWidth: true,
   },
   pluginsEnabled: {
@@ -520,6 +526,7 @@ export const CONFIG_DOMAINS = [
           'rmDisableControlPanel',
           'rmDisableAutoUpdatePanel',
           'rmPanelRepo',
+          'githubToken',
         ],
       },
       {
@@ -675,6 +682,10 @@ export const CONFIG_DOMAINS = [
           'antigravitySensitiveWords',
           'quotaAntigravityCredits',
         ],
+      },
+      {
+        id: 'devin',
+        fields: ['devinSensitiveWords'],
       },
       {
         id: 'gemini',

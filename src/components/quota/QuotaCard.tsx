@@ -2,6 +2,8 @@
  * Generic quota card component.
  */
 
+import { useState } from 'react';
+import { ClaudeGrantDialog } from './claudeGrants/ClaudeGrantDialog';
 import { useTranslation } from 'react-i18next';
 import type { ReactElement, ReactNode } from 'react';
 import type { TFunction } from 'i18next';
@@ -91,6 +93,7 @@ export function QuotaCard<TState extends QuotaStatusState>({
   renderQuotaItems,
 }: QuotaCardProps<TState>) {
   const { t } = useTranslation();
+  const [grantOpen, setGrantOpen] = useState(false);
 
   const displayType = item.type || item.provider || defaultType;
   const typeLabel = getTypeLabel(t, displayType);
@@ -161,6 +164,10 @@ export function QuotaCard<TState extends QuotaStatusState>({
         )}
       </div>
 
+      {defaultType === 'claude' && <>
+        <Button variant="secondary" size="sm" onClick={() => setGrantOpen(true)} disabled={!canRefresh}>{t('claude_reset.title')}</Button>
+        {grantOpen && <ClaudeGrantDialog file={item} onClose={() => setGrantOpen(false)} />}
+      </>}
       {onRefresh && quotaStatus !== 'idle' && (
         <div className={styles.quotaCardActions}>
           <Button

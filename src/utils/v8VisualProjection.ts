@@ -9,6 +9,7 @@ type ConfigDocument = ReturnType<typeof parseDocument>;
  */
 const paths: [string, string][] = [
   ['host', 'server.host'],
+  ['github-token', 'server.github-token'],
   ['port', 'server.port'],
   ['tls', 'server.tls'],
   ['trusted-proxies', 'server.trusted-proxies'],

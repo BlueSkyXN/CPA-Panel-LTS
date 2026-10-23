@@ -10,6 +10,8 @@
 
 ## Summary
 
+V8 已延期业务功能的后续接入见 [2026-10-23 功能对齐](v8-feature-alignment-20261023.md)。
+
 v8 开发线新增审查见 [2026-10-23 intake](upstream-intake-20261023-v8.md)：官方 main 至 `714de076` 的 52 项逐项记录，Core 配套至 `d946c4fb`。
 
 v8 开发线的后续逐提交审查见 [2026-10-03 intake](upstream-intake-20261003-v8.md)：官方 main 固定到 `ee79a794`，94 项分别记录适配、等价、部分、拒绝与延期；不表示已合入 LTS main，也不表示所有官方新增 UI 已接纳。

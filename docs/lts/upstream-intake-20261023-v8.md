@@ -1,5 +1,7 @@
 # 2026-10-23 V8 selective-port intake
 
+后续业务功能补齐见 [2026-10-23 功能对齐](v8-feature-alignment-20261023.md)；本文分类保留为当时快照。
+
 本轮从 `ee79a794526a30c03748a8864a9ac6589a31833b` 审查至官方 main `714de0760a3ce86094b178fb46f834d34bc4a2a5`，52 个 first-parent 提交。2026-10-23 fetch 确认目标未漂移。配套 Core 同步至官方 `d946c4fba6fc9a5cfbca1f3d85184d62ad2fb683`。
 
 这是 V8 开发线的 selective-port 审查范围。完整 usage、Flow、四语、插件 gate、精确 If-Match 和未知 YAML 保留仍是现行合同。partial/defer 是可见未交付项，不算全量移植或产品功能对等。没有真实消费 reset credit、第三方授权或付费健康请求。

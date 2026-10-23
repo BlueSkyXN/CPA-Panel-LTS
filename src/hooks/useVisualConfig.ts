@@ -1428,6 +1428,7 @@ function getNextDirtyFields(
       'tlsKey',
       'rmAllowRemote',
       'rmSecretKey',
+      'githubToken',
       'rmDisableControlPanel',
       'rmPanelRepo',
       'authDir',
@@ -1471,6 +1472,16 @@ function getNextDirtyFields(
       areStringArraysEqual(
         nextValues.antigravitySensitiveWords,
         baselineValues.antigravitySensitiveWords
+      )
+    );
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, 'devinSensitiveWords')) {
+    updateDirty(
+      'devinSensitiveWords',
+      areStringArraysEqual(
+        nextValues.devinSensitiveWords,
+        baselineValues.devinSensitiveWords
       )
     );
   }
@@ -1681,6 +1692,7 @@ export function useVisualConfig() {
         tlsCert: typeof tls?.cert === 'string' ? tls.cert : '',
         tlsKey: typeof tls?.key === 'string' ? tls.key : '',
 
+        githubToken: typeof parsed['github-token'] === 'string' ? parsed['github-token'] : '',
         rmAllowRemote: readConfigBoolean(remoteManagement?.['allow-remote']),
         rmSecretKey:
           typeof remoteManagement?.['secret-key'] === 'string'
@@ -1737,6 +1749,7 @@ export function useVisualConfig() {
           parsed['antigravity-signature-bypass-strict']
         ),
         antigravitySensitiveWords: parseStringList(antigravity?.['sensitive-words']),
+        devinSensitiveWords: parseStringList(asRecord(parsed.devin)?.['sensitive-words']),
 
         claudeHeaderUserAgent:
           typeof claudeHeaderDefaults?.['user-agent'] === 'string'
@@ -1921,6 +1934,8 @@ export function useVisualConfig() {
           deleteIfMapEmpty(doc, ['tls']);
         }
 
+        if (dirtyFields.has('githubToken')) setStringInDoc(doc, ['github-token'], values.githubToken);
+
         const remoteManagementDirty =
           dirtyFields.has('rmAllowRemote') ||
           dirtyFields.has('rmSecretKey') ||
@@ -2092,6 +2107,16 @@ export function useVisualConfig() {
             values.antigravitySensitiveWords
           );
           deleteIfMapEmpty(doc, ['antigravity']);
+        }
+
+        if (dirtyFields.has('devinSensitiveWords')) {
+          ensureMapInDoc(doc, ['devin']);
+          setStringListInDoc(
+            doc,
+            ['devin', 'sensitive-words'],
+            values.devinSensitiveWords
+          );
+          deleteIfMapEmpty(doc, ['devin']);
         }
 
         const claudeHeadersDirty =

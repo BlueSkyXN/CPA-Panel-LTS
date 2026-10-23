@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { ClaudeGrantDialog } from '@/components/quota/claudeGrants/ClaudeGrantDialog';
 import { supportsSiwcBinding, getSiwcBindingStatus } from '../siwcBinding';
 import { AuthFileCooldownSection } from './AuthFileCooldownSection';
 import { useTranslation } from 'react-i18next';
@@ -64,6 +66,7 @@ export type AuthFileCardProps = {
   onToggleSelect: (name: string) => void;
   onUpdatePat?: (file: AuthFileItem) => void;
   onBindSiwc?: (file: AuthFileItem) => void;
+  onRuntimeAction?: (file: AuthFileItem, action: 'refresh' | 'cooldown') => void;
 };
 
 const resolveQuotaType = (file: AuthFileItem): QuotaProviderType | null => {
@@ -75,6 +78,7 @@ const resolveQuotaType = (file: AuthFileItem): QuotaProviderType | null => {
 
 export function AuthFileCard(props: AuthFileCardProps) {
   const { t } = useTranslation();
+  const [grantOpen, setGrantOpen] = useState(false);
   const {
     file,
     compact,
@@ -304,6 +308,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
             <PatAccountSummary file={file} disabled={disableControls} />
           )}
 
+          {grantOpen && <ClaudeGrantDialog file={file} onClose={() => setGrantOpen(false)} />}
           <div className={styles.cardActions}>
             <div className={styles.cardActionsMain}>
               {!isRuntimeOnly && isAccountFormProvider(providerKey) && onUpdatePat && (
@@ -340,6 +345,11 @@ export function AuthFileCard(props: AuthFileCardProps) {
                 <AuthFileActionsMenu
                   label={t('auth_files.more_actions')}
                   actions={[
+                    ...(providerKey === 'claude' ? [{ label: t('claude_reset.title'), onClick: () => setGrantOpen(true), disabled: disableControls }] : []),
+                    ...(props.onRuntimeAction ? [
+                      { label: t('credential_actions.refresh'), onClick: () => props.onRuntimeAction?.(file, 'refresh'), disabled: disableControls },
+                      { label: t('credential_actions.cooldown'), onClick: () => props.onRuntimeAction?.(file, 'cooldown'), disabled: disableControls || !String(file.authIndex ?? '').trim() },
+                    ] : []),
                     ...(supportsSiwcBinding(file) && props.onBindSiwc ? [{ label: t('siwc.bind'), onClick: () => props.onBindSiwc?.(file), disabled: disableControls }] : []),
                     {
                       label: t('auth_files.download_button'),

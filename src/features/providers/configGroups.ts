@@ -34,7 +34,7 @@ export function resourceConfigGroups(resource: ProviderResource): ConfigGroupTar
 export function providerFamily(brand: ProviderBrand): ProviderFamily | null {
   if (brand === 'claudeApi') return 'claude';
   if (brand === 'openaiCompatibility') return 'openai-compatibility';
-  if (['gemini', 'interactions', 'codex', 'xai', 'claude', 'vertex'].includes(brand))
+  if (['gemini', 'interactions', 'codex', 'meta', 'xai', 'claude', 'vertex'].includes(brand))
     return brand as ProviderFamily;
   return null;
 }

@@ -12,11 +12,15 @@ export type OAuthProvider =
   | 'kimi'
   | 'kimi-ai'
   | 'xai'
-  | 'copilot';
+  | 'copilot'
+  | 'devin'
+  | 'meta';
 
 export interface OAuthStartResponse {
   url: string;
   state?: string;
+  user_code?: string;
+  expires_in?: number;
 }
 
 export interface OAuthCallbackResponse {
@@ -31,7 +35,7 @@ export interface CopilotLoginInfo {
   interval_seconds?: number;
 }
 
-const WEBUI_SUPPORTED: OAuthProvider[] = ['codex', 'anthropic', 'antigravity', 'gemini-cli', 'xai'];
+const WEBUI_SUPPORTED: OAuthProvider[] = ['codex', 'anthropic', 'antigravity', 'gemini-cli', 'xai', 'devin'];
 const V8_AUTH_PROVIDER_MAP: Partial<Record<OAuthProvider, string>> = {
   anthropic: 'claude',
 };
@@ -53,7 +57,7 @@ export function captureSiwcBindingApi() {
 }
 
 export const oauthApi = {
-  startAuth: (provider: OAuthProvider, options?: { projectId?: string; signal?: AbortSignal }) => {
+  startAuth: (provider: OAuthProvider, options?: { projectId?: string; signal?: AbortSignal; client?: ReturnType<typeof apiClient.captureConnection> }) => {
     const params: Record<string, string | boolean> = {};
     if (WEBUI_SUPPORTED.includes(provider)) {
       params.is_webui = true;
@@ -63,7 +67,7 @@ export const oauthApi = {
     }
     // v8 dispatches by provider query; Core names the Anthropic flow `claude`.
     params.provider = V8_AUTH_PROVIDER_MAP[provider] ?? provider;
-    return apiClient.get<OAuthStartResponse>('/oauth/auth-url', {
+    return (options?.client ?? apiClient).get<OAuthStartResponse>('/oauth/auth-url', {
       params,
       signal: options?.signal,
     });

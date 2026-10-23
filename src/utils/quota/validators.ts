@@ -72,6 +72,6 @@ export function isIgnoredGeminiCliModel(modelId: string): boolean {
 // Built-in quota views keep precedence even when a plugin also advertises the provider.
 export function isPluginQuotaFile(file: AuthFileItem): boolean {
   const provider = resolveAuthProvider(file);
-  if (['antigravity', 'claude', 'codex', 'gemini-cli', 'kimi', 'xai'].includes(provider)) return false;
+  if (['antigravity', 'claude', 'codex', 'gemini-cli', 'kimi', 'xai', 'devin', 'meta'].includes(provider)) return false;
   return file.supportsQuota === true || file['supports_quota'] === true;
 }

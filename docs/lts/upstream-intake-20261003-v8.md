@@ -1,5 +1,7 @@
 # 2026-10-03 v8 development selective-port intake
 
+后续业务功能补齐见 [2026-10-23 功能对齐](v8-feature-alignment-20261023.md)；本文分类保留为当时快照。
+
 ## Scope and provenance
 
 - Candidate starts at `4613af11dfe3b18ec2dae2ba9ccbaf7bed28a1b5`; PR #98 targets `v8-dev`, not `main`.

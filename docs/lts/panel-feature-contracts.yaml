@@ -827,6 +827,9 @@ features:
       - /v8/management/config.yaml
       - /v8/management/config/observability/logs/request-log
     required_markers:
+      - githubToken
+      - server.github-token
+      - devinSensitiveWords
       - visualBaseYaml
       - normalizeYamlForVisualDiff
       - applyVisualChangesToYaml
@@ -1021,6 +1024,8 @@ features:
       - src/features/authFiles/constants.ts
       - src/features/authFiles/reauthRequired.test.mjs
       - src/services/api/oauth.ts
+      - src/pages/devinOAuth.ts
+      - scripts/smoke-v8-alignment.py
       - src/lts/codexRemoteCloudConnect/
       - src/i18n/locales/
       - src/types/authFile.ts
@@ -1029,6 +1034,8 @@ features:
       - scripts/smoke-lts-panel.py
       - scripts/smoke-lts-panel-core.py
     core_endpoints:
+      - /v8/management/credentials/refresh
+      - /v8/management/routing/cooldown/reset
       - /v8/management/credentials
       - /v8/management/credentials/status
       - /v8/management/credentials/fields
@@ -1037,6 +1044,11 @@ features:
       - /v8/management/config/oauth/excluded-models
       - /v8/management/config/oauth/model-alias
     required_markers:
+      - CredentialActionDialog
+      - requestManualRefresh
+      - requestAllManualRefresh
+      - validateCooldownResponse
+      - validateDevinCallback
       - normalizeBatchUploadResponse
       - normalizeBatchDeleteResponse
       - AUTH_FILE_INVALID_JSON_OBJECT_ERROR
@@ -1093,6 +1105,9 @@ features:
       - src/services/api/apiCall.ts
       - src/services/api/antigravitySubscription.ts
       - src/services/api/pluginQuota.ts
+      - src/services/api/devinQuota.ts
+      - src/services/api/metaQuota.ts
+      - src/services/api/claudeResetGrants.ts
       - src/stores/useAuthStore.ts
       - src/stores/useQuotaStore.ts
       - src/types/quota.ts
@@ -1106,6 +1121,10 @@ features:
       - /v0/management/api-call
       - /v8/management/plugins/:id/quota
     required_markers:
+      - DEVIN_CONFIG
+      - META_CONFIG
+      - createResetGrantOperations
+      - ANTHROPIC_RESET_GRANT_PROGRAM
       - PLUGIN_CONFIG
       - quotaPluginId
       - normalizePluginQuotaSummary
