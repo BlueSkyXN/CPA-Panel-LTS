@@ -36,9 +36,6 @@ const serializeModelAliases = (models?: ModelAlias[], includeOpenAIFields = fals
           if (model.priority !== undefined) {
             payload.priority = model.priority;
           }
-          if (model.testModel) {
-            payload['test-model'] = model.testModel;
-          }
           if (includeOpenAIFields && model.image) {
             payload.image = true;
           }
@@ -212,7 +209,6 @@ const serializeOpenAIProvider = (provider: OpenAIProviderConfig) => {
   const models = serializeModelAliases(provider.models, true);
   if (models && models.length) payload.models = models;
   if (provider.priority !== undefined) payload.priority = provider.priority;
-  if (provider.testModel) payload['test-model'] = provider.testModel;
   if (provider.disableCooling !== undefined) payload['disable-cooling'] = provider.disableCooling;
   return payload;
 };
@@ -281,11 +277,27 @@ const getGroups = async (family: ProviderFamily): Promise<FamilySnapshot> => {
   const { groups, revision } = await readGroups(family);
   return { groups: stripProviderGroupResponseFields(groups) as Record<string, unknown>[], revision };
 };
+// 清理已退休的配置字段，保留 headers 等不透明用户映射中的同名键。
+const removeTestModel = (value: Record<string, unknown>) => {
+  const next = { ...value };
+  delete next['test-model'];
+  return next;
+};
+const cleanModelTestFields = (value: Record<string, unknown>) => {
+  if (!Array.isArray(value.models)) return value;
+  return { ...value, models: value.models.map((model) => isRecord(model) ? removeTestModel(model) : model) };
+};
+const cleanProviderTestFields = (family: ProviderFamily, groups: Record<string, unknown>[]) =>
+  groups.map((group) => ({
+    ...cleanModelTestFields(family === 'openai-compatibility' ? removeTestModel(group) : group),
+    ...(Array.isArray(group.keys) ? { keys: group.keys.map((key) => isRecord(key) ? cleanModelTestFields(key) : key) } : {}),
+  }));
+
 /** 412/428 (stale or missing revision) propagate to the caller; never retried blindly. */
 const putGroups = (family: ProviderFamily, groups: Record<string, unknown>[], revision: string) =>
   apiClient.put(
     `/config/api-keys/${family}`,
-    stripProviderGroupResponseFields(groups),
+    stripProviderGroupResponseFields(cleanProviderTestFields(family, groups)),
     ifMatch(revision)
   );
 

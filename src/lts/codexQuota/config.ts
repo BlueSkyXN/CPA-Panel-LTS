@@ -1,3 +1,5 @@
+import { guardConfigConnection } from '@/services/api/configValue';
+import { isRecord } from '@/utils/helpers';
 import React from 'react';
 import type { ReactNode } from 'react';
 import type { TFunction } from 'i18next';
@@ -1361,6 +1363,8 @@ const consumeCodexRateLimitResetCredit = async (
   if (result.statusCode < 200 || result.statusCode >= 300) {
     throw createStatusError(getApiCallErrorMessage(result), result.statusCode);
   }
+  const code = isRecord(result.body) ? result.body.code : undefined;
+  if (code !== 'reset' && code !== 'already_redeemed') throw new Error(t('codex_quota.reset_not_confirmed'));
 };
 
 const resetCodexQuota = async (
@@ -1379,7 +1383,10 @@ const resetCodexQuota = async (
   analytics: CodexAnalyticsState | null;
   analyticsError: string | null;
 }> => {
+  const assertConnection = guardConfigConnection();
   await consumeCodexRateLimitResetCredit(file, t);
+  assertConnection();
+  // Core clears only quota-derived cooldown after the confirmed consume response.
   return fetchCodexQuota(file, t);
 };
 

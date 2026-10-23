@@ -486,3 +486,20 @@ test('legacy display_name/displayName routing aliases are read as aliases and pe
   assert.equal(written[2]['display-name'], 'Catalog Label Updated');
   assert.equal(written[2].alias, 'label-alias');
 });
+
+test('provider saves drop retired test-model fields but retain opaque user headers', async () => {
+  const doc = geminiDoc();
+  doc['api-keys'].gemini[1].models = [{ name: 'gemini-test', 'test-model': 'old-probe', 'future-model': true }];
+  doc['api-keys'].gemini[1].keys[0].models = [{ name: 'gemini-test', 'test-model': 'key-probe' }];
+  doc['api-keys'].gemini[1].keys[0].headers = { 'test-model': 'keep-header' };
+  core = installFakeV8Core(apiClient, doc);
+  const config = await loadConfig();
+  const target = config.geminiApiKeys.find((item) => item.apiKey === 'synthetic-b');
+  await providersApi.updateGeminiKey(target.apiKey, target.baseUrl, { ...target, priority: 3 });
+  const write = writesOf(core.calls).at(-1);
+  assert.equal(write.data[1].models[0]['test-model'], undefined);
+  assert.equal(write.data[1].models[0]['future-model'], true);
+  assert.equal(write.data[1].keys[0].models[0]['test-model'], undefined);
+  assert.equal(write.data[1].keys[0].headers['test-model'], 'keep-header');
+  assert.ok(write.ifMatch);
+});

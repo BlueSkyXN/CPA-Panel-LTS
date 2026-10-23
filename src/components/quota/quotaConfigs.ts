@@ -1,3 +1,5 @@
+import { normalizeClaudeUsageSnapshot } from '@/services/api/claudeUsage';
+import { resolveAntigravityGroupLabelKey, resolveAntigravityBucketLabelKey, resolveAntigravityGroupModels, shouldShowAntigravityQuotaAvailable } from '@/utils/quota/antigravityLabels';
 import { resolveKimiQuotaUrl } from '@/services/api/kimiQuota';
 import { apiClient } from '@/services/api/client';
 /**
@@ -14,6 +16,8 @@ import type {
   AntigravityQuotaState,
   AuthFileItem,
   ClaudeExtraUsage,
+  ClaudeUsageWindow,
+  ClaudeDollarWindow,
   ClaudeProfileResponse,
   ClaudeQuotaState,
   ClaudeQuotaWindow,
@@ -30,6 +34,7 @@ import type {
   XaiQuotaFetchResult,
   XaiBillingSummary,
   XaiQuotaState,
+  PluginQuotaState,
 } from '@/types';
 import {
   antigravitySubscriptionApi,
@@ -90,7 +95,7 @@ import styles from '@/pages/QuotaPage.module.scss';
 
 type QuotaUpdater<T> = T | ((prev: T) => T);
 
-type QuotaType = 'antigravity' | 'claude' | 'codex' | 'gemini-cli' | 'kimi' | 'xai';
+type QuotaType = 'antigravity' | 'claude' | 'codex' | 'gemini-cli' | 'kimi' | 'xai' | 'plugin';
 
 type AntigravityQuotaData = {
   groups: AntigravityQuotaGroup[];
@@ -117,12 +122,14 @@ export interface QuotaStore {
   geminiCliQuota: Record<string, GeminiCliQuotaState>;
   kimiQuota: Record<string, KimiQuotaState>;
   xaiQuota: Record<string, XaiQuotaState>;
+  pluginQuota: Record<string, PluginQuotaState>;
   setAntigravityQuota: (updater: QuotaUpdater<Record<string, AntigravityQuotaState>>) => void;
   setClaudeQuota: (updater: QuotaUpdater<Record<string, ClaudeQuotaState>>) => void;
   setCodexQuota: (updater: QuotaUpdater<Record<string, CodexQuotaState>>) => void;
   setGeminiCliQuota: (updater: QuotaUpdater<Record<string, GeminiCliQuotaState>>) => void;
   setKimiQuota: (updater: QuotaUpdater<Record<string, KimiQuotaState>>) => void;
   setXaiQuota: (updater: QuotaUpdater<Record<string, XaiQuotaState>>) => void;
+  setPluginQuota: (updater: QuotaUpdater<Record<string, PluginQuotaState>>) => void;
   clearQuotaCache: () => void;
 }
 
@@ -551,40 +558,6 @@ const fetchGeminiCliQuota = async (
   };
 };
 
-const ANTIGRAVITY_GROUP_LABEL_KEYS = new Map<string, string>([
-  ['gemini models', 'group_gemini_models'],
-  ['claude and gpt models', 'group_claude_gpt_models'],
-]);
-
-const ANTIGRAVITY_BUCKET_LABEL_KEYS = new Map<string, string>([
-  ['weekly limit', 'weekly_limit'],
-  ['daily limit', 'daily_limit'],
-  ['5 hour limit', 'five_hour_limit'],
-  ['5-hour limit', 'five_hour_limit'],
-  ['five hour limit', 'five_hour_limit'],
-  ['monthly limit', 'monthly_limit'],
-]);
-
-const translateAntigravityQuotaLabel = (
-  value: string,
-  keys: Map<string, string>,
-  t: TFunction
-): string => {
-  const key = keys.get(value.trim().toLowerCase().replace(/\s+/g, ' '));
-  return key ? t(`antigravity_quota.${key}`) : value;
-};
-
-const translateAntigravityQuotaDescription = (
-  value: string | undefined,
-  t: TFunction
-): string | undefined => {
-  if (!value) return undefined;
-  const modelsMatch = value.match(/^models within this group:\s*(.+)$/i);
-  return modelsMatch
-    ? t('antigravity_quota.group_models_description', { models: modelsMatch[1].trim() })
-    : value;
-};
-
 const formatAntigravityDuration = (t: TFunction, deltaMs: number): string => {
   const totalMinutes = Math.max(1, Math.ceil(deltaMs / 60000));
   const days = Math.floor(totalMinutes / 1440);
@@ -689,8 +662,10 @@ const AntigravityQuotaItems = ({
   }
 
   groups.forEach((group) => {
-    const groupLabel = translateAntigravityQuotaLabel(group.label, ANTIGRAVITY_GROUP_LABEL_KEYS, t);
-    const groupDescription = translateAntigravityQuotaDescription(group.description, t);
+    const groupKey = resolveAntigravityGroupLabelKey(group.label);
+    const groupLabel = groupKey ? t(`antigravity_quota.${groupKey}`) : group.label;
+    const groupModels = resolveAntigravityGroupModels(group.label, group.description);
+    const groupDescription = groupModels ? t('antigravity_quota.group_models_description', { models: groupModels.join(', ') }) : group.description;
     nodes.push(
       h(
         'div',
@@ -706,14 +681,11 @@ const AntigravityQuotaItems = ({
         ...group.buckets.map((bucket) => {
           const percent = Math.max(0, Math.min(1, bucket.remainingFraction)) * 100;
           const percentLabel =
-            bucket.remainingFraction === 1
+            shouldShowAntigravityQuotaAvailable(bucket, group.buckets)
               ? t('antigravity_quota.quota_available')
               : t('antigravity_quota.remaining_percent', { percent: Math.round(percent) });
-          const bucketLabel = translateAntigravityQuotaLabel(
-            bucket.label,
-            ANTIGRAVITY_BUCKET_LABEL_KEYS,
-            t
-          );
+          const bucketKey = resolveAntigravityBucketLabelKey(bucket.label, bucket.window);
+          const bucketLabel = bucketKey ? t(`antigravity_quota.${bucketKey}`) : bucket.label;
 
           return h(
             'div',
@@ -876,16 +848,17 @@ export const buildClaudeQuotaWindows = (
   const fableLimit = findFableUsageLimit(payload);
 
   for (const { key, id, labelKey } of CLAUDE_USAGE_WINDOW_KEYS) {
-    if (key === 'iguana_necktie' && fableLimit) continue;
     const window = payload[key as keyof ClaudeUsagePayload];
     if (!window || typeof window !== 'object' || !('utilization' in window)) continue;
-    const typedWindow = window as { utilization: number; resets_at: string | null };
+    const typedWindow = window as ClaudeUsageWindow;
+    const isCreditPool = key === 'iguana_necktie' && [typedWindow.limit_dollars, typedWindow.used_dollars, typedWindow.remaining_dollars].some((v) => normalizeNumberValue(v) !== null);
+    if (key === 'iguana_necktie' && fableLimit && !isCreditPool) continue;
     const usedPercent = normalizeNumberValue(typedWindow.utilization);
     const resetLabel = formatQuotaResetTime(typedWindow.resets_at ?? undefined);
     windows.push({
-      id,
-      label: t(labelKey),
-      labelKey,
+      id: isCreditPool ? 'cloud-session-credits' : id,
+      label: t(isCreditPool ? 'claude_quota.cloud_session_credits' : labelKey),
+      labelKey: isCreditPool ? 'claude_quota.cloud_session_credits' : labelKey,
       usedPercent,
       resetLabel,
     });
@@ -967,6 +940,7 @@ const fetchClaudeQuota = async (
   windows: ClaudeQuotaWindow[];
   extraUsage?: ClaudeExtraUsage | null;
   planType?: string | null;
+  dollarWindows: ClaudeDollarWindow[];
 }> => {
   const rawAuthIndex = file['auth_index'] ?? file.authIndex;
   const authIndex = normalizeAuthIndex(rawAuthIndex);
@@ -1004,7 +978,10 @@ const fetchClaudeQuota = async (
     throw new Error(t('claude_quota.empty_windows'));
   }
 
-  const windows = buildClaudeQuotaWindows(payload, t);
+  const snapshot = normalizeClaudeUsageSnapshot(payload);
+  if (!snapshot) throw new Error(t('claude_quota.empty_windows'));
+  const dollarWindows = snapshot.dollarWindows;
+  const windows = buildClaudeQuotaWindows(payload, t).filter((window) => window.id !== 'cloud-session-credits' || !dollarWindows.some((balance) => balance.key === 'iguana_necktie'));
   const planType =
     profileResult.status === 'fulfilled' &&
     profileResult.value.statusCode >= 200 &&
@@ -1014,7 +991,7 @@ const fetchClaudeQuota = async (
         )
       : null;
 
-  return { windows, extraUsage: payload.extra_usage, planType };
+  return { windows, extraUsage: snapshot.extraUsage, dollarWindows, planType };
 };
 
 const renderClaudeItems = (
@@ -1040,19 +1017,33 @@ const renderClaudeItems = (
     );
   }
 
-  if (extraUsage && extraUsage.is_enabled) {
-    const usedLabel = `$${(extraUsage.used_credits / 100).toFixed(2)} / $${(extraUsage.monthly_limit / 100).toFixed(2)}`;
-    nodes.push(
-      h(
-        'div',
-        { key: 'extra', className: styleMap.codexPlan },
-        h('span', { className: styleMap.codexPlanLabel }, t('claude_quota.extra_usage_label')),
-        h('span', { className: styleMap.codexPlanValue }, usedLabel)
-      )
-    );
+
+  const money = (value: number | null, currency = 'USD', divisor = 1) => {
+    if (value === null) return '--';
+    try { return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(value / divisor); }
+    catch { return `${(value/divisor).toFixed(2)} ${currency}`; }
+  };
+  if (extraUsage) {
+    const state = extraUsage.isEnabled === null ? 'plan_unknown' : extraUsage.isEnabled ? 'extra_usage_enabled' : 'extra_usage_disabled';
+    const details = [
+      extraUsage.userDisabled ? t('claude_quota.extra_usage_user_disabled') : '',
+      extraUsage.spendLimitReached ? t('claude_quota.extra_usage_spend_limit_reached') : '',
+      extraUsage.disabledReason ? t('claude_quota.extra_usage_disabled_reason', {reason:extraUsage.disabledReason}) : '',
+    ].filter(Boolean);
+    nodes.push(h('div', {key:'extra',className:styleMap.quotaRow},
+      h('div',{className:styleMap.quotaRowHeader},h('span',null,t('claude_quota.extra_usage_label')),h('span',null,t(`claude_quota.${state}`))),
+      h('div',{className:styleMap.quotaAmount},t('claude_quota.usage_spent_limit',{spent:money(extraUsage.usedCredits,extraUsage.currency ?? 'USD',100),limit:money(extraUsage.monthlyLimit,extraUsage.currency ?? 'USD',100)})),
+      ...details.map((detail)=>h('span',{key:detail,className:styleMap.quotaMeta},detail))));
+  }
+  for (const balance of quota.dollarWindows ?? []) {
+    nodes.push(h('div',{key:balance.key,className:styleMap.quotaRow},
+      h('div',{className:styleMap.quotaRowHeader},h('span',null,balance.key === 'iguana_necktie' ? t('claude_quota.cloud_session_credits') : balance.key),
+        h('span',null,t('claude_quota.dollar_balance_remaining',{amount:money(balance.remainingDollars)}))),
+      h('div',{className:styleMap.quotaAmount},t('claude_quota.usage_spent_limit',{spent:money(balance.usedDollars),limit:money(balance.limitDollars)})),
+      h('span',{className:styleMap.quotaReset},formatQuotaResetTime(balance.resetsAt ?? undefined))));
   }
 
-  if (windows.length === 0) {
+  if (windows.length === 0 && !extraUsage && !quota.dollarWindows?.length) {
     nodes.push(
       h('div', { key: 'empty', className: styleMap.quotaMessage }, t('claude_quota.empty_windows'))
     );
@@ -1095,7 +1086,7 @@ const renderClaudeItems = (
 
 export const CLAUDE_CONFIG: QuotaConfig<
   ClaudeQuotaState,
-  { windows: ClaudeQuotaWindow[]; extraUsage?: ClaudeExtraUsage | null; planType?: string | null }
+  { windows: ClaudeQuotaWindow[]; extraUsage?: ClaudeExtraUsage | null; planType?: string | null; dollarWindows: ClaudeDollarWindow[] }
 > = {
   type: 'claude',
   i18nPrefix: 'claude_quota',
@@ -1109,6 +1100,7 @@ export const CLAUDE_CONFIG: QuotaConfig<
     status: 'success',
     windows: data.windows,
     extraUsage: data.extraUsage,
+    dollarWindows: data.dollarWindows,
     planType: data.planType,
   }),
   buildErrorState: (message, status) => ({
@@ -1615,40 +1607,10 @@ const renderXaiItems = (
               })
         )
       : null,
-    ...billing.productUsage.map((item) => {
-      const used =
-        item.usagePercent === null ? null : Math.max(0, Math.min(100, item.usagePercent));
-      const remainingPercent = used === null ? null : Math.max(0, Math.min(100, 100 - used));
-      return h(
-        'div',
-        { key: `product-${item.product}`, className: styleMap.quotaRow },
-        h(
-          'div',
-          { className: styleMap.quotaRowHeader },
-          h(
-            'span',
-            { className: styleMap.quotaModel },
-            t('xai_quota.product_usage', { product: item.product })
-          ),
-          h(
-            'div',
-            { className: styleMap.quotaMeta },
-            h(
-              'span',
-              { className: styleMap.quotaPercent },
-              t('xai_quota.used_percent', {
-                percent: formatXaiPercent(used),
-              })
-            )
-          )
-        ),
-        h(QuotaProgressBar, {
-          percent: remainingPercent,
-          highThreshold: QUOTA_PROGRESS_HIGH_THRESHOLD,
-          mediumThreshold: QUOTA_PROGRESS_MEDIUM_THRESHOLD,
-        })
-      );
-    }),
+    billing.productUsage.length ? h('div', {key:'product-usage',className:styleMap.quotaMessage},
+      h('div',null,t('xai_quota.usage_breakdown')),
+      ...billing.productUsage.map((item)=>h('div',{key:item.product},
+        `${t('xai_quota.product_usage',{product:item.product})}: ${item.usagePercent === null ? t('xai_quota.usage_unavailable') : formatXaiPercent(Math.max(0,Math.min(100,item.usagePercent)))}`))) : null,
     paygEnabled && onDemandCap > 0
       ? h(
           'div',

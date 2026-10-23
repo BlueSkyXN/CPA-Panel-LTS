@@ -42,6 +42,7 @@ export type AuthFileFieldsPatch = {
   weight?: number | null;
   websockets?: boolean;
   using_api?: boolean;
+  use_siwc?: boolean;
   note?: string;
   model_policy?: AuthFileModelPolicy | null;
 };
@@ -262,6 +263,14 @@ const normalizeAuthFileEntry = (
 
   return {
     ...entry,
+    supportsQuota: entry['supports_quota'] === true || entry.supportsQuota === true,
+    quotaProvider: readTextField(entry, 'quota_provider') || readTextField(entry, 'quotaProvider') || undefined,
+    quotaPluginId: readTextField(entry, 'quota_plugin_id') || readTextField(entry, 'quotaPluginId') || undefined,
+    siwcBindSupported: entry['siwc_bind_supported'] === true || entry.siwcBindSupported === true,
+    useSiwc: entry['use_siwc'] === true || entry.useSiwc === true,
+    siwcBound: entry['siwc_bound'] === true || entry.siwcBound === true,
+    siwcStatus: ['off','valid','invalid'].includes(String(entry['siwc_status'] ?? entry.siwcStatus)) ? (entry['siwc_status'] ?? entry.siwcStatus) as 'off' | 'valid' | 'invalid' : undefined,
+    siwcExpiresAt: readTextField(entry, 'siwc_expires_at') || readTextField(entry, 'siwcExpiresAt') || undefined,
     cooldownSnapshot: normalizeAuthFileCooldowns(entry.cooldowns, observedAt, receivedAtMs),
     runtimeOnly: isRuntimeOnlyEntry(entry),
     authIndex: normalizeRecentRequestAuthIndex(entry['auth_index'] ?? entry.authIndex),

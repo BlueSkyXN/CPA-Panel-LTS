@@ -21,7 +21,7 @@ export type AuthFileModelItem = {
 };
 export type AuthFileIconAsset = string;
 
-export type QuotaProviderType = 'antigravity' | 'claude' | 'codex' | 'gemini-cli' | 'kimi' | 'xai';
+export type QuotaProviderType = 'antigravity' | 'claude' | 'codex' | 'gemini-cli' | 'kimi' | 'xai' | 'plugin';
 export type OAuthConfigLoadError = 'loading' | 'unsupported' | 'load' | null;
 
 export const canWriteOAuthConfig = (options: {
@@ -37,6 +37,7 @@ export const QUOTA_PROVIDER_TYPES = new Set<QuotaProviderType>([
   'gemini-cli',
   'kimi',
   'xai',
+  'plugin',
 ]);
 
 export const OAUTH_PROVIDER_PRESETS = [

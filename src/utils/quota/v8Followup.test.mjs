@@ -220,3 +220,50 @@ test('all LTS locale overlays use the current Codex Pro labels', async () => {
     assert.equal(messages.codex_quota.plan_prolite, 'Pro 100');
   }
 });
+
+test('plugin quota prefers authoritative plugin ID, preserves built-in cards, and rejects unknown capability', async () => {
+  const { fetchPluginQuota, normalizePluginQuotaSummary } = await load('services/api/pluginQuota.ts');
+  const { isPluginQuotaFile } = await load('utils/quota/validators.ts');
+  const { useAuthStore } = await load('stores/useAuthStore.ts');
+  const { pluginsApi } = await load('services/api/plugins.ts');
+  const beforeAuth=useAuthStore.getState(), beforePost=apiClient.post, beforeList=pluginsApi.list;
+  const file = normalizeAuthFilesResponse({files:[{name:'custom.json',type:'custom',auth_index:'synthetic-index',supports_quota:true,quota_provider:'custom',quota_plugin_id:'host-selected'}]}).files[0];
+  assert.equal(file.quotaPluginId,'host-selected');
+  assert.equal(isPluginQuotaFile(file),true);
+  assert.equal(isPluginQuotaFile({...file,type:'codex'}),false);
+  assert.deepEqual(normalizePluginQuotaSummary([null,{key:'bad',label:'Bad',value:Infinity},{key:'balance',label:'Balance',value:1.25,format:'currency',currency:'USD'}]),[{key:'balance',label:'Balance',value:1.25,unit:undefined,format:'currency',currency:'USD'}]);
+  let calls=0;
+  try {
+    useAuthStore.setState({pluginSupportKnown:false,supportsPlugin:false});
+    apiClient.post=async (path,data)=>{calls++; assert.equal(path,'/plugins/host-selected/quota'); assert.deepEqual(data,{auth_index:'synthetic-index'});return {groups:[],summary:[{key:'n',label:'N',value:2}]};};
+    pluginsApi.list=async()=>{assert.fail('authoritative ID must not use a heuristic');};
+    await assert.rejects(fetchPluginQuota(file,(key)=>key));assert.equal(calls,0);
+    useAuthStore.setState({pluginSupportKnown:true,supportsPlugin:true});
+    assert.equal((await fetchPluginQuota(file,(key)=>key)).summary[0].value,2);assert.equal(calls,1);
+    useQuotaStore.getState().setPluginQuota({'custom.json':{status:'success',groups:[],summary:[],subscription:null}});
+    useQuotaStore.getState().clearQuotaCache(['custom.json']);
+    assert.equal(useQuotaStore.getState().pluginQuota['custom.json'],undefined);
+  } finally { apiClient.post=beforePost;pluginsApi.list=beforeList;useAuthStore.setState({pluginSupportKnown:beforeAuth.pluginSupportKnown,supportsPlugin:beforeAuth.supportsPlugin}); }
+});
+
+test('Codex reset requires an explicit confirmed code and never clears unrelated cooldowns through a second reset', async () => {
+  const beforeRequest=apiCallApi.request;
+  const beforePost=apiClient.post;
+  try {
+    apiClient.post=async()=>assert.fail('LTS Core owns quota-only cooldown cleanup');
+    for (const code of ['no_credit','nothing_to_reset',undefined]) {
+      let calls=0;
+      apiCallApi.request=async()=>{calls++;return {statusCode:200,body:{code}};};
+      await assert.rejects(CODEX_CONFIG.resetQuota({name:'codex.json',authIndex:'synthetic-index'},(key)=>key),/reset_not_confirmed/);
+      assert.equal(calls,1);
+    }
+    let calls=0;
+    apiCallApi.request=async (request)=>{
+      calls++;
+      if (request.method === 'POST') return {statusCode:200,body:{code:'reset'}};
+      throw new Error('readback fixture unavailable');
+    };
+    await assert.rejects(CODEX_CONFIG.resetQuota({name:'codex.json',authIndex:'synthetic-index'},(key)=>key));
+    assert.ok(calls>1,'confirmed reset must continue to quota readback');
+  } finally {apiCallApi.request=beforeRequest;apiClient.post=beforePost;}
+});

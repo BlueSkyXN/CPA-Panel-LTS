@@ -130,6 +130,7 @@
     "hint_single": "点击名称切换连接；默认仅保留一个实例连接，可在下方开启多实例管理。"
   },
   "codex_quota": {
+    "reset_not_confirmed": "服务未确认额度已重置，请先刷新额度再重试。",
     "plan_business_premium": "Business Premium",
     "title": "Codex 额度",
     "empty_title": "暂无 Codex 认证",

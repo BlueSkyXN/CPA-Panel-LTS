@@ -130,6 +130,7 @@
     "hint_single": "點擊名稱切換連線；預設僅保留一個實例連線，可在下方開啟多實例管理。"
   },
   "codex_quota": {
+    "reset_not_confirmed": "服務未確認配額已重置，請先重新整理配額再重試。",
     "plan_business_premium": "Business Premium",
     "title": "Codex 配額",
     "empty_title": "暫無 Codex 驗證",

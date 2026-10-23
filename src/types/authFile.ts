@@ -57,6 +57,14 @@ export interface AuthFileItem {
   priority?: number;
   weight?: number;
   note?: string;
+  supportsQuota?: boolean;
+  quotaProvider?: string;
+  quotaPluginId?: string;
+  siwcBindSupported?: boolean;
+  useSiwc?: boolean;
+  siwcBound?: boolean;
+  siwcStatus?: 'off' | 'valid' | 'invalid';
+  siwcExpiresAt?: string;
   success?: unknown;
   failed?: unknown;
   /** API 边界从 success / failed 原始字段归一化得到的累计计数。 */

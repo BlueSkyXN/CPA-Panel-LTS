@@ -1,3 +1,4 @@
+import { supportsSiwcBinding, getSiwcBindingStatus } from '../siwcBinding';
 import { AuthFileCooldownSection } from './AuthFileCooldownSection';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
@@ -6,7 +7,8 @@ import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { IconInfo, IconModelCluster } from '@/components/ui/icons';
 import { ProviderStatusBar } from '@/components/providers/ProviderStatusBar';
 import type { AuthFileItem } from '@/types';
-import { resolveAuthProvider } from '@/utils/quota';
+import { resolveAuthProvider, isPluginQuotaFile } from '@/utils/quota';
+import { useAuthStore } from '@/stores';
 import {
   normalizeRecentRequestAuthIndex,
   normalizeRecentRequestBuckets,
@@ -61,9 +63,11 @@ export type AuthFileCardProps = {
   onToggleStatus: (file: AuthFileItem, enabled: boolean) => void;
   onToggleSelect: (name: string) => void;
   onUpdatePat?: (file: AuthFileItem) => void;
+  onBindSiwc?: (file: AuthFileItem) => void;
 };
 
 const resolveQuotaType = (file: AuthFileItem): QuotaProviderType | null => {
+  if (isPluginQuotaFile(file)) return 'plugin';
   const provider = resolveAuthProvider(file);
   if (!QUOTA_PROVIDER_TYPES.has(provider as QuotaProviderType)) return null;
   return provider as QuotaProviderType;
@@ -105,8 +109,9 @@ export function AuthFileCard(props: AuthFileCardProps) {
   const typeColor = getTypeColor(providerKey);
   const typeLabel = getTypeLabel(t, providerKey);
 
-  const quotaType =
-    quotaFilterType && resolveQuotaType(file) === quotaFilterType ? quotaFilterType : null;
+  const pluginSupported = useAuthStore((s) => s.pluginSupportKnown && s.supportsPlugin);
+  const resolvedQuotaType = resolveQuotaType(file);
+  const quotaType = resolvedQuotaType === 'plugin' && pluginSupported ? 'plugin' : quotaFilterType && resolvedQuotaType === quotaFilterType ? quotaFilterType : null;
 
   const showQuotaLayout = Boolean(quotaType) && !isRuntimeOnly && !compact;
 
@@ -192,6 +197,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
                   {typeLabel}
                 </span>
                 <span className={`${styles.stateBadge} ${stateBadgeClass}`}>{stateLabel}</span>
+                {supportsSiwcBinding(file) && <span className={styles.stateBadge}>SIWC: {t(`siwc.${getSiwcBindingStatus(file)}`)}</span>}
               </div>
               <div className={styles.fileIdentity}>
                 <span className={styles.fileName} title={displayName}>
@@ -334,6 +340,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
                 <AuthFileActionsMenu
                   label={t('auth_files.more_actions')}
                   actions={[
+                    ...(supportsSiwcBinding(file) && props.onBindSiwc ? [{ label: t('siwc.bind'), onClick: () => props.onBindSiwc?.(file), disabled: disableControls }] : []),
                     {
                       label: t('auth_files.download_button'),
                       onClick: () => onDownload(file.name),

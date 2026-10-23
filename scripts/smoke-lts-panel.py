@@ -1428,7 +1428,7 @@ class MockCoreHandler(BaseHTTPRequestHandler):
         url = str(payload.get("url") or "")
         auth_index = str(payload.get("authIndex") or "")
         if "rate-limit-reset-credits/consume" in url:
-            return build_api_call_result({"status": "ok"})
+            return build_api_call_result({"code": "reset"})
         if "usage-leaderboard" in url:
             return build_api_call_result(build_codex_team_leaderboard_payload())
         if "daily-workspace-usage-counts" in url:
@@ -1903,7 +1903,7 @@ def assert_xai_billing_identity(
     expected_headers = {
         "Authorization": "Bearer $TOKEN$",
         "x-xai-token-auth": "xai-grok-cli",
-        "x-grok-client-version": "1.0.3",
+        "x-grok-client-version": "1.0.46",
         "x-grok-client-mode": "interactive",
         "accept": "application/json",
         "x-userid": "xai-user-smoke",
@@ -1915,7 +1915,7 @@ def assert_xai_billing_identity(
             continue
         user_agent = headers.get("user-agent", "")
         if re.fullmatch(
-            r"grok-pager/1\.0\.3 grok-shell/1\.0\.3 "
+            r"grok-pager/1\.0\.46 grok-shell/1\.0\.46 "
             r"\((?:macos|windows|linux|unknown); (?:aarch64|x86_64|unknown)\)",
             user_agent,
         ):
@@ -2990,8 +2990,10 @@ def run_quota_runtime_smoke(page: Any, app_url: str, state: MockCoreState) -> No
     weekly_row.get_by_text(re.compile(r"^Resets ", re.I)).wait_for()
     if " ~ " in weekly_row.inner_text():
         raise AssertionError("xAI weekly quota still renders the redundant full period range")
-    xai_card.get_by_text("Grok 4 usage", exact=True).wait_for()
-    xai_card.get_by_text("Used 25%", exact=True).wait_for()
+    xai_card.get_by_text("Grok 4 usage: 25%", exact=True).wait_for()
+    xai_card.get_by_text("Grok Code usage: 55%", exact=True).wait_for()
+    if xai_card.get_by_text("Used 25%", exact=True).count():
+        raise AssertionError("Shared usage components must not render independent quota meters")
     xai_card.get_by_text("Pay as you go", exact=True).wait_for()
     xai_card.get_by_text("$25.00 / $25.00", exact=False).wait_for()
     xai_card.get_by_text("Prepaid credits", exact=True).wait_for()

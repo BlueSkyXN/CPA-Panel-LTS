@@ -130,3 +130,39 @@ test('retry cancels only its own success reset and terminal polls stop', async (
     assert.equal(tasks.size, 0);
   }
 });
+
+test('accepted callback can resume a failed poll without overlapping an active request', async () => {
+  const { attempts, tasks, tick } = setup();
+  const attempt = attempts.begin('codex');
+  let errors = 0;
+  attempt.poll(async () => { throw new Error('temporary'); }, () => true, () => errors++, 3000);
+  assert.equal(attempt.isPolling(), true);
+  tick(); await flush();
+  assert.equal(errors, 1);
+  assert.equal(attempt.isPolling(), false);
+  const response = deferred(); let requests = 0;
+  const request = () => { requests++; return response.promise; };
+  attempt.poll(request, () => false, assert.fail, 3000);
+  attempt.poll(request, () => false, assert.fail, 3000);
+  tick(); await flush();
+  assert.equal(requests, 1);
+  assert.equal(attempt.isPolling(), true);
+  response.resolve('ok'); await flush();
+  assert.equal(attempt.isPolling(), false);
+  assert.equal(tasks.size, 0);
+  attempt.invalidate();
+  assert.equal(attempt.isCurrent(), false);
+});
+
+test('SIWC validates callback ownership and cancels a late start response after close', async () => {
+  const { isSiwcCallbackValid, createSiwcStart, supportsSiwcBinding } = await vite.ssrLoadModule('/src/features/authFiles/siwcBinding.ts');
+  const url = 'http://127.0.0.1:1455/auth/callback?state=s1&code=synthetic&client_id=issued';
+  assert.equal(isSiwcCallbackValid(url, 's1'), true);
+  for (const invalid of [url.replace('s1','s2'), url+'&state=s1', url.replace('&client_id=issued',''), url.replace('127.0.0.1','foreign.invalid'), url+'#secret']) assert.equal(isSiwcCallbackValid(invalid, 's1'), false);
+  assert.equal(supportsSiwcBinding({name:'c.json',provider:'codex',siwcBindSupported:true}), true);
+  assert.equal(supportsSiwcBinding({name:'c.json',provider:'codex',siwcBindSupported:true,runtimeOnly:true}), false);
+  const response = deferred(); const cancelled=[]; let results=0;
+  const start = createSiwcStart({start:()=>response.promise, cancel:async (state)=>cancelled.push(state), onResult:()=>results++, onError:assert.fail});
+  const running = start.start(); start.close(); response.resolve({state:'late-state'}); await running; await flush();
+  assert.deepEqual(cancelled,['late-state']); assert.equal(results,0);
+});

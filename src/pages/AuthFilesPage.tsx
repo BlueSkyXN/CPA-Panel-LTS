@@ -1,3 +1,4 @@
+import { SiwcBindDialog } from '@/features/authFiles/components/SiwcBindDialog';
 import {
   useCallback,
   type CSSProperties,
@@ -99,6 +100,7 @@ export function AuthFilesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedProvider = normalizeProviderKey(searchParams.get('provider') || '');
 
+  const [siwcTarget, setSiwcTarget] = useState<AuthFileItem | null>(null);
   const [filter, setFilter] = useState<'all' | string>('all');
   const [patTarget, setPatTarget] = useState<AuthFileItem | null | undefined>(undefined);
   const supportsPat = useAuthStore((s) => s.pluginSupportKnown && s.supportsPlugin);
@@ -914,6 +916,7 @@ export function AuthFilesPage() {
                     codexRemoteCloudConnectSummary={codexRemoteCloudConnectSummaryCache.get(
                       file.name
                     )}
+                    onBindSiwc={setSiwcTarget}
                     onShowModels={showModels}
                     onUpdatePat={supportsPat ? setPatTarget : undefined}
                     onShowCodexRemoteCloudConnectEnvironments={
@@ -1124,6 +1127,7 @@ export function AuthFilesPage() {
             document.body
           )
         : null}
+      {siwcTarget && <SiwcBindDialog key={siwcTarget.name} file={siwcTarget} onClose={() => setSiwcTarget(null)} onSaved={() => { invalidateDerivedCaches([siwcTarget.name]); void loadFiles({ background: true }); }} />}
     </div>
   );
 }

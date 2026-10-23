@@ -1092,6 +1092,7 @@ features:
       - src/features/authFiles/constants.ts
       - src/services/api/apiCall.ts
       - src/services/api/antigravitySubscription.ts
+      - src/services/api/pluginQuota.ts
       - src/stores/useAuthStore.ts
       - src/stores/useQuotaStore.ts
       - src/types/quota.ts
@@ -1103,7 +1104,11 @@ features:
       - scripts/smoke-lts-panel.py
     core_endpoints:
       - /v0/management/api-call
+      - /v8/management/plugins/:id/quota
     required_markers:
+      - PLUGIN_CONFIG
+      - quotaPluginId
+      - normalizePluginQuotaSummary
       - CODEX_CONFIG
       - resetCodexQuota
       - CODEX_RATE_LIMIT_RESET_CREDITS_URL
@@ -1111,7 +1116,7 @@ features:
       - CODEX_REQUEST_HEADERS
       - codex-tui/0.149.1
       - retrieveUserQuotaSummary
-      - antigravity/cli/1.0.13
+      - antigravity/hub/2.24.0
       - ANTIGRAVITY_CODE_ASSIST_URL
       - buildAntigravityQuotaGroups
       - AntigravityQuotaSummaryPayload
@@ -1129,7 +1134,7 @@ features:
       - parseXaiAutoTopupPayload
       - preserveAutoTopup
       - x-grok-client-mode
-      - grok-pager/1.0.3
+      - grok-pager/1.0.46
       - assert_xai_billing_identity
       - assert_xai_user_identity_lookup
       - assert_xai_auto_topup_identity
@@ -1359,3 +1364,31 @@ features:
       - npm run check:lts
       - npm run type-check
       - npm run build
+
+  - id: codex-siwc-binding
+    status: shared
+    reason: File-backed Codex credentials can bind SIWC and toggle its use through the native V8 API. The flow keeps callback ownership, cancellable polling, original-connection cleanup and credential/cache readback.
+    routes:
+      - /auth-files
+    panel_files:
+      - src/pages/AuthFilesPage.tsx
+      - src/features/authFiles/components/AuthFileCard.tsx
+      - src/features/authFiles/components/SiwcBindDialog.tsx
+      - src/features/authFiles/siwcBinding.ts
+      - src/services/api/oauth.ts
+      - src/services/api/authFiles.ts
+      - src/services/api/client.ts
+      - src/services/api/client.test.mjs
+      - src/pages/oauthAttempts.test.mjs
+    core_endpoints:
+      - /v8/management/oauth/siwc/bind
+      - /v8/management/oauth/status
+      - /v8/management/oauth/callback
+      - /v8/management/oauth/session
+      - /v8/management/credentials/fields
+    required_markers:
+      - captureSiwcBindingApi
+      - createSiwcStart
+      - isSiwcCallbackValid
+      - supportsSiwcBinding
+      - use_siwc

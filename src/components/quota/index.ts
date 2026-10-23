@@ -14,3 +14,5 @@ export {
   XAI_CONFIG,
 } from './quotaConfigs';
 export type { QuotaConfig } from './quotaConfigs';
+
+export { PLUGIN_CONFIG } from './pluginQuota';

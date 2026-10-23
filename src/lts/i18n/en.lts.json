@@ -130,6 +130,7 @@
     "hint_single": "Click a name to switch connections. Only one instance stays connected unless you enable multi-instance below."
   },
   "codex_quota": {
+    "reset_not_confirmed": "The server did not confirm a quota reset. Refresh the quota before trying again.",
     "plan_business_premium": "Business Premium",
     "title": "Codex Quota",
     "empty_title": "No Codex Auth Files",
