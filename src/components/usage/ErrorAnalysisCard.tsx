@@ -1,23 +1,27 @@
-import { useState, useMemo } from 'react';
+import type { UsageAnalyticsData } from '@/types/usageAnalytics';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ChartData, ChartOptions } from 'chart.js';
 import { Bar, Line } from 'react-chartjs-2';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import {
-  buildFailureTrendSeries,
-  collectErrorAnalysisRows,
   formatCompactNumber,
   formatDayLabel,
   formatHourLabel,
-  summarizeErrorAnalytics,
-  type AnalyticsTimeWindow,
   type ErrorAnalyticsSummary,
   type ErrorFamily,
-  type UsageDetail,
 } from '@/utils/usage';
-import { buildChartOptions, buildStaticAxisTheme, getHourChartMinWidth, sparsePointRadius } from '@/utils/usage/chartConfig';
+import {
+  buildChartOptions,
+  buildStaticAxisTheme,
+  getHourChartMinWidth,
+  sparsePointRadius,
+} from '@/utils/usage/chartConfig';
 import styles from '@/pages/UsagePage.module.scss';
+import { bucketRangeAt, type AnalyticsBucketRange } from './analyticsBucketDrill';
+import { AnalyticsBucketDrillControl } from './AnalyticsBucketDrillControl';
+import type { AnalyticsGrain, AnalyticsTimeWindow } from '@/utils/usage/analyticsBuckets';
 
 const FAILURE_RATE_COLOR = '#EF4444';
 
@@ -29,20 +33,28 @@ const FAMILY_COLORS: Record<ErrorFamily, string> = {
 };
 
 export interface ErrorAnalysisCardProps {
-  details: UsageDetail[];
+  data: UsageAnalyticsData;
   loading: boolean;
   isMobile: boolean;
-  timeWindow: AnalyticsTimeWindow | null;
+  /** 当前查询窗口；用于把最后一个桶的下钻终点收敛到可见范围。 */
+  window?: AnalyticsTimeWindow | null;
+  /** 时间粒度由 UsageAnalyticsCharts 统一持有，四张趋势图共用。 */
+  grain: AnalyticsGrain;
+  onGrainChange: (grain: AnalyticsGrain) => void;
+  /** 点击时间桶时下钻到该桶的请求明细；未提供时图表仅展示。 */
+  onBucketClick?: ((bucket: AnalyticsBucketRange) => void) | null;
 }
 
 export function ErrorAnalysisCard({
-  details,
+  data,
   loading,
   isMobile,
-  timeWindow,
+  window,
+  grain: period,
+  onGrainChange: setPeriod,
+  onBucketClick,
 }: ErrorAnalysisCardProps) {
   const { t, i18n } = useTranslation();
-  const [period, setPeriod] = useState<'hour' | 'day'>('hour');
 
   const percentFormatter = useMemo(
     () =>
@@ -54,9 +66,8 @@ export function ErrorAnalysisCard({
   );
 
   const { trendData, trendOptions, statusData, statusOptions, summary, hasTrend } = useMemo(() => {
-    const rows = collectErrorAnalysisRows(details);
-    const summary: ErrorAnalyticsSummary = summarizeErrorAnalytics(rows, { topReasonLimit: 5 });
-    const trend = buildFailureTrendSeries(rows, period, timeWindow);
+    const summary: ErrorAnalyticsSummary = data.errors;
+    const trend = data[period].errors;
     const labels = trend.map((point) =>
       period === 'hour'
         ? formatHourLabel(new Date(point.timestampMs))
@@ -79,8 +90,18 @@ export function ErrorAnalysisCard({
 
     const baseOptions = buildChartOptions({ period, labels, isMobile });
     const axis = buildStaticAxisTheme(isMobile ? 10 : 11);
+    const bucketTimes = trend.map((point) => point.timestampMs);
+    const grain = period;
     const trendOptions: ChartOptions<'line'> = {
       ...baseOptions,
+      onClick: onBucketClick
+        ? (_elements, elements) => {
+            const first = elements[0];
+            if (!first) return;
+            const bucket = bucketRangeAt(bucketTimes, first.index, grain, window);
+            if (bucket) onBucketClick(bucket);
+          }
+        : undefined,
       elements: {
         ...baseOptions.elements,
         point: {
@@ -121,7 +142,9 @@ export function ErrorAnalysisCard({
 
     const statusData: ChartData<'bar'> = {
       labels: summary.byStatus.map((group) =>
-        group.status === null ? t('usage_stats.error_analysis_unknown_status') : String(group.status)
+        group.status === null
+          ? t('usage_stats.error_analysis_unknown_status')
+          : String(group.status)
       ),
       datasets: [
         {
@@ -150,8 +173,7 @@ export function ErrorAnalysisCard({
           callbacks: {
             label: (context) => {
               const count = Number(context.parsed.x) || 0;
-              const share =
-                summary.failedRequests > 0 ? count / summary.failedRequests : null;
+              const share = summary.failedRequests > 0 ? count / summary.failedRequests : null;
               return share === null ? `${count}` : `${count} (${percentFormatter.format(share)})`;
             },
           },
@@ -184,7 +206,7 @@ export function ErrorAnalysisCard({
       summary,
       hasTrend: trend.some((point) => point.requests > 0),
     };
-  }, [details, period, isMobile, timeWindow, percentFormatter, t]);
+  }, [data, period, isMobile, percentFormatter, t, window, onBucketClick]);
 
   return (
     <Card
@@ -195,6 +217,8 @@ export function ErrorAnalysisCard({
             variant={period === 'hour' ? 'primary' : 'secondary'}
             size="sm"
             onClick={() => setPeriod('hour')}
+            data-testid="analytics-errors-hour"
+            aria-pressed={period === 'hour'}
           >
             {t('usage_stats.by_hour')}
           </Button>
@@ -202,6 +226,8 @@ export function ErrorAnalysisCard({
             variant={period === 'day' ? 'primary' : 'secondary'}
             size="sm"
             onClick={() => setPeriod('day')}
+            data-testid="analytics-errors-day"
+            aria-pressed={period === 'day'}
           >
             {t('usage_stats.by_day')}
           </Button>
@@ -214,15 +240,20 @@ export function ErrorAnalysisCard({
         <div className={styles.chartWrapper}>
           <div className={styles.analyticsChips}>
             <span className={styles.analyticsChip}>
-              <span className={styles.analyticsChipLabel}>{t('usage_stats.error_analysis_failure_rate')}</span>
+              <span className={styles.analyticsChipLabel}>
+                {t('usage_stats.error_analysis_failure_rate')}
+              </span>
               <span className={styles.analyticsChipValue}>
                 {summary.failureRate === null ? '--' : percentFormatter.format(summary.failureRate)}
               </span>
             </span>
             <span className={styles.analyticsChip}>
-              <span className={styles.analyticsChipLabel}>{t('usage_stats.error_analysis_failed_requests')}</span>
+              <span className={styles.analyticsChipLabel}>
+                {t('usage_stats.error_analysis_failed_requests')}
+              </span>
               <span className={styles.analyticsChipValue}>
-                {formatCompactNumber(summary.failedRequests)} / {formatCompactNumber(summary.totalRequests)}
+                {formatCompactNumber(summary.failedRequests)} /{' '}
+                {formatCompactNumber(summary.totalRequests)}
               </span>
             </span>
           </div>
@@ -263,7 +294,9 @@ export function ErrorAnalysisCard({
                         <span className={styles.errorReasonText} title={group.reason}>
                           {group.reason}
                         </span>
-                        <span className={styles.errorReasonCount}>{group.count.toLocaleString()}</span>
+                        <span className={styles.errorReasonCount}>
+                          {group.count.toLocaleString()}
+                        </span>
                       </li>
                     ))}
                   </ul>
@@ -274,6 +307,16 @@ export function ErrorAnalysisCard({
         </div>
       ) : (
         <div className={styles.hint}>{t('usage_stats.no_data')}</div>
+      )}
+      {onBucketClick && !loading && hasTrend && (
+        <AnalyticsBucketDrillControl
+          key={period}
+          id="errors"
+          times={data[period].errors.map((point) => point.timestampMs)}
+          grain={period}
+          window={window}
+          onOpen={onBucketClick}
+        />
       )}
     </Card>
   );

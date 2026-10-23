@@ -24,7 +24,9 @@ import type { GeminiKeyConfig, ProviderKeyConfig, OpenAIProviderConfig } from '@
 import type { AuthFileItem } from '@/types/authFile';
 import type { CredentialInfo } from '@/types/sourceInfo';
 import { buildSourceInfoMap, resolveSourceDisplay } from '@/utils/sourceResolver';
+import { formatFileSize } from '@/utils/format';
 import { parseTimestampMs } from '@/utils/timestamp';
+import { isLargeRequestConnectFailure, upstreamPayloadBytes } from '@/utils/usage/requestSize';
 import {
   classifyServiceTier,
   calculateAverageTps,
@@ -32,9 +34,12 @@ import {
   calculateDecodeDurationMs,
   calculateFirstContentMs,
   calculateReasoningRatio,
+  resolvePerformanceTokens,
   calculateOutputTps,
   calculateVisibleAverageTps,
   collectUsageDetails,
+  extractFailureReason,
+  extractFailureStatus,
   extractLatencyMs,
   extractTTFAMs,
   extractTTFBMs,
@@ -64,16 +69,27 @@ import {
   getUsageNonCacheReadInputTokenCount,
 } from '@/utils/usage/cacheTokens';
 import { normalizeReasoningEffort } from '@/utils/usage/reasoningEffort';
+import { describeFailureReason } from '@/utils/usage/failureReason';
+import { SERVICE_TIER_FLOWS, serviceTierFlow } from '@/utils/usage/serviceTier';
 import { normalizeResponseCyberProgram } from '@/utils/usage/cyberProgram';
 import { downloadBlob } from '@/utils/download';
+import { logsApi } from '@/services/api/logs';
 import styles from '@/pages/UsagePage.module.scss';
 import type { UsageQuerySession, UsageQueryFilter } from '@/types/usageQuery';
 import { queryItemDetail, useUsageQueryDetails } from './hooks/useUsageQueryDetails';
+import { buildRequestEventFilterOptions } from './requestEventFilterOptions';
+import { analyticsQueryFilter, type AnalyticsFilters } from '@/utils/usage/analyticsFilters';
 import { useNotificationStore } from '@/stores/useNotificationStore';
 
 const ALL_FILTER = '__all__';
 const SERVICE_TIER_FAST_FILTER = '__service_tier_fast__';
 const SERVICE_TIER_STD_FILTER = '__service_tier_std__';
+const SERVICE_TIER_FILTER_VALUES = {
+  fast: SERVICE_TIER_FAST_FILTER,
+  std: SERVICE_TIER_STD_FILTER,
+  fast_to_std: '__service_tier_fast_to_std__',
+  std_to_fast: '__service_tier_std_to_fast__',
+};
 const REASONING_EFFORT_LEGACY_UNKNOWN_FILTER = '__reasoning_effort_legacy_unknown__';
 const REASONING_EFFORT_RAW_FILTER_PREFIX = '__reasoning_effort_raw__:';
 const RESULT_SUCCESS_FILTER = '__result_success__';
@@ -138,8 +154,9 @@ const PAGE_TIME_RANGE_LABEL_KEYS: Record<UsageTimeRange, string> = {
   all: 'usage_stats.range_all',
 };
 
-const CACHE_RATE_LOW_THRESHOLD = 0.25;
-const CACHE_RATE_HIGH_THRESHOLD = 0.6;
+// Below 90% is abnormal. 90% up to 95% is only the floor; 95% and above is normal.
+const CACHE_RATE_ABNORMAL_THRESHOLD = 0.9;
+const CACHE_RATE_NORMAL_THRESHOLD = 0.95;
 
 const REQUEST_EVENT_COLUMN_IDS = [
   'timestamp',
@@ -150,6 +167,8 @@ const REQUEST_EVENT_COLUMN_IDS = [
   'authIndex',
   'tier',
   'result',
+  'transport',
+  'requestSize',
   'latency',
   'ttfb',
   'firstContent',
@@ -169,6 +188,7 @@ const REQUEST_EVENT_COLUMN_IDS = [
   'cacheWriteTokens',
   'totalTokens',
   'cost',
+  'requestLog',
 ] as const;
 
 type RequestEventColumnId = (typeof REQUEST_EVENT_COLUMN_IDS)[number];
@@ -258,6 +278,8 @@ const DEFAULT_COLUMN_VISIBILITY: RequestEventColumnVisibility = {
   authIndex: false,
   tier: true,
   result: true,
+  transport: true,
+  requestSize: true,
   latency: true,
   ttfb: true,
   firstContent: true,
@@ -277,6 +299,24 @@ const DEFAULT_COLUMN_VISIBILITY: RequestEventColumnVisibility = {
   cacheWriteTokens: true,
   totalTokens: true,
   cost: true,
+  // Request logs exist only when Core request-log is enabled, so the action column is opt-in.
+  requestLog: false,
+};
+
+const COLUMN_VISIBILITY_CUSTOM_BACKUP_KEY = 'cli-proxy-usage-request-event-columns-custom-backup';
+// 紧凑排查视图：默认列集合里挑出定位单条问题所需的最小集合；
+// 完整列集合与用户自定义配置不受影响。
+const COMPACT_COLUMN_VISIBILITY: RequestEventColumnVisibility = {
+  ...DEFAULT_COLUMN_VISIBILITY,
+  ttfb: false,
+  firstContent: false,
+  ttft: false,
+  outputTps: false,
+  averageTps: false,
+  nonCacheReadInputTokens: false,
+  displayedOutputTokens: false,
+  reasoningTokens: false,
+  cacheWriteTokens: false,
 };
 
 type RequestEventRow = {
@@ -313,12 +353,21 @@ type RequestEventRow = {
   reasoningEffortFilterValue: string;
   reasoningEffortLabel: string;
   failed: boolean;
+  failureStatus: number | null;
+  failureReason: string | null;
+  traceId: string | null;
+  upstreamTransport: string | null;
+  upstreamRequestBytes: number | null;
+  upstreamRequestWireBytes: number | null;
+  upstreamRequestEncoding: string | null;
+  largeConnectFailure: boolean;
   latencyMs: number | null;
   ttfbMs: number | null;
   timingVersion: number | null;
   firstContentMs: number | null;
   ttftMs: number | null;
   ttfaMs: number | null;
+  outputTiming: UsageDetail['output_timing'];
   decodeDurationMs: number | null;
   outputTps: number | null;
   averageTps: number | null;
@@ -327,7 +376,10 @@ type RequestEventRow = {
   inputTokens: number;
   nonCacheReadInputTokens: number;
   outputTokens: number;
-  displayedOutputTokens: number;
+  displayedOutputTokens: number | null;
+  performanceOutputTokens: number | null;
+  performanceReasoningTokens: number | null;
+  tokenBreakdown: UsageDetail['token_breakdown'];
   reasoningTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
@@ -355,7 +407,7 @@ const getRequestEventNumericValue = (
     case 'totalOutputTokens':
       return row.outputTokens;
     case 'displayedOutputTokens':
-      return row.displayedOutputTokens;
+      return row.displayedOutputTokens ?? Number.NaN;
     case 'reasoningTokens':
       return row.reasoningTokens;
     case 'cacheReadTokens':
@@ -411,6 +463,9 @@ const numericFilterPopoverStylesEqual = (
   current?.maxHeight === next.maxHeight;
 
 export interface RequestEventsDetailsCardProps {
+  initialAnalyticsFilters?: AnalyticsFilters | null;
+  /** 下钻携带的初始结果筛选：只显示失败记录。 */
+  initialResultFailed?: boolean;
   querySession?: UsageQuerySession | null;
   usage: unknown;
   loading: boolean;
@@ -541,8 +596,8 @@ const getCacheRateTone = (
   }
   if (inputTokens <= 0) return 'unavailable';
   if (cacheRate === null) return 'unavailable';
-  if (cacheRate < CACHE_RATE_LOW_THRESHOLD) return 'low';
-  if (cacheRate < CACHE_RATE_HIGH_THRESHOLD) return 'medium';
+  if (cacheRate < CACHE_RATE_ABNORMAL_THRESHOLD) return 'low';
+  if (cacheRate < CACHE_RATE_NORMAL_THRESHOLD) return 'medium';
   return 'high';
 };
 
@@ -606,6 +661,8 @@ export function RequestEventsDetailsCard({
   usage,
   loading: parentLoading,
   querySession = null,
+  initialAnalyticsFilters = null,
+  initialResultFailed = false,
   pageTimeRange,
   pageTimeRangeCustom = null,
   referenceNowMs,
@@ -657,6 +714,17 @@ export function RequestEventsDetailsCard({
   // 静默清空、"筛选只剩当前页数据"的假象；与页面级 range 的 draft 保留策略一致。
   const REQUEST_EVENT_FILTERS_STORAGE_KEY = 'cpa-request-event-filters-v1';
   const loadPersistedFilters = (): Record<string, string> => {
+    if (initialAnalyticsFilters) return {
+      model: initialAnalyticsFilters.model ?? ALL_FILTER,
+      source: initialAnalyticsFilters.source?.value ?? ALL_FILTER,
+      serviceTier:
+        initialAnalyticsFilters.tier ? SERVICE_TIER_FILTER_VALUES[initialAnalyticsFilters.tier] : ALL_FILTER,
+      reasoningEffort:
+        initialAnalyticsFilters.effort === undefined
+          ? ALL_FILTER
+          : getReasoningEffortFilterValue(normalizeReasoningEffort(initialAnalyticsFilters.effort)),
+      ...(initialResultFailed ? { result: RESULT_FAILED_FILTER } : {}),
+    };
     try {
       const raw = sessionStorage.getItem(REQUEST_EVENT_FILTERS_STORAGE_KEY);
       const parsed: unknown = raw ? JSON.parse(raw) : null;
@@ -678,6 +746,7 @@ export function RequestEventsDetailsCard({
   const persistedFilters = persistedFiltersRef;
   const persistFilter = (name: string, value: string) => {
     persistedFilters.current = { ...persistedFilters.current, [name]: value };
+    if (initialAnalyticsFilters) return;
     try {
       sessionStorage.setItem(
         REQUEST_EVENT_FILTERS_STORAGE_KEY,
@@ -767,7 +836,19 @@ export function RequestEventsDetailsCard({
   const [draftNumericMinimumFilter, setDraftNumericMinimumFilter] = useState('');
   const [draftNumericMaximumFilter, setDraftNumericMaximumFilter] = useState('');
   const [authFileMap, setAuthFileMap] = useState<Map<string, CredentialInfo>>(new Map());
+  const [requestLogDownloads, setRequestLogDownloads] = useState<ReadonlySet<string>>(
+    () => new Set()
+  );
   const [columnSettingsOpen, setColumnSettingsOpen] = useState(false);
+  const [expandedRows, setExpandedRows] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleExpandedRow = (rowId: string) => {
+    setExpandedRows((current) => {
+      const next = new Set(current);
+      if (next.has(rowId)) next.delete(rowId);
+      else next.add(rowId);
+      return next;
+    });
+  };
   const [activeHeaderTooltip, setActiveHeaderTooltip] =
     useState<RequestEventHeaderTooltipState | null>(null);
   const [storedColumnVisibility, setStoredColumnVisibility] = useLocalStorage<unknown>(
@@ -778,6 +859,36 @@ export function RequestEventsDetailsCard({
     () => normalizeColumnVisibility(storedColumnVisibility),
     [storedColumnVisibility]
   );
+  // 视图模式从当前列配置推导：与紧凑预设完全一致即视为紧凑视图，
+  // 其余（默认或自定义）都是完整视图，避免第二份可能漂移的状态。
+  const compactView =
+    REQUEST_EVENT_COLUMN_IDS.every((columnId) =>
+      columnId === 'requestLog'
+        ? !columnVisibility[columnId]
+        : columnVisibility[columnId] === COMPACT_COLUMN_VISIBILITY[columnId]
+    );
+  const applyCompactView = (compact: boolean) => {
+    if (compact) {
+      // 备份当前自定义配置，切回完整视图时恢复。
+      window.localStorage.setItem(
+        COLUMN_VISIBILITY_CUSTOM_BACKUP_KEY,
+        JSON.stringify(columnVisibility)
+      );
+      setStoredColumnVisibility(COMPACT_COLUMN_VISIBILITY);
+    } else {
+      let restored: RequestEventColumnVisibility | null = null;
+      try {
+        const raw = window.localStorage.getItem(COLUMN_VISIBILITY_CUSTOM_BACKUP_KEY);
+        const parsed: unknown = raw ? JSON.parse(raw) : null;
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          restored = normalizeColumnVisibility(parsed);
+        }
+      } catch {
+        /* 损坏的备份退回默认列。 */
+      }
+      setStoredColumnVisibility(restored ?? DEFAULT_COLUMN_VISIBILITY);
+    }
+  };
   const columnSettingsId = useId();
   const headerTooltipId = useId();
   const numericFilterId = useId();
@@ -1048,7 +1159,12 @@ export function RequestEventsDetailsCard({
         filter.api = options?.apis[index] ?? (rememberedApi || `__unresolved-${requestKeyFilter}`);
       }
     }
-    if (sourceFilter !== ALL_FILTER) {
+    if (sourceFilter !== ALL_FILTER && sourceFilter === initialAnalyticsFilters?.source?.value) {
+      if (!options) return null;
+      const selection = analyticsQueryFilter({ source: initialAnalyticsFilters.source }, options);
+      if (selection.empty) return null;
+      filter.identities = selection.filter.identities;
+    } else if (sourceFilter !== ALL_FILTER) {
       const identities = options?.identities.filter((id) => {
         const source = normalizeUsageSourceId(id.source);
         const info = resolveSourceDisplay(source, id.auth_index, sourceInfoMap, authFileMap);
@@ -1067,7 +1183,8 @@ export function RequestEventsDetailsCard({
       }
     }
     if (authIndexFilter !== ALL_FILTER) filter.auth_index = authIndexFilter === '-' ? '' : authIndexFilter;
-    if (serviceTierFilter !== ALL_FILTER) filter.tier = serviceTierFilter === SERVICE_TIER_FAST_FILTER ? 'fast' : 'std';
+    if (serviceTierFilter !== ALL_FILTER)
+      filter.tier_flow = SERVICE_TIER_FLOWS.find((flow) => SERVICE_TIER_FILTER_VALUES[flow] === serviceTierFilter) ?? 'std';
     if (reasoningEffortFilter !== ALL_FILTER) {
       const effort = reasoningEffortFilter === REASONING_EFFORT_LEGACY_UNKNOWN_FILTER ? '' : decodeURIComponent(reasoningEffortFilter.slice(REASONING_EFFORT_RAW_FILTER_PREFIX.length));
       filter.effort = effort;
@@ -1093,6 +1210,7 @@ export function RequestEventsDetailsCard({
     for (const e of entries) { const set = labels.get(e.label) ?? new Set<string>(); set.add(e.value); labels.set(e.label, set); }
     return Array.from(new Map(entries.map((e) => [e.value, { value: e.value, label: (labels.get(e.label)?.size ?? 0) > 1 ? `${e.label} · ${e.auth || (e.raw !== e.label ? e.raw : '') || e.type || e.value}` : e.label }])).values());
   }, [remote.options, sourceInfoMap, authFileMap]);
+  const remoteSourceLabels = useMemo(() => new Map(remoteSources.map((source) => [source.value, source.label])), [remoteSources]);
   const buildRows = useCallback((details: UsageDetail[]): RequestEventRow[] => {
     const configuredKeyIndexes = new Map<string, number>();
     requestApiKeys.forEach((key, index) => {
@@ -1208,7 +1326,7 @@ export function RequestEventsDetailsCard({
         effectiveServiceTier,
       });
       const serviceTierFilterValue =
-        resolvedServiceTier.tier === 'fast' ? SERVICE_TIER_FAST_FILTER : SERVICE_TIER_STD_FILTER;
+        SERVICE_TIER_FILTER_VALUES[serviceTierFlow(resolvedServiceTier)];
       const getServiceTierLabel = (tier: DisplayServiceTier) => tierLabels[tier];
       const serviceTierLabel = getServiceTierLabel(resolvedServiceTier.tier);
       const responseCyberProgram = normalizeResponseCyberProgram(detail.response_cyber_program);
@@ -1262,7 +1380,10 @@ export function RequestEventsDetailsCard({
       const reasoningTokens = Math.max(toNumber(detail.tokens?.reasoning_tokens), 0);
       const { cacheReadTokens, cacheWriteTokens } = getUsageCacheTokenCounts(detail.tokens);
       const nonCacheReadInputTokens = getUsageNonCacheReadInputTokenCount(detail.tokens);
-      const displayedOutputTokens = Math.max(outputTokens - reasoningTokens, 0);
+      const performanceTokens = resolvePerformanceTokens(detail.tokens, detail.token_breakdown);
+      const performanceOutputTokens = performanceTokens.outputTokens;
+      const performanceReasoningTokens = performanceTokens.reasoningTokens;
+      const displayedOutputTokens = performanceTokens.nonReasoningTokens;
       const cacheRate = resolveCacheRate(inputTokens, cacheReadTokens);
       const totalTokens = Math.max(
         toNumber(detail.tokens?.total_tokens),
@@ -1274,15 +1395,16 @@ export function RequestEventsDetailsCard({
       const ttftMs = normalizeSemanticTimingMs(extractTTFTMs(detail), latencyMs, ttfbMs);
       const ttfaMs = normalizeSemanticTimingMs(extractTTFAMs(detail), latencyMs, ttfbMs);
       const firstContentMs = calculateFirstContentMs(ttftMs, ttfaMs);
-      const decodeDurationMs = calculateDecodeDurationMs(latencyMs, ttfbMs);
-      const outputTps = calculateOutputTps(outputTokens, latencyMs, ttfbMs);
-      const averageTps = calculateAverageTps(outputTokens, latencyMs);
+      const outputTiming = detail.output_timing;
+      const decodeDurationMs = calculateDecodeDurationMs(latencyMs, ttfbMs, outputTiming);
+      const outputTps = calculateOutputTps(performanceOutputTokens, latencyMs, ttfbMs, outputTiming);
+      const averageTps = calculateAverageTps(performanceOutputTokens, latencyMs);
       const visibleAverageTps = calculateVisibleAverageTps(
-        outputTokens,
-        reasoningTokens,
+        performanceOutputTokens,
+        performanceReasoningTokens,
         latencyMs
       );
-      const reasoningRatio = calculateReasoningRatio(outputTokens, reasoningTokens);
+      const reasoningRatio = calculateReasoningRatio(performanceOutputTokens, performanceReasoningTokens);
       const costEstimate = calculateCostEstimate(detail, priceProfile);
       const longContext = costEstimate.contextBand === 'long';
       const costAmount = costEstimate.status === 'priced' ? costEstimate.amount : null;
@@ -1317,12 +1439,21 @@ export function RequestEventsDetailsCard({
         reasoningEffortFilterValue,
         reasoningEffortLabel,
         failed: detail.failed === true,
+        failureStatus: detail.failed === true ? extractFailureStatus(detail) : null,
+        failureReason: detail.failed === true ? extractFailureReason(detail) : null,
+        traceId: detail.trace_id ?? null,
+        upstreamTransport: detail.upstream_transport ?? null,
+        upstreamRequestBytes: upstreamPayloadBytes(detail),
+        upstreamRequestWireBytes: detail.upstream_request_wire_bytes ?? null,
+        upstreamRequestEncoding: detail.upstream_request_encoding ?? null,
+        largeConnectFailure: isLargeRequestConnectFailure(detail),
         latencyMs,
         ttfbMs,
         timingVersion,
         firstContentMs,
         ttftMs,
         ttfaMs,
+        outputTiming,
         decodeDurationMs,
         outputTps,
         averageTps,
@@ -1332,6 +1463,9 @@ export function RequestEventsDetailsCard({
         nonCacheReadInputTokens,
         outputTokens,
         displayedOutputTokens,
+        performanceOutputTokens,
+        performanceReasoningTokens,
+        tokenBreakdown: detail.token_breakdown,
         reasoningTokens,
         cacheReadTokens,
         cacheWriteTokens,
@@ -1346,7 +1480,7 @@ export function RequestEventsDetailsCard({
     });
 
     const sourceLabelKeyMap = new Map<string, Set<string>>();
-    baseRows.forEach((row) => {
+    if (!querySession) baseRows.forEach((row) => {
       const keys = sourceLabelKeyMap.get(row.source) ?? new Set<string>();
       keys.add(row.sourceKey);
       sourceLabelKeyMap.set(row.source, keys);
@@ -1373,13 +1507,12 @@ export function RequestEventsDetailsCard({
       return `${row.source} · ${row.sourceKey}`;
     };
 
-    return baseRows
-      .map((row) => {
-        row.source = querySession ? (remoteSources.find((s) => s.value === row.sourceKey)?.label ?? row.source) : buildDisambiguatedSourceLabel(row);
-        return row;
-      })
-      .sort((a, b) => b.timestampMs - a.timestampMs);
-  }, [authFileMap, i18n.language, priceProfile, requestApiKeys, sourceInfoMap, t, querySession, remote.options, remoteSources]);
+    baseRows.forEach((row) => {
+      row.source = querySession ? (remoteSourceLabels.get(row.sourceKey) ?? row.source) : buildDisambiguatedSourceLabel(row);
+    });
+    // Query pages already have a stable server order, including timestamp ties.
+    return querySession ? baseRows : baseRows.sort((a, b) => b.timestampMs - a.timestampMs);
+  }, [authFileMap, i18n.language, priceProfile, requestApiKeys, sourceInfoMap, t, querySession, remote.options, remoteSourceLabels]);
   const rows = useMemo(() => buildRows(querySession ? (remote.data?.items ?? []).map(queryItemDetail) : collectUsageDetails(usage)), [buildRows, querySession, remote.data, usage]);
 
   const effectiveTimeRangeFilter = isRequestEventTimeRange(timeRangeFilter)
@@ -1394,7 +1527,7 @@ export function RequestEventsDetailsCard({
   const pageTimeRangeWindow = useMemo(() => {
     if (pageTimeRange === 'all') return null;
     if (pageTimeRange === 'custom') {
-      if (!pageTimeRangeCustom || pageTimeRangeCustom.endMs <= pageTimeRangeCustom.startMs) {
+      if (!pageTimeRangeCustom || pageTimeRangeCustom.endMs < pageTimeRangeCustom.startMs) {
         return null;
       }
       return pageTimeRangeCustom;
@@ -1442,16 +1575,12 @@ export function RequestEventsDetailsCard({
   );
 
   const modelOptions = useMemo(
-    () => [
-      { value: ALL_FILTER, label: t('usage_stats.filter_all') },
-      // 已选值不随窗口收窄消失：丢失选项会让用户以为筛选被重置，
-      // 实际上下推仍在生效，窗口内无匹配时显示真实的 0 条。
-      ...(modelFilter !== ALL_FILTER ? [{ value: modelFilter, label: modelFilter }] : []),
-      ...Array.from(new Set(querySession ? remote.options?.models ?? [] : timeScopedRows.map((row) => row.model))).map((model) => ({
-        value: model,
-        label: model,
-      })),
-    ],
+    () =>
+      buildRequestEventFilterOptions(
+        querySession ? remote.options?.models ?? [] : timeScopedRows.map((row) => row.model),
+        modelFilter,
+        { value: ALL_FILTER, label: t('usage_stats.filter_all') }
+      ),
     [t, timeScopedRows, querySession, remote.options, modelFilter]
   );
 
@@ -1524,7 +1653,7 @@ export function RequestEventsDetailsCard({
     );
     // 已选值不随窗口收窄消失；沿用记忆中的标签，避免触发器显示成原始值。
     if (sourceFilter !== ALL_FILTER && !optionMap.has(sourceFilter))
-      optionMap.set(sourceFilter, sourceLabelMemory.current.get(sourceFilter) ?? sourceFilter);
+      optionMap.set(sourceFilter, sourceLabelMemory.current.get(sourceFilter) ?? (sourceFilter === initialAnalyticsFilters?.source?.value ? initialAnalyticsFilters.source.label : sourceFilter));
 
     return [
       { value: ALL_FILTER, label: t('usage_stats.filter_all') },
@@ -1533,17 +1662,17 @@ export function RequestEventsDetailsCard({
         label,
       })),
     ];
-  }, [t, timeScopedRows, querySession, remoteSources, sourceFilter]);
+  }, [t, timeScopedRows, querySession, remoteSources, sourceFilter, initialAnalyticsFilters]);
 
   const authIndexOptions = useMemo(
-    () => [
-      { value: ALL_FILTER, label: t('usage_stats.filter_all') },
-      ...(authIndexFilter !== ALL_FILTER ? [{ value: authIndexFilter, label: authIndexFilter }] : []),
-      ...Array.from(new Set(querySession ? (remote.options?.auth_indices ?? []).map((id) => id || '-') : timeScopedRows.map((row) => row.authIndex))).map((authIndex) => ({
-        value: authIndex,
-        label: authIndex,
-      })),
-    ],
+    () =>
+      buildRequestEventFilterOptions(
+        querySession
+          ? (remote.options?.auth_indices ?? []).map((id) => id || '-')
+          : timeScopedRows.map((row) => row.authIndex),
+        authIndexFilter,
+        { value: ALL_FILTER, label: t('usage_stats.filter_all') }
+      ),
     [t, timeScopedRows, querySession, remote.options, authIndexFilter]
   );
 
@@ -1552,6 +1681,8 @@ export function RequestEventsDetailsCard({
       { value: ALL_FILTER, label: t('usage_stats.filter_all') },
       { value: SERVICE_TIER_FAST_FILTER, label: t('usage_stats.request_events_tier_fast') },
       { value: SERVICE_TIER_STD_FILTER, label: t('usage_stats.request_events_tier_standard') },
+      { value: SERVICE_TIER_FILTER_VALUES.fast_to_std, label: t('usage_stats.request_events_tier_fast_to_std') },
+      { value: SERVICE_TIER_FILTER_VALUES.std_to_fast, label: t('usage_stats.request_events_tier_std_to_fast') },
     ],
     [t]
   );
@@ -1656,6 +1787,8 @@ export function RequestEventsDetailsCard({
       { id: 'authIndex' as const, label: t('usage_stats.request_events_auth_index') },
       { id: 'tier' as const, label: t('usage_stats.request_events_tier') },
       { id: 'result' as const, label: t('usage_stats.request_events_result') },
+      { id: 'transport' as const, label: t('usage_stats.request_events_transport') },
+      { id: 'requestSize' as const, label: t('usage_stats.request_events_request_size') },
       { id: 'latency' as const, label: t('usage_stats.time') },
       { id: 'ttfb' as const, label: t('usage_stats.request_events_ttfb') },
       {
@@ -1696,6 +1829,7 @@ export function RequestEventsDetailsCard({
       { id: 'cacheWriteTokens' as const, label: t('usage_stats.cache_write_tokens') },
       { id: 'totalTokens' as const, label: t('usage_stats.total_tokens') },
       { id: 'cost' as const, label: t('usage_stats.request_events_cost_estimate') },
+      { id: 'requestLog' as const, label: t('usage_stats.request_events_request_log') },
     ],
     [t]
   );
@@ -1855,7 +1989,10 @@ export function RequestEventsDetailsCard({
           effectiveRequestKeyFilter === ALL_FILTER ||
           row.requestIdentityToken === effectiveRequestKeyFilter;
         const sourceMatched =
-          effectiveSourceFilter === ALL_FILTER || row.sourceKey === effectiveSourceFilter;
+          effectiveSourceFilter === ALL_FILTER ||
+          (effectiveSourceFilter === initialAnalyticsFilters?.source?.value
+            ? initialAnalyticsFilters.source.identities.some((id) => id.source === row.sourceRaw && id.auth_index === (row.authIndex === '-' ? '' : row.authIndex))
+            : row.sourceKey === effectiveSourceFilter);
         const authIndexMatched =
           effectiveAuthIndexFilter === ALL_FILTER || row.authIndex === effectiveAuthIndexFilter;
         const serviceTierMatched =
@@ -1893,6 +2030,7 @@ export function RequestEventsDetailsCard({
       }),
     [
       cacheFilter,
+      initialAnalyticsFilters,
       effectiveAuthIndexFilter,
       effectiveModelFilter,
       effectiveRequestKeyFilter,
@@ -1912,7 +2050,8 @@ export function RequestEventsDetailsCard({
   // Reset to the first page on a new filter/snapshot without an effect-driven rerender.
   const [pagination, setPagination] = useState<{ rows: RequestEventRow[]; page: number } | null>(null);
   const filteredCount = querySession ? remote.data?.total ?? 0 : filteredRows.length;
-  const pageCount = Math.max(1, Math.ceil(filteredCount / REQUEST_EVENTS_PAGE_SIZE));
+  const pageSize = querySession ? remote.pageSize : REQUEST_EVENTS_PAGE_SIZE;
+  const pageCount = Math.max(1, Math.ceil(filteredCount / pageSize));
   const currentPage = querySession ? remote.page : pagination && pagination.rows === filteredRows ? Math.min(pagination.page, pageCount - 1) : 0;
   const renderedRows = useMemo(
     () => querySession ? filteredRows : filteredRows.slice(currentPage * REQUEST_EVENTS_PAGE_SIZE, (currentPage + 1) * REQUEST_EVENTS_PAGE_SIZE),
@@ -1933,10 +2072,11 @@ export function RequestEventsDetailsCard({
       }
       return summarizeUsagePerformance(
         filteredRows.map((row) => ({
-          outputTokens: row.outputTokens,
-          reasoningTokens: row.reasoningTokens,
+          outputTokens: row.performanceOutputTokens,
+          reasoningTokens: row.performanceReasoningTokens,
           latencyMs: row.latencyMs,
           ttfbMs: row.ttfbMs,
+          outputTiming: row.outputTiming,
         }))
       );
     },
@@ -2024,6 +2164,7 @@ export function RequestEventsDetailsCard({
     setNumericFilterOpen(false);
     setNumericFilterPresentation(null);
     persistedFilters.current = {};
+    if (initialAnalyticsFilters) return;
     try {
       sessionStorage.removeItem(REQUEST_EVENT_FILTERS_STORAGE_KEY);
     } catch {
@@ -2048,18 +2189,8 @@ export function RequestEventsDetailsCard({
   };
 
   const [exportingRows, setExportingRows] = useState(false);
-  const collectExportRows = async () => {
-    if (!querySession) return filteredRows;
-    setExportingRows(true);
-    try { return buildRows(await remote.exportDetails()); }
-    catch (error) { useNotificationStore.getState().showNotification(`${t('notification.download_failed')}: ${error instanceof Error ? error.message : ''}`, 'error'); return null; }
-    finally { setExportingRows(false); }
-  };
-  const handleExportCsv = async () => {
-    if (!filteredRows.length) return;
-    const exportRows = await collectExportRows();
-    if (!exportRows) return;
-
+  const [exportFormat, setExportFormat] = useState<'csv' | 'json'>('csv');
+  const serializeCsv = (exportRows: RequestEventRow[], first: boolean) => {
     const csvHeader = [
       'timestamp',
       'model',
@@ -2080,12 +2211,19 @@ export function RequestEventsDetailsCard({
       'service_tier_evidence',
         'reasoning_effort',
         'result',
+        'upstream_transport',
+        'upstream_request_bytes',
+        'upstream_request_wire_bytes',
+        'upstream_request_encoding',
         ...(hasLatencyData ? ['latency_ms'] : []),
         ...(hasTTFBData ? ['ttfb_ms'] : []),
         'first_content_ms',
         'timing_version',
         'ttft_ms',
         'ttfa_ms',
+        'output_timing_version',
+        'output_streamed',
+        'output_duration_ms',
         ...(hasOutputTpsData ? ['decode_duration_ms', 'output_tps'] : []),
         ...(hasAverageTpsData ? ['average_tps'] : []),
         'visible_average_tps',
@@ -2093,6 +2231,8 @@ export function RequestEventsDetailsCard({
         'input_tokens',
       'non_cache_read_input_tokens',
       'output_tokens',
+      'tps_output_tokens',
+      'non_reasoning_output_tokens',
       'reasoning_tokens',
       'cached_tokens',
       'cache_read_tokens',
@@ -2100,6 +2240,9 @@ export function RequestEventsDetailsCard({
       'total_tokens',
       'estimated_cost_usd',
       'pricing_status',
+      'trace_id',
+      'failure_status',
+      'failure_reason',
     ];
 
     const csvRows = exportRows.map((row) =>
@@ -2123,12 +2266,19 @@ export function RequestEventsDetailsCard({
         row.resolvedServiceTier.evidence,
         row.reasoningEffort ?? '',
         row.failed ? 'failed' : 'success',
+        row.upstreamTransport ?? '',
+        row.upstreamRequestBytes ?? '',
+        row.upstreamRequestWireBytes ?? '',
+        row.upstreamRequestEncoding ?? '',
         ...(hasLatencyData ? [row.latencyMs ?? ''] : []),
         ...(hasTTFBData ? [row.ttfbMs ?? ''] : []),
         row.firstContentMs ?? '',
         row.timingVersion ?? '',
         row.ttftMs ?? '',
         row.ttfaMs ?? '',
+        row.outputTiming?.version ?? '',
+        row.outputTiming ? String(row.outputTiming.streamed) : '',
+        row.outputTiming?.duration_ms ?? '',
         ...(hasOutputTpsData ? [row.decodeDurationMs ?? '', row.outputTps ?? ''] : []),
         ...(hasAverageTpsData ? [row.averageTps ?? ''] : []),
         row.visibleAverageTps ?? '',
@@ -2136,6 +2286,8 @@ export function RequestEventsDetailsCard({
         row.inputTokens,
         row.nonCacheReadInputTokens,
         row.outputTokens,
+        row.performanceOutputTokens ?? '',
+        row.displayedOutputTokens ?? '',
         row.reasoningTokens,
         row.cacheReadTokens,
         row.cacheReadTokens,
@@ -2143,24 +2295,45 @@ export function RequestEventsDetailsCard({
         row.totalTokens,
         row.costAmount ?? '',
         row.costStatus,
+        row.traceId ?? '',
+        row.failureStatus ?? '',
+        row.failureReason ?? '',
       ]
         .map((value) => encodeCsv(value))
         .join(',')
     );
 
-    const content = [csvHeader.join(','), ...csvRows].join('\n');
-    const fileTime = new Date().toISOString().replace(/[:.]/g, '-');
-    downloadBlob({
-      filename: `usage-events-${fileTime}.csv`,
-      blob: new Blob([content], { type: 'text/csv;charset=utf-8' }),
-    });
+    return `${first ? csvHeader.join(',') : ''}\n${csvRows.join('\n')}`;
   };
 
-  const handleExportJson = async () => {
-    if (!filteredRows.length) return;
-    const exportRows = await collectExportRows();
-    if (!exportRows) return;
+  const downloadRequestLog = async (traceId: string) => {
+    setRequestLogDownloads((current) => new Set(current).add(traceId));
+    try {
+      const response = await logsApi.downloadRequestLogById(traceId);
+      downloadBlob({
+        filename: `request-${traceId}.log`,
+        blob: new Blob([response.data], { type: 'text/plain' }),
+      });
+    } catch (error) {
+      const status = isRecord(error) && typeof error.status === 'number' ? error.status : undefined;
+      useNotificationStore
+        .getState()
+        .showNotification(
+          status === 404
+            ? t('usage_stats.request_events_request_log_missing')
+            : `${t('notification.download_failed')}${error instanceof Error && error.message ? `: ${error.message}` : ''}`,
+          'error'
+        );
+    } finally {
+      setRequestLogDownloads((current) => {
+        const next = new Set(current);
+        next.delete(traceId);
+        return next;
+      });
+    }
+  };
 
+  const serializeJson = (exportRows: RequestEventRow[], first: boolean) => {
     const payload = exportRows.map((row) => ({
       timestamp: row.timestamp,
       model: row.model,
@@ -2181,8 +2354,16 @@ export function RequestEventsDetailsCard({
       service_tier_evidence: row.resolvedServiceTier.evidence,
       reasoning_effort: row.reasoningEffort,
       failed: row.failed,
+      failure_status: row.failureStatus,
+      failure_reason: row.failureReason,
+      upstream_transport: row.upstreamTransport,
+      upstream_request_bytes: row.upstreamRequestBytes,
+      upstream_request_wire_bytes: row.upstreamRequestWireBytes,
+      upstream_request_encoding: row.upstreamRequestEncoding,
       ...(hasLatencyData && row.latencyMs !== null ? { latency_ms: row.latencyMs } : {}),
       ...(hasTTFBData && row.ttfbMs !== null ? { ttfb_ms: row.ttfbMs } : {}),
+      ...(row.outputTiming ? { output_timing: row.outputTiming } : {}),
+      ...(row.tokenBreakdown ? { token_breakdown: row.tokenBreakdown } : {}),
       first_content_ms: row.firstContentMs,
       timing_version: row.timingVersion,
       ttft_ms: row.ttftMs,
@@ -2197,6 +2378,8 @@ export function RequestEventsDetailsCard({
         input_tokens: row.inputTokens,
         non_cache_read_input_tokens: row.nonCacheReadInputTokens,
         output_tokens: row.outputTokens,
+        tps_output_tokens: row.performanceOutputTokens,
+        non_reasoning_output_tokens: row.displayedOutputTokens,
         reasoning_tokens: row.reasoningTokens,
         cached_tokens: row.cacheReadTokens,
         cache_read_tokens: row.cacheReadTokens,
@@ -2205,14 +2388,49 @@ export function RequestEventsDetailsCard({
       },
       estimated_cost_usd: row.costAmount,
       pricing_status: row.costStatus,
+      trace_id: row.traceId,
     }));
 
-    const content = JSON.stringify(payload, null, 2);
-    const fileTime = new Date().toISOString().replace(/[:.]/g, '-');
-    downloadBlob({
-      filename: `usage-events-${fileTime}.json`,
-      blob: new Blob([content], { type: 'application/json;charset=utf-8' }),
-    });
+    return `${first ? '[\n' : ',\n'}${JSON.stringify(payload, null, 2).slice(2, -2)}`;
+  };
+
+  const handleExportRows = async (format: 'csv' | 'json', resume = false) => {
+    if (exportingRows || !filteredRows.length) return;
+    setExportFormat(format);
+    setExportingRows(true);
+    try {
+      const serialize = format === 'csv' ? serializeCsv : serializeJson;
+      let parts: BlobPart[];
+      if (querySession) {
+        const result = await remote.exportDetails((details, first) => serialize(buildRows(details), first), resume);
+        if (result === null) return;
+        parts = result;
+      } else {
+        parts = [];
+        for (let offset = 0; offset < filteredRows.length; offset += 200) {
+          await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+          if (!remote.isCurrentQuery()) return;
+          parts.push(new Blob([serialize(filteredRows.slice(offset, offset + 200), offset === 0)]));
+        }
+      }
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      if (!remote.isCurrentQuery() || (querySession && !remote.isExportCurrent())) return;
+      const fileTime = new Date().toISOString().replace(/[:.]/g, '-');
+      downloadBlob({
+        filename: `usage-events-${fileTime}.${format}`,
+        blob: new Blob(format === 'json' ? [...parts, '\n]'] : parts, {
+          type: format === 'json' ? 'application/json;charset=utf-8' : 'text/csv;charset=utf-8',
+        }),
+      });
+      remote.finishExport();
+    } catch (error) {
+      remote.cancelExport();
+      useNotificationStore.getState().showNotification(
+        `${t('notification.download_failed')}: ${error instanceof Error ? error.message : ''}`, 'error'
+      );
+    } finally {
+      setExportingRows(false);
+    }
   };
 
   const numericFilterEditor = (
@@ -2381,18 +2599,36 @@ export function RequestEventsDetailsCard({
           <Button
             variant="secondary"
             size="sm"
-            onClick={handleExportCsv}
+            onClick={() => void handleExportRows('csv')}
             disabled={filteredRows.length === 0 || exportingRows || loading}
           >
-            {t('usage_stats.export_csv')}
+            {t('usage_stats.export_filtered_csv')}
           </Button>
           <Button
             variant="secondary"
             size="sm"
-            onClick={handleExportJson}
+            onClick={() => void handleExportRows('json')}
             disabled={filteredRows.length === 0 || exportingRows || loading}
           >
-            {t('usage_stats.export_json')}
+            {t('usage_stats.export_filtered_json')}
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            aria-pressed={compactView}
+            title={
+              compactView
+                ? t('usage_stats.request_events_full_view_hint')
+                : t('usage_stats.request_events_compact_view_hint')
+            }
+            onClick={() => applyCompactView(!compactView)}
+          >
+            {t(
+              compactView
+                ? 'usage_stats.request_events_full_view'
+                : 'usage_stats.request_events_compact_view'
+            )}
           </Button>
           <div
             ref={columnSettingsRef}
@@ -2702,12 +2938,40 @@ export function RequestEventsDetailsCard({
         </Sheet>
       )}
 
-      {remote.error && <div className={styles.errorBox} role="alert">{remote.error}</div>}
+      <div className={styles.requestEventsExportStatus}>
+        <span>{t('usage_stats.export_filtered_scope', { count: filteredCount })}</span>
+        {referenceNowMs > 0 && <span>{t('usage_stats.query_as_of', { time: new Date(referenceNowMs).toLocaleString(i18n.language) })}</span>}
+      </div>
+      {remote.exportState.status !== 'idle' && (
+        <div className={styles.requestEventsExportStatus} role={remote.exportState.status === 'error' ? 'alert' : 'status'} aria-live="polite">
+          <span>{t('usage_stats.export_progress', { loaded: remote.exportState.loaded, total: remote.exportState.total ?? filteredCount })}</span>
+          {remote.exportState.retry > 0 && <span>{t('usage_stats.export_retrying', { attempt: remote.exportState.retry })}</span>}
+          {remote.exportState.status === 'generating' && <span>{t('usage_stats.export_generating')}</span>}
+          {remote.exportState.status === 'complete' && <span>{t('usage_stats.export_success')}</span>}
+          {remote.exportState.status === 'cancelled' && <span>{t('usage_stats.export_cancelled')}</span>}
+          {remote.exportState.status === 'error' && <span>{t(`usage_stats.export_error_${remote.exportState.failure}`)}</span>}
+          {['loading', 'generating'].includes(remote.exportState.status) && (
+            <Button size="sm" variant="secondary" onClick={remote.cancelExport}>{t('common.cancel')}</Button>
+          )}
+          {remote.exportState.canResume && (
+            <Button size="sm" variant="secondary" disabled={exportingRows || loading} onClick={() => void handleExportRows(exportFormat, true)}>
+              {t('usage_stats.export_resume')}
+            </Button>
+          )}
+        </div>
+      )}
+      {remote.error && (
+        <div className={`${styles.errorBox} ${styles.requestEventsExportStatus}`} role="alert">
+          <span>{t('usage_stats.page_load_failed', { page: remote.requestedPage + 1 })} {remote.error}</span>
+          <Button size="sm" variant="secondary" onClick={remote.retry}>{t('usage_stats.page_retry')}</Button>
+        </div>
+      )}
+      {remote.loading && remote.data && <div className={styles.hint} role="status">{t('usage_stats.page_loading', { page: remote.requestedPage + 1 })}</div>}
       {performanceSummaryGrid}
 
       {loading && timeScopedRows.length === 0 ? (
         <div className={styles.hint}>{t('common.loading')}</div>
-      ) : timeScopedRows.length === 0 ? (
+      ) : remote.error && timeScopedRows.length === 0 ? null : timeScopedRows.length === 0 ? (
         <EmptyState
           title={t('usage_stats.request_events_empty_title')}
           description={t('usage_stats.request_events_empty_desc')}
@@ -2735,6 +2999,7 @@ export function RequestEventsDetailsCard({
             role="region"
             tabIndex={0}
             aria-label={t('usage_stats.request_events_table_region')}
+            aria-busy={remote.loading}
           >
             <table className={`${styles.table} ${styles.requestEventsTable}`}>
               <thead>
@@ -2759,6 +3024,16 @@ export function RequestEventsDetailsCard({
                   )}
                   {columnVisibility.tier && <th>{t('usage_stats.request_events_tier')}</th>}
                   {columnVisibility.result && <th>{t('usage_stats.request_events_result')}</th>}
+                  {columnVisibility.transport && (
+                    <th title={t('usage_stats.request_events_transport_hint')}>
+                      {t('usage_stats.request_events_transport')}
+                    </th>
+                  )}
+                  {columnVisibility.requestSize && (
+                    <th title={t('usage_stats.request_events_request_size_hint')}>
+                      {t('usage_stats.request_events_request_size')}
+                    </th>
+                  )}
                   {columnVisibility.latency && hasLatencyData && (
                     <th title={latencyHint}>{t('usage_stats.time')}</th>
                   )}
@@ -2852,6 +3127,11 @@ export function RequestEventsDetailsCard({
                       {t('usage_stats.request_events_cost_estimate')}
                     </th>
                   )}
+                  {columnVisibility.requestLog && (
+                    <th title={t('usage_stats.request_events_request_log_hint')}>
+                      {t('usage_stats.request_events_request_log')}
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -2889,8 +3169,19 @@ export function RequestEventsDetailsCard({
                     ? `${inputTokensLabel} · ${longContextLabel}`
                     : undefined;
 
+                  const rowExpanded = expandedRows.has(row.id);
                   return (
-                    <tr key={row.id}>
+                    <>
+                    <tr
+                      key={row.id}
+                      data-request-row-expanded={rowExpanded}
+                      className={rowExpanded ? styles.requestEventsRowExpanded : undefined}
+                      onClick={() => {
+                        // 选中文本时点击视为复制操作，不触发展开。
+                        if (window.getSelection()?.toString()) return;
+                        toggleExpandedRow(row.id);
+                      }}
+                    >
                       {columnVisibility.timestamp && (
                         <td title={row.timestamp} className={styles.requestEventsTimestamp}>
                           {row.timestampLabel}
@@ -3017,16 +3308,72 @@ export function RequestEventsDetailsCard({
                         </td>
                       )}
                       {columnVisibility.result && (
-                        <td>
+                        <td data-request-result={row.failed ? 'failed' : 'success'}>
                           <span
+                            data-failure-status={row.failureStatus ?? undefined}
+                            title={
+                              row.failureStatus !== null
+                                ? t('usage_stats.request_events_failure_status', { status: row.failureStatus })
+                                : undefined
+                            }
+                            aria-label={
+                              row.failureStatus !== null
+                                ? `${t('stats.failure')} · ${t('usage_stats.request_events_failure_status', { status: row.failureStatus })}`
+                                : undefined
+                            }
                             className={
                               row.failed
                                 ? styles.requestEventsResultFailed
                                 : styles.requestEventsResultSuccess
                             }
                           >
-                            {row.failed ? t('stats.failure') : t('stats.success')}
+                            {row.failed ? row.failureStatus ?? t('stats.failure') : t('stats.success')}
                           </span>
+                          {row.failureReason && (
+                            <span
+                              className={styles.requestEventsFailureReason}
+                              data-failure-reason={row.failureReason}
+                              title={describeFailureReason(row.failureReason, t).title}
+                            >
+                              {describeFailureReason(row.failureReason, t).label}
+                            </span>
+                          )}
+                          {row.largeConnectFailure && (
+                            <span
+                              className={styles.requestEventsResultHint}
+                              data-request-diagnostic="large-request-connect-failure"
+                              title={t('usage_stats.request_events_large_connect_failure_hint')}
+                            >
+                              {t('usage_stats.request_events_large_connect_failure')}
+                            </span>
+                          )}
+                        </td>
+                      )}
+                      {columnVisibility.transport && (
+                        <td data-upstream-transport={row.upstreamTransport ?? undefined}>
+                          {row.upstreamTransport === 'websocket'
+                            ? t('usage_stats.request_events_transport_websocket')
+                            : row.upstreamTransport === 'http'
+                              ? t('usage_stats.request_events_transport_http')
+                              : '-'}
+                        </td>
+                      )}
+                      {columnVisibility.requestSize && (
+                        <td
+                          className={styles.durationCell}
+                          data-upstream-request-bytes={row.upstreamRequestBytes ?? undefined}
+                          title={
+                            row.upstreamRequestEncoding && row.upstreamRequestWireBytes !== null
+                              ? t('usage_stats.request_events_request_size_wire', {
+                                  wire: formatFileSize(row.upstreamRequestWireBytes),
+                                  encoding: row.upstreamRequestEncoding,
+                                })
+                              : undefined
+                          }
+                        >
+                          {row.upstreamRequestBytes !== null
+                            ? formatFileSize(row.upstreamRequestBytes)
+                            : '-'}
                         </td>
                       )}
                       {columnVisibility.latency && hasLatencyData && (
@@ -3079,7 +3426,7 @@ export function RequestEventsDetailsCard({
                           title={
                             row.outputTps === null
                               ? outputTpsHint
-                              : `${outputTpsHint} (${formatDurationMs(row.decodeDurationMs)})`
+                              : `${outputTpsHint} (${row.performanceOutputTokens} tokens / ${formatDurationMs(row.decodeDurationMs)})`
                           }
                         >
                           {formatPerSecondValue(row.outputTps)}
@@ -3157,7 +3504,7 @@ export function RequestEventsDetailsCard({
                       {columnVisibility.displayedOutputTokens && (
                         <td className={styles.requestEventsTokenCell}>
                           <span className={styles.requestEventsTokenValue}>
-                            {row.displayedOutputTokens.toLocaleString()}
+                            {row.displayedOutputTokens === null ? '--' : row.displayedOutputTokens.toLocaleString()}
                           </span>
                         </td>
                       )}
@@ -3224,7 +3571,131 @@ export function RequestEventsDetailsCard({
                             : formatRequestEventCostUsd(row.costAmount, i18n.language)}
                         </td>
                       )}
+                      {columnVisibility.requestLog && (
+                        <td data-request-trace-id={row.traceId ?? undefined}>
+                          {row.traceId ? (
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              loading={requestLogDownloads.has(row.traceId)}
+                              disabled={requestLogDownloads.has(row.traceId)}
+                              onClick={() => row.traceId && void downloadRequestLog(row.traceId)}
+                            >
+                              {t('usage_stats.request_events_request_log_download')}
+                            </Button>
+                          ) : (
+                            '-'
+                          )}
+                        </td>
+                      )}
                     </tr>
+                    {rowExpanded && (
+                      <tr key={`${row.id}-detail`} className={styles.requestEventsDetailRow}>
+                        <td colSpan={stableVisibleColumnCount + 1}>
+                          <div className={styles.requestEventsDetailGrid} data-testid="request-event-detail">
+                            <dl>
+                              <dt>{t('usage_stats.request_events_detail_result')}</dt>
+                              <dd>
+                                <span
+                                  className={
+                                    row.failed
+                                      ? styles.requestEventsResultFailed
+                                      : styles.requestEventsResultSuccess
+                                  }
+                                >
+                                  {row.failed
+                                    ? row.failureStatus ?? t('stats.failure')
+                                    : t('stats.success')}
+                                </span>
+                                {row.failureReason && (
+                                  <span className={styles.requestEventsFailureReason}>
+                                    {row.failureReason}
+                                  </span>
+                                )}
+                                {row.upstreamModel && row.upstreamModel !== row.model && (
+                                  <span className={styles.upstreamModelDiff}>
+                                    {t('usage_stats.request_events_upstream_model', {
+                                      model: row.upstreamModel,
+                                    })}
+                                  </span>
+                                )}
+                              </dd>
+                              <dt>{t('usage_stats.request_events_detail_timing')}</dt>
+                              <dd>
+                                {[
+                                  ['usage_stats.time', row.latencyMs],
+                                  ['usage_stats.request_events_ttfb', row.ttfbMs],
+                                  [
+                                    'usage_stats.request_events_ttft',
+                                    row.ttftMs,
+                                  ],
+                                  [
+                                    'usage_stats.request_events_ttfa',
+                                    row.ttfaMs,
+                                  ],
+                                ].map(([label, value]) => (
+                                  <span key={String(label)} className={styles.requestEventsDetailItem}>
+                                    {t(String(label))}:{' '}
+                                    {value === null || value === undefined
+                                      ? '—'
+                                      : formatDurationMs(Number(value))}
+                                  </span>
+                                ))}
+                              </dd>
+                              <dt>{t('usage_stats.request_events_detail_tokens')}</dt>
+                              <dd>
+                                {[
+                                  ['usage_stats.request_events_total_input_tokens', row.inputTokens],
+                                  [
+                                    'usage_stats.cache_read_tokens',
+                                    row.cacheReadTokens,
+                                  ],
+                                  [
+                                    'usage_stats.cache_write_tokens',
+                                    row.cacheWriteTokens,
+                                  ],
+                                  ['usage_stats.request_events_total_output_tokens', row.outputTokens],
+                                  [
+                                    'usage_stats.reasoning_tokens',
+                                    row.reasoningTokens,
+                                  ],
+                                ].map(([label, value]) => (
+                                  <span key={String(label)} className={styles.requestEventsDetailItem}>
+                                    {t(String(label))}:{' '}
+                                    {value === null || value === undefined
+                                      ? '—'
+                                      : Number(value).toLocaleString()}
+                                  </span>
+                                ))}
+                              </dd>
+                              <dt>{t('usage_stats.request_events_detail_diagnostics')}</dt>
+                              <dd>
+                                <span className={styles.requestEventsDetailItem}>
+                                  {t('usage_stats.request_events_detail_auth_index')}:{' '}
+                                  {row.authIndex || '—'}
+                                </span>
+                                <span className={styles.requestEventsDetailItem}>
+                                  {t('usage_stats.request_events_detail_trace_id')}:{' '}
+                                  {row.traceId ?? '—'}
+                                </span>
+                                {row.upstreamTransport && (
+                                  <span className={styles.requestEventsDetailItem}>
+                                    {t('usage_stats.request_events_transport')}:{' '}
+                                    {t(
+                                      row.upstreamTransport === 'websocket'
+                                        ? 'usage_stats.request_events_transport_websocket'
+                                        : 'usage_stats.request_events_transport_http'
+                                    )}
+                                  </span>
+                                )}
+                              </dd>
+                            </dl>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </>
                   );
                 })}
               </tbody>
@@ -3233,14 +3704,14 @@ export function RequestEventsDetailsCard({
           {pageCount > 1 && (
             <nav className={styles.requestEventsPagination} aria-label={t('usage_stats.request_events_pagination')}>
               <span>{t('usage_stats.request_events_page_status', {
-                start: currentPage * REQUEST_EVENTS_PAGE_SIZE + 1,
-                end: Math.min((currentPage + 1) * REQUEST_EVENTS_PAGE_SIZE, filteredCount),
+                start: currentPage * pageSize + 1,
+                end: Math.min((currentPage + 1) * pageSize, filteredCount),
                 total: filteredCount,
               })}</span>
-              <Button variant="secondary" size="sm" disabled={currentPage === 0} onClick={() => changePage(currentPage - 1)}>
+              <Button variant="secondary" size="sm" disabled={remote.loading || currentPage === 0} onClick={() => changePage(currentPage - 1)}>
                 {t('usage_stats.request_events_previous_page')}
               </Button>
-              <Button variant="secondary" size="sm" disabled={currentPage + 1 >= pageCount} onClick={() => changePage(currentPage + 1)}>
+              <Button variant="secondary" size="sm" disabled={remote.loading || currentPage + 1 >= pageCount} onClick={() => changePage(currentPage + 1)}>
                 {t('usage_stats.request_events_next_page')}
               </Button>
             </nav>

@@ -468,6 +468,11 @@ export function OAuthPage() {
       if (!attempt.isCurrent()) return;
       updateProviderState(provider, { callbackSubmitting: false, callbackStatus: 'success' });
       showNotification(t('auth_login.oauth_callback_success'), 'success');
+      const loginState = states[provider]?.state;
+      if (loginState && !attempt.isPolling()) {
+        updateProviderState(provider, { status: 'waiting', error: undefined, polling: true });
+        startPolling(provider, loginState, attempt);
+      }
     } catch (err: unknown) {
       const status = getErrorStatus(err);
       if (!attempt.isCurrent()) return;

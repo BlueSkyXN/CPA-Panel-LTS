@@ -210,6 +210,39 @@ export const CONFIG_FIELDS = {
     heading: false,
     aliases: ['cache', '缓存', 'ZCode', 'ChatGPT'],
   },
+  codexZcodeContextUsage: {
+    labelKey: 'codex_zcode_context_usage.title',
+    yamlKey: 'codex.zcode-context-usage',
+    fullWidth: true,
+    heading: false,
+    aliases: ['token', 'context', '压缩', '上下文', 'GLM', 'zcode'],
+  },
+  codexOutboundTransport: {
+    labelKey: 'codex_outbound.transport.title',
+    yamlKey: 'codex.outbound.transport',
+    fullWidth: true,
+    heading: false,
+    aliases: ['websocket', 'WebSocket', 'transport', '传输', 'HTTP'],
+  },
+  codexOutboundWebsocketThresholdBytes: {
+    labelKey: 'codex_outbound.threshold.label',
+    yamlKey: 'codex.outbound.websocket-threshold-bytes',
+    fullWidth: false,
+  },
+  codexOutboundRequestCompression: {
+    labelKey: 'codex_outbound.request_compression.title',
+    yamlKey: 'codex.outbound.request-compression',
+    fullWidth: true,
+    heading: false,
+    aliases: ['zstd', 'compression', '压缩'],
+  },
+  codexOutboundAcceptEncoding: {
+    labelKey: 'codex_outbound.accept_encoding.title',
+    yamlKey: 'codex.outbound.accept-encoding',
+    fullWidth: true,
+    heading: false,
+    aliases: ['Accept-Encoding', 'gzip'],
+  },
   codexIdentityConfuse: {
     labelKey: 'config_management.visual.sections.headers.codex_identity_confuse',
     yamlKey: 'codex.identity-confuse',
@@ -581,6 +614,16 @@ export const CONFIG_DOMAINS = [
     group: 'features',
     pages: [
       { id: 'cache', fields: ['codexCacheAffinityStrategy'] },
+      { id: 'context', fields: ['codexZcodeContextUsage'] },
+      {
+        id: 'outbound',
+        fields: [
+          'codexOutboundTransport',
+          'codexOutboundWebsocketThresholdBytes',
+          'codexOutboundRequestCompression',
+          'codexOutboundAcceptEncoding',
+        ],
+      },
       {
         id: 'scope',
         fields: [

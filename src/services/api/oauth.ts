@@ -39,6 +39,19 @@ const CALLBACK_PROVIDER_MAP: Partial<Record<OAuthProvider, string>> = {
   'gemini-cli': 'gemini',
 };
 
+export interface SiwcBindResponse {
+  status: 'ok'; url: string; state: string; flow: 'siwc_bind'; expires_in: number;
+}
+export function captureSiwcBindingApi() {
+  const client = apiClient.captureConnection();
+  return {
+    start: (name: string) => client.post<SiwcBindResponse>('/oauth/siwc/bind', { name }),
+    cancel: (state: string) => client.delete('/oauth/session', { params: { state } }),
+    status: (state: string, signal?: AbortSignal) => client.get<{status:'ok'|'wait'|'error';error?:string}>('/oauth/status', {params:{state},signal}),
+    callback: (redirect_url: string, signal?: AbortSignal) => client.post('/oauth/callback', {provider:'codex',redirect_url}, {signal}),
+  };
+}
+
 export const oauthApi = {
   startAuth: (provider: OAuthProvider, options?: { projectId?: string; signal?: AbortSignal }) => {
     const params: Record<string, string | boolean> = {};

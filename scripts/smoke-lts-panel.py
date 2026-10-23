@@ -472,12 +472,17 @@ def build_usage_payload() -> dict[str, Any]:
             "timing_version": 1,
             "ttft_ms": 80,
             "ttfa_ms": 95,
+            "trace_id": "smoke-trace-1",
+            "size_version": 1,
+            "upstream_transport": "websocket",
+            "upstream_request_bytes": 900000,
+            "upstream_request_wire_bytes": 900000,
             "tokens": {
                 "input_tokens": 12,
                 "output_tokens": 8,
                 "reasoning_tokens": 2,
                 "cached_tokens": 1,
-                "cache_read_tokens": 3,
+                "cache_read_tokens": 12,
                 "cache_creation_tokens": 4,
                 "total_tokens": 23,
             },
@@ -536,8 +541,8 @@ def build_usage_payload() -> dict[str, Any]:
                 "input_tokens": 11,
                 "output_tokens": 7,
                 "reasoning_tokens": 1,
-                "cached_tokens": 7,
-                "cache_read_tokens": 7,
+                "cached_tokens": 10,
+                "cache_read_tokens": 10,
                 "total_tokens": 19,
             },
             "failed": False,
@@ -590,7 +595,7 @@ def build_usage_payload() -> dict[str, Any]:
             "reasoning_effort": "medium",
             "tokens": {
                 "input_tokens": 272_000,
-                "cache_read_tokens": 163_200,
+                "cache_read_tokens": 258_400,
                 "output_tokens": 0,
                 "total_tokens": 272_000,
             },
@@ -1423,7 +1428,7 @@ class MockCoreHandler(BaseHTTPRequestHandler):
         url = str(payload.get("url") or "")
         auth_index = str(payload.get("authIndex") or "")
         if "rate-limit-reset-credits/consume" in url:
-            return build_api_call_result({"status": "ok"})
+            return build_api_call_result({"code": "reset"})
         if "usage-leaderboard" in url:
             return build_api_call_result(build_codex_team_leaderboard_payload())
         if "daily-workspace-usage-counts" in url:
@@ -1898,7 +1903,7 @@ def assert_xai_billing_identity(
     expected_headers = {
         "Authorization": "Bearer $TOKEN$",
         "x-xai-token-auth": "xai-grok-cli",
-        "x-grok-client-version": "1.0.3",
+        "x-grok-client-version": "1.0.46",
         "x-grok-client-mode": "interactive",
         "accept": "application/json",
         "x-userid": "xai-user-smoke",
@@ -1910,7 +1915,7 @@ def assert_xai_billing_identity(
             continue
         user_agent = headers.get("user-agent", "")
         if re.fullmatch(
-            r"grok-pager/1\.0\.3 grok-shell/1\.0\.3 "
+            r"grok-pager/1\.0\.46 grok-shell/1\.0\.46 "
             r"\((?:macos|windows|linux|unknown); (?:aarch64|x86_64|unknown)\)",
             user_agent,
         ):
@@ -2650,7 +2655,8 @@ def run_oauth_load_failure_smoke(
         page.goto(f"{app_url}?route=oauth-load-failure#/auth-files", wait_until="domcontentloaded")
         page.wait_for_function("() => window.location.hash.endsWith('/auth-files')")
         page.get_by_text("Refresh failed", exact=True).first.wait_for()
-        if not page.get_by_role("button", name="Add Disablement", exact=True).is_disabled():
+        disablement_buttons = page.get_by_role("button", name="Add Disablement", exact=True)
+        if disablement_buttons.count() == 0 or not all(button.is_disabled() for button in disablement_buttons.all()):
             raise AssertionError("OAuth excluded-model writes stayed enabled after a load failure")
         if not page.get_by_role("button", name="Add Alias", exact=True).is_disabled():
             raise AssertionError("OAuth model-alias writes stayed enabled after a load failure")
@@ -2699,7 +2705,8 @@ def run_auth_file_using_api_smoke(page: Any, app_url: str) -> None:
         and "/v8/management/credentials/download" in response.url
         and "codex-smoke.json" in response.url
     ):
-        codex_card.locator('button[title="Auth File Details / Edit"]').click()
+        codex_card.get_by_role("button", name="More", exact=True).click()
+        page.get_by_role("menuitem", name="Auth File Details / Edit", exact=True).click()
     codex_dialog = page.get_by_role("dialog").filter(has_text="codex-smoke.json").filter(
         has_text="Auth File Details / Edit"
     )
@@ -2719,7 +2726,8 @@ def run_auth_file_using_api_smoke(page: Any, app_url: str) -> None:
         and "/v8/management/credentials/download" in response.url
         and "xai-smoke.json" in response.url
     ):
-        xai_card.locator('button[title="Auth File Details / Edit"]').click()
+        xai_card.get_by_role("button", name="More", exact=True).click()
+        page.get_by_role("menuitem", name="Auth File Details / Edit", exact=True).click()
     xai_dialog = page.get_by_role("dialog").filter(has_text="xai-smoke.json").filter(
         has_text="Auth File Details / Edit"
     )
@@ -2982,8 +2990,10 @@ def run_quota_runtime_smoke(page: Any, app_url: str, state: MockCoreState) -> No
     weekly_row.get_by_text(re.compile(r"^Resets ", re.I)).wait_for()
     if " ~ " in weekly_row.inner_text():
         raise AssertionError("xAI weekly quota still renders the redundant full period range")
-    xai_card.get_by_text("Grok 4 usage", exact=True).wait_for()
-    xai_card.get_by_text("Used 25%", exact=True).wait_for()
+    xai_card.get_by_text("Grok 4 usage: 25%", exact=True).wait_for()
+    xai_card.get_by_text("Grok Code usage: 55%", exact=True).wait_for()
+    if xai_card.get_by_text("Used 25%", exact=True).count():
+        raise AssertionError("Shared usage components must not render independent quota meters")
     xai_card.get_by_text("Pay as you go", exact=True).wait_for()
     xai_card.get_by_text("$25.00 / $25.00", exact=False).wait_for()
     xai_card.get_by_text("Prepaid credits", exact=True).wait_for()
@@ -3050,6 +3060,8 @@ def run_remote_cloud_connect_runtime_smoke(page: Any, app_url: str) -> None:
 
 
 def run_usage_analytics_smoke(page: Any) -> None:
+    page.get_by_text("Model Share", exact=True).wait_for()
+    page.get_by_role("button", name="Open performance and reliability analysis", exact=True).click()
     section = page.locator('[aria-label="Performance & Reliability"]')
     section.wait_for()
     for expected_heading in [
@@ -3057,18 +3069,24 @@ def run_usage_analytics_smoke(page: Any) -> None:
         "Latency Distribution",
         "Cache Efficiency",
         "Error Analysis",
-        "Model Share",
     ]:
         section.get_by_text(expected_heading, exact=True).first.wait_for()
-    if section.locator("canvas").count() < 5:
+    if section.locator("canvas").count() < 4:
         raise AssertionError("Usage analytics section did not render its chart canvases")
     # 分位数 chips 存在且带有样本数说明。
     if section.get_by_text("P50", exact=True).count() == 0:
         raise AssertionError("Latency distribution card is missing percentile chips")
-    if section.get_by_text("samples loaded", exact=False).count() == 0:
+    if section.get_by_text(re.compile(r"Loaded \d+ / \d+ samples")).count() == 0:
         raise AssertionError("Analytics section does not disclose its sample count")
     # 错误分析展示 mock 的脱敏 failure_reason。
     section.get_by_text("rate_limited", exact=True).wait_for()
+    page.goto(page.url.split("#")[0] + "#/usage")
+    # 客户端转场期间旧页面停留在 aria-hidden 的退场层，get_by_text 仍会命中；
+    # 等非隐藏层真正渲染出 usage 内容，后续 role 查询才不会读到退场层。
+    page.wait_for_function(
+        "() => [...document.querySelectorAll('.page-transition__layer:not([aria-hidden=\"true\"])')]"
+        ".some((layer) => layer.textContent.includes('Model Share'))"
+    )
 
 
 def run_usage_pricing_entry_smoke(page: Any) -> None:
@@ -3167,6 +3185,10 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
             "kimi-k2.7-code-highspeed",
             "grok-4.5",
             "grok-4.6",
+            "grok-4.3",
+            "grok-4.7",
+            "grok-4.7-fast",
+            "doubao-seed-2.1-pro",
             "claude-haiku-4-5-20251001",
             "claude-sonnet-4-5-20250929",
             "claude-sonnet-4-6",
@@ -3436,7 +3458,7 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
                 raise AssertionError(f"Grok 4.5 {band} row did not expose Fast as unavailable")
 
         grok_text = grok_model.inner_text()
-        if "200.0K" not in grok_text:
+        if "200,000" not in grok_text:
             raise AssertionError("Grok 4.5 catalog did not expose the 200K pricing threshold")
         if (
             grok_model.locator(
@@ -3484,7 +3506,7 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
                 raise AssertionError(f"Grok 4.6 {band} row did not expose Fast as unavailable")
 
         grok46_text = grok46_model.inner_text()
-        if "200.0K" not in grok46_text:
+        if "200,000" not in grok46_text:
             raise AssertionError("Grok 4.6 catalog did not expose the 200K pricing threshold")
         if (
             grok46_model.locator(
@@ -3493,6 +3515,128 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
             != "https://docs.x.ai/developers/models/grok-4.6"
         ):
             raise AssertionError("Grok 4.6 Official source does not point to xAI model pricing")
+
+        for grok_new_model, grok_new_rates, grok_new_source in [
+            (
+                "grok-4.3",
+                {
+                    "short": {"Input": "$1.25", "Cached input": "$0.2", "Output": "$2.5"},
+                    "long": {"Input": "$2.5", "Cached input": "$0.4", "Output": "$5"},
+                },
+                "https://docs.x.ai/developers/models/grok-4.3",
+            ),
+            (
+                "grok-4.7",
+                {
+                    "short": {"Input": "$2", "Cached input": "$0.5", "Output": "$6"},
+                    "long": {"Input": "$4", "Cached input": "$1", "Output": "$12"},
+                },
+                "https://docs.x.ai/developers/models/grok-4.7",
+            ),
+            (
+                "grok-4.7-fast",
+                {
+                    "short": {"Input": "$4", "Cached input": "$1", "Output": "$12"},
+                    "long": {"Input": "$6", "Cached input": "$1.5", "Output": "$18"},
+                },
+                "https://docs.x.ai/developers/pricing#grok-47-fast-pricing-cursor-and-grok-build-only",
+            ),
+        ]:
+            grok_new = catalog.locator(
+                f'[data-testid="preset-pricing-model"][data-model="{grok_new_model}"]'
+            )
+            grok_new_rows = grok_new.locator("tr")
+            if grok_new_rows.count() != 2:
+                raise AssertionError(
+                    f"{grok_new_model} catalog did not render short and long-context rows"
+                )
+            for band, expected_rates in grok_new_rates.items():
+                grok_new_row = grok_new.locator(f'tr[data-context-band="{band}"]')
+                for label, expected_rate in expected_rates.items():
+                    actual_rate = (
+                        grok_new_row.locator(f'td[data-label="{label}"] strong')
+                        .first.text_content()
+                        or ""
+                    )
+                    if actual_rate != expected_rate:
+                        raise AssertionError(
+                            f"{grok_new_model} {band} {label} rate is {actual_rate!r}, "
+                            f"expected {expected_rate!r}"
+                        )
+                cache_write = grok_new_row.locator('td[data-label="Cache write"]')
+                if (
+                    (cache_write.locator("strong").text_content() or "")
+                    != "Auto / input rate"
+                    or (cache_write.locator("small").text_content() or "")
+                    != expected_rates["Input"]
+                ):
+                    raise AssertionError(
+                        f"{grok_new_model} {band} Cache write did not inherit the Input rate"
+                    )
+                if "Unavailable" not in (
+                    grok_new_row.locator('td[data-label="Fast policies"]').text_content() or ""
+                ):
+                    raise AssertionError(
+                        f"{grok_new_model} {band} row did not expose Fast as unavailable"
+                    )
+
+            threshold = "200,001" if grok_new_model == "grok-4.7-fast" else "200,000"
+            if threshold not in grok_new.inner_text():
+                raise AssertionError(
+                    f"{grok_new_model} catalog did not expose the exact {threshold} pricing threshold"
+                )
+            if (
+                grok_new.locator(
+                    '[data-testid="pricing-official-source"]'
+                ).first.get_attribute("href")
+                != grok_new_source
+            ):
+                raise AssertionError(
+                    f"{grok_new_model} Official source does not point to xAI model pricing"
+                )
+
+        doubao_model = catalog.locator(
+            '[data-testid="preset-pricing-model"][data-model="doubao-seed-2.1-pro"]'
+        )
+        doubao_rows = doubao_model.locator("tr")
+        if doubao_rows.count() != 1:
+            raise AssertionError(
+                "Doubao Seed 2.1 Pro catalog did not render a single standard row"
+            )
+        doubao_row = doubao_model.locator('tr[data-context-band="short"]')
+        for label, expected_rate in {
+            "Input": "$0.882",
+            "Cached input": "$0.176",
+            "Output": "$4.412",
+        }.items():
+            actual_rate = (
+                doubao_row.locator(f'td[data-label="{label}"] strong').first.text_content() or ""
+            )
+            if actual_rate != expected_rate:
+                raise AssertionError(
+                    f"Doubao Seed 2.1 Pro {label} rate is {actual_rate!r}, "
+                    f"expected {expected_rate!r}"
+                )
+        doubao_cache_write = doubao_row.locator('td[data-label="Cache write"]')
+        if (
+            (doubao_cache_write.locator("strong").text_content() or "")
+            != "Auto / input rate"
+            or (doubao_cache_write.locator("small").text_content() or "")
+            != "$0.882"
+        ):
+            raise AssertionError("Doubao Seed 2.1 Pro Cache write did not inherit the Input rate")
+        if "Unavailable" not in (
+            doubao_row.locator('td[data-label="Fast policies"]').text_content() or ""
+        ):
+            raise AssertionError("Doubao Seed 2.1 Pro row did not expose Fast as unavailable")
+        if (
+            doubao_model.locator('[data-testid="pricing-official-source"]')
+            .first.get_attribute("href")
+            != "https://www.volcengine.com/docs/82379/1099320"
+        ):
+            raise AssertionError(
+                "Doubao Seed 2.1 Pro Official source does not point to Volcano Ark pricing"
+            )
 
         sol_model = catalog.locator('[data-testid="preset-pricing-model"][data-model="gpt-5.6-sol"]')
         for band, expected_rates in [
@@ -4143,7 +4287,7 @@ def run_usage_events_workspace_smoke(context: Any, app_url: str) -> None:
         if not workspace.get_by_role("button", name="Next page", exact=True).is_disabled():
             raise AssertionError("The last request page must disable Next page")
         with workspace.expect_download() as pending:
-            workspace.get_by_role("button", name="Export JSON", exact=True).click()
+            workspace.get_by_role("button", name="Export filtered JSON", exact=True).click()
         exported = json.loads(Path(pending.value.path()).read_text(encoding="utf-8"))
         if len(exported) != 625:
             raise AssertionError("Request export was incorrectly limited to the current page")
@@ -4187,6 +4331,8 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         'td[data-request-performance="first-content"][data-first-content-ms="80"]'
     ).wait_for()
     card.locator('td[data-request-performance="ttft"][data-ttft-ms="80"]').wait_for()
+    card.locator('td[data-upstream-transport="websocket"]').wait_for()
+    card.locator('td[data-upstream-request-bytes="900000"]').wait_for()
     card.locator('td[data-request-performance="ttfa"][data-ttfa-ms="95"]').wait_for()
     card.locator('td[data-request-performance="output-tps"][data-output-tps="200"]').wait_for()
     card.locator('[data-performance-summary-key="output-tps"]').wait_for()
@@ -4216,8 +4362,8 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         raise AssertionError("Request events must expose one canonical effort column")
     card.get_by_role("columnheader", name="Total Input Tokens", exact=True).wait_for()
     card.locator("th", has_text="Non-Cache-Read Input Tokens").wait_for()
-    card.get_by_role("columnheader", name="Total Output Tokens", exact=True).wait_for()
-    card.locator("th", has_text="Explicit Output Tokens").wait_for()
+    card.get_by_role("columnheader", name="Reported output tokens", exact=True).wait_for()
+    card.locator("th", has_text="Non-reasoning output tokens").wait_for()
     card.get_by_role("columnheader", name="Reasoning Tokens", exact=True).wait_for()
     card.locator("th", has_text="Cache Read Tokens").wait_for()
     card.get_by_role("columnheader", name="Cache Write Tokens", exact=True).wait_for()
@@ -4286,6 +4432,8 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         "authIndex": False,
         "tier": True,
         "result": True,
+        "transport": True,
+        "requestSize": True,
         "latency": True,
         "ttfb": True,
         "firstContent": True,
@@ -4305,6 +4453,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         "cacheWriteTokens": True,
         "totalTokens": True,
         "cost": True,
+        "requestLog": False,
     }
     if stored_columns != expected_column_defaults:
         raise AssertionError(
@@ -4393,8 +4542,8 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         [
             "Total Input Tokens",
             "Non-Cache-Read Input Tokens",
-            "Total Output Tokens",
-            "Explicit Output Tokens",
+            "Reported output tokens",
+            "Non-reasoning output tokens",
             "Reasoning Tokens",
             "Cache Read Tokens",
             "Cache Write Tokens",
@@ -4437,7 +4586,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         column["label"]: column.get("headerAriaLabel") or column.get("headerTitle")
         for column in token_column_alignment
         if column["label"]
-        in {"Non-Cache-Read Input Tokens", "Explicit Output Tokens", "Cache Read Tokens"}
+        in {"Non-Cache-Read Input Tokens", "Non-reasoning output tokens", "Cache Read Tokens"}
     }
     if any(not hint for hint in header_hints.values()):
         raise AssertionError(
@@ -4506,7 +4655,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     priority_row = rows.filter(has_text="12").filter(has_text="Fast").first
     priority_cells = [text.strip() for text in priority_row.locator("td").all_inner_texts()]
     priority_token_values = [cell.splitlines()[0] for cell in priority_cells[-9:-1]]
-    if priority_token_values != ["12", "9", "8", "6", "2", "3", "4", "23"]:
+    if priority_token_values != ["12", "0", "8", "6", "2", "12", "4", "23"]:
         raise AssertionError(
             "Combined service-tier/cache row rendered the wrong token values: "
             f"{priority_cells!r}"
@@ -4537,7 +4686,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         'td[data-cache-rate-tone="low"][data-cache-token-count="0"]'
     )
     if zero_cache_cells.count() == 0:
-        raise AssertionError("A known 0% cache-read share was not classified as Low")
+        raise AssertionError("A known 0% cache-read share was not classified as abnormal")
     anomaly_cache_cells = rows.locator('td[data-cache-rate-tone="anomaly"]')
     if anomaly_cache_cells.count() != 1:
         raise AssertionError(
@@ -4553,7 +4702,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         )
 
     with page.expect_download() as csv_download:
-        card.get_by_role("button", name="Export CSV", exact=True).click()
+        card.get_by_role("button", name="Export filtered CSV", exact=True).click()
     csv_path = csv_download.value.path()
     if not csv_path:
         raise AssertionError("Request-event CSV export did not create a download")
@@ -4574,6 +4723,12 @@ def run_usage_service_tier_smoke(page: Any) -> None:
             "Request-event CSV did not export canonical timing/performance columns: "
             f"{sorted(csv_rows[0])!r}"
         )
+    if (
+        csv_rows[0].get("upstream_transport") != "websocket"
+        or csv_rows[0].get("upstream_request_bytes") != "900000"
+        or csv_rows[0].get("trace_id") != "smoke-trace-1"
+    ):
+        raise AssertionError(f"Request-event CSV did not export request size fields: {csv_rows[0]!r}")
     if (
         csv_rows[0].get("timing_version") != "1"
         or csv_rows[0].get("first_content_ms") != "80"
@@ -4631,9 +4786,9 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         )
     priority_csv = priority_csv_rows[0]
     expected_priority_csv_tokens = {
-        "non_cache_read_input_tokens": "9",
-        "cached_tokens": "3",
-        "cache_read_tokens": "3",
+        "non_cache_read_input_tokens": "0",
+        "cached_tokens": "12",
+        "cache_read_tokens": "12",
         "cache_creation_tokens": "4",
         "total_tokens": "23",
     }
@@ -4655,7 +4810,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         )
 
     with page.expect_download() as json_download:
-        card.get_by_role("button", name="Export JSON", exact=True).click()
+        card.get_by_role("button", name="Export filtered JSON", exact=True).click()
     json_path = json_download.value.path()
     if not json_path:
         raise AssertionError("Request-event JSON export did not create a download")
@@ -4734,11 +4889,13 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     priority_json_tokens = priority_json_rows[0].get("tokens", {})
     expected_priority_json_tokens = {
         "input_tokens": 12,
-        "non_cache_read_input_tokens": 9,
+        "non_cache_read_input_tokens": 0,
         "output_tokens": 8,
+        "tps_output_tokens": 8,
+        "non_reasoning_output_tokens": 6,
         "reasoning_tokens": 2,
-        "cached_tokens": 3,
-        "cache_read_tokens": 3,
+        "cached_tokens": 12,
+        "cache_read_tokens": 12,
         "cache_creation_tokens": 4,
         "total_tokens": 23,
     }
@@ -4758,11 +4915,12 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         )
 
     tier_select = card.get_by_label("Tier", exact=True)
-    for option_label, expected_rows in [("Fast", 1), ("Std", 4)]:
+    for option_label, expected_rows in [("Fast", 1), ("Std", 1), ("Fast → Std", 3), ("Std → Fast", 0)]:
         tier_select.click()
         page.get_by_role("option", name=option_label, exact=True).click()
         wait_for_row_count(expected_rows)
-        if any(option_label not in rows.nth(index).inner_text() for index in range(expected_rows)):
+        expected_label = option_label.replace(" ", "")
+        if any(expected_label not in rows.nth(index).inner_text().replace("\n", "").replace(" ", "") for index in range(expected_rows)):
             raise AssertionError(
                 f"Tier filter {option_label!r} returned the wrong request event row"
             )
@@ -4822,10 +4980,10 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     }
     expected_cache_tone_labels = {
         "unavailable": "Not set",
-        "low": "Low",
-        "medium": "Moderate",
-        "high": "High",
-        "anomaly": "Anomaly",
+        "low": "Abnormal",
+        "medium": "Borderline",
+        "high": "Normal",
+        "anomaly": "Data anomaly",
     }
     original_theme = page.evaluate(
         "() => document.documentElement.getAttribute('data-theme')"
@@ -4879,8 +5037,8 @@ def run_usage_service_tier_smoke(page: Any) -> None:
             f"{cache_tone_signatures!r}"
         )
     cache_rate_boundaries = {
-        "medium": ('td[data-cache-rate-tone="medium"][data-cache-token-count="3"]', "25%"),
-        "high": ('td[data-cache-rate-tone="high"][data-cache-token-count="163200"]', "60%"),
+        "medium": ('td[data-cache-rate-tone="medium"][data-cache-token-count="10"]', "90.9%"),
+        "high": ('td[data-cache-rate-tone="high"][data-cache-token-count="258400"]', "95%"),
     }
     for tone, (selector, expected_rate) in cache_rate_boundaries.items():
         boundary_cell = card.locator(selector)
@@ -4984,8 +5142,16 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     result_select.click()
     page.get_by_role("option", name="Failure", exact=True).click()
     wait_for_row_count(1)
-    if "Failure" not in rows.first.inner_text():
-        raise AssertionError("Result filter returned a successful request")
+    failed_result_cell = rows.first.locator('td[data-request-result="failed"]')
+    failure_badge = failed_result_cell.locator('[data-failure-status="429"]')
+    if failure_badge.count() != 1:
+        raise AssertionError("Failed request lost its HTTP failure-status badge")
+    badge_label = failure_badge.first.get_attribute("aria-label") or ""
+    if "Failure" not in badge_label or "429" not in badge_label:
+        raise AssertionError(
+            "Failure-status badge is not announced as a failure to screen readers: "
+            f"{badge_label!r}"
+        )
 
     card.get_by_role("button", name="Clear Filters", exact=True).click()
     wait_for_row_count(8)
@@ -5017,8 +5183,8 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     for metric_name in [
         "Total Input Tokens",
         "Non-Cache-Read Input Tokens",
-        "Total Output Tokens",
-        "Explicit Output Tokens",
+        "Reported output tokens",
+        "Non-reasoning output tokens",
         "Reasoning Tokens",
         "Cache Read Tokens",
         "Cache Write Tokens",
@@ -5526,6 +5692,8 @@ def run_usage_request_event_column_storage_smoke(context: Any, app_url: str) -> 
                 authIndex: false,
                 tier: false,
                 result: false,
+                transport: false,
+                requestSize: false,
                 latency: true,
                 ttfb: false,
                 firstContent: false,
@@ -7024,7 +7192,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
         ("PUT", "/v8/management/config.yaml"),
     ]:
         assert_request_seen(state, method, path)
-    # V8-only: no configuration is read or written through the legacy flat v0 routes.
+    # V8 config writes stay native; LTS read-only capability and operational probes remain allowed.
     for request in state.requests:
         method, _, target = request.partition(" ")
         target_path = target.split("?", 1)[0]
@@ -7032,6 +7200,8 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
             continue
         suffix = target_path[len(LTS_EXTENSION) :]
         allowed = suffix.startswith(("/usage", "/nodes", "/flow-control", "/auth-files/models/refresh"))
+        allowed = allowed or (method == "GET" and suffix in {"/oauth-model-policy", "/auth-files/models/policy-preview"})
+        allowed = allowed or (method == "POST" and suffix == "/proxy-url/test")
         allowed = allowed or bool(re.match(r"^/plugins/[^/]+/(readiness|summary|login-info)$", suffix))
         if not allowed:
             raise AssertionError(f"Panel used a non-extension v0 route: {request}")

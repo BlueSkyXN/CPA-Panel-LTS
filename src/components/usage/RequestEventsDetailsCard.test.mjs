@@ -37,10 +37,11 @@ const vite = await createServer({
   server: { middlewareMode: true },
 });
 
-const [{ RequestEventsDetailsCard }, pricingModule, i18nModule] = await Promise.all([
+const [{ RequestEventsDetailsCard }, pricingModule, i18nModule, { buildRequestEventFilterOptions }] = await Promise.all([
   vite.ssrLoadModule('/src/components/usage/RequestEventsDetailsCard.tsx'),
   vite.ssrLoadModule('/src/utils/usage/pricing/index.ts'),
   vite.ssrLoadModule('/src/i18n/index.ts'),
+  vite.ssrLoadModule('/src/components/usage/requestEventFilterOptions.ts'),
 ]);
 const i18n = i18nModule.default;
 
@@ -487,6 +488,60 @@ test('fully redacts short caller keys instead of exposing every original charact
   assert.doesNotMatch(markup, /x\*+z/);
 });
 
+const allFilterOption = { value: '__all__', label: '全部' };
+
+test('model filter options are unique, naturally sorted, and keep All first', () => {
+  const models = Object.freeze([
+    'gpt-5.10', 'glm-5.3-flash', 'gpt-5.9', 'glm-5.3',
+    'Doubao-Seed-2.1-Pro', 'glm-5.3', '__all__',
+  ]);
+  const expected = [
+    allFilterOption,
+    ...['Doubao-Seed-2.1-Pro', 'glm-5.3', 'glm-5.3-flash', 'gpt-5.9', 'gpt-5.10']
+      .map((value) => ({ value, label: value })),
+  ];
+
+  for (const selection of ['__all__', 'glm-5.3', 'gpt-5.10']) {
+    assert.deepEqual(buildRequestEventFilterOptions(models, selection, allFilterOption), expected);
+    assert.deepEqual(buildRequestEventFilterOptions([...models].reverse(), selection, allFilterOption), expected);
+  }
+});
+
+test('filter ordering ignores case but preserves exact model identities and deterministic ties', () => {
+  const models = ['gpt-5.9', 'GLM-5.3', 'glm-5.3', 'GPT-5.10', 'glm-5.3'];
+  const expected = ['__all__', 'GLM-5.3', 'glm-5.3', 'gpt-5.9', 'GPT-5.10'];
+
+  for (const values of [models, [...models].reverse()]) {
+    assert.deepEqual(
+      buildRequestEventFilterOptions(values, 'glm-5.3', allFilterOption).map(({ value }) => value),
+      expected
+    );
+  }
+});
+
+test('missing selected models stay in sorted position even with empty window options', () => {
+  assert.deepEqual(
+    buildRequestEventFilterOptions(['gpt-5.10', 'Doubao-Seed-2.1-Pro'], 'glm-5.3', allFilterOption)
+      .map(({ value }) => value),
+    ['__all__', 'Doubao-Seed-2.1-Pro', 'glm-5.3', 'gpt-5.10']
+  );
+  assert.deepEqual(buildRequestEventFilterOptions([], 'glm-5.3', allFilterOption), [
+    allFilterOption, { value: 'glm-5.3', label: 'glm-5.3' },
+  ]);
+  assert.deepEqual(buildRequestEventFilterOptions([], '__all__', allFilterOption), [allFilterOption]);
+});
+
+test('auth index filter options retain missing selections without duplicates or selection pinning', () => {
+  const values = ['10', '2', '-', '1', '2'];
+  const options = buildRequestEventFilterOptions(values, '2', allFilterOption);
+  assert.deepEqual(options.map(({ value }) => value), ['__all__', '-', '1', '2', '10']);
+  assert.deepEqual(buildRequestEventFilterOptions(values, '-', allFilterOption), options);
+  assert.deepEqual(
+    buildRequestEventFilterOptions(['10', '1'], '2', allFilterOption).map(({ value }) => value),
+    ['__all__', '1', '2', '10']
+  );
+});
+
 test('previously selected filters survive a workspace remount via the session draft', async () => {
   await i18n.changeLanguage('en');
   const usage = {
@@ -507,7 +562,7 @@ test('previously selected filters survive a workspace remount via the session dr
   };
   sessionStorage.setItem(
     'cpa-request-event-filters-v1',
-    JSON.stringify({ model: 'gpt-b', serviceTier: '__service_tier_fast__' })
+    JSON.stringify({ model: 'gpt-b', authIndex: 'missing-auth-index', serviceTier: '__service_tier_fast__' })
   );
   try {
     const markup = renderToStaticMarkup(
@@ -527,7 +582,9 @@ test('previously selected filters survive a workspace remount via the session dr
     );
     // The restored selection stays visible instead of silently resetting to All.
     assert.match(markup, />gpt-b</);
+    assert.match(markup, />missing-auth-index</);
     assert.match(markup, /Fast</);
+    assert.equal((markup.match(/data-request-cost-status=/g) ?? []).length, 0);
   } finally {
     sessionStorage.removeItem('cpa-request-event-filters-v1');
   }
@@ -631,4 +688,208 @@ test('Blue metadata survives both snapshot transforms and does not change pricin
   assert.equal(program.normalizeResponseCyberProgram(undefined), null);
   assert.equal(program.normalizeResponseCyberProgram('daybreak_red'), 'unknown');
   assert.equal(program.normalizeResponseCyberProgram('standard'), 'standard');
+});
+
+
+test('analytics drilldown overrides stored filters and combines tier with exact model/source', async () => {
+  await i18n.changeLanguage('en');
+  const storageKey = 'cpa-request-event-filters-v1';
+  sessionStorageValues.set(storageKey, JSON.stringify({ model: 'old-model', result: 'failed', source: 'old-source', serviceTier: '__service_tier_std__' }));
+  const detail = (source, auth_index, token) => ({ timestamp: '2026-10-08T00:00:00Z', source, auth_index, failed: false, tokens: { total_tokens: token } });
+  const usage = { apis: { app: { models: {
+    'model-a': { details: [detail('source-a', '1', 11), detail('source-b', '2', 22), {
+      ...detail('source-a', '1', 44), effective_service_tier: 'priority',
+    }] },
+    'model-b': { details: [detail('source-a', '1', 33)] },
+  } } } };
+  const props = { usage, loading: false, pageTimeRange: 'all', referenceNowMs: Date.parse('2026-10-08T01:00:00Z'),
+    priceProfile: pricingModule.createDefaultPriceProfileV3(), requestApiKeys: [], geminiKeys: [], claudeConfigs: [], codexConfigs: [], vertexConfigs: [], openaiProviders: [] };
+  for (const tier of ['fast', 'std', undefined]) {
+    const markup = renderToStaticMarkup(createElement(RequestEventsDetailsCard, { ...props, initialAnalyticsFilters: {
+      model: 'model-a', tier, source: { value: 'auth:1', label: 'Credential A', identities: [{ source: 't:source-a', auth_index: '1' }] },
+    } }));
+    assert.equal((markup.match(/data-request-cost-status=/g) ?? []).length, tier ? 1 : 2);
+    assert.ok(markup.includes('Credential A'));
+    const rows = markup.slice(markup.indexOf('<tbody'));
+    assert.equal(rows.includes('>44<'), tier !== 'std');
+    assert.equal(rows.includes('>11<'), tier !== 'fast');
+  }
+  const all = renderToStaticMarkup(createElement(RequestEventsDetailsCard, { ...props, initialAnalyticsFilters: {} }));
+  assert.equal((all.match(/data-request-cost-status=/g) ?? []).length, 4);
+  assert.equal(JSON.parse(sessionStorageValues.get(storageKey)).model, 'old-model');
+  sessionStorageValues.delete(storageKey);
+});
+
+test('transition drilldown keeps effort and excludes pure tiers from both conversion groups', async () => {
+  await i18n.changeLanguage('en');
+  const rows = [
+    ['priority', 'priority', 'high', 11],
+    ['default', 'default', 'high', 22],
+    ['priority', 'default', 'high', 33],
+    ['priority', 'default', 'medium', 44],
+    ['default', 'priority', 'high', 55],
+    ['priority', 'default', undefined, 66],
+  ].map(([request_service_tier, response_service_tier, reasoning_effort, total_tokens]) => ({
+    request_service_tier, response_service_tier, reasoning_effort,
+    timestamp: '2026-10-08T00:00:00Z', source: 'synthetic-source', auth_index: '1',
+    failed: false, tokens: { total_tokens },
+  }));
+  const props = { usage: { apis: { app: { models: { 'model-a': { details: rows } } } } },
+    loading: false, pageTimeRange: 'all', referenceNowMs: Date.parse('2026-10-08T01:00:00Z'),
+    priceProfile: pricingModule.createDefaultPriceProfileV3(), requestApiKeys: [], geminiKeys: [], claudeConfigs: [], codexConfigs: [], vertexConfigs: [], openaiProviders: [] };
+  for (const [tier, effort, tokens] of [
+    ['fast', 'high', 11], ['std', 'high', 22], ['fast_to_std', 'high', 33],
+    ['fast_to_std', 'medium', 44], ['std_to_fast', 'high', 55], ['fast_to_std', '', 66],
+  ]) {
+    const html = renderToStaticMarkup(createElement(RequestEventsDetailsCard, {
+      ...props, initialAnalyticsFilters: { tier, effort },
+    }));
+    assert.equal((html.match(/data-request-cost-status=/g) ?? []).length, 1, `${tier}/${effort}`);
+    assert.ok(html.slice(html.indexOf('<tbody')).includes(`>${tokens}<`));
+  }
+});
+
+test('classifies cache-read share below 90% as abnormal and 95% or above as normal', async () => {
+  await i18n.changeLanguage('en');
+  const cases = [
+    [0, 0, 'unavailable'],
+    [0, 5, 'anomaly'],
+    [100, 0, 'low'],
+    [100, 89, 'low'],
+    [100, 90, 'medium'],
+    [100, 94, 'medium'],
+    [100, 95, 'high'],
+    [100, 99, 'high'],
+    [100, 100, 'high'],
+    [9, 12, 'anomaly'],
+  ];
+  const details = cases.map(([input, cache], index) => ({
+    timestamp: `2026-10-16T00:${String(index).padStart(2, '0')}:00Z`,
+    source: 'synthetic-source',
+    auth_index: '1',
+    failed: false,
+    tokens: { input_tokens: input, cache_read_tokens: cache, total_tokens: Math.max(input, cache) },
+  }));
+  const markup = renderToStaticMarkup(createElement(RequestEventsDetailsCard, {
+    usage: { apis: { app: { models: { 'gpt-5.6-sol': { details } } } } },
+    loading: false,
+    pageTimeRange: 'all',
+    referenceNowMs: Date.parse('2026-10-16T01:00:00Z'),
+    priceProfile: pricingModule.createDefaultPriceProfileV3(),
+    requestApiKeys: [],
+    geminiKeys: [],
+    claudeConfigs: [],
+    codexConfigs: [],
+    vertexConfigs: [],
+    openaiProviders: [],
+  }));
+  for (const [, cache, tone] of cases) {
+    assert.match(markup, new RegExp(`data-cache-rate-tone="${tone}" data-cache-token-count="${cache}"`));
+  }
+  assert.match(markup, /aria-label="[^"]*below 90%[^"]*"/);
+  assert.match(markup, /aria-label="0 cache-read tokens, 0%, Abnormal"/);
+  assert.match(markup, /aria-label="90 cache-read tokens, 90%, Borderline"/);
+  assert.match(markup, /aria-label="95 cache-read tokens, 95%, Normal"/);
+  assert.match(markup, /aria-label="99 cache-read tokens, 99%, Normal"/);
+  assert.match(markup, /aria-label="12 cache-read tokens, [^"]*Data anomaly[^"]*exceed total input tokens \(9\)\."/);
+  assert.equal((markup.match(/data-cache-rate-tone="anomaly"/g) ?? []).length, 2);
+});
+
+test('shows provider-scoped content safety explanations without rewriting raw reasons', async () => {
+  for (const [locale, label] of [
+    ['en', 'Content safety block'],
+    ['zh-CN', '内容审核拦截'],
+    ['zh-TW', '內容審核攔截'],
+    ['ru', 'Блокировка контента'],
+  ]) {
+    await i18n.changeLanguage(locale);
+    const reasons = ['bigmodel_1301', 'zai_1301', '1301', 'other_1301', 'bigmodel_1399', 'upstream_error'];
+    const details = reasons.map((reason, index) => ({
+      timestamp: `2026-10-16T00:0${index}:00Z`,
+      source: 'synthetic-source',
+      auth_index: '1',
+      failed: true,
+      failure_status: index === 0 ? 400 : 502,
+      failure_reason: reason,
+      tokens: { input_tokens: 10, output_tokens: 0, total_tokens: 10 },
+    }));
+    const markup = renderToStaticMarkup(createElement(RequestEventsDetailsCard, {
+      usage: { apis: { app: { models: { 'glm-5.3': { details } } } } },
+      loading: false,
+      pageTimeRange: 'all',
+      referenceNowMs: Date.parse('2026-10-16T01:00:00Z'),
+      priceProfile: pricingModule.createDefaultPriceProfileV3(),
+      requestApiKeys: [], geminiKeys: [], claudeConfigs: [], codexConfigs: [], vertexConfigs: [], openaiProviders: [],
+    }));
+    assert.equal(markup.split(`1301 · ${label}`).length - 1, 2);
+    for (const reason of reasons) assert.ok(markup.includes(`data-failure-reason="${reason}"`));
+    for (const reason of reasons.slice(2)) assert.ok(markup.includes(`>${reason}</span>`));
+    assert.match(markup, /data-failure-status="400"/);
+    assert.match(markup, /data-failure-status="502"/);
+    assert.deepEqual(details.map((detail) => detail.failure_reason), reasons);
+  }
+});
+
+test('shows the failure status code badge and reason on failed request events', async () => {
+  await i18n.changeLanguage('en');
+  const details = [
+    {
+      timestamp: '2026-10-16T00:00:00Z',
+      source: 'synthetic-source',
+      auth_index: '1',
+      failed: true,
+      failure_status: 429,
+      failure_reason: 'rate_limit_error',
+      tokens: { input_tokens: 10, output_tokens: 0, total_tokens: 10 },
+    },
+    {
+      timestamp: '2026-10-16T00:01:00Z',
+      source: 'synthetic-source',
+      auth_index: '1',
+      failed: true,
+      failure_status: 700,
+      tokens: { input_tokens: 10, output_tokens: 0, total_tokens: 10 },
+    },
+    {
+      timestamp: '2026-10-16T00:02:00Z',
+      source: 'synthetic-source',
+      auth_index: '1',
+      failed: true,
+      tokens: { input_tokens: 10, output_tokens: 0, total_tokens: 10 },
+    },
+    {
+      timestamp: '2026-10-16T00:03:00Z',
+      source: 'synthetic-source',
+      auth_index: '1',
+      failed: false,
+      failure_status: 429,
+      failure_reason: 'rate_limit_error',
+      tokens: { input_tokens: 10, output_tokens: 2, total_tokens: 12 },
+    },
+  ];
+  const markup = renderToStaticMarkup(createElement(RequestEventsDetailsCard, {
+    usage: { apis: { app: { models: { 'gpt-5.6-sol': { details } } } } },
+    loading: false,
+    pageTimeRange: 'all',
+    referenceNowMs: Date.parse('2026-10-16T01:00:00Z'),
+    priceProfile: pricingModule.createDefaultPriceProfileV3(),
+    requestApiKeys: [],
+    geminiKeys: [],
+    claudeConfigs: [],
+    codexConfigs: [],
+    vertexConfigs: [],
+    openaiProviders: [],
+  }));
+  // 429 失败：显示纯错误码徽标 + 错误原因 + 可访问标签。
+  assert.match(markup, /data-request-result="failed"[^>]*>/);
+  assert.match(markup, /data-failure-status="429"[^>]*aria-label="Failure · HTTP 429"/);
+  assert.match(markup, /data-failure-reason="rate_limit_error"/);
+  // 越界状态码（700 > 599）被丢弃，保留纯「失败」文案。
+  assert.doesNotMatch(markup, /data-failure-status="700"/);
+  const failedCells = markup.match(/data-request-result="failed"[\s\S]*?<\/td>/g) ?? [];
+  assert.ok(failedCells.length >= 3);
+  assert.ok(failedCells.some((cell) => cell.includes('>Failure<')));
+  // 成功记录即便带失败字段也不显示错误徽标。
+  assert.match(markup, /data-request-result="success"/);
+  assert.equal((markup.match(/data-failure-status=/g) ?? []).length, 1);
 });

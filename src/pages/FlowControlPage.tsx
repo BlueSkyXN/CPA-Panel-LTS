@@ -3,6 +3,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import { parseDocument } from 'yaml';
+import { useNavigate } from 'react-router-dom';
+import { AnalyticsLayout, AnalyticsPageHeader } from './AnalyticsLayout';
+import { Button } from '@/components/ui/Button';
 import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer';
 import { DiffModal } from '@/components/config/DiffModal';
 import {
@@ -32,6 +35,8 @@ import styles from './FlowControlPage.module.scss';
  */
 export function FlowControlPage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const [statusRevision, setStatusRevision] = useState(0);
   const pageTransitionLayer = usePageTransitionLayer();
   const isCurrentLayer = pageTransitionLayer ? pageTransitionLayer.isCurrentLayer : true;
   const showNotification = useNotificationStore((state) => state.showNotification);
@@ -98,6 +103,7 @@ export function FlowControlPage() {
       setMergedYaml(data);
       setPreviewServerYaml(data);
       loadVisualValuesFromYaml(data);
+      setStatusRevision((value) => value + 1);
       setLoaded(true);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : t('notification.refresh_failed');
@@ -122,7 +128,10 @@ export function FlowControlPage() {
           : typeof refreshError === 'string'
             ? refreshError
             : '';
-      showNotification(`${t('notification.refresh_failed')}${message ? `: ${message}` : ''}`, 'error');
+      showNotification(
+        `${t('notification.refresh_failed')}${message ? `: ${message}` : ''}`,
+        'error'
+      );
     }
   };
 
@@ -203,6 +212,7 @@ export function FlowControlPage() {
       setPreviewServerYaml(latestContent);
       loadVisualValuesFromYaml(latestContent);
       await syncConfigStore();
+      setStatusRevision((value) => value + 1);
       showNotification(t('config_management.save_success'), 'success');
     } catch (err: unknown) {
       notifyConfigFailure(err);
@@ -246,52 +256,57 @@ export function FlowControlPage() {
   );
 
   return (
-    <div className={configStyles.container}>
-      <div className={configStyles.pageHeader}>
-        <h1 className={configStyles.pageTitle}>{t('nav.flow_control')}</h1>
-      </div>
-      <p className={styles.intro}>{t('flow_control.page_description')}</p>
+    <AnalyticsLayout>
+      <div className={configStyles.container}>
+        <AnalyticsPageHeader
+          title={t('analytics.flow_config')}
+          description={t('analytics.flow_config_hint')}
+          actions={<Button variant="secondary" onClick={() => navigate('/analytics/flow')}>
+            {t('analytics.flow_dashboard')}
+          </Button>}
+        />
 
-      <div className={configStyles.workspaceShell}>
-        <div className={configStyles.content}>
-          {error && <div className="error-box">{error}</div>}
-          {!error && visualParseError && (
-            <div className="error-box">
-              {t('config_management.visual_mode_unavailable_detail', {
-                message: visualParseError,
-              })}
-            </div>
-          )}
-          {loading && !loaded ? (
-            <div className={styles.loading}>
-              <LoadingSpinner />
-            </div>
-          ) : (
-            loaded && (
-              <FlowControlFields
-                values={visualValues}
-                disabled={disableControls || loading}
-                onChange={setVisualValues}
-                active={isCurrentLayer}
-                page="all"
-              />
-            )
-          )}
+        <div className={configStyles.workspaceShell}>
+          <div className={configStyles.content}>
+            {error && <div className="error-box">{error}</div>}
+            {!error && visualParseError && (
+              <div className="error-box">
+                {t('config_management.visual_mode_unavailable_detail', {
+                  message: visualParseError,
+                })}
+              </div>
+            )}
+            {loading && !loaded ? (
+              <div className={styles.loading}>
+                <LoadingSpinner />
+              </div>
+            ) : (
+              loaded && (
+                <FlowControlFields
+                  key={statusRevision}
+                  values={visualValues}
+                  disabled={disableControls || loading}
+                  onChange={setVisualValues}
+                  active={isCurrentLayer}
+                />
+              )
+            )}
+          </div>
         </div>
-      </div>
 
-      {shouldRenderActionBar && typeof document !== 'undefined'
-        ? createPortal(actionBar, document.body)
-        : null}
-      <DiffModal
-        open={diffModalOpen}
-        original={serverYaml}
-        modified={mergedYaml}
-        onConfirm={handleConfirmSave}
-        onCancel={() => setDiffModalOpen(false)}
-        loading={saving}
-        targetName={connectionName}
-      />
-    </div>
+        {shouldRenderActionBar && typeof document !== 'undefined'
+          ? createPortal(actionBar, document.body)
+          : null}
+        <DiffModal
+          open={diffModalOpen}
+          original={serverYaml}
+          modified={mergedYaml}
+          onConfirm={handleConfirmSave}
+          onCancel={() => setDiffModalOpen(false)}
+          loading={saving}
+          targetName={connectionName}
+        />
+      </div>
+    </AnalyticsLayout>
   );
 }

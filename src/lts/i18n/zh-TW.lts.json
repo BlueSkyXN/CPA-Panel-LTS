@@ -1,4 +1,64 @@
 {
+  "analytics": {
+    "capacity_error": "所選範圍超出精確分析容量，請縮小時間範圍或篩選條件；未進行抽樣或截斷。",
+    "snapshot_expired": "查詢快照已失效，請重新整理以建立新快照。",
+    "busy_error": "Core 正在處理其他分析，請稍後重試。",
+    "updating": "正在更新，暫時顯示上次完整結果。",
+    "stale_error": "更新失敗，保留上次完整結果。",
+    "aggregated_ready": "已分析 {{count}} 筆符合條件的請求。",
+    "invalid_timestamps": "其中 {{count}} 筆記錄缺少有效時間戳記，未計入圖表。",
+    "configured_policy": "已儲存預期設定",
+    "title": "進階分析",
+    "navigation_hint": "請求表現、流控狀態與策略",
+    "observability": "可觀測看板",
+    "flow_dashboard": "流控看板",
+    "flow_config": "流控設定",
+    "observability_hint": "分析所選時間範圍內的請求延遲、快取利用與失敗分布。",
+    "flow_dashboard_hint": "查看目前受控請求、排隊與實際生效策略；本頁不修改伺服器設定。",
+    "flow_config_hint": "編輯流控規則、佇列容量與觀察設定。預覽差異後儲存，並單獨確認執行策略是否生效。",
+    "flow_scope_hint": "並行數與排隊僅涵蓋已接入流控的呼叫，不代表全站並行數。趨勢來自本次觀察工作階段，並非歷史統計；暫停觀察不會關閉流控。",
+    "overview_entry_hint": "延遲、快取效率與錯誤分析已集中到進階分析，開啟時沿用目前時間範圍。",
+    "open_observability": "查看效能與可靠性分析",
+    "samples_deferred": "此時間範圍需手動載入請求樣本。",
+    "samples_loading": "已載入 {{count}} / {{total}} 筆，結果尚不完整。",
+    "samples_ready": "已載入 {{count}} / {{total}} 筆。",
+    "samples_error": "樣本載入失敗，已保留 {{count}} / {{total}} 筆。",
+    "samples_stopped": "已停止載入，已保留 {{count}} / {{total}} 筆。",
+    "retry_samples": "重新載入樣本",
+    "stop_samples": "停止載入",
+    "partial_results": "目前圖表僅根據已載入樣本，不能視為整個時間範圍的最終結果。",
+    "source_names_unavailable": "憑據名稱載入失敗，暫以來源識別碼顯示。",
+    "empty_window": "所選時間範圍與篩選條件下沒有請求記錄。",
+    "no_measurements": "沒有可用於此指標的成功請求測量資料。",
+    "basic_settings": "基本設定",
+    "rules_section": "流控規則",
+    "scope_details": "統計範圍與口徑",
+    "flow_scope_short": "受控呼叫 · 本次觀察",
+    "filter_title": "篩選範圍",
+    "active_filters": "已選條件：{{count}} 項",
+    "result_scope": "結果時間範圍",
+    "remove_filter": "移除篩選：{{filter}}",
+    "bucket_label": "時間桶",
+    "select_bucket": "選擇時段",
+    "open_bucket_records": "查看該時段記錄",
+    "back_to_dashboard": "返回看板",
+    "back_to_dashboard_hint": "回到可觀測看板，保留當時的篩選與時間範圍",
+    "group_performance": "吞吐與回應",
+    "group_performance_hint": "結合請求量與回應耗時觀察負載變化。",
+    "group_reliability": "效率與可靠性",
+    "group_reliability_hint": "查看快取利用與失敗分佈。",
+    "group_distribution": "請求與延遲分佈",
+    "group_distribution_hint": "比較請求大小和回應耗時的分佈。",
+    "summary_records": "執行記錄",
+    "summary_records_hint": "目前篩選與時間窗內的使用統計記錄總數",
+    "summary_failures": "失敗執行",
+    "summary_failures_hint": "點擊查看目前條件下的失敗記錄",
+    "summary_latency": "總耗時 P95",
+    "summary_ttfa": "首回答文字 P95",
+    "summary_samples": "{{count}} 條樣本",
+    "summary_cache": "快取讀取率",
+    "summary_cache_meta": "{{read}} / {{input}} 讀取/輸入"
+  },
   "usage_stats": {
     "execution_blue_std": "BLUE",
     "execution_blue_fast": "BLUE FAST",
@@ -6,7 +66,24 @@
     "cyber_program_standard": "Standard 標準防護（上游回應已確認）",
     "cyber_program_missing": "未知：上游未回傳存取程序或屬於歷史記錄",
     "cyber_program_unknown": "未知或暫不支援的存取程序，不推斷為 Standard",
-    "cyber_program_response": "網路安全存取程序：{{value}}。速度層級與計費獨立。"
+    "cyber_program_response": "網路安全存取程序：{{value}}。速度層級與計費獨立。",
+    "export_backup": "匯出完整備份",
+    "export_backup_hint": "匯出全部用量統計用於備份和還原，不受目前篩選條件影響。",
+    "export_filtered_csv": "匯出篩選結果 CSV",
+    "export_filtered_json": "匯出篩選結果 JSON",
+    "export_filtered_scope": "CSV / JSON 匯出目前時間範圍和篩選條件下的全部 {{count}} 筆符合記錄。",
+    "query_as_of": "資料截至 {{time}}",
+    "export_progress": "已讀取 {{loaded}} / {{total}} 筆",
+    "export_retrying": "正在重試此批次（{{attempt}}/2）…",
+    "export_generating": "正在產生檔案…",
+    "export_cancelled": "已取消匯出。可以重新開始匯出。",
+    "export_error_failed": "匯出失敗，未下載檔案。",
+    "export_error_expired": "查詢快照已失效，請重新整理頁面後再次匯出。",
+    "export_error_incomplete": "記錄、總數或游標不一致，已停止匯出，未下載檔案。",
+    "export_resume": "繼續匯出",
+    "page_load_failed": "第 {{page}} 頁載入失敗。",
+    "page_retry": "重新載入本頁",
+    "page_loading": "正在載入第 {{page}} 頁，暫時保留上次成功載入的頁面。"
   },
   "login": {
     "saved_connections": "已儲存的實例連線",
@@ -53,6 +130,7 @@
     "hint_single": "點擊名稱切換連線；預設僅保留一個實例連線，可在下方開啟多實例管理。"
   },
   "codex_quota": {
+    "reset_not_confirmed": "服務未確認配額已重置，請先重新整理配額再重試。",
     "plan_business_premium": "Business Premium",
     "title": "Codex 配額",
     "empty_title": "暫無 Codex 驗證",
@@ -501,7 +579,12 @@
     "applied_on": "已套用：開啟",
     "applied_off": "已套用：關閉",
     "queue_section": "佇列與容量",
-    "waiting_split": "{{requests}} 請求 · {{attempts}} 執行"
+    "waiting_split": "{{requests}} 請求 · {{attempts}} 執行",
+    "trend_title": "本次觀察趨勢",
+    "trend_scope": "僅顯示本次觀察取樣；暫停或缺少取樣處斷開曲線。",
+    "trend_empty": "開啟即時觀察後採集樣本，目前檢視尚無趨勢記錄。",
+    "trend_collecting": "已收到一個樣本，等待下一次取樣。",
+    "trend_readings": "查看取樣讀數"
   },
   "config_management": {
     "visual": {
@@ -514,12 +597,16 @@
         "codex-policy": "Codex 最佳化"
       },
       "pages": {
-        "codex-policy_cache": "快取最佳化"
+        "codex-policy_cache": "快取最佳化",
+        "codex-policy_outbound": "出站策略",
+        "codex-policy_context": "上下文計數"
       },
       "guidance": {
         "pages": {
           "codex-policy": {
-            "cache": "協助連續對話重用上游快取，適配 ZCode 等用戶端的請求方式。僅適用於透過 ChatGPT 帳號登入接入的 Codex；使用 API Key 接入的模型不受影響。"
+            "cache": "協助連續對話重用上游快取，適配 ZCode 等用戶端的請求方式。僅適用於透過 ChatGPT 帳號登入接入的 Codex；使用 API Key 接入的模型不受影響。",
+            "outbound": "設定 Codex 請求以什麼方式送往上游。只對透過 ChatGPT 帳號登入接入的 Codex 生效；切換傳輸方式還要求憑據開啟 WebSocket。",
+            "context": "適用於透過 zcode-coding-plan 接入 GLM 的 Codex 用戶端。先觀察計數差異，確認後可啟用校正。"
           },
           "headers": {
             "codex": "設定 Codex 請求身分資訊；快取最佳化、異常偵測、重試與對沖在「Codex 最佳化」中設定。"
@@ -552,6 +639,78 @@
       "legacy": {
         "label": "關閉增強最佳化",
         "description": "關閉工作階段相容性修復和歷史內容匹配，保留一般請求處理。上游本身的快取仍可能生效。"
+      }
+    }
+  },
+  "codex_outbound": {
+    "unknown_hint": "目前設定值無法識別。除非修改此項，否則會原樣保留。",
+    "transport": {
+      "title": "HTTP 請求的上游傳輸方式",
+      "default_hint": "目前使用預設值：跟隨用戶端。",
+      "options": {
+        "follow": {
+          "label": "跟隨用戶端",
+          "description": "HTTP 請求經 HTTP 送往上游，WebSocket 工作階段保持 WebSocket。"
+        },
+        "websocket": {
+          "label": "一律使用 WebSocket",
+          "description": "HTTP 請求改經 WebSocket 送往上游，與官方 Codex 用戶端一致。每個請求單獨建立上游連線。"
+        },
+        "auto": {
+          "label": "大請求使用 WebSocket",
+          "description": "請求體達到下方門檻時才改走 WebSocket，小請求仍走 HTTP。適用於大請求經 HTTP 失敗的情況。"
+        }
+      }
+    },
+    "threshold": {
+      "label": "WebSocket 門檻（位元組）",
+      "hint": "用於「大請求使用 WebSocket」。留空或 0 使用預設值 786432（768 KiB）。"
+    },
+    "request_compression": {
+      "title": "請求體壓縮",
+      "default_hint": "目前使用預設值：zstd，與官方用戶端一致。",
+      "options": {
+        "auto": {
+          "label": "zstd（官方）",
+          "description": "送往 Codex 後端的 HTTP 請求體以 zstd 壓縮；上游回傳 415 時自動以原文重送一次。"
+        },
+        "none": {
+          "label": "關閉",
+          "description": "請求體不壓縮。"
+        }
+      }
+    },
+    "accept_encoding": {
+      "title": "回應壓縮協商（Accept-Encoding）",
+      "default_hint": "目前使用預設值：與官方用戶端一致。",
+      "options": {
+        "official": {
+          "label": "與官方用戶端一致",
+          "description": "不向 chatgpt.com 送出 Accept-Encoding，回應以原文返回。"
+        },
+        "legacy": {
+          "label": "舊行為",
+          "description": "請求 gzip 回應並自動解壓，即此選項出現之前的行為。"
+        }
+      }
+    }
+  },
+  "codex_zcode_context_usage": {
+    "title": "GLM 搜尋上下文計數",
+    "unknown_hint": "無法識別目前模式。請選擇一種模式，或在 YAML 中檢查設定。",
+    "count_hint": "觀察與校正模式會在搜尋完成後額外請求一次原生 token 計數，最多等待 5 秒，可能占用上游請求額度。需要 Core 與外掛支援；計數失敗時保留原值。",
+    "options": {
+      "disabled": {
+        "label": "關閉（預設）",
+        "description": "沿用上游 usage，不額外計數。"
+      },
+      "observe": {
+        "label": "觀察",
+        "description": "記錄上下文計數與上游用量的差異，保留用戶端數值。"
+      },
+      "correct": {
+        "label": "校正",
+        "description": "以原生計數更新 Codex 的上下文總量；後台用量與快取分項仍按上游統計。"
       }
     }
   }

@@ -1,17 +1,10 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import ts from 'typescript';
+import * as esbuild from 'esbuild';
 
 const importTypeScriptModule = async (url) => {
-  const source = await readFile(url, 'utf8');
-  const compiled = ts.transpileModule(source, {
-    compilerOptions: {
-      module: ts.ModuleKind.ES2022,
-      target: ts.ScriptTarget.ES2020,
-    },
-  }).outputText;
-  return import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
+  const compiled = await esbuild.build({ entryPoints: [url.pathname], bundle: true, format: 'esm', platform: 'node', write: false, target: 'es2020' });
+  return import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].contents).toString('base64')}`);
 };
 
 const { analyzeUsageImport } = await importTypeScriptModule(
@@ -792,4 +785,59 @@ test('accepts optional response cyber program without requiring it on legacy row
   assert.equal(analyzeUsageImport(v3Payload(detail(v2Tokens(), {
     response_cyber_program: 42,
   }))).valid, false);
+});
+
+test('accepts Core request size fields and rejects only types Core cannot decode', () => {
+  const sized = detail(v2Tokens(), {
+    trace_id: 'abc123',
+    size_version: 1,
+    client_request_bytes: 1_080_429,
+    upstream_transport: 'websocket',
+    upstream_request_bytes: 1_080_631,
+    upstream_request_wire_bytes: 1_080_631,
+    upstream_request_encoding: 'zstd',
+    upstream_response_bytes: 8_135,
+  });
+  assert.equal(analyzeUsageImport(v3Payload(sized)).valid, true);
+  // Unknown versions and negative byte counts are dropped or clamped by Core, not rejected.
+  assert.equal(analyzeUsageImport(v3Payload(detail(v2Tokens(), { size_version: 2 }))).valid, true);
+  assert.equal(
+    analyzeUsageImport(v3Payload(detail(v2Tokens(), { size_version: 1, upstream_request_bytes: -5 }))).valid,
+    true
+  );
+
+  for (const overrides of [
+    { size_version: -1 },
+    { size_version: '1' },
+    { upstream_request_bytes: 1.5 },
+    { upstream_response_bytes: '10' },
+    { upstream_transport: 1 },
+    { trace_id: 7 },
+  ]) {
+    assert.deepEqual(analyzeUsageImport(v3Payload(detail(v2Tokens(), overrides))).issues, [
+      'usage_shape_invalid',
+    ]);
+  }
+});
+
+test('validates optional output window metadata without accepting it as legacy timing', () => {
+  const measured = { version: 1, streamed: true, duration_ms: 200 };
+  const row = detail(v2Tokens(), { latency_ms: 1000, ttfb_ms: 100, timing_version: 1, output_timing: measured });
+  assert.equal(analyzeUsageImport(v3Payload(row)).valid, true);
+  for (const output_timing of [null, {}, { version: 1, streamed: false, duration_ms: 0 }, { version: 1, streamed: true, duration_ms: 901 }, { version: 1, streamed: true, duration_ms: 1.5 }]) {
+    assert.deepEqual(analyzeUsageImport(v3Payload({ ...row, output_timing })).issues, ['usage_v3_timing_contract_invalid']);
+  }
+  assert.deepEqual(analyzeUsageImport(v2Payload({ ...row, timing_version: undefined })).issues, ['usage_v2_timing_semantics_ambiguous']);
+});
+
+test('validates canonical output accounting and raw-counter correspondence', () => {
+  const token_breakdown = { schema_version: 2, quality: 'complete', total_tokens: 150, unclassified_tokens: 0, input: { total_tokens: 10, uncached_tokens: 10, cache_read_tokens: 0, cache_write_tokens: 0 }, output: { total_tokens: 140, non_reasoning_tokens: 100, reasoning_tokens: 40 } };
+  const row = detail(v2Tokens({ input_tokens: 10, output_tokens: 100, reasoning_tokens: 40, cached_tokens: 0, cache_read_tokens: 0, total_tokens: 150 }), { token_breakdown });
+  assert.equal(analyzeUsageImport(v3Payload(row)).valid, true);
+  for (const b of [null, {}, { ...token_breakdown, quality: 'guess' }, { ...token_breakdown, output: { ...token_breakdown.output, total_tokens: 141 } }]) {
+    assert.deepEqual(analyzeUsageImport(v3Payload({ ...row, token_breakdown: b })).issues, ['usage_v3_token_contract_invalid']);
+  }
+  assert.deepEqual(analyzeUsageImport(v3Payload({ ...row, tokens: { ...row.tokens, output_tokens: 60 } })).issues, ['usage_v3_token_contract_invalid']);
+  assert.deepEqual(analyzeUsageImport(v3Payload({ ...row, tokens: { ...row.tokens, input_tokens: 20 } })).issues, ['usage_v3_token_contract_invalid']);
+  assert.deepEqual(analyzeUsageImport(v2Payload(row)).issues, ['usage_v2_token_contract_invalid']);
 });

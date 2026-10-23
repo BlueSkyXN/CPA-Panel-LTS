@@ -1,20 +1,20 @@
-import { useState, useMemo } from 'react';
+import type { UsageAnalyticsData } from '@/types/usageAnalytics';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ChartData, ChartOptions } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { formatDayLabel, formatDurationMs, formatHourLabel } from '@/utils/usage';
 import {
-  buildLatencyPercentileSeries,
-  collectLatencyAnalysisRows,
-  formatDayLabel,
-  formatDurationMs,
-  formatHourLabel,
-  type AnalyticsTimeWindow,
-  type UsageDetail,
-} from '@/utils/usage';
-import { buildChartOptions, getHourChartMinWidth, sparsePointRadius } from '@/utils/usage/chartConfig';
+  buildChartOptions,
+  getHourChartMinWidth,
+  sparsePointRadius,
+} from '@/utils/usage/chartConfig';
 import styles from '@/pages/UsagePage.module.scss';
+import { bucketRangeAt, type AnalyticsBucketRange } from './analyticsBucketDrill';
+import { AnalyticsBucketDrillControl } from './AnalyticsBucketDrillControl';
+import type { AnalyticsGrain, AnalyticsTimeWindow } from '@/utils/usage/analyticsBuckets';
 
 const SERIES_COLORS = {
   p50: '#10B981',
@@ -24,19 +24,31 @@ const SERIES_COLORS = {
 } as const;
 
 export interface LatencyTrendChartProps {
-  details: UsageDetail[];
+  data: UsageAnalyticsData;
   loading: boolean;
   isMobile: boolean;
-  timeWindow: AnalyticsTimeWindow | null;
+  /** 当前查询窗口；用于把最后一个桶的下钻终点收敛到可见范围。 */
+  window?: AnalyticsTimeWindow | null;
+  /** 时间粒度由 UsageAnalyticsCharts 统一持有，四张趋势图共用。 */
+  grain: AnalyticsGrain;
+  onGrainChange: (grain: AnalyticsGrain) => void;
+  /** 点击时间桶时下钻到该桶的请求明细；未提供时图表仅展示。 */
+  onBucketClick?: ((bucket: AnalyticsBucketRange) => void) | null;
 }
 
-export function LatencyTrendChart({ details, loading, isMobile, timeWindow }: LatencyTrendChartProps) {
+export function LatencyTrendChart({
+  data,
+  loading,
+  isMobile,
+  window,
+  grain: period,
+  onGrainChange: setPeriod,
+  onBucketClick,
+}: LatencyTrendChartProps) {
   const { t } = useTranslation();
-  const [period, setPeriod] = useState<'hour' | 'day'>('hour');
 
   const { chartData, chartOptions, hasSamples } = useMemo(() => {
-    const rows = collectLatencyAnalysisRows(details);
-    const series = buildLatencyPercentileSeries(rows, period, timeWindow);
+    const series = data[period].latency;
     const labels = series.times.map((time) =>
       period === 'hour' ? formatHourLabel(new Date(time)) : formatDayLabel(new Date(time))
     );
@@ -46,7 +58,7 @@ export function LatencyTrendChart({ details, loading, isMobile, timeWindow }: La
       p99: 'P99',
       average: t('usage_stats.latency_trend_avg'),
     };
-    const data: ChartData<'line'> = {
+    const chart: ChartData<'line'> = {
       labels,
       datasets: [
         {
@@ -90,8 +102,18 @@ export function LatencyTrendChart({ details, loading, isMobile, timeWindow }: La
       const first = items[0];
       return first ? series.sampleCounts[first.dataIndex] : null;
     };
+    const bucketTimes = series.times;
+    const grain = period;
     const options: ChartOptions<'line'> = {
       ...baseOptions,
+      onClick: onBucketClick
+        ? (_elements, elements) => {
+            const first = elements[0];
+            if (!first) return;
+            const bucket = bucketRangeAt(bucketTimes, first.index, grain, window);
+            if (bucket) onBucketClick(bucket);
+          }
+        : undefined,
       elements: {
         ...baseOptions.elements,
         point: {
@@ -120,9 +142,7 @@ export function LatencyTrendChart({ details, loading, isMobile, timeWindow }: La
               `${context.dataset.label}: ${formatDurationMs(Number(context.parsed.y))}`,
             afterBody: (items) => {
               const count = sampleCountAt(items);
-              return count !== null
-                ? t('usage_stats.analytics_samples_in_bucket', { count })
-                : '';
+              return count !== null ? t('usage_stats.analytics_samples_in_bucket', { count }) : '';
             },
           },
         },
@@ -130,11 +150,11 @@ export function LatencyTrendChart({ details, loading, isMobile, timeWindow }: La
     };
 
     return {
-      chartData: data,
+      chartData: chart,
       chartOptions: options,
       hasSamples: series.sampleCounts.some((count) => count > 0),
     };
-  }, [details, period, isMobile, timeWindow, t]);
+  }, [data, period, isMobile, t, window, onBucketClick]);
 
   const labels = chartData.labels ?? [];
 
@@ -147,6 +167,8 @@ export function LatencyTrendChart({ details, loading, isMobile, timeWindow }: La
             variant={period === 'hour' ? 'primary' : 'secondary'}
             size="sm"
             onClick={() => setPeriod('hour')}
+            data-testid="analytics-latency-hour"
+            aria-pressed={period === 'hour'}
           >
             {t('usage_stats.by_hour')}
           </Button>
@@ -154,6 +176,8 @@ export function LatencyTrendChart({ details, loading, isMobile, timeWindow }: La
             variant={period === 'day' ? 'primary' : 'secondary'}
             size="sm"
             onClick={() => setPeriod('day')}
+            data-testid="analytics-latency-day"
+            aria-pressed={period === 'day'}
           >
             {t('usage_stats.by_day')}
           </Button>
@@ -167,7 +191,10 @@ export function LatencyTrendChart({ details, loading, isMobile, timeWindow }: La
           <div className={styles.chartLegend} aria-label="Chart legend">
             {chartData.datasets.map((dataset) => (
               <div key={dataset.label} className={styles.legendItem} title={dataset.label}>
-                <span className={styles.legendDot} style={{ backgroundColor: dataset.borderColor as string }} />
+                <span
+                  className={styles.legendDot}
+                  style={{ backgroundColor: dataset.borderColor as string }}
+                />
                 <span className={styles.legendLabel}>{dataset.label}</span>
               </div>
             ))}
@@ -189,7 +216,17 @@ export function LatencyTrendChart({ details, loading, isMobile, timeWindow }: La
           <p className={styles.analyticsNote}>{t('usage_stats.analytics_success_only_note')}</p>
         </div>
       ) : (
-        <div className={styles.hint}>{t('usage_stats.no_data')}</div>
+        <div className={styles.hint}>{t('analytics.no_measurements')}</div>
+      )}
+      {onBucketClick && !loading && hasSamples && (
+        <AnalyticsBucketDrillControl
+          key={period}
+          id="latency"
+          times={data[period].latency.times}
+          grain={period}
+          window={window}
+          onOpen={onBucketClick}
+        />
       )}
     </Card>
   );

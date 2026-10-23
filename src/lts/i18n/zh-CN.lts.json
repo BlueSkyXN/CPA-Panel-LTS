@@ -1,4 +1,64 @@
 {
+  "analytics": {
+    "capacity_error": "所选范围超出精确分析容量，请缩小时间范围或筛选条件；未进行抽样或截断。",
+    "snapshot_expired": "查询快照已失效，请刷新以建立新快照。",
+    "busy_error": "Core 正在处理其他分析，请稍后重试。",
+    "updating": "正在更新，暂时显示上次完整结果。",
+    "stale_error": "更新失败，保留上次完整结果。",
+    "aggregated_ready": "已分析 {{count}} 条匹配请求。",
+    "invalid_timestamps": "其中 {{count}} 条记录缺少有效时间戳，未计入图表。",
+    "configured_policy": "已保存期望配置",
+    "title": "高级分析",
+    "navigation_hint": "请求表现、流控状态与策略",
+    "observability": "可观测看板",
+    "flow_dashboard": "流控看板",
+    "flow_config": "流控配置",
+    "observability_hint": "分析所选时间范围内的请求延迟、缓存利用与失败分布。",
+    "flow_dashboard_hint": "查看当前受控请求、排队和实际生效策略；本页不修改服务端配置。",
+    "flow_config_hint": "编辑流控规则、排队容量和观察设置。预览差异后保存，并单独核对运行策略是否生效。",
+    "flow_scope_hint": "并发与排队仅覆盖已接入流控的调用，不代表全站并发。趋势来自本次观察会话，不是历史统计；暂停观察不会关闭流控。",
+    "overview_entry_hint": "延迟、缓存效率和错误分析已集中到高级分析，打开时沿用当前时间范围。",
+    "open_observability": "查看性能与可靠性分析",
+    "samples_deferred": "该时间范围需手动加载请求样本。",
+    "samples_loading": "已加载 {{count}} / {{total}} 条，结果尚不完整。",
+    "samples_ready": "已加载 {{count}} / {{total}} 条。",
+    "samples_error": "样本加载失败，已保留 {{count}} / {{total}} 条。",
+    "samples_stopped": "已停止加载，已保留 {{count}} / {{total}} 条。",
+    "retry_samples": "重新加载样本",
+    "stop_samples": "停止加载",
+    "partial_results": "当前图表仅基于已加载样本，不能视为整个时间范围的最终结果。",
+    "source_names_unavailable": "凭据名称加载失败，暂以来源标识显示。",
+    "empty_window": "所选时间范围和筛选条件下没有请求记录。",
+    "no_measurements": "没有可用于此指标的成功请求测量数据。",
+    "basic_settings": "基本设置",
+    "rules_section": "流控规则",
+    "scope_details": "统计范围与口径",
+    "flow_scope_short": "受控调用 · 本次观察",
+    "filter_title": "筛选范围",
+    "active_filters": "已选条件：{{count}} 项",
+    "result_scope": "结果时间范围",
+    "remove_filter": "移除筛选：{{filter}}",
+    "bucket_label": "时间桶",
+    "select_bucket": "选择时段",
+    "open_bucket_records": "查看该时段记录",
+    "back_to_dashboard": "返回看板",
+    "back_to_dashboard_hint": "回到可观测看板，保留当时的筛选与时间范围",
+    "group_performance": "吞吐与响应",
+    "group_performance_hint": "结合请求量与响应耗时观察负载变化。",
+    "group_reliability": "效率与可靠性",
+    "group_reliability_hint": "查看缓存利用与失败分布。",
+    "group_distribution": "请求与延迟分布",
+    "group_distribution_hint": "比较请求大小和响应耗时的分布。",
+    "summary_records": "执行记录",
+    "summary_records_hint": "当前筛选与时间窗内的使用统计记录总数",
+    "summary_failures": "失败执行",
+    "summary_failures_hint": "点击查看当前条件下的失败记录",
+    "summary_latency": "总耗时 P95",
+    "summary_ttfa": "首回答文本 P95",
+    "summary_samples": "{{count}} 条样本",
+    "summary_cache": "缓存读取率",
+    "summary_cache_meta": "{{read}} / {{input}} 读取/输入"
+  },
   "usage_stats": {
     "execution_blue_std": "BLUE",
     "execution_blue_fast": "BLUE FAST",
@@ -6,7 +66,24 @@
     "cyber_program_standard": "Standard 标准防护（上游响应已确认）",
     "cyber_program_missing": "未知：上游未回显访问程序或属于历史记录",
     "cyber_program_unknown": "未知或暂不支持的访问程序，不按 Standard 推断",
-    "cyber_program_response": "网络安全访问程序：{{value}}。速度档位与计费独立。"
+    "cyber_program_response": "网络安全访问程序：{{value}}。速度档位与计费独立。",
+    "export_backup": "导出完整备份",
+    "export_backup_hint": "导出全部用量统计用于备份和恢复，不受当前筛选条件影响。",
+    "export_filtered_csv": "导出筛选结果 CSV",
+    "export_filtered_json": "导出筛选结果 JSON",
+    "export_filtered_scope": "CSV / JSON 导出当前时间范围和筛选条件下的全部 {{count}} 条匹配记录。",
+    "query_as_of": "数据截至 {{time}}",
+    "export_progress": "已读取 {{loaded}} / {{total}} 条",
+    "export_retrying": "正在重试本批次（{{attempt}}/2）…",
+    "export_generating": "正在生成文件…",
+    "export_cancelled": "已取消导出。可以重新开始导出。",
+    "export_error_failed": "导出失败，未下载文件。",
+    "export_error_expired": "查询快照已失效，请刷新页面后重新导出。",
+    "export_error_incomplete": "记录、总数或游标不一致，已停止导出，未下载文件。",
+    "export_resume": "继续导出",
+    "page_load_failed": "第 {{page}} 页加载失败。",
+    "page_retry": "重新加载本页",
+    "page_loading": "正在加载第 {{page}} 页，暂时保留上次成功加载的页面。"
   },
   "login": {
     "saved_connections": "已保存的实例连接",
@@ -53,6 +130,7 @@
     "hint_single": "点击名称切换连接；默认仅保留一个实例连接，可在下方开启多实例管理。"
   },
   "codex_quota": {
+    "reset_not_confirmed": "服务未确认额度已重置，请先刷新额度再重试。",
     "plan_business_premium": "Business Premium",
     "title": "Codex 额度",
     "empty_title": "暂无 Codex 认证",
@@ -501,7 +579,12 @@
     "applied_on": "已应用：开启",
     "applied_off": "已应用：关闭",
     "queue_section": "排队与容量",
-    "waiting_split": "{{requests}} 请求 · {{attempts}} 执行"
+    "waiting_split": "{{requests}} 请求 · {{attempts}} 执行",
+    "trend_title": "本次观察趋势",
+    "trend_scope": "仅显示本次观察采样；暂停或缺失采样处断开曲线。",
+    "trend_empty": "开启实时观察后采集样本，当前视图尚无趋势记录。",
+    "trend_collecting": "已收到一个样本，等待下一次采样。",
+    "trend_readings": "查看采样读数"
   },
   "config_management": {
     "visual": {
@@ -514,12 +597,16 @@
         "codex-policy": "Codex 优化"
       },
       "pages": {
-        "codex-policy_cache": "缓存优化"
+        "codex-policy_cache": "缓存优化",
+        "codex-policy_outbound": "出站策略",
+        "codex-policy_context": "上下文计数"
       },
       "guidance": {
         "pages": {
           "codex-policy": {
-            "cache": "帮助连续对话复用上游缓存，适配 ZCode 等客户端的请求方式。仅适用于通过 ChatGPT 账号登录接入的 Codex；使用 API Key 接入的模型不受影响。"
+            "cache": "帮助连续对话复用上游缓存，适配 ZCode 等客户端的请求方式。仅适用于通过 ChatGPT 账号登录接入的 Codex；使用 API Key 接入的模型不受影响。",
+            "outbound": "设置 Codex 请求以什么方式发往上游。只对通过 ChatGPT 账号登录接入的 Codex 生效；切换传输方式还要求凭据开启 WebSocket。",
+            "context": "用于通过 zcode-coding-plan 接入 GLM 的 Codex 客户端。先观察计数差异，确认后可启用校正。"
           },
           "headers": {
             "codex": "设置 Codex 请求身份信息；缓存优化、异常检测、重试与对冲在「Codex 优化」中设置。"
@@ -552,6 +639,78 @@
       "legacy": {
         "label": "关闭增强优化",
         "description": "关闭会话兼容修复和历史内容匹配，保留常规请求处理。上游自身的缓存仍可能生效。"
+      }
+    }
+  },
+  "codex_outbound": {
+    "unknown_hint": "当前配置值无法识别。除非修改此项，否则会原样保留。",
+    "transport": {
+      "title": "HTTP 请求的上游传输方式",
+      "default_hint": "当前使用默认值：跟随客户端。",
+      "options": {
+        "follow": {
+          "label": "跟随客户端",
+          "description": "HTTP 请求经 HTTP 发往上游，WebSocket 会话保持 WebSocket。"
+        },
+        "websocket": {
+          "label": "始终使用 WebSocket",
+          "description": "HTTP 请求改经 WebSocket 发往上游，与官方 Codex 客户端一致。每个请求单独建立上游连接。"
+        },
+        "auto": {
+          "label": "大请求使用 WebSocket",
+          "description": "请求体达到下方阈值时才改走 WebSocket，小请求仍走 HTTP。适用于大请求经 HTTP 失败的情况。"
+        }
+      }
+    },
+    "threshold": {
+      "label": "WebSocket 阈值（字节）",
+      "hint": "用于“大请求使用 WebSocket”。留空或 0 使用默认值 786432（768 KiB）。"
+    },
+    "request_compression": {
+      "title": "请求体压缩",
+      "default_hint": "当前使用默认值：zstd，与官方客户端一致。",
+      "options": {
+        "auto": {
+          "label": "zstd（官方）",
+          "description": "发往 Codex 后端的 HTTP 请求体用 zstd 压缩；上游返回 415 时自动用原文重发一次。"
+        },
+        "none": {
+          "label": "关闭",
+          "description": "请求体不压缩。"
+        }
+      }
+    },
+    "accept_encoding": {
+      "title": "响应压缩协商（Accept-Encoding）",
+      "default_hint": "当前使用默认值：与官方客户端一致。",
+      "options": {
+        "official": {
+          "label": "与官方客户端一致",
+          "description": "不向 chatgpt.com 发送 Accept-Encoding，响应以原文返回。"
+        },
+        "legacy": {
+          "label": "旧行为",
+          "description": "请求 gzip 响应并自动解压，即此选项出现之前的行为。"
+        }
+      }
+    }
+  },
+  "codex_zcode_context_usage": {
+    "title": "GLM 搜索上下文计数",
+    "unknown_hint": "当前模式无法识别。请选择一种模式，或在 YAML 中检查配置。",
+    "count_hint": "观察和校正模式会在搜索完成后额外请求一次原生 token 计数，最多等待 5 秒，可能占用上游请求额度。需要 Core 与插件支持；计数失败时保留原值。",
+    "options": {
+      "disabled": {
+        "label": "关闭（默认）",
+        "description": "沿用上游 usage，不额外计数。"
+      },
+      "observe": {
+        "label": "观察",
+        "description": "记录上下文计数与上游用量的差异，保持客户端数值。"
+      },
+      "correct": {
+        "label": "校正",
+        "description": "用原生计数更新 Codex 的上下文总量；后台用量和缓存分项仍按上游统计。"
       }
     }
   }

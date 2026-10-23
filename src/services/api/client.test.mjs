@@ -50,7 +50,7 @@ test('read-only usage POST queries neither block a switch nor become frozen writ
   const lifecycle = await vite.ssrLoadModule('/src/services/connectionSession.ts');
   apiClient.setConfig({ apiBase: 'https://test.example.test', managementKey: 'synthetic' });
   const response = (config) => ({ data: {}, status: 200, statusText: 'OK', headers: {}, config });
-  for (const path of ['/usage/query/summary', '/usage/query/details', '/usage/query/pricing']) {
+  for (const path of ['/usage/query/summary', '/usage/query/details', '/usage/query/pricing', '/usage/query/analytics']) {
     let finish;
     const pending = apiClient.post(path, {}, { adapter: (config) => new Promise(resolve => { finish = () => resolve(response(config)); }) });
     try {
@@ -287,4 +287,44 @@ test('a stale 401 keeps its parsed error but cannot log out the current connecti
   } finally {
     window.removeEventListener('unauthorized', onUnauthorized);
   }
+});
+
+test('captured OAuth cleanup stays on its original connection and late 401 cannot log out the replacement', async () => {
+  apiClient.setConfig({ apiBase: 'https://original.example.test', managementKey: 'synthetic-original' });
+  const captured = apiClient.captureConnection();
+  const generation = apiClient.setConfig({ apiBase: 'https://replacement.example.test', managementKey: 'synthetic-replacement' });
+  let unauthorized = 0;
+  const listener = () => unauthorized++;
+  window.addEventListener('unauthorized', listener);
+  try {
+    await assert.rejects(captured.delete('/oauth/session', { params: { state: 'synthetic-old-state' }, adapter: async (config) => {
+      assert.equal(config.baseURL, 'https://original.example.test/v8/management');
+      assert.equal(config.headers.Authorization, 'Bearer synthetic-original');
+      throw unauthorizedError(config, { error: 'expired' });
+    }}));
+    assert.equal(unauthorized, 0);
+    assert.equal(apiClient.getConnectionGeneration(), generation);
+  } finally { window.removeEventListener('unauthorized', listener); }
+});
+
+test('frozen connection allows only targeted OAuth session cleanup on the captured server', async () => {
+  const lifecycle = await vite.ssrLoadModule('/src/services/connectionSession.ts');
+  apiClient.setConfig({ apiBase: 'https://original.example.test', managementKey: 'synthetic-original' });
+  const captured = apiClient.captureConnection();
+  lifecycle.setSessionFrozen(true);
+  let calls = 0;
+  const adapter = async (config) => {
+    calls++;
+    assert.equal(config.baseURL, 'https://original.example.test/v8/management');
+    assert.equal(config.headers.Authorization, 'Bearer synthetic-original');
+    return { data: {status:'ok'}, status: 200, statusText: 'OK', headers: {}, config };
+  };
+  try {
+    await captured.delete('/oauth/session', {params:{state:'synthetic-state'},adapter});
+    for (const path of ['/credentials', '/config', '/oauth/session/extra']) {
+      await assert.rejects(captured.delete(path, {adapter}), /Connection switch/);
+    }
+    assert.equal(calls, 1);
+    assert.equal(lifecycle.hasActiveWrites(), false);
+  } finally { lifecycle.setSessionFrozen(false); }
 });

@@ -1,6 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { decodeUsageQuerySession } from '@/services/api/usageQuery';
+import { isRecord } from '@/utils/helpers';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { readAnalyticsNavigationState } from '@/utils/usage/analyticsFilters';
+import {
+  analyticsReturnState,
+  readAnalyticsReturnContext,
+} from '@/utils/usage/analyticsNavigation';
+import { useAuthStore } from '@/stores/useAuthStore';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
 import { RequestEventsDetailsCard } from '@/components/usage/RequestEventsDetailsCard';
@@ -16,10 +24,19 @@ import styles from './UsagePage.module.scss';
 export function UsageEventsPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
+  const initialAnalyticsFilters = useMemo(
+    () => readAnalyticsNavigationState(location.state),
+    [location.state]
+  );
   const [searchParams, setSearchParams] = useSearchParams();
   const scope = useMemo(() => {
     let storage: Storage | undefined;
-    try { storage = window.localStorage; } catch { /* Storage may be unavailable. */ }
+    try {
+      storage = window.localStorage;
+    } catch {
+      /* Storage may be unavailable. */
+    }
     return resolveUsageEventsScope(searchParams, storage);
   }, [searchParams]);
   const config = useConfigStore((state) => state.config);
@@ -29,63 +46,162 @@ export function UsageEventsPage() {
     providers: OpenAIProviderConfig[];
   } | null>(null);
   const {
-    usage, loading, error, lastRefreshedAt, priceProfile, loadUsage, querySession,
-    handleExport, handleImport, handleImportChange, importInputRef, exporting, importing,
+    usage,
+    loading,
+    error,
+    lastRefreshedAt,
+    priceProfile,
+    loadUsage,
+    querySession,
+    handleExport,
+    handleImport,
+    handleImportChange,
+    importInputRef,
+    exporting,
+    importing,
   } = useUsageData();
-  useHeaderRefresh(loadUsage);
+  const pinnedSession = useMemo(() => {
+    if (!isRecord(location.state) || !location.state.analyticsSession) return null;
+    try {
+      return decodeUsageQuerySession(location.state.analyticsSession);
+    } catch {
+      return null;
+    }
+  }, [location.state]);
+  // 可观测看板摘要带的失败下钻用 failed=1 表达"只看失败记录"，
+  // 复用事件页已有的结果筛选语义，不引入并行的一套参数。
+  const initialResultFailed = searchParams.get('failed') === '1';
+  const connection = useAuthStore((state) => JSON.stringify([state.profileId, state.apiBase]));
+  const returnContext = useMemo(
+    () =>
+      readAnalyticsReturnContext(
+        isRecord(location.state) ? location.state.analyticsReturnContext : null,
+        connection
+      ),
+    [location.state, connection]
+  );
+  const [releasedSnapshot, setReleasedSnapshot] = useState<string | null>(null);
+  const selectedSession =
+    pinnedSession && releasedSnapshot !== pinnedSession.bound ? pinnedSession : querySession;
+  const refresh = useCallback(async () => {
+    await loadUsage();
+    setReleasedSnapshot(pinnedSession?.bound ?? null);
+    if (pinnedSession)
+      navigate(`${location.pathname}${location.search}`, {
+        replace: true,
+        state: { ...(isRecord(location.state) ? location.state : {}), analyticsSession: null },
+      });
+  }, [loadUsage, pinnedSession, navigate, location.pathname, location.search, location.state]);
+  useHeaderRefresh(refresh);
 
   useEffect(() => {
     let stopped = false;
-    providersApi.getOpenAIProviders().then((providers) => {
-      if (!stopped) setProviderState({ source: providerSource, providers: providers || [] });
-    }).catch(() => { if (!stopped) setProviderState(null); });
-    return () => { stopped = true; };
+    providersApi
+      .getOpenAIProviders()
+      .then((providers) => {
+        if (!stopped) setProviderState({ source: providerSource, providers: providers || [] });
+      })
+      .catch(() => {
+        if (!stopped) setProviderState(null);
+      });
+    return () => {
+      stopped = true;
+    };
   }, [providerSource]);
 
-  const providers = providerState?.source === providerSource && providerState
-    ? providerState.providers : (providerSource ?? []);
+  const providers =
+    providerState?.source === providerSource && providerState
+      ? providerState.providers
+      : (providerSource ?? []);
   const ranges: UsageTimeRange[] = ['all', ...USAGE_PRESET_TIME_RANGES];
   if (scope.range === 'custom') ranges.push('custom');
 
   return (
-    <div className={`${styles.container} ${styles.requestEventsWorkspace}`} data-testid="usage-events-workspace">
+    <div
+      className={`${styles.container} ${styles.requestEventsWorkspace}`}
+      data-testid="usage-events-workspace"
+    >
       <div className={styles.header}>
         <h1 className={styles.pageTitle}>{t('usage_stats.request_events_workspace_title')}</h1>
         <div className={styles.headerActions}>
           <Select
             value={scope.range}
             options={ranges.map((value) => ({ value, label: t(`usage_stats.range_${value}`) }))}
-            onChange={(value) => setSearchParams(buildUsageEventsSearch(value as UsageTimeRange, scope.customRange))}
+            onChange={(value) =>
+              setSearchParams(buildUsageEventsSearch(value as UsageTimeRange, scope.customRange), {
+                state: location.state,
+              })
+            }
             ariaLabel={t('usage_stats.range_filter')}
             fullWidth={false}
           />
-          <Button variant="secondary" size="sm" onClick={() => navigate('/usage')}>
-            {t('usage_stats.pricing_back')}
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() =>
+              returnContext
+                ? navigate(`${returnContext.pathname}${returnContext.search}`, {
+                    state: analyticsReturnState(returnContext),
+                  })
+                : navigate('/usage')
+            }
+            title={returnContext ? t('analytics.back_to_dashboard_hint') : undefined}
+          >
+            {returnContext ? t('analytics.back_to_dashboard') : t('usage_stats.pricing_back')}
           </Button>
           <Button variant="secondary" size="sm" onClick={() => navigate('/usage/pricing')}>
             {t('usage_stats.pricing_title')}
           </Button>
-          <Button variant="secondary" size="sm" onClick={handleExport} loading={exporting} disabled={loading || importing}>
-            {t('usage_stats.export')}
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleExport}
+            title={t('usage_stats.export_backup_hint')}
+            loading={exporting}
+            disabled={loading || importing}
+          >
+            {t('usage_stats.export_backup')}
           </Button>
-          <Button variant="secondary" size="sm" onClick={handleImport} loading={importing} disabled={loading || exporting}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleImport}
+            loading={importing}
+            disabled={loading || exporting}
+          >
             {t('usage_stats.import')}
           </Button>
-          <Button variant="secondary" size="sm" onClick={() => void loadUsage().catch(() => {})} disabled={loading || importing || exporting}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => void refresh().catch(() => {})}
+            disabled={loading || importing || exporting}
+          >
             {loading ? t('common.loading') : t('usage_stats.refresh')}
           </Button>
-          <input ref={importInputRef} type="file" accept=".json,application/json" hidden onChange={handleImportChange} />
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".json,application/json"
+            hidden
+            onChange={handleImportChange}
+          />
         </div>
       </div>
       {error && <div className={styles.errorBox}>{error}</div>}
-      {!scope.valid && <div className={styles.errorBox}>{t('usage_stats.request_events_invalid_scope')}</div>}
+      {!scope.valid && (
+        <div className={styles.errorBox}>{t('usage_stats.request_events_invalid_scope')}</div>
+      )}
       <RequestEventsDetailsCard
-        querySession={scope.valid ? querySession : null}
+        key={JSON.stringify([initialAnalyticsFilters, initialResultFailed])}
+        initialAnalyticsFilters={initialAnalyticsFilters}
+        initialResultFailed={initialResultFailed}
+        querySession={scope.valid ? selectedSession : null}
         usage={scope.valid ? usage : null}
         loading={loading}
         pageTimeRange={scope.range}
         pageTimeRangeCustom={scope.customRange}
-        referenceNowMs={lastRefreshedAt?.getTime() ?? 0}
+        referenceNowMs={selectedSession?.now_ms ?? lastRefreshedAt?.getTime() ?? 0}
         priceProfile={priceProfile}
         requestApiKeys={config?.apiKeys || []}
         geminiKeys={config?.geminiApiKeys || []}

@@ -17,6 +17,7 @@ import {
   GEMINI_CLI_CONFIG,
   KIMI_CONFIG,
   XAI_CONFIG,
+  PLUGIN_CONFIG,
 } from '@/components/quota';
 import { ProviderTabs } from '@/features/authFiles/components/ProviderTabs';
 import type { QuotaProviderType } from '@/features/authFiles/constants';
@@ -32,6 +33,7 @@ const QUOTA_PROVIDERS = [
   { id: 'xai', config: XAI_CONFIG },
   { id: 'gemini-cli', config: GEMINI_CLI_CONFIG },
   { id: 'kimi', config: KIMI_CONFIG },
+  { id: 'plugin', config: PLUGIN_CONFIG },
 ] as const;
 
 const QUOTA_TAB_IDS: string[] = ['all', ...QUOTA_PROVIDERS.map(({ id }) => id)];
@@ -59,6 +61,9 @@ export function QuotaPage() {
   const xaiQuota = useQuotaStore((state) => state.xaiQuota);
 
   const revealRef = useRevealGroup<HTMLDivElement>();
+
+  const pluginSupported = useAuthStore((state) => state.pluginSupportKnown && state.supportsPlugin);
+  const pluginQuota = useQuotaStore((state) => state.pluginQuota);
 
   const disableControls = connectionStatus !== 'connected';
 
@@ -102,12 +107,12 @@ export function QuotaPage() {
   const providerCounts = useMemo(() => {
     const counts: Record<string, number> = { all: 0 };
     QUOTA_PROVIDERS.forEach(({ id, config }) => {
-      const count = files.filter((file) => config.filterFn(file)).length;
+      const count = id === 'plugin' && !pluginSupported ? 0 : files.filter((file) => config.filterFn(file)).length;
       counts[id] = count;
       counts.all += count;
     });
     return counts;
-  }, [files]);
+  }, [files, pluginSupported]);
 
   const quotaByProvider = useMemo(
     () => ({
@@ -117,8 +122,9 @@ export function QuotaPage() {
       'gemini-cli': geminiCliQuota,
       kimi: kimiQuota,
       xai: xaiQuota,
+      plugin: pluginQuota,
     }),
-    [antigravityQuota, claudeQuota, codexQuota, geminiCliQuota, kimiQuota, xaiQuota]
+    [antigravityQuota, claudeQuota, codexQuota, geminiCliQuota, kimiQuota, xaiQuota, pluginQuota]
   );
 
   const { loadedCount, attentionCount } = useMemo(() => {
@@ -227,6 +233,9 @@ export function QuotaPage() {
           disabled={disableControls}
         />
       </div>
+      {pluginSupported && <div hidden={!showProvider('plugin')}>
+        <QuotaSection config={PLUGIN_CONFIG} files={files} loading={loading} disabled={disableControls}/>
+      </div>}
       <div hidden={!showProvider('kimi')}>
         <QuotaSection
           config={KIMI_CONFIG}

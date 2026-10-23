@@ -9,9 +9,9 @@ import {
   type FlowSupport, type FlowStatus,
 } from './model';
 import { FlowSSEDecoder } from './sse';
+import { appendFlowSample, type FlowPoint } from './history';
 
 export type FlowLiveState = 'off' | 'connecting' | 'live' | 'reconnecting' | 'paused' | 'disabled' | 'error';
-type Point = { requests: number; attempts: number; waiting: number };
 
 function isObservationVisible() {
   return typeof document === 'undefined' || (
@@ -30,7 +30,7 @@ export function useFlowControlStatus({ active = true, observationVisible = true 
   const [live, setLive] = useState(false);
   const [liveState, setLiveState] = useState<FlowLiveState>('off');
   const [visible, setVisible] = useState(isObservationVisible);
-  const [history, setHistory] = useState<Point[]>([]);
+  const [history, setHistory] = useState<FlowPoint[]>([]);
 
   useEffect(() => {
     const change = () => setVisible(isObservationVisible());
@@ -99,6 +99,7 @@ export function useFlowControlStatus({ active = true, observationVisible = true 
       setSupport((old) => old.state === 'ready'
         ? { ...old, data: { ...old.data, 'events-enabled': false } } : old);
     };
+    let firstFrame = true;
     const accept = (state: FlowStatus) => {
       if (stopped) return;
       setSupport((old) => old.state === 'ready' ? {
@@ -114,9 +115,9 @@ export function useFlowControlStatus({ active = true, observationVisible = true 
       } : old);
       const restarted = !!lastProcess && lastProcess !== state['process-id'];
       lastProcess = state['process-id'] ?? '';
-      setHistory((old) => [...(restarted ? [] : old), {
-        requests: state['active-requests'], attempts: state['active-attempts'], waiting: state.waiting,
-      }].slice(-60));
+      const discontinuity = firstFrame;
+      firstFrame = false;
+      setHistory((old) => appendFlowSample(old, state, { reset: restarted, discontinuity, intervalMs: interval }));
       // Refresh the rule/alias directory only after a policy or process change,
       // not on every summary. A late response must not replace a newer summary.
       if ((lastRevision !== undefined && state['policy-revision'] !== lastRevision) || restarted) {
@@ -138,6 +139,7 @@ export function useFlowControlStatus({ active = true, observationVisible = true 
 
     const connect = async () => {
       if (stopped || permanent) return;
+      firstFrame = true;
       controller = new AbortController();
       setLiveState(failures ? 'reconnecting' : 'connecting');
       const resetWatchdog = () => {

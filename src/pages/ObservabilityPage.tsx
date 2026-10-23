@@ -1,0 +1,478 @@
+import { useUsageAnalytics } from '@/components/usage/hooks/useUsageAnalytics';
+import { UsageAnalyticsCharts } from '@/components/usage/UsageAnalyticsCharts';
+import { analyticsResultWindow } from '@/types/usageAnalytics';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useAuthStore } from '@/stores/useAuthStore';
+import { isRecord } from '@/utils/helpers';
+import type { AnalyticsGrain } from '@/utils/usage/analyticsBuckets';
+import {
+  analyticsReturnState,
+  readAnalyticsReturnContext,
+  type AnalyticsReturnContext,
+} from '@/utils/usage/analyticsNavigation';
+import { getConnectionFrameElement } from '@/services/connectionRuntime';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { AnalyticsFiltersBar } from '@/components/usage/AnalyticsFiltersBar';
+import { useUsageAnalyticsOptions } from '@/components/usage/hooks/useUsageAnalyticsOptions';
+import { AnalyticsSummaryStrip } from '@/components/usage/AnalyticsSummaryStrip';
+import {
+  analyticsQueryFilter,
+  readAnalyticsNavigationState,
+  type AnalyticsFilters,
+} from '@/utils/usage/analyticsFilters';
+import { useTranslation } from 'react-i18next';
+import {
+  Chart as ChartJS,
+  BarElement,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Tooltip,
+  Legend,
+  Filler,
+} from 'chart.js';
+import { AnalyticsSection } from '@/components/common/AnalyticsSection';
+import { AnalyticsLayout, AnalyticsPageHeader } from './AnalyticsLayout';
+import { Button } from '@/components/ui/Button';
+import { Select } from '@/components/ui/Select';
+import { UsageAnalyticsSection } from '@/components/usage/UsageAnalyticsSection';
+import { useUsageData } from '@/components/usage/hooks/useUsageData';
+import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
+import {
+  filterUsageByTimeRange,
+  resolveUsageTimeRangeWindow,
+  USAGE_PRESET_TIME_RANGES,
+  type UsageTimeRange,
+} from '@/utils/usage';
+import { buildUsageEventsSearch, resolveUsageEventsScope } from '@/utils/usage/eventWorkspace';
+import styles from './AnalyticsPage.module.scss';
+
+ChartJS.register(
+  BarElement,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Tooltip,
+  Legend,
+  Filler
+);
+
+const localDateTime = (ms: number) => {
+  if (!Number.isFinite(ms)) return '';
+  const date = new Date(ms);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
+
+export function ObservabilityPage() {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const connection = useAuthStore((state) => JSON.stringify([state.profileId, state.apiBase]));
+  const pageRef = useRef<HTMLDivElement>(null);
+  const restoredPosition = useRef<string | null>(null);
+  const restoreContext = useMemo(
+    () =>
+      readAnalyticsReturnContext(
+        isRecord(location.state) ? location.state.analyticsRestoreContext : null,
+        connection
+      ),
+    [location.state, connection]
+  );
+  const grain: AnalyticsGrain =
+    isRecord(location.state) && location.state.analyticsGrain === 'day' ? 'day' : 'hour';
+  const setGrain = (next: AnalyticsGrain) =>
+    navigate(`${location.pathname}${location.search}`, {
+      replace: true,
+      state: { ...(isRecord(location.state) ? location.state : {}), analyticsGrain: next },
+    });
+  const filters = useMemo(
+    () => readAnalyticsNavigationState(location.state) ?? {},
+    [location.state]
+  );
+  const setFilters = (next: AnalyticsFilters) =>
+    navigate(`${location.pathname}${location.search}`, {
+      replace: true,
+      state: { ...(isRecord(location.state) ? location.state : {}), analyticsFilters: next },
+    });
+  const [params, setParams] = useSearchParams();
+  const scope = useMemo(() => resolveUsageEventsScope(params), [params]);
+  const { usage, querySession, loading, error, lastRefreshedAt, loadUsage } = useUsageData();
+  const transition = usePageTransitionLayer();
+  const currentLayer = transition?.isCurrentLayer ?? true;
+  const selectedSession = restoreContext?.session ?? querySession;
+  const [visible, setVisible] = useState(
+    () => !document.hidden && getConnectionFrameElement()?.getAttribute('data-active') !== 'false'
+  );
+  useEffect(() => {
+    const frame = getConnectionFrameElement();
+    const update = () =>
+      setVisible(!document.hidden && frame?.getAttribute('data-active') !== 'false');
+    const observer = frame ? new MutationObserver(update) : null;
+    if (frame) observer?.observe(frame, { attributes: true, attributeFilter: ['data-active'] });
+    document.addEventListener('visibilitychange', update);
+    update();
+    return () => {
+      observer?.disconnect();
+      document.removeEventListener('visibilitychange', update);
+    };
+  }, []);
+  const active = currentLayer && visible;
+  const isMobile = useMediaQuery('(max-width: 768px)');
+  const refresh = async () => {
+    await loadUsage();
+    if (restoreContext)
+      navigate(`${location.pathname}${location.search}`, {
+        replace: true,
+        state: { analyticsFilters: filters, analyticsGrain: grain },
+      });
+  };
+  useHeaderRefresh(refresh, active);
+  const nowMs = restoreContext?.session?.now_ms ?? lastRefreshedAt?.getTime() ?? 0;
+  const timeWindow = useMemo(
+    () =>
+      restoreContext
+        ? restoreContext.timeWindow
+        : scope.range === 'custom'
+          ? scope.customRange
+          : nowMs > 0
+            ? resolveUsageTimeRangeWindow(scope.range, nowMs)
+            : null,
+    [scope, nowMs, restoreContext]
+  );
+  const legacyUsage = useMemo(
+    () =>
+      scope.valid && usage
+        ? timeWindow
+          ? filterUsageByTimeRange(usage, timeWindow, nowMs)
+          : usage
+        : null,
+    [scope.valid, usage, timeWindow, nowMs]
+  );
+  const ready = scope.valid && !error && nowMs > 0;
+  const aggregated = selectedSession?.analytics_version === 1;
+  const analytics = useUsageAnalytics(
+    selectedSession,
+    timeWindow,
+    filters,
+    active,
+    ready && aggregated,
+    JSON.stringify([scope.range, scope.customRange])
+  );
+  const metadata = useUsageAnalyticsOptions(
+    selectedSession,
+    legacyUsage,
+    timeWindow,
+    active,
+    ready && !aggregated
+  );
+  const visibleResult = aggregated ? analytics.result : null;
+  const visibleWindow = visibleResult ? analyticsResultWindow(visibleResult) : timeWindow;
+  const selection = useMemo(
+    () => (metadata.options ? analyticsQueryFilter(filters, metadata.options) : null),
+    [filters, metadata.options]
+  );
+  const setRange = (range: UsageTimeRange) => {
+    const custom = scope.customRange ?? {
+      startMs: (nowMs || Date.now()) - 86400000,
+      endMs: nowMs || Date.now(),
+    };
+    setParams(buildUsageEventsSearch(range, custom), {
+      state: { analyticsFilters: filters, analyticsGrain: grain },
+    });
+  };
+  const setCustom = (field: 'start' | 'end', value: string) => {
+    const next = new URLSearchParams(params);
+    next.set('range', 'custom');
+    next.set(field, value ? String(Date.parse(value)) : '');
+    setParams(next, { replace: true, state: { analyticsFilters: filters, analyticsGrain: grain } });
+  };
+  // Drill-down navigation keeps the analytics filters, the visible window, and
+  // the aggregate snapshot (bound / now_ms) so the event workspace lists the
+  // same population the charts summarized.
+  const drillDownSearch = (extra: Record<string, string>) => {
+    const search = buildUsageEventsSearch(visibleWindow ? 'custom' : 'all', visibleWindow ?? null);
+    // buildUsageEventsSearch 返回带 "?" 前缀；解析回纯参数再附加下钻条件。
+    const next = new URLSearchParams(search.replace(/^\?/, ''));
+    for (const [key, value] of Object.entries(extra)) next.set(key, value);
+    return `?${next.toString()}`;
+  };
+  const openEvents = (path: string, focusId: string | null = null) => {
+    const session =
+      visibleResult && selectedSession
+        ? { ...selectedSession, bound: visibleResult.bound, now_ms: visibleResult.now_ms }
+        : selectedSession;
+    const context: AnalyticsReturnContext = {
+      pathname: '/analytics/observability',
+      search: location.search,
+      connection,
+      filters,
+      grain,
+      timeWindow: visibleWindow,
+      session,
+      scrollTop: pageRef.current?.closest('.content')?.scrollTop ?? 0,
+      focusId: focusId ?? (document.activeElement as HTMLElement | null)?.dataset.testid ?? null,
+    };
+    // 同时更新来源历史项，浏览器后退和显式返回使用同一份调查上下文。
+    navigate(`${context.pathname}${context.search}`, {
+      replace: true,
+      state: analyticsReturnState(context),
+    });
+    navigate(path, {
+      state: {
+        analyticsFilters: filters,
+        analyticsSession: session,
+        analyticsReturnContext: context,
+      },
+    });
+  };
+  useLayoutEffect(() => {
+    if (
+      !restoreContext ||
+      !active ||
+      transition?.isAnimating ||
+      restoredPosition.current === JSON.stringify(restoreContext)
+    )
+      return;
+    const content = pageRef.current?.closest<HTMLElement>('.content');
+    if (!content) return;
+    const restore = () => {
+      content.scrollTo({ top: restoreContext.scrollTop, behavior: 'instant' });
+      if (content.scrollHeight - content.clientHeight + 1 < restoreContext.scrollTop) return;
+      let target = restoreContext.focusId
+        ? pageRef.current?.querySelector<HTMLElement>(`[data-testid="${restoreContext.focusId}"]`)
+        : null;
+      if (target?.matches(':disabled') && restoreContext.focusId?.endsWith('-open')) {
+        target = pageRef.current?.querySelector<HTMLElement>(
+          `[data-testid="${restoreContext.focusId.slice(0, -5)}"]`
+        );
+      }
+      if (restoreContext.focusId && !target && !analytics.error) return;
+      target?.focus({ preventScroll: true });
+      restoredPosition.current = JSON.stringify(restoreContext);
+      observer?.disconnect();
+    };
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(restore) : null;
+    if (pageRef.current) observer?.observe(pageRef.current);
+    const frame = requestAnimationFrame(restore);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer?.disconnect();
+    };
+  }, [restoreContext, active, transition?.isAnimating, location.key, visibleResult, analytics.error]);
+  const buildFailedDrillDown = () => `/usage/events${drillDownSearch({ failed: '1' })}`;
+  const bucketDrillDownWindow = (bucket: { startMs: number; endMs: number }) =>
+    `/usage/events${buildUsageEventsSearch('custom', { startMs: bucket.startMs, endMs: bucket.endMs })}`;
+
+  return (
+    <div ref={pageRef} data-testid="observability-workspace">
+      <AnalyticsLayout>
+        <AnalyticsPageHeader
+          title={t('analytics.observability')}
+          description={t('analytics.observability_hint')}
+          actions={
+            <>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={!ready || (aggregated && (!visibleResult || analytics.stale))}
+                data-testid="analytics-open-details"
+                onClick={() =>
+                  openEvents(
+                    `/usage/events${buildUsageEventsSearch(visibleWindow ? 'custom' : 'all', visibleWindow)}`,
+                    'analytics-open-details'
+                  )
+                }
+              >
+                {t('usage_stats.request_events_open_workspace')}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={loading}
+                onClick={() => void refresh().catch(() => {})}
+              >
+                {t('usage_stats.refresh')}
+              </Button>
+            </>
+          }
+        />
+        <div className={styles.filterPanel}>
+          <AnalyticsSection title={t('analytics.filter_title')}>
+            <div className={styles.filters}>
+              <div
+                className={`${styles.filterField} ${scope.range === 'custom' ? styles.customTimeField : ''}`}
+              >
+                <span>{t('usage_stats.range_filter')}</span>
+                <Select
+                  value={scope.range}
+                  options={['all', ...USAGE_PRESET_TIME_RANGES, 'custom'].map((value) => ({
+                    value,
+                    label: t(`usage_stats.range_${value}`),
+                  }))}
+                  onChange={(value) => setRange(value as UsageTimeRange)}
+                  ariaLabel={t('usage_stats.range_filter')}
+                />
+                {scope.range === 'custom' && (
+                  <div className={styles.range}>
+                    <input
+                      type="datetime-local"
+                      aria-label={t('usage_stats.range_custom_start')}
+                      value={localDateTime(Number(params.get('start') || NaN))}
+                      onChange={(event) => setCustom('start', event.target.value)}
+                    />
+                    <span>–</span>
+                    <input
+                      type="datetime-local"
+                      aria-label={t('usage_stats.range_custom_end')}
+                      value={localDateTime(Number(params.get('end') || NaN))}
+                      onChange={(event) => setCustom('end', event.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+              <AnalyticsFiltersBar
+                options={aggregated ? analytics.options : metadata.options}
+                filters={filters}
+                onChange={setFilters}
+                active={active && ready}
+              />
+            </div>
+          </AnalyticsSection>
+        </div>
+        {!aggregated && metadata.error && (
+          <div className="error-box" role="alert">
+            {t('usage_stats.loading_error')}: {metadata.error}{' '}
+            <Button variant="secondary" size="sm" onClick={metadata.retry}>
+              {t('common.retry')}
+            </Button>
+          </div>
+        )}
+        <div className={styles.resultMeta}>
+          {visibleWindow && (
+            <p>
+              <span>{t('analytics.result_scope')}</span>
+              {new Date(visibleWindow.startMs).toLocaleString()} –{' '}
+              {new Date(visibleWindow.endMs).toLocaleString()}
+            </p>
+          )}
+          {lastRefreshedAt && (
+            <p>
+              <span>{t('usage_stats.last_updated')}</span>
+              {new Date(visibleResult?.now_ms ?? nowMs).toLocaleString()}
+            </p>
+          )}
+          {scope.valid && !error && aggregated && (
+            <>
+              <p className={styles.note} role="status">
+                {analytics.loading || analytics.stale
+                  ? t(
+                      analytics.error && visibleResult
+                        ? 'analytics.stale_error'
+                        : visibleResult
+                          ? 'analytics.updating'
+                          : 'common.loading'
+                    )
+                  : visibleResult
+                    ? t('analytics.aggregated_ready', { count: visibleResult.total })
+                    : ''}
+              </p>
+            </>
+          )}
+        </div>
+        {error && (
+          <div className="error-box" role="alert">
+            {error}
+          </div>
+        )}
+        {!scope.valid && (
+          <div className="error-box" role="alert">
+            {t('usage_stats.range_custom_invalid')}
+          </div>
+        )}
+        {scope.valid && !error && aggregated && (
+          <section aria-label={t('usage_stats.analytics_section_title')}>
+            {analytics.error && (
+              <div className="error-box" role="alert">
+                {t(
+                  analytics.code === 'usage_analytics_too_large'
+                    ? 'analytics.capacity_error'
+                    : analytics.code === 'usage_query_expired'
+                      ? 'analytics.snapshot_expired'
+                      : analytics.code === 'usage_analytics_busy'
+                        ? 'analytics.busy_error'
+                        : 'usage_stats.loading_error'
+                )}{' '}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={
+                    analytics.code === 'usage_query_expired'
+                      ? () => void refresh().catch(() => {})
+                      : analytics.retry
+                  }
+                >
+                  {t('common.retry')}
+                </Button>
+              </div>
+            )}
+            {visibleResult && visibleResult.analyzed < visibleResult.total && (
+              <p className={styles.note}>
+                {t('analytics.invalid_timestamps', {
+                  count: visibleResult.total - visibleResult.analyzed,
+                })}
+              </p>
+            )}
+            {visibleResult && visibleResult.total > 0 && (
+              <AnalyticsSummaryStrip
+                data={visibleResult.data}
+                totalRecords={visibleResult.total}
+                loading={analytics.loading}
+                canOpenFailed={Boolean(visibleWindow) && !analytics.stale}
+                onOpenFailed={visibleWindow ? () => openEvents(buildFailedDrillDown()) : undefined}
+              />
+            )}
+            {visibleResult &&
+              (visibleResult.total > 0 ? (
+                <UsageAnalyticsCharts
+                  data={visibleResult.data}
+                  loading={false}
+                  isMobile={isMobile}
+                  window={visibleWindow}
+                  grain={grain}
+                  onGrainChange={setGrain}
+                  onBucketClick={
+                    analytics.stale
+                      ? undefined
+                      : (bucket) => openEvents(bucketDrillDownWindow(bucket))
+                  }
+                />
+              ) : (
+                <p className={styles.note}>{t('analytics.empty_window')}</p>
+              ))}
+          </section>
+        )}
+        {scope.valid && !error && !aggregated && !metadata.error && (
+          <UsageAnalyticsSection
+            querySession={selectedSession}
+            legacyUsage={legacyUsage}
+            timeWindow={timeWindow}
+            loading={loading || metadata.loading}
+            isMobile={isMobile}
+            active={active}
+            enabled={ready && selection !== null}
+            filter={selection?.filter}
+            filters={filters}
+            empty={selection?.empty}
+            grain={grain}
+            onGrainChange={setGrain}
+          />
+        )}
+      </AnalyticsLayout>
+    </div>
+  );
+}

@@ -1,4 +1,5 @@
 import type { UsageDetail } from '@/utils/usage';
+import type { ServiceTierFlow } from '@/utils/usage/serviceTier';
 
 export interface UsageQuerySession {
   version: 1;
@@ -6,6 +7,10 @@ export interface UsageQuerySession {
   now_ms: number;
   models: string[];
   max_page_size: number;
+  export_version?: number;
+  max_export_page_size?: number;
+  analytics_version?: number;
+  max_analytics_rows?: number;
 }
 export interface UsageQueryIdentity {
   source: string;
@@ -17,6 +22,7 @@ export interface UsageQueryFilter {
   auth_index?: string;
   identities?: UsageQueryIdentity[];
   tier?: 'fast' | 'std';
+  tier_flow?: ServiceTierFlow;
   effort?: string;
   failed?: boolean;
   cached?: boolean;
@@ -114,12 +120,14 @@ export interface UsageQueryOptions {
   efforts: string[];
   metrics: UsageQueryMetrics;
 }
-export interface UsageQueryDetails {
+export interface UsageQueryPage {
   version: 1;
   bound: string;
   items: UsageQueryItem[];
   total: number;
   next_cursor?: string;
+}
+export interface UsageQueryDetails extends UsageQueryPage {
   metrics: UsageQueryMetrics;
   options?: UsageQueryOptions;
 }

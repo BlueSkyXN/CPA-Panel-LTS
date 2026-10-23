@@ -9,6 +9,7 @@ import {
   IconPlus,
   IconX,
 } from '@/components/ui/icons';
+import { ProxyUrlField } from '@/components/common/ProxyUrlField';
 import { Collapsible } from '@/components/ui/Collapsible';
 import { Select } from '@/components/ui/Select';
 import { hasDisableAllModelsRule } from '@/components/providers/utils';
@@ -563,19 +564,16 @@ export function BaseProviderForm({
         ) : null}
 
         {descriptor.supportsProxyUrl ? (
-          <div className={styles.field}>
-            <label className={styles.label} htmlFor={`${fid}-proxy`}>
-              {t('providersPage.form.proxyUrl')}
-            </label>
-            <input
-              id={`${fid}-proxy`}
-              className={styles.input}
-              value={form.proxyUrl}
-              onChange={(e) => updateField('proxyUrl', e.target.value)}
-              placeholder="http://127.0.0.1:7890"
-              disabled={mutating}
-            />
-          </div>
+          <ProxyUrlField
+            id={`${fid}-proxy`}
+            label={t('providersPage.form.proxyUrl')}
+            value={form.proxyUrl}
+            onChange={(proxyUrl) => updateField('proxyUrl', proxyUrl)}
+            placeholder="http://127.0.0.1:7890"
+            disabled={mutating}
+            className={styles.field}
+            inputClassName={styles.input}
+          />
         ) : null}
 
         {descriptor.supportsPrefix ? (

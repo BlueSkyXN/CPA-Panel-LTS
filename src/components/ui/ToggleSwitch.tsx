@@ -6,6 +6,8 @@ interface ToggleSwitchProps {
   onChange: (value: boolean) => void;
   label?: ReactNode;
   ariaLabel?: string;
+  id?: string;
+  ariaDescribedBy?: string;
   disabled?: boolean;
   labelPosition?: 'left' | 'right';
 }
@@ -15,6 +17,8 @@ export function ToggleSwitch({
   onChange,
   label,
   ariaLabel,
+  id,
+  ariaDescribedBy,
   disabled = false,
   labelPosition = 'right'
 }: ToggleSwitchProps) {
@@ -33,6 +37,8 @@ export function ToggleSwitch({
   return (
     <label className={className}>
       <input
+        id={id}
+        aria-describedby={ariaDescribedBy}
         type="checkbox"
         checked={checked}
         onChange={handleChange}

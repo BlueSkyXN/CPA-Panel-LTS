@@ -14,27 +14,13 @@ export const ANTIGRAVITY_QUOTA_URLS = [
 export const ANTIGRAVITY_CODE_ASSIST_URL =
   'https://daily-cloudcode-pa.googleapis.com/v1internal:loadCodeAssist';
 
-export const ANTIGRAVITY_CLI_VERSION = '1.0.13';
-export const ANTIGRAVITY_CLIENT_NAME = 'aidev_client';
-export const ANTIGRAVITY_CLIENT_PLATFORM = {
-  osType: 'darwin',
-  arch: 'arm64',
-} as const;
-
-type AntigravityUserAgentOptions = {
-  version?: string;
-  clientName?: string;
-  osType?: string;
-  arch?: string;
-};
-
+export const ANTIGRAVITY_HUB_VERSION = '2.24.0';
+export const ANTIGRAVITY_HUB_PLATFORM = 'aidev_client; os_type=darwin; arch=arm64';
+type AntigravityUserAgentOptions = { version?: string; platform?: string };
 export const buildAntigravityUserAgent = ({
-  version = ANTIGRAVITY_CLI_VERSION,
-  clientName = ANTIGRAVITY_CLIENT_NAME,
-  osType = ANTIGRAVITY_CLIENT_PLATFORM.osType,
-  arch = ANTIGRAVITY_CLIENT_PLATFORM.arch,
-}: AntigravityUserAgentOptions = {}) =>
-  `antigravity/cli/${version} (${clientName}; os_type=${osType}; arch=${arch})`;
+  version = ANTIGRAVITY_HUB_VERSION,
+  platform = ANTIGRAVITY_HUB_PLATFORM,
+}: AntigravityUserAgentOptions = {}) => `antigravity/hub/${version} (${platform}${version === '2.24.0' ? '; cl=1000335682' : ''})`;
 
 export const ANTIGRAVITY_USER_AGENT = buildAntigravityUserAgent();
 
@@ -153,7 +139,7 @@ export const XAI_BILLING_WEEKLY_URL = 'https://cli-chat-proxy.grok.com/v1/billin
 export const XAI_BILLING_MONTHLY_URL = 'https://cli-chat-proxy.grok.com/v1/billing';
 export const XAI_USER_URL = 'https://cli-chat-proxy.grok.com/v1/user';
 export const XAI_AUTO_TOPUP_URL = 'https://cli-chat-proxy.grok.com/v1/auto-topup-rule';
-export const XAI_GROK_CLIENT_VERSION = '1.0.3';
+export const XAI_GROK_CLIENT_VERSION = '1.0.46';
 
 type NavigatorUADataLike = {
   platform?: string;

@@ -10,7 +10,7 @@ const compiled = ts.transpileModule(source, {
     target: ts.ScriptTarget.ES2020,
   },
 }).outputText;
-const { classifyServiceTier, normalizeServiceTier, resolveServiceTier } = await import(
+const { classifyServiceTier, normalizeServiceTier, resolveServiceTier, serviceTierFlow } = await import(
   `data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`
 );
 
@@ -22,6 +22,19 @@ test('normalizes and classifies the two supported display tiers', () => {
   assert.equal(classifyServiceTier('STANDARD'), 'std');
   assert.equal(classifyServiceTier('auto'), null);
   assert.equal(classifyServiceTier(undefined), null);
+});
+
+test('flows are exclusive and follow the displayed client-to-effective arrow', () => {
+  for (const [values, expected] of [
+    [{ requestServiceTier: 'priority', responseServiceTier: 'priority' }, 'fast'],
+    [{ requestServiceTier: 'default', responseServiceTier: 'default' }, 'std'],
+    [{ requestServiceTier: 'priority', responseServiceTier: 'default' }, 'fast_to_std'],
+    [{ requestServiceTier: 'standard', effectiveServiceTier: 'priority' }, 'std_to_fast'],
+    [{ serviceTier: 'priority', outboundServiceTier: 'default' }, 'fast_to_std'],
+    [{ requestServiceTier: 'priority', responseServiceTier: 'future-tier' }, 'fast_to_std'],
+    [{ effectiveServiceTier: 'priority' }, 'fast'],
+    [{}, 'std'],
+  ]) assert.equal(serviceTierFlow(resolveServiceTier(values)), expected);
 });
 
 test('effective tier wins while matching response or outbound values refine its evidence', () => {

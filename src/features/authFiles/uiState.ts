@@ -1,6 +1,32 @@
-export const AUTH_FILES_SORT_MODES = ['default', 'az', 'priority'] as const;
+export const AUTH_FILES_SORT_MODES = ['default', 'name', 'az', 'modified', 'priority'] as const;
 
 export type AuthFilesSortMode = (typeof AUTH_FILES_SORT_MODES)[number];
+export type AuthFilesSortDirection = 'asc' | 'desc';
+export type AuthFilesStatusFilter = 'all' | 'problem' | 'disabled';
+
+export const defaultAuthFilesSortDirection = (mode: AuthFilesSortMode): AuthFilesSortDirection =>
+  mode === 'priority' || mode === 'modified' ? 'desc' : 'asc';
+
+export const resolveAuthFilesStatusFilter = (state: AuthFilesUiState): AuthFilesStatusFilter => {
+  if (
+    state.statusFilter === 'all' ||
+    state.statusFilter === 'problem' ||
+    state.statusFilter === 'disabled'
+  ) {
+    return state.statusFilter;
+  }
+  // Legacy overlapping flags could never match; retain the explicit disabled filter.
+  return state.disabledOnly ? 'disabled' : state.problemOnly ? 'problem' : 'all';
+};
+
+export const resolveAuthFilesSort = (state: AuthFilesUiState) => {
+  const mode = isAuthFilesSortMode(state.sortMode) ? state.sortMode : 'default';
+  const direction =
+    state.sortDirection === 'asc' || state.sortDirection === 'desc'
+      ? state.sortDirection
+      : defaultAuthFilesSortDirection(mode);
+  return { mode, direction };
+};
 
 export type AuthFilesUiState = {
   filter?: string;
@@ -13,6 +39,8 @@ export type AuthFilesUiState = {
   regularPageSize?: number;
   compactPageSize?: number;
   sortMode?: AuthFilesSortMode;
+  sortDirection?: AuthFilesSortDirection;
+  statusFilter?: AuthFilesStatusFilter;
 };
 
 const AUTH_FILES_UI_STATE_KEY = 'authFilesPage.uiState';

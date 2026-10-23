@@ -159,3 +159,24 @@ test('an obsolete connection cannot publish its capability response', async () =
   await old;
   assert.equal(useUsageQueryStore.getState().session.bound, 'new-bound');
 });
+
+
+test('bulk export capabilities are optional and validate their advertised page limit', () => {
+  assert.doesNotThrow(() => api.decodeUsageQuerySession(session));
+  assert.doesNotThrow(() => api.decodeUsageQuerySession({ ...session, export_version: 1, max_export_page_size: 1000 }));
+  for (const extra of [{ export_version: 1 }, { export_version: '1' }, { export_version: 1, max_export_page_size: 0 }, { export_version: 1, max_export_page_size: 1.5 }]) {
+    assert.throws(() => api.decodeUsageQuerySession({ ...session, ...extra }));
+  }
+});
+
+test('bulk export accepts 1000 validated records without weakening details metrics or its page limit', () => {
+  const payload = usageDetailsResponse(usageDetail);
+  delete payload.metrics;
+  payload.items = Array.from({ length: 1000 }, (_, i) => ({ id: String(i), api: 'synthetic', model: 'test', detail: usageDetail }));
+  payload.total = 1000;
+  assert.equal(api.decodeUsageQueryExport(payload).items.length, 1000);
+  assert.throws(() => api.decodeUsageQueryDetails(payload));
+  assert.throws(() => api.decodeUsageQueryDetails({ ...payload, metrics }));
+  assert.throws(() => api.decodeUsageQueryExport({ ...payload, items: [...payload.items, payload.items[0]] }));
+  assert.throws(() => api.decodeUsageQueryExport({ ...payload, items: [{ ...payload.items[0], detail: { ...usageDetail, failed: 'no' } }] }));
+});

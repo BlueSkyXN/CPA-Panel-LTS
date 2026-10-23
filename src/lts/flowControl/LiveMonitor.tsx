@@ -1,10 +1,10 @@
-import { useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Collapsible } from '@/components/ui/Collapsible/Collapsible';
+import { FlowTrend } from './FlowTrend';
+import type { FlowPoint } from './history';
 import { Button } from '@/components/ui/Button';
 import {
-  IconAlertTriangle,
-  IconCheckCircle2,
-  IconDiamond,
   IconNetwork,
   IconTimer,
   IconTrendingUp,
@@ -16,13 +16,12 @@ import { referenceLabel } from './insights';
 import { type FlowLiveState } from './useStatus';
 import styles from './styles.module.scss';
 
-type Point = { requests: number; attempts: number; waiting: number };
 type Props = {
   data: FlowCapabilities | null;
   live: boolean;
   setLive: (value: boolean) => void;
   liveState: FlowLiveState;
-  history: Point[];
+  history: FlowPoint[];
   onRefresh: () => void;
 };
 type DetailsPage = {
@@ -35,43 +34,11 @@ type DetailsPage = {
 
 const DETAILS_PAGE_SIZE = 100;
 
-function Trend({ history, label }: { history: Point[]; label: string }) {
-  const max = Math.max(1, ...history.flatMap((point) => [point.requests, point.attempts, point.waiting]));
-  const points = (field: 'requests' | 'attempts' | 'waiting') =>
-    history.map((point, index) => {
-      const x = (index * 300) / Math.max(1, history.length - 1);
-      return `${x},${55 - (point[field] * 48) / max}`;
-    }).join(' ');
-  const area = history.length > 1
-    ? `M0,55 L${points('attempts')} L300,55 Z`
-    : '';
-
-  return (
-    <svg className={styles.trend} viewBox="0 0 300 60" role="img" aria-label={label} preserveAspectRatio="none">
-      <defs>
-        <linearGradient id="flow-trend-fill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#477fa5" stopOpacity="0.2" />
-          <stop offset="100%" stopColor="#477fa5" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d="M0 55H300" className={styles.trendBase} />
-      {area && <path d={area} fill="url(#flow-trend-fill)" />}
-      <polyline points={points('requests')} className={styles.trendRequests} />
-      <polyline points={points('attempts')} className={styles.trendActive} />
-      <polyline points={points('waiting')} className={styles.trendWaiting} />
-    </svg>
-  );
-}
-
 type KpiCard = {
   key: string;
   label: string;
   value: ReactNode;
   icon: ReactNode;
-  accent: string;
-  soft: string;
-  border: string;
-  small?: boolean;
   meta?: ReactNode;
 };
 
@@ -129,7 +96,7 @@ export function LiveMonitor({ data, live, setLive, liveState, history, onRefresh
     <section className={styles.liveMonitor} aria-label={t('flow_control.runtime')}>
       <div className={styles.heading}>
         <div>
-          <h4>{t('flow_control.runtime')}</h4>
+          <h2>{t('flow_control.runtime')}</h2>
           <p className={styles.hint}>{t('flow_control.v3_live_desc')}</p>
         </div>
         <div className={styles.actions}>
@@ -138,7 +105,7 @@ export function LiveMonitor({ data, live, setLive, liveState, history, onRefresh
             onClick={() => setLive(!live)}>
             {t(live ? 'flow_control.stop_live' : 'flow_control.start_live')}
           </Button>
-          <Button type="button" variant="secondary" onClick={onRefresh}>{t('flow_control.refresh')}</Button>
+          <Button type="button" variant="secondary" aria-label={t('flow_control.refresh')} onClick={onRefresh}>{t('usage_stats.refresh')}</Button>
         </div>
       </div>
       {!canLive && <p className={styles.hint}>{t('flow_control.v3_realtime_off')}</p>}
@@ -149,27 +116,18 @@ export function LiveMonitor({ data, live, setLive, liveState, history, onRefresh
             label: t('flow_control.active_requests'),
             value: state?.['active-requests'] ?? '—',
             icon: <IconNetwork size={15} />,
-            accent: '#477fa5',
-            soft: 'rgba(71, 127, 165, 0.16)',
-            border: 'rgba(71, 127, 165, 0.34)',
           },
           {
             key: 'attempts',
             label: t('flow_control.active_attempts'),
             value: state?.['active-attempts'] ?? '—',
             icon: <IconTrendingUp size={15} />,
-            accent: '#8b5cf6',
-            soft: 'rgba(139, 92, 246, 0.16)',
-            border: 'rgba(139, 92, 246, 0.32)',
           },
           {
             key: 'waiting',
             label: t('flow_control.waiting'),
             value: state?.waiting ?? '—',
             icon: <IconTimer size={15} />,
-            accent: '#d97706',
-            soft: 'rgba(217, 119, 6, 0.16)',
-            border: 'rgba(217, 119, 6, 0.32)',
             meta:
               state?.['waiting-requests'] != null || state?.['waiting-attempts'] != null
                 ? t('flow_control.waiting_split', {
@@ -178,86 +136,43 @@ export function LiveMonitor({ data, live, setLive, liveState, history, onRefresh
                   })
                 : undefined,
           },
-          {
-            key: 'queued-bytes',
-            label: t('flow_control.queued_bytes'),
-            value: mib(state?.['queued-bytes']),
-            icon: <IconDiamond size={15} />,
-            accent: '#64748b',
-            soft: 'rgba(100, 116, 139, 0.16)',
-            border: 'rgba(100, 116, 139, 0.34)',
-            small: true,
-          },
-          {
-            key: 'admitted',
-            label: t('flow_control.admitted_total'),
-            value: state?.admitted ?? '—',
-            icon: <IconCheckCircle2 size={15} />,
-            accent: '#22a45d',
-            soft: 'rgba(34, 164, 93, 0.16)',
-            border: 'rgba(34, 164, 93, 0.32)',
-          },
-          {
-            key: 'rejected',
-            label: t('flow_control.rejected_total'),
-            value: state?.rejected ?? '—',
-            icon: <IconAlertTriangle size={15} />,
-            accent: '#c25a4a',
-            soft: 'rgba(194, 90, 74, 0.16)',
-            border: 'rgba(194, 90, 74, 0.32)',
-            meta:
-              `${t('flow_control.timed_out_total')}: ${state?.['timed-out'] ?? 0}` +
-              ` · ${t('flow_control.canceled_total')}: ${state?.canceled ?? 0}`,
-          },
         ] as KpiCard[]).map((card) => (
           <div
             key={card.key}
             className={styles.kpi}
-            style={
-              {
-                '--accent': card.accent,
-                '--accent-soft': card.soft,
-                '--accent-border': card.border,
-              } as CSSProperties
-            }
+            data-metric={card.key}
           >
             <div className={styles.kpiHeader}>
               <span className={styles.kpiLabel}>{card.label}</span>
               <span className={styles.kpiIcon}>{card.icon}</span>
             </div>
-            <strong className={card.small ? styles.smallMetric : undefined}>{card.value}</strong>
+            <strong>{card.value}</strong>
             {card.meta && <small className={styles.kpiMeta}>{card.meta}</small>}
           </div>
         ))}
       </div>
-      <p className={styles.hint}>{t('flow_control.counts_hint')}</p>
-      {history.length > 1 && (
-        <div className={styles.trendPanel}>
-          <Trend history={history} label={t('flow_control.trend_label')} />
-          <div className={styles.trendSide}>
-            <div className={styles.trendLegend}>
-              <span><i className={styles.dotRequests} />{t('flow_control.active_requests')}</span>
-              <span><i className={styles.dotActive} />{t('flow_control.active_attempts')}</span>
-              <span><i className={styles.dotWaiting} />{t('flow_control.waiting')}</span>
-            </div>
-            <small>{t('flow_control.trend_label')}</small>
-          </div>
+      <dl className={styles.secondaryMetrics}>
+        <div><dt>{t('flow_control.queued_bytes')}</dt><dd>{mib(state?.['queued-bytes'])}</dd></div>
+        <div><dt>{t('flow_control.admitted_total')}</dt><dd>{state?.admitted ?? '—'}</dd></div>
+        <div><dt>{t('flow_control.rejected_total')}</dt><dd>{state?.rejected ?? '—'}</dd>
+          <small>{t('flow_control.timed_out_total')}: {state?.['timed-out'] ?? '—'} · {t('flow_control.canceled_total')}: {state?.canceled ?? '—'}</small>
         </div>
-      )}
+      </dl>
+      <div className={styles.waitSummary}>
+        <span>{t('flow_control.v3_oldest')}</span>
+        <strong>{state?.['oldest-wait-ms'] == null ? '—' : `${(state['oldest-wait-ms'] / 1000).toFixed(1)} s`}</strong>
+        {blockers.length > 0 && <div>
+          <span>{t('flow_control.v3_recent_blockers')}</span>
+          {blockers.map(([key, count]) => <span key={key} className={styles.blocker}>{lookup(key)} · {count}</span>)}
+        </div>}
+      </div>
+      <FlowTrend history={history} liveState={liveState} />
       <p className={styles.sampleLine}>
-        {state?.['sampled-at'] || '—'} · {t('flow_control.v3_revision')} {state?.['policy-revision'] ?? '—'}
-        {' · '}{t('flow_control.v3_oldest')} {Math.round((state?.['oldest-wait-ms'] ?? 0) / 1000)} s
+        {t('flow_control.sampled')}: {state?.['sampled-at'] ? new Date(state['sampled-at']).toLocaleString() : '—'}
+        {' · '}{t('flow_control.v3_revision')} {state?.['policy-revision'] ?? '—'}
       </p>
-      {blockers.length > 0 && (
-        <p className={styles.hint}>
-          {t('flow_control.v3_recent_blockers')}: {blockers.map(([key, count]) => (
-            <span key={key} className={styles.blocker}>{lookup(key)} · {count}</span>
-          ))}
-        </p>
-      )}
       {resources && (
-        <details>
-          <summary>{t('flow_control.v3_resource_snapshot')}</summary>
+        <Collapsible label={t('flow_control.v3_resource_snapshot')}>
           <div className={styles.status}>
             <span>{t('flow_control.v3_heap')}: {mib(resources['heap-object-bytes'])}</span>
             <span>{t('flow_control.v3_managed')}: {mib(resources['go-managed-bytes'])}</span>
@@ -266,10 +181,9 @@ export function LiveMonitor({ data, live, setLive, liveState, history, onRefresh
           </div>
           <p className={styles.hint}>{t('flow_control.v3_resource_note')}</p>
           <small>{resources['sampled-at']} / {resources['filesystem-sampled-at']}</small>
-        </details>
+        </Collapsible>
       )}
-      <details className={styles.details}>
-        <summary>{t('flow_control.v3_manual_details')}</summary>
+      <Collapsible className={styles.detailsPanel} label={t('flow_control.v3_manual_details')}>
         <p className={styles.hint}>{t('flow_control.v3_detail_hint')}</p>
         <div className={styles.grid}>
           <label className={styles.field}>
@@ -359,7 +273,7 @@ export function LiveMonitor({ data, live, setLive, liveState, history, onRefresh
             </div>
           </>
         )}
-      </details>
+      </Collapsible>
     </section>
   );
 }

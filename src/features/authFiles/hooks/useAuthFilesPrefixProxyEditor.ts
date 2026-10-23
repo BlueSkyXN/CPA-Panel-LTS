@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { authFilesApi, type AuthFileFieldsPatch } from '@/services/api';
-import type { AuthFileItem } from '@/types';
+import type { AuthFileItem, AuthFileModelPolicy } from '@/types';
 import { useNotificationStore } from '@/stores';
 import {
   applyAuthFileWebsockets,
@@ -39,7 +39,11 @@ export type PrefixProxyEditorField =
   | 'websockets'
   | 'usingApi'
   | 'note'
-  | 'headersText';
+  | 'headersText'
+  | 'modelPolicyAllowText'
+  | 'modelPolicyAllowEnabled'
+  | 'modelPolicyDenyText'
+  | 'modelPolicyDenyEnabled';
 
 export type PrefixProxyEditorFieldValue = string | boolean;
 
@@ -68,6 +72,11 @@ export type PrefixProxyEditorState = {
   headersText: string;
   headersTouched: boolean;
   headersError: string | null;
+  modelPolicyAllowText: string;
+  modelPolicyAllowEnabled: boolean;
+  modelPolicyDenyText: string;
+  modelPolicyDenyEnabled: boolean;
+  modelPolicyTouched: boolean;
 };
 
 export type UseAuthFilesPrefixProxyEditorOptions = {
@@ -173,6 +182,70 @@ const getAuthFileContentErrorKey = (text: string): AuthFileContentErrorKey => {
 
 const hasKeys = (value: Record<string, unknown> | AuthFileFieldsPatch | null): boolean =>
   Boolean(value && Object.keys(value).length > 0);
+
+// 账号 model_policy 读取：保持 Core 契约 {allowlist:{enabled,models},denylist:{...}}
+const parsePolicyModelsText = (text: string): string[] => {
+  const seen = new Set<string>();
+  const models: string[] = [];
+  text
+    .split(/[\n,]+/)
+    .map((entry) => entry.trim().toLowerCase())
+    .forEach((entry) => {
+      if (!entry || seen.has(entry)) return;
+      seen.add(entry);
+      models.push(entry);
+    });
+  return models;
+};
+
+const readModelPolicyList = (value: unknown): { enabled: boolean; models: string[] } | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const list = value as Record<string, unknown>;
+  if (list.enabled !== undefined && typeof list.enabled !== 'boolean') return null;
+  const models = Array.isArray(list.models)
+    ? list.models.map((item) => String(item ?? '').trim()).filter(Boolean)
+    : [];
+  return { enabled: list.enabled === true, models };
+};
+
+const buildModelPolicyPatch = (
+  editor: PrefixProxyEditorState
+): AuthFileModelPolicy | null | undefined => {
+  if (!editor.modelPolicyTouched) return undefined;
+  const original = editor.json ? editor.json.model_policy : undefined;
+  const originalPolicy =
+    original && typeof original === 'object' && !Array.isArray(original)
+      ? (original as Record<string, unknown>)
+      : null;
+  const originalAllow = readModelPolicyList(originalPolicy?.allowlist);
+  const originalDeny = readModelPolicyList(originalPolicy?.denylist);
+
+  const allowModels = parsePolicyModelsText(editor.modelPolicyAllowText);
+  const denyModels = parsePolicyModelsText(editor.modelPolicyDenyText);
+  const allowChanged =
+    editor.modelPolicyAllowEnabled !== (originalAllow?.enabled ?? false) ||
+    allowModels.join('\n') !== (originalAllow?.models ?? []).join('\n');
+  const denyChanged =
+    editor.modelPolicyDenyEnabled !== (originalDeny?.enabled ?? false) ||
+    denyModels.join('\n') !== (originalDeny?.models ?? []).join('\n');
+  if (!allowChanged && !denyChanged) return undefined;
+
+  const hasAny =
+    editor.modelPolicyAllowEnabled ||
+    allowModels.length > 0 ||
+    editor.modelPolicyDenyEnabled ||
+    denyModels.length > 0;
+  if (!hasAny) return null;
+
+  const next: AuthFileModelPolicy = {};
+  if (editor.modelPolicyAllowEnabled || allowModels.length > 0) {
+    next.allowlist = { enabled: editor.modelPolicyAllowEnabled, models: allowModels };
+  }
+  if (editor.modelPolicyDenyEnabled || denyModels.length > 0) {
+    next.denylist = { enabled: editor.modelPolicyDenyEnabled, models: denyModels };
+  }
+  return next;
+};
 
 const normalizeHeaders = (value: unknown): AuthFileHeaders => {
   if (!isRecordObject(value)) return {};
@@ -320,6 +393,11 @@ export const buildAuthFileFieldsPatch = (
     }
   }
 
+  const modelPolicyPatch = buildModelPolicyPatch(editor);
+  if (modelPolicyPatch !== undefined) {
+    patch.model_policy = modelPolicyPatch;
+  }
+
   return patch;
 };
 
@@ -377,6 +455,21 @@ const buildPrefixProxyUpdatedText = (
 
   if (patch.using_api !== undefined) {
     next = applyAuthFileUsingApi(next, patch.using_api);
+  }
+
+  if (patch.model_policy !== undefined) {
+    if (patch.model_policy === null) {
+      delete next.model_policy;
+    } else {
+      const policy: Record<string, unknown> = {};
+      if (patch.model_policy.allowlist) {
+        policy.allowlist = patch.model_policy.allowlist;
+      }
+      if (patch.model_policy.denylist) {
+        policy.denylist = patch.model_policy.denylist;
+      }
+      next.model_policy = policy;
+    }
   }
 
   return JSON.stringify(next);
@@ -446,6 +539,11 @@ export function useAuthFilesPrefixProxyEditor(
       headersText: '',
       headersTouched: false,
       headersError: null,
+      modelPolicyAllowText: '',
+      modelPolicyAllowEnabled: false,
+      modelPolicyDenyText: '',
+      modelPolicyDenyEnabled: false,
+      modelPolicyTouched: false,
     });
 
     try {
@@ -500,6 +598,15 @@ export function useAuthFilesPrefixProxyEditor(
         headersError = errorKey ? t(errorKey) : null;
       }
 
+      const rawPolicy =
+        json.model_policy &&
+        typeof json.model_policy === 'object' &&
+        !Array.isArray(json.model_policy)
+          ? (json.model_policy as Record<string, unknown>)
+          : null;
+      const policyAllow = readModelPolicyList(rawPolicy?.allowlist);
+      const policyDeny = readModelPolicyList(rawPolicy?.denylist);
+
       setPrefixProxyEditor((prev) => {
         if (!prev || prev.fileName !== name) return prev;
         return {
@@ -524,6 +631,11 @@ export function useAuthFilesPrefixProxyEditor(
           headersText,
           headersTouched: false,
           headersError,
+          modelPolicyAllowText: policyAllow?.models.join('\n') ?? '',
+          modelPolicyAllowEnabled: policyAllow?.enabled ?? false,
+          modelPolicyDenyText: policyDeny?.models.join('\n') ?? '',
+          modelPolicyDenyEnabled: policyDeny?.enabled ?? false,
+          modelPolicyTouched: false,
           error: null,
         };
       });
@@ -571,6 +683,18 @@ export function useAuthFilesPrefixProxyEditor(
           headersTouched: true,
           headersError: errorKey ? t(errorKey) : null,
         };
+      }
+      if (field === 'modelPolicyAllowText') {
+        return { ...prev, modelPolicyAllowText: String(value), modelPolicyTouched: true };
+      }
+      if (field === 'modelPolicyAllowEnabled') {
+        return { ...prev, modelPolicyAllowEnabled: Boolean(value), modelPolicyTouched: true };
+      }
+      if (field === 'modelPolicyDenyText') {
+        return { ...prev, modelPolicyDenyText: String(value), modelPolicyTouched: true };
+      }
+      if (field === 'modelPolicyDenyEnabled') {
+        return { ...prev, modelPolicyDenyEnabled: Boolean(value), modelPolicyTouched: true };
       }
       return prev;
     });

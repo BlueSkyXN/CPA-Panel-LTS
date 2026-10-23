@@ -42,6 +42,7 @@ const READ_ONLY_USAGE_POSTS = new Set([
   '/usage/query/summary',
   '/usage/query/details',
   '/usage/query/pricing',
+  '/usage/query/analytics',
 ]);
 
 function isMutationRequest(config: AxiosRequestConfig): boolean {
@@ -58,7 +59,7 @@ class ManagementTransport {
   private managementKey: string = '';
   private connectionGeneration = 0;
 
-  constructor() {
+  constructor(private readonly ownerIsCurrent: () => boolean = () => true) {
     this.instance = axios.create({
       timeout: REQUEST_TIMEOUT_MS,
       headers: {
@@ -106,9 +107,17 @@ class ManagementTransport {
     return `${this.apiRoot}${scope === 'lts' ? LTS_EXTENSION_API_PREFIX : MANAGEMENT_API_PREFIX}`;
   }
 
+  captureConnection(): ManagementTransport {
+    const generation = this.connectionGeneration;
+    const transport = new ManagementTransport(() => this.ownerIsCurrent() && this.isCurrentConnection(generation));
+    transport.setConfig({ apiBase: this.apiRoot, managementKey: this.managementKey, timeout: this.instance.defaults.timeout });
+    transport.instance.defaults.adapter = this.instance.defaults.adapter;
+    return transport;
+  }
+
   private isCurrentRequest(config: unknown): boolean {
     const scopedConfig = config as ConnectionScopedRequestConfig | undefined;
-    return scopedConfig?.__cpaConnectionGeneration === this.connectionGeneration;
+    return this.ownerIsCurrent() && scopedConfig?.__cpaConnectionGeneration === this.connectionGeneration;
   }
 
   private readHeader(headers: Record<string, unknown> | undefined, keys: string[]): string | null {
@@ -170,7 +179,10 @@ class ManagementTransport {
     this.instance.interceptors.request.use(
       (config) => {
         const mutation = isMutationRequest(config);
-        if (isSessionFrozen() && mutation) throw new Error('Connection switch in progress');
+        // OAuth cancellation must still reach the captured original server while a
+        // connection switch freezes configuration and credential edits.
+        const oauthCleanup = config.method?.toLowerCase() === 'delete' && config.url === '/oauth/session';
+        if (isSessionFrozen() && mutation && !oauthCleanup) throw new Error('Connection switch in progress');
         const scopedConfig = config as typeof config & ConnectionScopedRequestConfig;
         scopedConfig.__cpaConnectionGeneration = this.connectionGeneration;
         if (mutation) scopedConfig.__finishSessionWrite = beginSessionWrite();
@@ -312,6 +324,11 @@ class ApiClient {
 
   isCurrentConnection(generation: number): boolean {
     return this.transport.isCurrentConnection(generation);
+  }
+
+  /** OAuth 清理使用发起会话时的连接；旧响应不更新当前登录和能力状态。 */
+  captureConnection(): ApiClient {
+    return new ApiClient(this.transport.captureConnection(), this.scope);
   }
 
   private scoped(config?: RequestConfig): ConnectionScopedRequestConfig {

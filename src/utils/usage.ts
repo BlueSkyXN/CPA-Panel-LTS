@@ -5,6 +5,9 @@
 
 import type { ScriptableContext } from 'chart.js';
 import type { LatencyAccumulator, LatencyStats } from './usage/latency';
+import type { UsageOutputTiming } from './usage/performance';
+import { normalizeTokenAccounting, type UsageTokenAccounting } from './usage/tokenAccounting';
+export { resolvePerformanceTokens } from './usage/tokenAccounting';
 import {
   addLatencySample,
   calculateLatencyStatsFromDetails,
@@ -12,6 +15,7 @@ import {
   extractLatencyMs,
   finalizeLatencyStats,
 } from './usage/latency';
+import { extractRequestSize, type RequestSizeFields } from './usage/requestSize';
 import {
   getUsageCacheTokenCounts,
   resolveUsageTotalTokens,
@@ -37,6 +41,7 @@ import {
   extractTTFTMs,
   extractTTFAMs,
   extractTimingVersion,
+  normalizeOutputTiming,
   normalizeSemanticTimingMs,
 } from './usage/performance';
 import { maskApiKey } from './format';
@@ -176,7 +181,7 @@ export interface UsageTokenStats extends UsageTokenFields {
   total_tokens?: number;
 }
 
-export interface UsageDetail {
+export interface UsageDetail extends RequestSizeFields {
   __queryId?: string;
   timestamp: string;
   source: string;
@@ -194,6 +199,8 @@ export interface UsageDetail {
   timing_version?: number;
   ttft_ms?: number;
   ttfa_ms?: number;
+  output_timing?: UsageOutputTiming | null;
+  token_breakdown?: UsageTokenAccounting | null;
   tokens: UsageTokenStats;
   failed: boolean;
   failure_status?: number | null;
@@ -504,7 +511,8 @@ const extractReasoningEffort = (detail: Record<string, unknown>): string | null 
 const extractUpstreamModel = (detail: Record<string, unknown>): string | null =>
   typeof detail.upstream_model === 'string' ? detail.upstream_model : null;
 
-const extractFailureStatus = (detail: Record<string, unknown>): number | null => {
+export const extractFailureStatus = (detail: unknown): number | null => {
+  if (!isRecord(detail)) return null;
   const raw = detail.failure_status ?? detail.failureStatus ?? detail.FailureStatus;
   if (raw === null || raw === undefined) return null;
   const parsed = Number(raw);
@@ -514,7 +522,8 @@ const extractFailureStatus = (detail: Record<string, unknown>): number | null =>
 
 const FAILURE_REASON_MAX_LENGTH = 200;
 
-const extractFailureReason = (detail: Record<string, unknown>): string | null => {
+export const extractFailureReason = (detail: unknown): string | null => {
+  if (!isRecord(detail)) return null;
   const raw = detail.failure_reason ?? detail.failureReason ?? detail.FailureReason;
   if (typeof raw !== 'string') return null;
   const trimmed = raw.trim();
@@ -841,10 +850,13 @@ export function collectUsageDetails(usageData: unknown): UsageDetail[] {
           timing_version: timingVersion ?? undefined,
           ttft_ms: ttftMs ?? undefined,
           ttfa_ms: ttfaMs ?? undefined,
+          output_timing: detailRaw.output_timing === undefined ? undefined : normalizeOutputTiming(detailRaw.output_timing),
           tokens: normalizeUsageDetailTokens(tokensRaw),
+          token_breakdown: detailRaw.token_breakdown === undefined ? undefined : normalizeTokenAccounting(detailRaw.token_breakdown),
           failed: detailRaw.failed === true,
           failure_status: extractFailureStatus(detailRaw),
           failure_reason: extractFailureReason(detailRaw),
+          ...extractRequestSize(detailRaw),
           __apiBucket: apiBucket,
           __modelName: modelName,
           __timestampMs: Number.isNaN(timestampMs) ? 0 : timestampMs,
@@ -936,10 +948,13 @@ export function collectUsageDetailsWithEndpoint(usageData: unknown): UsageDetail
           timing_version: timingVersion ?? undefined,
           ttft_ms: ttftMs ?? undefined,
           ttfa_ms: ttfaMs ?? undefined,
+          output_timing: detailRaw.output_timing === undefined ? undefined : normalizeOutputTiming(detailRaw.output_timing),
           tokens: normalizeUsageDetailTokens(tokensRaw),
+          token_breakdown: detailRaw.token_breakdown === undefined ? undefined : normalizeTokenAccounting(detailRaw.token_breakdown),
           failed: detailRaw.failed === true,
           failure_status: extractFailureStatus(detailRaw),
           failure_reason: extractFailureReason(detailRaw),
+          ...extractRequestSize(detailRaw),
           __apiBucket: endpoint,
           __modelName: modelName,
           __endpoint: endpoint,

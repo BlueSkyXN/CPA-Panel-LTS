@@ -38,6 +38,7 @@ export type VisualConfigFieldPath =
   | 'transientErrorCooldownSeconds'
   | 'authAutoRefreshWorkers'
   | 'codexAbnormalReasoningRetryStreamBufferMaxBytes'
+  | 'codexOutboundWebsocketThresholdBytes'
   | 'codexAbnormalReasoningRetryMaxRetries'
   | 'codexAbnormalReasoningRetryHedgeDelayMs'
   | 'codexAbnormalReasoningRetryReasoningTokens'
@@ -168,8 +169,14 @@ export type VisualConfigValues = FlowControlValues & {
   codexHeaderUserAgent: string;
   codexHeaderBetaFeatures: string;
   codexIdentityConfuse: boolean;
+  codexZcodeContextUsage: string;
   // Empty means the Core default; unknown values remain visible and untouched.
   codexCacheAffinityStrategy: string;
+  // codex.outbound: empty means the Core default; unknown values remain visible and untouched.
+  codexOutboundTransport: string;
+  codexOutboundWebsocketThresholdBytes: string;
+  codexOutboundRequestCompression: string;
+  codexOutboundAcceptEncoding: string;
   codexAbnormalReasoningRetryAction: CodexAbnormalReasoningRetryAction;
   codexAbnormalReasoningRetryEnabled: boolean;
   codexAbnormalReasoningRetryModelContains: string[];
@@ -257,7 +264,12 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   codexHeaderUserAgent: '',
   codexHeaderBetaFeatures: '',
   codexIdentityConfuse: false,
+  codexZcodeContextUsage: '',
   codexCacheAffinityStrategy: '',
+  codexOutboundTransport: '',
+  codexOutboundWebsocketThresholdBytes: '',
+  codexOutboundRequestCompression: '',
+  codexOutboundAcceptEncoding: '',
   codexAbnormalReasoningRetryAction: 'disabled',
   codexAbnormalReasoningRetryEnabled: false,
   codexAbnormalReasoningRetryModelContains: ['gpt-5.5'],
