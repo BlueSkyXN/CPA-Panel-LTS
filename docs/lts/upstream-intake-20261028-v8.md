@@ -21,5 +21,10 @@ Panel 从 `829ec19dcd9075c39815966862c00e84e3194d11` 开始维护，审查官方
 ## 验证
 
 `npm run validate:lts` 通过：703 tests，contract、type-check、build 通过；lint 保留一条既有 effect-cleanup warning。
-本机使用已安装 Chrome 的 mock browser smoke 通过。配套临时 Core smoke 待 Core 同步完成后执行。
-检查使用合成配置与临时实例，不访问生产配置或供应商账号。
+本机使用已安装 Chrome 的 mock browser smoke 通过；未安装额外浏览器。
+
+`CPA_SMOKE_BROWSER_CHANNEL=chrome python3 scripts/smoke-lts-panel-core.py --core-dir ../CPA-Core-LTS`
+通过。配套 Core 的运行代码为 `e335f0b1f`，包含官方 `9717e325b`；覆盖 V8 配置条件写与回读、provider CRUD、thinking 能力保留、usage 导入导出、auth_index 状态条、定价、日志下载、Flow 与插件页面。
+此次未启用额外的 `--include-plugin-store` 远程商店验证。
+
+检查使用合成配置与临时实例，不访问生产配置或供应商账号。两个 main 分支、现有发行包和 HF 部署保持原状。
