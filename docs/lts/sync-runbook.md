@@ -10,6 +10,8 @@
 
 ## Summary
 
+V8 最新增量审查见 [2026-10-28 intake](upstream-intake-20261028-v8.md)：官方 Panel main 至 `64b4f5ae` 的三个提交，配套 Core 同步目标为 `9717e325b`。
+
 V8 已延期业务功能的后续接入见 [2026-10-23 功能对齐](v8-feature-alignment-20261023.md)。
 
 v8 开发线新增审查见 [2026-10-23 intake](upstream-intake-20261023-v8.md)：官方 main 至 `714de076` 的 52 项逐项记录，Core 配套至 `d946c4fb`。
