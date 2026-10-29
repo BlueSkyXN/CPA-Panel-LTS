@@ -1,4 +1,4 @@
-> **v8 开发候选：** 仅配套 CPA-Core-LTS v8 版本线（请按 v8 教程重新配置 Core）。详见 [v8 配置契约](docs/lts/v8-config-compatibility.md) 与 [端点映射](docs/lts/v8-endpoint-map.md)；本分支不代表已发布升级。
+> **V8 LTS 主线：** `main` 维护配套 CPA-Core-LTS V8 的 Panel。Core 使用 V8 配置布局，详见 [配置契约](docs/lts/v8-config-compatibility.md) 与 [端点映射](docs/lts/v8-endpoint-map.md)。正式版 `management.html` 从 [Releases](https://github.com/BlueSkyXN/CPA-Panel-LTS/releases/latest) 下载。
 
 # CPA Panel LTS
 

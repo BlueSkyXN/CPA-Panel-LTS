@@ -1,4 +1,4 @@
-> **v8 development candidate:** pairs only with the CPA-Core-LTS v8 line (reconfigure Core per the v8 guide). See [v8 configuration contract](docs/lts/v8-config-compatibility.md) and [endpoint map](docs/lts/v8-endpoint-map.md). This branch is not a released upgrade.
+> **V8 LTS:** `main` maintains the Panel for the CPA-Core-LTS V8 line. Configure Core using the V8 layout; see the [configuration contract](docs/lts/v8-config-compatibility.md) and [endpoint map](docs/lts/v8-endpoint-map.md). Download the released `management.html` from [Releases](https://github.com/BlueSkyXN/CPA-Panel-LTS/releases/latest).
 
 # CPA Panel LTS
 

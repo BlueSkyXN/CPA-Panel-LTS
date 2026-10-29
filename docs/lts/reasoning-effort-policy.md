@@ -20,4 +20,4 @@ requests:
 
 Panel 保存时保留未知 YAML 字段和注释；并发修改规则列表会阻止保存并提示重新加载。连接旧 Core 时，缺少 `X-CPA-REASONING-EFFORT-POLICY: 1` 能力标记，表单只读；升级 Core 后重新连接即可编辑。
 
-协议适配、动态控制、预算映射与统计语义见 [Core 使用说明](https://github.com/BlueSkyXN/CPA-Core-LTS/blob/v8-dev/docs/lts/reasoning-effort-policy.md)。
+协议适配、动态控制、预算映射与统计语义见 [Core 使用说明](https://github.com/BlueSkyXN/CPA-Core-LTS/blob/main/docs/lts/reasoning-effort-policy.md)。
