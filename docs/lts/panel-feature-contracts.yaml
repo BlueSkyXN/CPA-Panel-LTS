@@ -10,6 +10,32 @@ status_definitions:
   experimental: Optional surface that may be gated or hidden when backend support is missing.
 
 features:
+  - id: reasoning-effort-policy-config
+    status: lts-maintained
+    reason: Core-owned semantic effort policy needs capability-gated editing and lossless YAML persistence across protocol-specific payload rules.
+    routes:
+      - /config
+    panel_files:
+      - src/components/config/ReasoningEffortRulesEditor.tsx
+      - src/components/config/reasoningEffort.ts
+      - src/components/config/reasoningEffort.test.mjs
+      - src/hooks/useVisualConfig.ts
+      - src/types/visualConfig.ts
+      - src/services/api/client.ts
+      - src/services/api/configFile.ts
+      - src/utils/v8VisualProjection.ts
+      - docs/lts/reasoning-effort-policy.md
+    core_endpoints:
+      - /v0/management/config.yaml
+    required_markers:
+      - reasoning-effort
+      - x-cpa-reasoning-effort-policy
+      - supportsReasoningEffortPolicy
+    validation:
+      - npm run test:config
+      - npm run test:api-client
+      - python3 scripts/smoke-reasoning-effort.py
+
   - id: codex-zcode-context-usage-config
     status: experimental
     reason: Optional native context counting for Codex clients using zcode search keeps client compaction totals separate from full provider usage accounting.

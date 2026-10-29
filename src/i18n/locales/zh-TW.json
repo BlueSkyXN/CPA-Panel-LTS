@@ -1927,7 +1927,8 @@
           "payload": {
             "defaults": "僅補齊請求中缺少的參數；需要保留用戶端選擇時優先使用預設規則。Raw 版本填寫 JSON 值，不是一般字串。",
             "overrides": "覆寫符合請求的參數，包括用戶端已提供的值；僅在需要統一行為時使用。Raw 版本須使用有效 JSON。",
-            "filters": "刪除符合請求中的指定參數，而非賦予預設值。請先確認上游不需要這些參數。"
+            "filters": "刪除符合請求中的指定參數，而非賦予預設值。請先確認上游不需要這些參數。",
+            "reasoning": "按模型設定推理強度：跟隨用戶端、僅補充預設值，或強制指定強度。最後匹配的規則生效，並優先於 Payload 中的強度欄位。"
           },
           "plugins": {
             "runtime": "設定外掛執行開關；可用能力由 Core 決定，設定開啟不等於外掛已安裝或正在執行。",
@@ -1974,7 +1975,8 @@
         "plugins_runtime": "外掛執行",
         "plugins_sources": "商店來源",
         "plugins_auth": "商店驗證",
-        "compatibility_devin": "Devin"
+        "compatibility_devin": "Devin",
+        "payload_reasoning": "推理強度"
       },
       "navigation": "設定目錄",
       "foundation": "基礎環境",
@@ -2429,7 +2431,8 @@
         "integer_range_1_3600": "請輸入 1 到 3600 之間的整數",
         "payload_invalid_number": "請輸入有效數字",
         "payload_invalid_boolean": "請選擇 true 或 false",
-        "payload_invalid_json": "請輸入有效的 JSON"
+        "payload_invalid_json": "請輸入有效的 JSON",
+        "reasoning_effort_rules": "請填寫模型範圍、選擇有效策略，並為預設或強制策略選擇強度。"
       },
       "common": {
         "edit": "編輯",
@@ -2437,6 +2440,23 @@
         "cancel": "取消",
         "update": "更新",
         "add": "新增"
+      },
+      "reasoning_effort": {
+        "title": "推理強度",
+        "help": "依請求中的模型名稱比對，支援 *。多條符合時，較後的規則生效；強度策略優先於進階參數規則。",
+        "models": "模型範圍",
+        "mode": "策略",
+        "effort": "強度",
+        "mode_follow": "跟隨用戶端",
+        "mode_default": "未指定時補齊",
+        "mode_force": "強制覆寫",
+        "unsupported": "目前 Core 尚不支援推理強度策略，請升級 Core 後設定。",
+        "new_rule": "新規則",
+        "remove": "刪除規則",
+        "select_effort": "選擇強度",
+        "move_up": "上移",
+        "move_down": "下移",
+        "add": "新增強度規則"
       }
     },
     "meta_fields": "{{count}} 項設定",

@@ -41,6 +41,12 @@ import type {
   PayloadParamValidationErrorCode,
 } from '@/types/visualConfig';
 import { DEFAULT_VISUAL_VALUES } from '@/types/visualConfig';
+import { useAuthStore } from '@/stores/useAuthStore';
+import {
+  parseReasoningEffortRules,
+  syncReasoningEffortRules,
+  validReasoningEffortRules,
+} from '@/components/config/reasoningEffort';
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -402,6 +408,10 @@ export function getVisualConfigValidationErrors(
 ): VisualConfigValidationErrors {
   return {
     ...flowControlValidation(values, dirtyFields),
+    reasoningEffortRules:
+      dirtyFields.has('reasoningEffortRules') && !validReasoningEffortRules(values.reasoningEffortRules)
+        ? 'reasoning_effort_rules'
+        : undefined,
     port: getPortError(values.port),
     errorLogsMaxFiles: getNonNegativeIntegerError(values.errorLogsMaxFiles),
     logsMaxTotalSizeMb: getNonNegativeIntegerError(values.logsMaxTotalSizeMb),
@@ -1532,6 +1542,12 @@ function getNextDirtyFields(
     );
   }
 
+  if (Object.prototype.hasOwnProperty.call(patch, 'reasoningEffortRules')) {
+    updateDirty(
+      'reasoningEffortRules',
+      JSON.stringify(nextValues.reasoningEffortRules) === JSON.stringify(baselineValues.reasoningEffortRules)
+    );
+  }
   if (Object.prototype.hasOwnProperty.call(patch, 'payloadDefaultRules')) {
     updateDirty(
       'payloadDefaultRules',
@@ -1871,6 +1887,7 @@ export function useVisualConfig() {
                 : '',
 
         payloadDefaultRules: parsePayloadRules(payload?.default),
+        reasoningEffortRules: parseReasoningEffortRules(parsed['reasoning-effort']),
         payloadDefaultRawRules: parseRawPayloadRules(payload?.['default-raw']),
         payloadOverrideRules: parsePayloadRules(payload?.override),
         payloadOverrideRawRules: parseRawPayloadRules(payload?.['override-raw']),
@@ -2466,6 +2483,13 @@ export function useVisualConfig() {
 
         if (dirtyFields.has('streaming.nonstreamKeepaliveInterval')) {
           setIntFromStringInDoc(doc, ['nonstream-keepalive-interval'], nonstreamKeepaliveInterval);
+        }
+
+        if (dirtyFields.has('reasoningEffortRules')) {
+          if (!useAuthStore.getState().supportsReasoningEffortPolicy) {
+            throw new Error('Core does not support reasoning effort policies');
+          }
+          syncReasoningEffortRules(doc, baselineValues.reasoningEffortRules, values.reasoningEffortRules);
         }
 
         if (hasPayloadDirtyFields(dirtyFields)) {

@@ -22,6 +22,7 @@ import {
 } from './VisualConfigEditorBlocks';
 import type { ConfigFieldId } from './configNavigation';
 import styles from './VisualConfigEditor.module.scss';
+import { ReasoningEffortRulesEditor } from './ReasoningEffortRulesEditor';
 export type ConfigFieldsProps = {
   values: VisualConfigValues;
   validationErrors?: VisualConfigValidationErrors;
@@ -840,6 +841,9 @@ export function useConfigFieldControls({
           ) : null}
         </div>
       </FieldShell>
+    ),
+    reasoningEffortRules: (
+      <ReasoningEffortRulesEditor rules={values.reasoningEffortRules} disabled={disabled} onChange={(reasoningEffortRules) => onChange({ reasoningEffortRules })} />
     ),
     payloadDefaultRules: (
       <PayloadRulesEditor

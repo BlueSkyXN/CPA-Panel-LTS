@@ -27,6 +27,21 @@ const unauthorizedError = (config, data) =>
     config,
   });
 
+test('reasoning effort capability is read from the current Core and cleared by an older config response', async () => {
+  const observed = [];
+  const listener = (event) => observed.push(event.detail.supported);
+  window.addEventListener('server-reasoning-effort-policy-update', listener);
+  try {
+    apiClient.setConfig({ apiBase: 'https://policy.example.test', managementKey: 'synthetic' });
+    await apiClient.get('/config.yaml', { adapter: async (config) => ({ data: 'config-version: 8', status: 200, statusText: 'OK', headers: { 'x-cpa-reasoning-effort-policy': '1' }, config }) });
+    assert.equal(observed.at(-1), true);
+    await apiClient.get('/config.yaml', { adapter: async (config) => ({ data: 'config-version: 8', status: 200, statusText: 'OK', headers: {}, config }) });
+    assert.equal(observed.at(-1), false);
+  } finally {
+    window.removeEventListener('server-reasoning-effort-policy-update', listener);
+  }
+});
+
 test('switch preparation blocks new writes and tracks in-flight mutations until completion', async () => {
   const lifecycle = await vite.ssrLoadModule('/src/services/connectionSession.ts');
   apiClient.setConfig({ apiBase: 'https://test.example.test', managementKey: 'synthetic' });
