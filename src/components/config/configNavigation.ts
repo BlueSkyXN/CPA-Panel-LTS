@@ -496,6 +496,12 @@ export const CONFIG_FIELDS = {
     heading: true,
     advanced: true,
   },
+  reasoningEffortRules: {
+    labelKey: 'config_management.visual.reasoning_effort.title',
+    yamlKey: 'reasoning-effort',
+    fullWidth: true,
+    heading: true,
+  },
   payloadFilterRules: {
     labelKey: 'config_management.visual.sections.payload.filter_rules',
     yamlKey: 'payload.filter',
@@ -712,6 +718,10 @@ export const CONFIG_DOMAINS = [
       {
         id: 'filters',
         fields: ['payloadFilterRules'],
+      },
+      {
+        id: 'reasoning',
+        fields: ['reasoningEffortRules'],
       },
     ],
   },

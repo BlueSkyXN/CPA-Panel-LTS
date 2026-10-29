@@ -38,6 +38,7 @@ const paths: [string, string][] = [
   ['nonstream-keepalive-interval', 'requests.nonstream-keepalive-interval'],
   ['streaming', 'requests.streaming'],
   ['payload', 'requests.payload'],
+  ['reasoning-effort', 'requests.reasoning-effort'],
   ['debug', 'observability.logs.debug'],
   ['logging-to-file', 'observability.logs.logging-to-file'],
   ['request-log', 'observability.logs.request-log'],

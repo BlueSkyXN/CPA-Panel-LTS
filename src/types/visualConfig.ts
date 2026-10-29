@@ -27,6 +27,7 @@ export type PayloadParamValidationErrorCode =
   | 'payload_invalid_json';
 
 export type VisualConfigFieldPath =
+	| 'reasoningEffortRules'
   | 'flowControlRulesText'
   | 'port'
   | 'errorLogsMaxFiles'
@@ -47,6 +48,7 @@ export type VisualConfigFieldPath =
   | 'streaming.nonstreamKeepaliveInterval';
 
 export type VisualConfigValidationErrorCode =
+	| 'reasoning_effort_rules'
   | 'flow_control_config'
   | 'port_range'
   | 'non_negative_integer'
@@ -93,6 +95,14 @@ export type PayloadFilterRule = {
   id: string;
   models: PayloadModelEntry[];
   params: string[];
+};
+
+export type ReasoningEffortRule = {
+  id: string;
+  models: string[];
+  mode: string;
+  effort: string;
+  sourceFingerprint?: string;
 };
 
 export interface StreamingConfig {
@@ -202,6 +212,7 @@ export type VisualConfigValues = FlowControlValues & {
   payloadOverrideRules: PayloadRule[];
   payloadOverrideRawRules: PayloadRule[];
   payloadFilterRules: PayloadFilterRule[];
+  reasoningEffortRules: ReasoningEffortRule[];
   streaming: StreamingConfig;
 };
 
@@ -293,6 +304,7 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   codexAbnormalReasoningRetryHedgeDelayMs: '1000',
   codexAbnormalReasoningRetryRequireDistinctAuth: true,
   payloadDefaultRules: [],
+  reasoningEffortRules: [],
   payloadDefaultRawRules: [],
   payloadOverrideRules: [],
   payloadOverrideRawRules: [],

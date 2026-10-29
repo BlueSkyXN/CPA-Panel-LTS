@@ -1903,7 +1903,8 @@
           "payload": {
             "defaults": "Fill missing request parameters only. Prefer defaults when preserving client choices. Raw rules accept JSON values, not plain text.",
             "overrides": "Replace parameters in matching requests, including client-supplied values. Use for enforced behavior; Raw values must be valid JSON.",
-            "filters": "Remove specified parameters from matching requests rather than setting defaults. Verify that the upstream service does not need them."
+            "filters": "Remove specified parameters from matching requests rather than setting defaults. Verify that the upstream service does not need them.",
+            "reasoning": "Set reasoning effort by model: follow the client, fill a missing value, or force a level. The last matching rule wins and takes priority over Payload effort fields."
           },
           "plugins": {
             "runtime": "Configure plugin execution. Core determines support; an enabled setting does not mean a plugin is installed or running.",
@@ -1950,7 +1951,8 @@
         "plugins_runtime": "Plugin runtime",
         "plugins_sources": "Store sources",
         "plugins_auth": "Store authentication",
-        "compatibility_devin": "Devin"
+        "compatibility_devin": "Devin",
+        "payload_reasoning": "Reasoning effort"
       },
       "navigation": "Configuration navigation",
       "foundation": "Environment",
@@ -2405,7 +2407,8 @@
         "integer_range_1_3600": "Enter a whole number between 1 and 3600",
         "payload_invalid_number": "Enter a valid number",
         "payload_invalid_boolean": "Choose true or false",
-        "payload_invalid_json": "Enter valid JSON"
+        "payload_invalid_json": "Enter valid JSON",
+        "reasoning_effort_rules": "Enter model names, choose a policy, and select an effort for default or force rules."
       },
       "common": {
         "edit": "Edit",
@@ -2413,6 +2416,23 @@
         "cancel": "Cancel",
         "update": "Update",
         "add": "Add"
+      },
+      "reasoning_effort": {
+        "title": "Reasoning effort",
+        "help": "Match client-requested model names; * is supported. The last matching rule wins. Effort policies take precedence over advanced payload rules.",
+        "models": "Models",
+        "mode": "Policy",
+        "effort": "Effort",
+        "mode_follow": "Follow client",
+        "mode_default": "Fill when unspecified",
+        "mode_force": "Force override",
+        "unsupported": "This Core does not support reasoning effort policies. Upgrade Core to configure them.",
+        "new_rule": "New rule",
+        "remove": "Remove rule",
+        "select_effort": "Select effort",
+        "move_up": "Move up",
+        "move_down": "Move down",
+        "add": "Add effort rule"
       }
     },
     "meta_fields": "{{count}} settings",

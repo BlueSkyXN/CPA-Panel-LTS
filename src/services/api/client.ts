@@ -227,6 +227,12 @@ class ManagementTransport {
         const buildDate =
           homeBuildDate || cpaBuildDate || this.readHeader(headers, BUILD_DATE_HEADER_KEYS);
         const supportsPlugin = this.readBooleanHeader(headers, CPA_SUPPORT_PLUGIN_HEADER_KEYS);
+        const reasoningPolicy = this.readBooleanHeader(headers, ['x-cpa-reasoning-effort-policy']);
+        if (reasoningPolicy !== null || /\/config(?:\.yaml)?(?:\?|$)/.test(response.config?.url ?? '')) {
+          window.dispatchEvent(new CustomEvent('server-reasoning-effort-policy-update', {
+            detail: { supported: reasoningPolicy === true },
+          }));
+        }
         const runtimeKind: ServerRuntimeKind | null =
           homeVersion || homeBuildDate ? 'home' : cpaVersion || cpaBuildDate ? 'cpa' : null;
 

@@ -56,6 +56,7 @@ interface AuthStoreState extends AuthState {
   ) => void;
   updateServerRuntimeKind: (runtimeKind: ServerRuntimeKind) => void;
   updateServerPluginSupport: (supportsPlugin: boolean) => void;
+  updateServerReasoningEffortPolicy: (supported: boolean) => void;
   updateConnectionStatus: (status: ConnectionStatus, error?: string | null) => void;
 }
 
@@ -148,6 +149,7 @@ export const useAuthStore = create<AuthStoreState>()(
       serverBuildDate: null,
       serverRuntimeKind: 'unknown',
       supportsPlugin: false,
+      supportsReasoningEffortPolicy: false,
       pluginSupportKnown: false,
       pluginSupportSource: 'unknown',
       supportsFlowControl: false,
@@ -209,6 +211,7 @@ export const useAuthStore = create<AuthStoreState>()(
             serverBuildDate: null,
             serverRuntimeKind: 'unknown',
             supportsPlugin: false,
+            supportsReasoningEffortPolicy: false,
             pluginSupportKnown: false,
             pluginSupportSource: 'unknown',
             supportsFlowControl: false,
@@ -330,6 +333,7 @@ export const useAuthStore = create<AuthStoreState>()(
           serverBuildDate: null,
           serverRuntimeKind: 'unknown',
           supportsPlugin: false,
+          supportsReasoningEffortPolicy: false,
           pluginSupportKnown: false,
           pluginSupportSource: 'unknown',
           supportsFlowControl: false,
@@ -355,6 +359,7 @@ export const useAuthStore = create<AuthStoreState>()(
         try {
           set({
             supportsPlugin: false,
+            supportsReasoningEffortPolicy: false,
             pluginSupportKnown: false,
             pluginSupportSource: 'unknown',
             supportsFlowControl: false,
@@ -410,6 +415,7 @@ export const useAuthStore = create<AuthStoreState>()(
             isAuthenticated: false,
             connectionStatus: 'error',
             supportsPlugin: false,
+            supportsReasoningEffortPolicy: false,
             pluginSupportKnown: false,
             pluginSupportSource: 'unknown',
             supportsFlowControl: false,
@@ -434,6 +440,9 @@ export const useAuthStore = create<AuthStoreState>()(
 
       updateServerPluginSupport: (supportsPlugin) => {
         set({ supportsPlugin, pluginSupportKnown: true, pluginSupportSource: 'header' });
+      },
+      updateServerReasoningEffortPolicy: (supported) => {
+        set({ supportsReasoningEffortPolicy: supported });
       },
 
       // 更新连接状态
@@ -462,6 +471,7 @@ export const useAuthStore = create<AuthStoreState>()(
         }
         const nextState = { ...(persistedState as Record<string, unknown>) };
         delete nextState.supportsPlugin;
+        delete nextState.supportsReasoningEffortPolicy;
         delete nextState.pluginSupportKnown;
         delete nextState.pluginSupportSource;
         delete nextState.supportsFlowControl;
@@ -474,6 +484,9 @@ export const useAuthStore = create<AuthStoreState>()(
 
 // 监听全局未授权事件
 if (typeof window !== 'undefined') {
+  window.addEventListener('server-reasoning-effort-policy-update', ((event: CustomEvent) => {
+    useAuthStore.getState().updateServerReasoningEffortPolicy(event.detail?.supported === true);
+  }) as EventListener);
   window.addEventListener('unauthorized', () => {
     useAuthStore.getState().logout('unauthorized');
   });

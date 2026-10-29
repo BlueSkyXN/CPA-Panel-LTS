@@ -1901,7 +1901,8 @@
           "payload": {
             "defaults": "只补齐请求中缺失的参数；需要保留客户端选择时优先使用默认规则。Raw 版本填写 JSON 值，不是普通字符串。",
             "overrides": "覆盖匹配请求的参数，包括客户端已提供的值；仅在需要统一行为时使用。Raw 版本须使用合法 JSON。",
-            "filters": "删除匹配请求中的指定参数，而不是赋予默认值。先确认上游不需要这些参数。"
+            "filters": "删除匹配请求中的指定参数，而不是赋予默认值。先确认上游不需要这些参数。",
+            "reasoning": "按模型设置推理强度：跟随客户端、仅补充缺省值，或强制指定强度。最后匹配的规则生效，并优先于 Payload 中的强度字段。"
           },
           "plugins": {
             "runtime": "设置插件运行开关；可用能力由 Core 决定，配置开启不等于插件已安装或正在运行。",
@@ -1948,7 +1949,8 @@
         "plugins_runtime": "插件运行",
         "plugins_sources": "商店来源",
         "plugins_auth": "商店认证",
-        "compatibility_devin": "Devin"
+        "compatibility_devin": "Devin",
+        "payload_reasoning": "推理强度"
       },
       "navigation": "配置目录",
       "foundation": "基础环境",
@@ -2403,7 +2405,8 @@
         "integer_range_1_3600": "请输入 1 到 3600 之间的整数",
         "payload_invalid_number": "请输入有效数字",
         "payload_invalid_boolean": "请选择 true 或 false",
-        "payload_invalid_json": "请输入有效的 JSON"
+        "payload_invalid_json": "请输入有效的 JSON",
+        "reasoning_effort_rules": "请填写模型范围、选择有效策略，并为缺省或强制策略选择强度。"
       },
       "common": {
         "edit": "编辑",
@@ -2411,6 +2414,23 @@
         "cancel": "取消",
         "update": "更新",
         "add": "添加"
+      },
+      "reasoning_effort": {
+        "title": "推理强度",
+        "help": "按请求中的模型名匹配，支持 *。多条匹配时，靠后的规则生效；强度策略优先于高级参数规则。",
+        "models": "模型范围",
+        "mode": "策略",
+        "effort": "强度",
+        "mode_follow": "跟随客户端",
+        "mode_default": "未指定时补齐",
+        "mode_force": "强制覆盖",
+        "unsupported": "当前 Core 尚不支持推理强度策略，请升级 Core 后设置。",
+        "new_rule": "新规则",
+        "remove": "删除规则",
+        "select_effort": "选择强度",
+        "move_up": "上移",
+        "move_down": "下移",
+        "add": "添加强度规则"
       }
     },
     "meta_fields": "{{count}} 项配置",
