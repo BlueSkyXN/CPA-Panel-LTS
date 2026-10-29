@@ -7,7 +7,7 @@ import {
   normalizeNumberValue,
   normalizeStringValue,
   normalizePlanType,
-  parseIdTokenPayload
+  parseIdTokenPayload,
 } from './parsers';
 
 const toRecord = (value: unknown): Record<string, unknown> | null => {
@@ -38,6 +38,18 @@ export function resolveCodexChatgptAccountId(file: AuthFileItem): string | null 
       ? (file.attributes as Record<string, unknown>)
       : null;
 
+  const directCandidates = [
+    file.chatgpt_account_id,
+    file.chatgptAccountId,
+    metadata?.chatgpt_account_id,
+    metadata?.chatgptAccountId,
+    attributes?.chatgpt_account_id,
+    attributes?.chatgptAccountId,
+  ];
+  for (const candidate of directCandidates) {
+    const id = normalizeStringValue(candidate);
+    if (id) return id;
+  }
   const candidates = [file.id_token, metadata?.id_token, attributes?.id_token];
 
   for (const candidate of candidates) {
@@ -80,7 +92,7 @@ export function resolveCodexPlanType(file: AuthFileItem): string | null {
     metadataIdToken?.planType,
     attributes?.plan_type,
     attributes?.planType,
-    attributes?.id_token
+    attributes?.id_token,
   ];
 
   for (const candidate of candidates) {
@@ -141,7 +153,7 @@ export function resolveCodexSubscriptionActiveUntil(file: AuthFileItem): string 
     attributesSubscription?.active_until,
     attributesSubscription?.activeUntil,
     attributesIdToken?.chatgpt_subscription_active_until,
-    attributesIdToken?.chatgptSubscriptionActiveUntil
+    attributesIdToken?.chatgptSubscriptionActiveUntil,
   ];
 
   for (const candidate of candidates) {
@@ -170,12 +182,7 @@ export function resolveGeminiCliProjectId(file: AuthFileItem): string | null {
       ? (file.attributes as Record<string, unknown>)
       : null;
 
-  const candidates = [
-    file.account,
-    file['account'],
-    metadata?.account,
-    attributes?.account
-  ];
+  const candidates = [file.account, file['account'], metadata?.account, attributes?.account];
 
   for (const candidate of candidates) {
     const projectId = extractGeminiCliProjectId(candidate);

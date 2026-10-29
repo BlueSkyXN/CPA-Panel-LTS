@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Collapsible } from '@/components/ui/Collapsible/Collapsible';
 import { Button } from '@/components/ui/Button';
 import { FLOW_CONTROL_ENDPOINTS } from '@/services/api/flowControl';
-import { apiClient } from '@/services/api/client';
+import { ltsExtensionClient } from '@/services/api/client';
 import {
   identityForModel,
   modelOptionsForStage,
@@ -32,7 +32,14 @@ export function RuleInspector({ values, data, runningOnly = false }: Props) {
   const [error, setError] = useState(false);
   const [result, setResult] = useState<{ signature: string; rows: FlowExplanation[] } | null>(null);
   const [selected, setSelected] = useState(0);
-  const signature = JSON.stringify({ identity, models, draft, policy, process: data?.state['process-id'], revision: data?.state['policy-revision'] });
+  const signature = JSON.stringify({
+    identity,
+    models,
+    draft,
+    policy,
+    process: data?.state['process-id'],
+    revision: data?.state['policy-revision'],
+  });
   const latest = useRef(signature);
   latest.current = signature;
   const serial = useRef(0);
@@ -43,7 +50,7 @@ export function RuleInspector({ values, data, runningOnly = false }: Props) {
     setBusy(true);
     setError(false);
     try {
-      const raw = await apiClient.post<unknown>(FLOW_CONTROL_ENDPOINTS.preview, {
+      const raw = await ltsExtensionClient.post<unknown>(FLOW_CONTROL_ENDPOINTS.preview, {
         ...(policy ? { config: policy } : {}),
         targets: models.map((model) => identityForModel(identity, model)),
       });
@@ -69,8 +76,13 @@ export function RuleInspector({ values, data, runningOnly = false }: Props) {
   const current = rows[selected];
   const refs = { keys: data?.keys ?? [], accounts: data?.accounts ?? [] };
   const options = modelOptionsForStage(data, identity.stage);
-  const previewDisabled = !data?.supported || data['schema-version'] < 3 || busy
-    || models.length < 1 || models.length > 24 || models.some((model) => model.includes('*'));
+  const previewDisabled =
+    !data?.supported ||
+    data['schema-version'] < 3 ||
+    busy ||
+    models.length < 1 ||
+    models.length > 24 ||
+    models.some((model) => model.includes('*'));
 
   return (
     <Collapsible label={t('flow_control.v3_preview_title')} defaultOpen={!runningOnly}>
@@ -78,72 +90,129 @@ export function RuleInspector({ values, data, runningOnly = false }: Props) {
       <div className={styles.grid}>
         <label className={styles.field}>
           <span>{t('flow_control.stage')}</span>
-          <select value={identity.stage} onChange={(event) => {
-            setIdentity({ stage: event.target.value, key: identity.key });
-            setModels([]);
-          }}>
+          <select
+            value={identity.stage}
+            onChange={(event) => {
+              setIdentity({ stage: event.target.value, key: identity.key });
+              setModels([]);
+            }}
+          >
             <option value="attempt">{t('flow_control.stage_attempt')}</option>
             <option value="request">{t('flow_control.stage_request')}</option>
           </select>
         </label>
         <label className={styles.field}>
           <span>{t('flow_control.selected_user')}</span>
-          <select value={identity.key || ''} onChange={(event) => setIdentity((old) => ({ ...old, key: event.target.value }))}>
+          <select
+            value={identity.key || ''}
+            onChange={(event) => setIdentity((old) => ({ ...old, key: event.target.value }))}
+          >
             <option value="">{t('flow_control.v3_unknown')}</option>
             <option value="anonymous">{t('flow_control.anonymous')}</option>
-            {refs.keys.map((ref) => <option key={ref.ref} value={ref.ref}>{ref.label}</option>)}
+            {refs.keys.map((ref) => (
+              <option key={ref.ref} value={ref.ref}>
+                {ref.label}
+              </option>
+            ))}
           </select>
         </label>
         {identity.stage === 'attempt' && (
           <label className={styles.field}>
             <span>{t('flow_control.account_filter')}</span>
-            <select value={identity.account || ''} onChange={(event) => {
-              const account = refs.accounts.find((ref) => ref.ref === event.target.value);
-              setIdentity((old) => ({
-                ...old, account: event.target.value, provider: account?.provider, 'auth-kind': account?.['auth-kind'],
-              }));
-            }}>
+            <select
+              value={identity.account || ''}
+              onChange={(event) => {
+                const account = refs.accounts.find((ref) => ref.ref === event.target.value);
+                setIdentity((old) => ({
+                  ...old,
+                  account: event.target.value,
+                  provider: account?.provider,
+                  'auth-kind': account?.['auth-kind'],
+                }));
+              }}
+            >
               <option value="">{t('flow_control.v3_unknown')}</option>
-              {refs.accounts.map((ref) => <option key={ref.ref} value={ref.ref}>{ref.provider} · {ref.label}</option>)}
+              {refs.accounts.map((ref) => (
+                <option key={ref.ref} value={ref.ref}>
+                  {ref.provider} · {ref.label}
+                </option>
+              ))}
             </select>
           </label>
         )}
-        {runningOnly ? <p>{t('flow_control.v3_policy_source')}: {t('flow_control.v3_running')}</p> : (
+        {runningOnly ? (
+          <p>
+            {t('flow_control.v3_policy_source')}: {t('flow_control.v3_running')}
+          </p>
+        ) : (
           <label className={styles.field}>
             <span>{t('flow_control.v3_policy_source')}</span>
-            <select value={draft ? 'draft' : 'running'} onChange={(event) => setDraft(event.target.value === 'draft')}>
+            <select
+              value={draft ? 'draft' : 'running'}
+              onChange={(event) => setDraft(event.target.value === 'draft')}
+            >
               <option value="draft">{t('flow_control.v3_draft')}</option>
               <option value="running">{t('flow_control.v3_running')}</option>
             </select>
           </label>
         )}
       </div>
-      <SelectionField label={t('flow_control.v3_preview_models')} value={models} options={options}
-        allowAll={false} allowCustom onChange={(value) => setModels(value ?? [])} />
-      {identity.stage === 'attempt' && <p className={styles.hint}>{t('flow_control.resolved_model_hint')}</p>}
-      <Button type="button" variant="secondary" disabled={previewDisabled} onClick={() => { void submit(); }}>
+      <SelectionField
+        label={t('flow_control.v3_preview_models')}
+        value={models}
+        options={options}
+        allowAll={false}
+        allowCustom
+        onChange={(value) => setModels(value ?? [])}
+      />
+      {identity.stage === 'attempt' && (
+        <p className={styles.hint}>{t('flow_control.resolved_model_hint')}</p>
+      )}
+      <Button
+        type="button"
+        variant="secondary"
+        disabled={previewDisabled}
+        onClick={() => {
+          void submit();
+        }}
+      >
         {t('flow_control.v3_evaluate')}
       </Button>
       {models.length > 24 && <p role="alert">{t('flow_control.v3_preview_bound')}</p>}
-      {error && <p className="error-box" role="alert">{t('flow_control.explain_error')}</p>}
-      {result && rows.length === 0 && <p className={styles.hint}>{t('flow_control.v3_stale_preview')}</p>}
+      {error && (
+        <p className="error-box" role="alert">
+          {t('flow_control.explain_error')}
+        </p>
+      )}
+      {result && rows.length === 0 && (
+        <p className={styles.hint}>{t('flow_control.v3_stale_preview')}</p>
+      )}
       {rows.length > 0 && (
         <>
           <h4>{t('flow_control.v3_overlap')}</h4>
           <p className={styles.hint}>{t('flow_control.v3_matrix_hint')}</p>
           <div className={styles.table}>
             <table>
-              <thead><tr>
-                <th>{t('flow_control.model_probe')}</th>
-                {ruleList.map((rule) => <th key={rule.id}>{rule.label || rule.id}</th>)}
-                <th>{t('flow_control.stage_capacity')}</th>
-              </tr></thead>
+              <thead>
+                <tr>
+                  <th>{t('flow_control.model_probe')}</th>
+                  {ruleList.map((rule) => (
+                    <th key={rule.id}>{rule.label || rule.id}</th>
+                  ))}
+                  <th>{t('flow_control.stage_capacity')}</th>
+                </tr>
+              </thead>
               <tbody>
                 {rows.map((row, index) => (
                   <tr key={index}>
                     <th>
-                      <button type="button" className={styles.textButton} onClick={() => setSelected(index)}>
-                        {row.identity.provider ? `${row.identity.provider} · ` : ''}{row.identity.model}
+                      <button
+                        type="button"
+                        className={styles.textButton}
+                        onClick={() => setSelected(index)}
+                      >
+                        {row.identity.provider ? `${row.identity.provider} · ` : ''}
+                        {row.identity.model}
                       </button>
                     </th>
                     {ruleList.map((rule) => {
@@ -151,16 +220,29 @@ export function RuleInspector({ values, data, runningOnly = false }: Props) {
                       const blocked = cell?.known && cell['blocked-by'].length > 0;
                       return (
                         <td key={rule.id} data-blocked={blocked || undefined}>
-                          {cell ? (cell.known ? `${cell.active} / ${cell.rule['max-concurrent'] || '∞'}` : '?') : '—'}
+                          {cell
+                            ? cell.known
+                              ? `${cell.active} / ${cell.rule['max-concurrent'] || '∞'}`
+                              : '?'
+                            : '—'}
                           {cell && (
-                            <small>{cell.known ? cell['blocked-by'].join(', ') : t('flow_control.v3_unknown')}</small>
+                            <small>
+                              {cell.known
+                                ? cell['blocked-by'].join(', ')
+                                : t('flow_control.v3_unknown')}
+                            </small>
                           )}
                         </td>
                       );
                     })}
                     <td>
-                      {t(!row.complete ? 'flow_control.live_incomplete'
-                        : row['can-start'] ? 'flow_control.live_available' : 'flow_control.live_wait')}
+                      {t(
+                        !row.complete
+                          ? 'flow_control.live_incomplete'
+                          : row['can-start']
+                            ? 'flow_control.live_available'
+                            : 'flow_control.live_wait'
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -169,28 +251,41 @@ export function RuleInspector({ values, data, runningOnly = false }: Props) {
           </div>
           <p className={styles.sampleLine}>
             {rows[0]['sampled-at']} · {t('flow_control.v3_revision')} {rows[0]['policy-revision']}
-            {' · '}{t(draft ? 'flow_control.v3_draft' : 'flow_control.v3_running')}
+            {' · '}
+            {t(draft ? 'flow_control.v3_draft' : 'flow_control.v3_running')}
           </p>
         </>
       )}
       {current && (
         <div className={styles.conjunction}>
-          {current.matches.length === 0
-            ? <p>{t('flow_control.no_matching_rules')}</p>
-            : current.matches.map((row) => (
-              <div key={row.rule.id}
-                className={row.known && row['blocked-by'].length ? styles.constraintBlocked : styles.constraint}>
+          {current.matches.length === 0 ? (
+            <p>{t('flow_control.no_matching_rules')}</p>
+          ) : (
+            current.matches.map((row) => (
+              <div
+                key={row.rule.id}
+                className={
+                  row.known && row['blocked-by'].length
+                    ? styles.constraintBlocked
+                    : styles.constraint
+                }
+              >
                 <div>
                   <strong>{row.rule.label || row.rule.id}</strong>
                   <p>{ruleSentence(row.rule, refs, i18n.language)}</p>
-                  {!row.known && <small>{t('flow_control.v3_unknown')}: {row.unresolved?.join(' / ')}</small>}
+                  {!row.known && (
+                    <small>
+                      {t('flow_control.v3_unknown')}: {row.unresolved?.join(' / ')}
+                    </small>
+                  )}
                 </div>
                 <span className={styles.capacity}>
                   {row.known ? row.active : '?'} / {row.rule['max-concurrent'] || '∞'}
                   <small>{t('flow_control.v3_delta', { count: row.delta ?? 1 })}</small>
                 </span>
               </div>
-            ))}
+            ))
+          )}
         </div>
       )}
       <p className={styles.hint}>{t('flow_control.v3_preview_advisory')}</p>

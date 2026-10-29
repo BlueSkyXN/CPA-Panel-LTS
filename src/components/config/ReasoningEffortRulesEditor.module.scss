@@ -1,0 +1,27 @@
+.rules,
+.rule {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.rules p,
+.rule p {
+  margin: 0 0 8px;
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+
+  @media (max-width: 640px) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

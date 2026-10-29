@@ -1,9 +1,9 @@
-import { DEFAULT_API_PORT, MANAGEMENT_API_PREFIX } from './constants';
+import { DEFAULT_API_PORT, LTS_EXTENSION_API_PREFIX, MANAGEMENT_API_PREFIX } from './constants';
 
 export const normalizeApiBase = (input: string): string => {
   let base = (input || '').trim();
   if (!base) return '';
-  base = base.replace(/\/?v0\/management\/?$/i, '');
+  base = base.replace(/\/?v[08]\/management\/?$/i, '');
   base = base.replace(/\/+$/i, '');
   if (!/^https?:\/\//i.test(base)) {
     base = `http://${base}`;
@@ -17,13 +17,24 @@ export const computeApiUrl = (base: string): string => {
   return `${normalized}${MANAGEMENT_API_PREFIX}`;
 };
 
+/** Raw fetches (e.g. the Flow SSE stream) to LTS extensions that Core serves only under v0. */
+export const computeLtsExtensionApiUrl = (base: string): string => {
+  const normalized = normalizeApiBase(base);
+  if (!normalized) return '';
+  return `${normalized}${LTS_EXTENSION_API_PREFIX}`;
+};
+
 export const detectApiBaseFromLocation = (): string => {
   try {
-    const { protocol, hostname, port } = window.location;
+    const { protocol, hostname, port, pathname } = window.location;
     // file:/about: 文档推断不出实例地址；返回空串让登录页要求手工填写。
     if (protocol !== 'http:' && protocol !== 'https:') return '';
     const normalizedPort = port ? `:${port}` : '';
-    return normalizeApiBase(`${protocol}//${hostname}${normalizedPort}`);
+    // management.html and the Management API share the reverse proxy prefix.
+    const prefix = typeof pathname === 'string' && /\/management\.html$/i.test(pathname)
+      ? pathname.replace(/\/management\.html$/i, '')
+      : '';
+    return normalizeApiBase(`${protocol}//${hostname}${normalizedPort}${prefix}`);
   } catch (error) {
     console.warn('Failed to detect api base from location, fallback to default', error);
     return normalizeApiBase(`http://localhost:${DEFAULT_API_PORT}`);

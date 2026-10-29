@@ -5,6 +5,8 @@ import iconCodex from '@/assets/icons/codex.svg';
 import iconGemini from '@/assets/icons/gemini.svg';
 import iconGrok from '@/assets/icons/grok.svg';
 import iconIflow from '@/assets/icons/iflow.svg';
+import iconDevin from '@/assets/icons/devin.svg';
+import iconMeta from '@/assets/icons/meta.svg';
 import iconKimiLight from '@/assets/icons/kimi-light.svg';
 import iconQwen from '@/assets/icons/qwen.svg';
 import iconVertex from '@/assets/icons/vertex.svg';
@@ -21,7 +23,7 @@ export type AuthFileModelItem = {
 };
 export type AuthFileIconAsset = string;
 
-export type QuotaProviderType = 'antigravity' | 'claude' | 'codex' | 'gemini-cli' | 'kimi' | 'xai';
+export type QuotaProviderType = 'antigravity' | 'claude' | 'codex' | 'gemini-cli' | 'kimi' | 'xai' | 'devin' | 'meta' | 'plugin';
 export type OAuthConfigLoadError = 'loading' | 'unsupported' | 'load' | null;
 
 export const canWriteOAuthConfig = (options: {
@@ -36,7 +38,10 @@ export const QUOTA_PROVIDER_TYPES = new Set<QuotaProviderType>([
   'codex',
   'gemini-cli',
   'kimi',
+  'devin',
+  'meta',
   'xai',
+  'plugin',
 ]);
 
 export const OAUTH_PROVIDER_PRESETS = [
@@ -90,6 +95,8 @@ export const AUTH_FILE_ICONS: Record<string, AuthFileIconAsset> = {
   xai: iconGrok,
   iflow: iconIflow,
   kimi: iconKimiLight,
+  devin: iconDevin,
+  meta: iconMeta,
   qwen: iconQwen,
   vertex: iconVertex,
 };

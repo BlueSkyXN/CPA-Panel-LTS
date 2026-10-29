@@ -1,3 +1,6 @@
+import { CredentialActionDialog, type CredentialActionTarget } from '@/features/authFiles/components/CredentialActionDialog';
+import { apiClient } from '@/services/api/client';
+import { SiwcBindDialog } from '@/features/authFiles/components/SiwcBindDialog';
 import {
   useCallback,
   type CSSProperties,
@@ -99,6 +102,8 @@ export function AuthFilesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedProvider = normalizeProviderKey(searchParams.get('provider') || '');
 
+  const [runtimeAction, setRuntimeAction] = useState<CredentialActionTarget | null>(null);
+  const [siwcTarget, setSiwcTarget] = useState<AuthFileItem | null>(null);
   const [filter, setFilter] = useState<'all' | string>('all');
   const [patTarget, setPatTarget] = useState<AuthFileItem | null | undefined>(undefined);
   const supportsPat = useAuthStore((s) => s.pluginSupportKnown && s.supportsPlugin);
@@ -741,6 +746,7 @@ export function AuthFilesPage() {
             <AuthFileActionsMenu
               label={t('auth_files.more_actions')}
               actions={[
+                { label: t('credential_actions.refresh-all'), disabled: disableControls || loading, onClick: () => setRuntimeAction({ action: 'refresh-all', files: [], revision: apiClient.getConnectionRevision() }) },
                 {
                   label: deleteAllButtonLabel,
                   danger: true,
@@ -914,6 +920,8 @@ export function AuthFilesPage() {
                     codexRemoteCloudConnectSummary={codexRemoteCloudConnectSummaryCache.get(
                       file.name
                     )}
+                    onBindSiwc={setSiwcTarget}
+                    onRuntimeAction={(file, action) => setRuntimeAction({ action, files: [file], revision: apiClient.getConnectionRevision() })}
                     onShowModels={showModels}
                     onUpdatePat={supportsPat ? setPatTarget : undefined}
                     onShowCodexRemoteCloudConnectEnvironments={
@@ -1087,6 +1095,7 @@ export function AuthFilesPage() {
                   </Button>
                 </div>
                 <div className={styles.batchActionRight}>
+                  <Button variant="secondary" size="sm" disabled={disableControls || !selectedNames.length} onClick={() => setRuntimeAction({ action: 'refresh', files: files.filter((file) => selectedFiles.has(file.name)), revision: apiClient.getConnectionRevision() })}>{t('credential_actions.refresh')}</Button>
                   <Button
                     variant="secondary"
                     size="sm"
@@ -1124,6 +1133,8 @@ export function AuthFilesPage() {
             document.body
           )
         : null}
+      {runtimeAction && <CredentialActionDialog target={runtimeAction} onClose={() => setRuntimeAction(null)} onMutated={(names) => { invalidateDerivedCaches(names); void loadFiles({ background: true }); }} />}
+      {siwcTarget && <SiwcBindDialog key={siwcTarget.name} file={siwcTarget} onClose={() => setSiwcTarget(null)} onSaved={() => { invalidateDerivedCaches([siwcTarget.name]); void loadFiles({ background: true }); }} />}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { apiClient } from './client';
+import { ltsExtensionClient } from './client';
 import { isRecord } from '@/utils/helpers';
 import type { UsageAnalyticsResult } from '@/types/usageAnalytics';
 import type { UsageQueryRequest } from '@/types/usageQuery';
@@ -6,7 +6,8 @@ import { isRequestSizeDistribution } from '@/utils/usage/requestSizeAnalytics';
 
 const number = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0;
 const integer = (v: unknown): v is number => number(v) && Number.isSafeInteger(v);
-const timestamp = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && Math.abs(v) <= 8640000000000000;
+const timestamp = (v: unknown): v is number =>
+  typeof v === 'number' && Number.isSafeInteger(v) && Math.abs(v) <= 8640000000000000;
 const nullable = (v: unknown) => v === null || number(v);
 const list = (v: unknown, check: (item: unknown) => boolean, max = 4098): v is unknown[] =>
   Array.isArray(v) && v.length <= max && v.every(check);
@@ -180,7 +181,8 @@ export function decodeUsageAnalytics(v: unknown): UsageAnalyticsResult {
     v.options !== undefined &&
     (!isRecord(v.options) ||
       !list(v.options.models, (m) => typeof m === 'string', 8192) ||
-      (v.options.efforts !== undefined && !list(v.options.efforts, (e) => typeof e === 'string', 8192)) ||
+      (v.options.efforts !== undefined &&
+        !list(v.options.efforts, (e) => typeof e === 'string', 8192)) ||
       !list(
         v.options.identities,
         (id) => isRecord(id) && typeof id.source === 'string' && typeof id.auth_index === 'string',
@@ -193,6 +195,9 @@ export function decodeUsageAnalytics(v: unknown): UsageAnalyticsResult {
 export const usageAnalyticsApi = {
   query: async (request: UsageQueryRequest, signal?: AbortSignal) =>
     decodeUsageAnalytics(
-      await apiClient.post<unknown>('/usage/query/analytics', request, { signal, timeout: 30_000 })
+      await ltsExtensionClient.post<unknown>('/usage/query/analytics', request, {
+        signal,
+        timeout: 30_000,
+      })
     ),
 };

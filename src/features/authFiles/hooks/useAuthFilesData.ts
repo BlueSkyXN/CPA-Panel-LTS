@@ -485,7 +485,12 @@ export function useAuthFilesData(options?: UseAuthFilesDataOptions): UseAuthFile
       setFiles((prev) => prev.map((f) => (f.name === name ? { ...f, disabled: nextDisabled } : f)));
 
       try {
-        const res = await authFilesApi.setStatus(name, nextDisabled);
+        const index = item.authIndex ?? item.auth_index;
+        const res = await authFilesApi.setStatus(
+          name,
+          nextDisabled,
+          typeof index === 'string' ? index : undefined
+        );
         invalidateInFlightLoads();
         setFiles((prev) =>
           prev.map((f) => (f.name === name ? { ...f, disabled: res.disabled } : f))
@@ -551,7 +556,15 @@ export function useAuthFilesData(options?: UseAuthFilesDataOptions): UseAuthFile
 
       try {
         const results = await Promise.allSettled(
-          targetNameList.map((name) => authFilesApi.setStatus(name, nextDisabled))
+          targetNameList.map((name) => {
+            const file = files.find((candidate) => candidate.name === name);
+            const index = file?.authIndex ?? file?.auth_index;
+            return authFilesApi.setStatus(
+              name,
+              nextDisabled,
+              typeof index === 'string' ? index : undefined
+            );
+          })
         );
         invalidateInFlightLoads();
 

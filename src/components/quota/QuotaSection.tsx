@@ -113,7 +113,7 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
   const { t } = useTranslation();
   const showNotification = useNotificationStore((state) => state.showNotification);
   const showConfirmation = useNotificationStore((state) => state.showConfirmation);
-  const setQuota = useQuotaStore((state) => state[config.storeSetter]) as QuotaSetter<
+  const setQuota = useQuotaStore((state) => state[config.storeSetter]) as unknown as QuotaSetter<
     Record<string, TState>
   >;
 
@@ -220,7 +220,7 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
       if (singleRefreshInFlightRef.current.has(file.name)) return;
 
       singleRefreshInFlightRef.current.add(file.name);
-      const cacheGeneration = captureQuotaCacheGeneration();
+      const cacheGeneration = captureQuotaCacheGeneration(file.name);
       const previousQuota = quota[file.name];
 
       setQuota((prev) => ({
@@ -270,7 +270,7 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
         t,
         showConfirmation,
         onConfirm: async () => {
-          const cacheGeneration = captureQuotaCacheGeneration();
+          const cacheGeneration = captureQuotaCacheGeneration(file.name);
           setResettingQuotaName(file.name);
           try {
             const data = await resetQuota(file, t);

@@ -30,37 +30,37 @@ function editYaml(source, patch, target = source) {
 
 for (const mode of ['disabled', 'observe', 'correct']) {
   test(`${mode}: roundtrip preserves siblings and comments`, () => {
-    const source = 'codex:\n  zcode-context-usage: future # retain-comment\n  unknown: preserve\n';
+    const source = 'upstream:\n  codex:\n    zcode-context-usage: future # retain-comment\n    unknown: preserve\n';
     const result = editYaml(source, { codexZcodeContextUsage: mode });
-    assert.equal(parse(result.yaml).codex['zcode-context-usage'], mode);
-    assert.equal(parse(result.yaml).codex.unknown, 'preserve');
+    assert.equal(parse(result.yaml).upstream?.codex['zcode-context-usage'], mode);
+    assert.equal(parse(result.yaml).upstream?.codex.unknown, 'preserve');
     assert.ok(result.yaml.includes('# retain-comment'));
     assert.equal(editYaml(result.yaml, {}).values.codexZcodeContextUsage, mode);
   });
 }
 
 test('unrelated edits preserve absent, unknown, invalid and latest values', () => {
-  for (const source of ['debug: false\n', 'codex: {zcode-context-usage: future}\n', 'codex: {zcode-context-usage: 42}\n']) {
+  for (const source of ['debug: false\n', 'upstream:\n  codex: {zcode-context-usage: future}\n', 'upstream:\n  codex: {zcode-context-usage: 42}\n']) {
     const result = editYaml(source, { debug: true, codexIdentityConfuse: true });
-    assert.equal(parse(result.yaml).codex?.['zcode-context-usage'], parse(source).codex?.['zcode-context-usage']);
+    assert.equal(parse(result.yaml).upstream?.codex?.['zcode-context-usage'], parse(source).upstream?.codex?.['zcode-context-usage']);
   }
-  const initial = 'codex: {zcode-context-usage: observe}\n';
-  assert.equal(parse(editYaml(initial, { debug: true }, initial.replace('observe', 'correct')).yaml).codex['zcode-context-usage'], 'correct');
+  const initial = 'upstream:\n  codex: {zcode-context-usage: observe}\n';
+  assert.equal(parse(editYaml(initial, { debug: true }, initial.replace('observe', 'correct')).yaml).upstream?.codex['zcode-context-usage'], 'correct');
   assert.equal(editYaml('debug: false\n', {}).values.codexZcodeContextUsage, '');
-  assert.equal(editYaml('codex: {zcode-context-usage: 42}\n', {}).values.codexZcodeContextUsage, '__unsupported__');
+  assert.equal(editYaml('upstream:\n  codex: {zcode-context-usage: 42}\n', {}).values.codexZcodeContextUsage, '__unsupported__');
   assert.throws(() => editYaml(initial, { codexZcodeContextUsage: 'bad-mode' }), error => error.code === 'visual_apply_failed');
 });
 
 test('aliased parent cannot be replaced by a visual edit', () => {
-  const source = 'base: &policy {zcode-context-usage: observe, keep: true}\ncodex: *policy\n';
+  const source = 'base: &policy {zcode-context-usage: observe, keep: true}\nupstream:\n  codex: *policy\n';
   assert.throws(() => editYaml(source, { codexZcodeContextUsage: 'correct' }), error => error.code === 'visual_apply_failed');
 });
 
 test('unsupported parent values are preserved; null can become a mapping', () => {
-  for (const source of ['codex: future\n', 'codex: [future]\n', 'codex: false\n']) {
+  for (const source of ['upstream:\n  codex: future\n', 'upstream:\n  codex: [future]\n', 'upstream:\n  codex: false\n']) {
     assert.throws(() => editYaml(source, { codexZcodeContextUsage: 'correct' }), error => error.code === 'visual_apply_failed');
   }
-  assert.equal(parse(editYaml('codex: null\n', { codexZcodeContextUsage: 'observe' }).yaml).codex['zcode-context-usage'], 'observe');
+  assert.equal(parse(editYaml('upstream:\n  codex: null\n', { codexZcodeContextUsage: 'observe' }).yaml).upstream?.codex['zcode-context-usage'], 'observe');
 });
 
 for (const locale of ['zh-CN', 'zh-TW', 'en', 'ru']) {

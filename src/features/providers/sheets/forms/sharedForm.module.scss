@@ -1194,3 +1194,11 @@
   background: var(--failure-badge-bg);
   color: var(--failure-badge-text);
 }
+
+// Upstream advanced model capability hint (ModelAdvancedFields).
+.thinkingExistingHint {
+  margin: 0;
+  color: var(--warning-color);
+  font-size: 11px;
+  line-height: 1.5;
+}

@@ -83,3 +83,21 @@ test('errors and mismatched snapshots never populate result cache', async () => 
     assert.equal(cache.peekUsageAnalytics(cache.analyticsCacheKey(request)), null);
   }
 });
+
+test('analytics requests use the LTS scope on a V8 connection', async () => {
+  const { apiClient } = await vite.ssrLoadModule('/src/services/api/client.ts');
+  const adapter = apiClient.instance.defaults.adapter;
+  apiClient.setConfig({ apiBase: 'https://core.invalid', managementKey: 'synthetic' });
+  try {
+    apiClient.instance.defaults.adapter = async (config) => {
+      assert.equal(config.baseURL, 'https://core.invalid/v0/management');
+      assert.equal(config.url, '/usage/query/analytics');
+      return { status: 200, statusText: 'OK', config, headers: {}, data: response() };
+    };
+    const result = await originalQuery(request);
+    assert.equal(result.analytics_version, 1);
+  } finally {
+    apiClient.instance.defaults.adapter = adapter;
+    apiClient.clearConfig();
+  }
+});

@@ -1,3 +1,7 @@
+import { useState } from 'react';
+import { ClaudeGrantDialog } from '@/components/quota/claudeGrants/ClaudeGrantDialog';
+import { supportsSiwcBinding, getSiwcBindingStatus } from '../siwcBinding';
+import { AuthFileCooldownSection } from './AuthFileCooldownSection';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { SelectionCheckbox } from '@/components/ui/SelectionCheckbox';
@@ -5,7 +9,8 @@ import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { IconInfo, IconModelCluster } from '@/components/ui/icons';
 import { ProviderStatusBar } from '@/components/providers/ProviderStatusBar';
 import type { AuthFileItem } from '@/types';
-import { resolveAuthProvider } from '@/utils/quota';
+import { resolveAuthProvider, isPluginQuotaFile } from '@/utils/quota';
+import { useAuthStore } from '@/stores';
 import {
   normalizeRecentRequestAuthIndex,
   normalizeRecentRequestBuckets,
@@ -60,9 +65,12 @@ export type AuthFileCardProps = {
   onToggleStatus: (file: AuthFileItem, enabled: boolean) => void;
   onToggleSelect: (name: string) => void;
   onUpdatePat?: (file: AuthFileItem) => void;
+  onBindSiwc?: (file: AuthFileItem) => void;
+  onRuntimeAction?: (file: AuthFileItem, action: 'refresh' | 'cooldown') => void;
 };
 
 const resolveQuotaType = (file: AuthFileItem): QuotaProviderType | null => {
+  if (isPluginQuotaFile(file)) return 'plugin';
   const provider = resolveAuthProvider(file);
   if (!QUOTA_PROVIDER_TYPES.has(provider as QuotaProviderType)) return null;
   return provider as QuotaProviderType;
@@ -70,6 +78,7 @@ const resolveQuotaType = (file: AuthFileItem): QuotaProviderType | null => {
 
 export function AuthFileCard(props: AuthFileCardProps) {
   const { t } = useTranslation();
+  const [grantOpen, setGrantOpen] = useState(false);
   const {
     file,
     compact,
@@ -104,8 +113,9 @@ export function AuthFileCard(props: AuthFileCardProps) {
   const typeColor = getTypeColor(providerKey);
   const typeLabel = getTypeLabel(t, providerKey);
 
-  const quotaType =
-    quotaFilterType && resolveQuotaType(file) === quotaFilterType ? quotaFilterType : null;
+  const pluginSupported = useAuthStore((s) => s.pluginSupportKnown && s.supportsPlugin);
+  const resolvedQuotaType = resolveQuotaType(file);
+  const quotaType = resolvedQuotaType === 'plugin' && pluginSupported ? 'plugin' : quotaFilterType && resolvedQuotaType === quotaFilterType ? quotaFilterType : null;
 
   const showQuotaLayout = Boolean(quotaType) && !isRuntimeOnly && !compact;
 
@@ -169,9 +179,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
                 checked={selected}
                 onChange={() => onToggleSelect(file.name)}
                 className={styles.cardSelection}
-                aria-label={
-                  selected ? t('auth_files.batch_deselect') : t('auth_files.batch_select_all')
-                }
+                ariaLabel={`${selected ? t('auth_files.batch_deselect') : t('auth_files.batch_select_all')}: ${file.name}`}
                 title={selected ? t('auth_files.batch_deselect') : t('auth_files.batch_select_all')}
               />
             )}
@@ -193,6 +201,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
                   {typeLabel}
                 </span>
                 <span className={`${styles.stateBadge} ${stateBadgeClass}`}>{stateLabel}</span>
+                {supportsSiwcBinding(file) && <span className={styles.stateBadge}>SIWC: {t(`siwc.${getSiwcBindingStatus(file)}`)}</span>}
               </div>
               <div className={styles.fileIdentity}>
                 <span className={styles.fileName} title={displayName}>
@@ -232,6 +241,8 @@ export function AuthFileCard(props: AuthFileCardProps) {
               onOpen={onShowCodexRemoteCloudConnectEnvironments}
             />
           </div>
+
+          <AuthFileCooldownSection snapshot={file.cooldownSnapshot} />
 
           <div className={`${styles.cardMeta} ${compact ? styles.cardMetaCompact : ''}`}>
             <div className={styles.metaItem}>
@@ -297,6 +308,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
             <PatAccountSummary file={file} disabled={disableControls} />
           )}
 
+          {grantOpen && <ClaudeGrantDialog file={file} onClose={() => setGrantOpen(false)} />}
           <div className={styles.cardActions}>
             <div className={styles.cardActionsMain}>
               {!isRuntimeOnly && isAccountFormProvider(providerKey) && onUpdatePat && (
@@ -333,6 +345,12 @@ export function AuthFileCard(props: AuthFileCardProps) {
                 <AuthFileActionsMenu
                   label={t('auth_files.more_actions')}
                   actions={[
+                    ...(providerKey === 'claude' ? [{ label: t('claude_reset.title'), onClick: () => setGrantOpen(true), disabled: disableControls }] : []),
+                    ...(props.onRuntimeAction ? [
+                      { label: t('credential_actions.refresh'), onClick: () => props.onRuntimeAction?.(file, 'refresh'), disabled: disableControls },
+                      { label: t('credential_actions.cooldown'), onClick: () => props.onRuntimeAction?.(file, 'cooldown'), disabled: disableControls || !String(file.authIndex ?? '').trim() },
+                    ] : []),
+                    ...(supportsSiwcBinding(file) && props.onBindSiwc ? [{ label: t('siwc.bind'), onClick: () => props.onBindSiwc?.(file), disabled: disableControls }] : []),
                     {
                       label: t('auth_files.download_button'),
                       onClick: () => onDownload(file.name),

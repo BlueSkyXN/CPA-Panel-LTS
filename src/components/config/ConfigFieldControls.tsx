@@ -22,6 +22,7 @@ import {
 } from './VisualConfigEditorBlocks';
 import type { ConfigFieldId } from './configNavigation';
 import styles from './VisualConfigEditor.module.scss';
+import { ReasoningEffortRulesEditor } from './ReasoningEffortRulesEditor';
 export type ConfigFieldsProps = {
   values: VisualConfigValues;
   validationErrors?: VisualConfigValidationErrors;
@@ -221,6 +222,10 @@ export function useConfigFieldControls({
         onChange={(rmDisableAutoUpdatePanel) => onChange({ rmDisableAutoUpdatePanel })}
       />
     ),
+    githubToken: (
+      <Input label={t('credential_actions.github_token')} type="password" autoComplete="new-password"
+        value={values.githubToken} onChange={(e) => onChange({ githubToken: e.target.value })} disabled={disabled} />
+    ),
     rmSecretKey: (
       <Input
         label={t('config_management.visual.sections.remote.secret_key')}
@@ -371,6 +376,27 @@ export function useConfigFieldControls({
         />
         <div className={styles.fieldHint}>
           {t('config_management.visual.sections.system.antigravity_sensitive_words_desc')}
+        </div>
+      </div>
+    ),
+    devinSensitiveWords: (
+      <div className={styles.fieldShell} data-testid="devin-sensitive-words">
+        <label className={styles.fieldLabel}>
+          {t('config_management.visual.sections.system.devin_sensitive_words')}
+        </label>
+        <StringListEditor
+          value={values.devinSensitiveWords}
+          disabled={disabled}
+          inputAriaLabel={t(
+            'config_management.visual.sections.system.devin_sensitive_words_label'
+          )}
+          placeholder={t(
+            'config_management.visual.sections.system.devin_sensitive_words_placeholder'
+          )}
+          onChange={(devinSensitiveWords) => onChange({ devinSensitiveWords })}
+        />
+        <div className={styles.fieldHint}>
+          {t('config_management.visual.sections.system.devin_sensitive_words_desc')}
         </div>
       </div>
     ),
@@ -815,6 +841,9 @@ export function useConfigFieldControls({
           ) : null}
         </div>
       </FieldShell>
+    ),
+    reasoningEffortRules: (
+      <ReasoningEffortRulesEditor rules={values.reasoningEffortRules} disabled={disabled} onChange={(reasoningEffortRules) => onChange({ reasoningEffortRules })} />
     ),
     payloadDefaultRules: (
       <PayloadRulesEditor

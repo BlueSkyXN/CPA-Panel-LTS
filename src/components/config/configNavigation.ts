@@ -70,6 +70,7 @@ export const CONFIG_FIELDS = {
     yamlKey: 'remote-management.disable-auto-update-panel',
     fullWidth: false,
   },
+  githubToken: { labelKey: 'credential_actions.github_token', yamlKey: 'server.github-token', fullWidth: true },
   rmSecretKey: {
     labelKey: 'config_management.visual.sections.remote.secret_key',
     yamlKey: 'remote-management.secret-key',
@@ -140,6 +141,11 @@ export const CONFIG_FIELDS = {
   antigravitySensitiveWords: {
     labelKey: 'config_management.visual.sections.system.antigravity_sensitive_words',
     yamlKey: 'antigravity.sensitive-words',
+    fullWidth: true,
+  },
+  devinSensitiveWords: {
+    labelKey: 'config_management.visual.sections.system.devin_sensitive_words',
+    yamlKey: 'devin.sensitive-words',
     fullWidth: true,
   },
   pluginsEnabled: {
@@ -490,6 +496,12 @@ export const CONFIG_FIELDS = {
     heading: true,
     advanced: true,
   },
+  reasoningEffortRules: {
+    labelKey: 'config_management.visual.reasoning_effort.title',
+    yamlKey: 'reasoning-effort',
+    fullWidth: true,
+    heading: true,
+  },
   payloadFilterRules: {
     labelKey: 'config_management.visual.sections.payload.filter_rules',
     yamlKey: 'payload.filter',
@@ -520,6 +532,7 @@ export const CONFIG_DOMAINS = [
           'rmDisableControlPanel',
           'rmDisableAutoUpdatePanel',
           'rmPanelRepo',
+          'githubToken',
         ],
       },
       {
@@ -677,6 +690,10 @@ export const CONFIG_DOMAINS = [
         ],
       },
       {
+        id: 'devin',
+        fields: ['devinSensitiveWords'],
+      },
+      {
         id: 'gemini',
         fields: ['enableGeminiCliEndpoint'],
       },
@@ -701,6 +718,10 @@ export const CONFIG_DOMAINS = [
       {
         id: 'filters',
         fields: ['payloadFilterRules'],
+      },
+      {
+        id: 'reasoning',
+        fields: ['reasoningEffortRules'],
       },
     ],
   },

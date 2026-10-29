@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { providersApi } from '@/services/api';
+import { apiClient } from '@/services/api/client';
+import { normalizeConfigResponse } from '@/services/api/transformers';
+import { readConfigSnapshot } from '@/services/api/configValue';
 import { getErrorMessage } from '@/utils/helpers';
 import { useAuthStore, useConfigStore } from '@/stores';
 import {
@@ -17,12 +20,17 @@ import {
   geminiToResource,
   interactionsToResource,
   infistarToResource,
+  kimiToResource,
   openaiToResource,
   qiniuCloudToResource,
   vertexToResource,
+  metaToResource,
   xaiToResource,
 } from './adapters';
-import { PROVIDER_BRAND_ORDER } from './descriptors';
+import { PROVIDER_BRAND_ORDER, PROVIDER_DESCRIPTORS } from './descriptors';
+import { buildRuntimePolicy } from './runtimePolicy';
+import { buildModelOptions } from './modelOptions';
+import { pickProviderBehavior } from './providerBehavior';
 import type {
   ProviderBrand,
   ProviderEntryFormInput,
@@ -58,11 +66,21 @@ import {
   isInfistarOpenAIProvider,
 } from './infistar';
 import {
+  buildKimiRaw,
+  isKimiClaudeProvider,
+  isKimiCodexProvider,
+  isKimiOpenAIProvider,
+} from './kimi';
+import {
   getSponsorOpenAIDeleteIndices,
   getSponsorProviderDefinition,
+  isMultiProtocolSponsorBrand,
   type SponsorProtocolUrls,
 } from './sponsorDefinitions';
-import { runSponsorMutationWithRecovery } from './sponsorMutationRecovery';
+import {
+  runSponsorMutationWithRecovery,
+  isSponsorPartialMutationError,
+} from './sponsorMutationRecovery';
 
 const CONFIG_DETECTED_BRANDS: ReadonlySet<ProviderBrand> = new Set([
   'claudeApi',
@@ -70,6 +88,7 @@ const CONFIG_DETECTED_BRANDS: ReadonlySet<ProviderBrand> = new Set([
   'fennoAI',
   'qiniuCloud',
   'infistar',
+  'kimi',
 ]);
 
 export interface UseProviderWorkbenchResult {
@@ -134,11 +153,13 @@ const buildModelAliases = (
   (models ?? [])
     .map((m) => {
       const entry: ModelAlias = {
+        sourceIndex: m.sourceIndex,
         name: m.name.trim(),
         alias: m.alias?.trim() || undefined,
         displayName: m.displayName?.trim() || undefined,
         priority: m.priority,
         testModel: m.testModel,
+        ...buildModelOptions(m),
         thinking: parseThinkingJson(m.thinkingJson),
       };
       if (includeImage) {
@@ -148,8 +169,28 @@ const buildModelAliases = (
     })
     .filter((m) => m.name);
 
+/**
+ * The form always carries a cloak section with default values. When the stored entry has no
+ * cloak node and the section was left at its defaults, emit nothing so editing an unrelated
+ * field does not materialize `cloak: {strict-mode: false}` in the persisted config.
+ */
+export const buildCloakConfig = (
+  input: NonNullable<ProviderEntryFormInput['cloak']>,
+  existing?: ProviderKeyConfig['cloak']
+): ProviderKeyConfig['cloak'] => {
+  const cloak = {
+    mode: input.mode.trim() || undefined,
+    strictMode: input.strictMode,
+    sensitiveWords: parseTextList(input.sensitiveWordsText),
+    cacheUserId: input.cacheUserId === true,
+  };
+  const untouched =
+    !cloak.mode && cloak.strictMode !== true && !cloak.sensitiveWords?.length && !cloak.cacheUserId;
+  return existing || !untouched ? cloak : undefined;
+};
+
 const buildProviderKeyConfig = (
-  brand: 'gemini' | 'interactions' | 'codex' | 'xai' | 'claude' | 'vertex',
+  brand: 'gemini' | 'interactions' | 'codex' | 'meta' | 'xai' | 'claude' | 'vertex',
   input: ProviderEntryFormInput,
   existing?: ProviderKeyConfig | GeminiKeyConfig | null
 ): ProviderKeyConfig | GeminiKeyConfig => {
@@ -158,6 +199,7 @@ const buildProviderKeyConfig = (
   const excluded = buildExcludedModels(input.excludedModelsText, input.disabled, brand);
   const apiKeyChanged = input.apiKey.trim().length > 0;
   const next: ProviderKeyConfig = {
+    source: existing?.source,
     apiKey: apiKeyChanged ? input.apiKey.trim() : (existing?.apiKey ?? ''),
     priority: input.priority,
     weight: input.weight,
@@ -167,19 +209,21 @@ const buildProviderKeyConfig = (
     models: models.length ? models : undefined,
     headers: Object.keys(headers).length ? headers : undefined,
     excludedModels: excluded,
-    disableCooling: input.disableCooling === true,
+    disableCooling: input.disableCooling,
+    ...(input.runtimePolicy
+      ? buildRuntimePolicy(
+          input.runtimePolicy,
+          PROVIDER_DESCRIPTORS[brand].supportsRequestScopedErrors
+        )
+      : {}),
     authIndex: existing?.authIndex,
+    ...pickProviderBehavior(input, brand),
   };
   if ((brand === 'codex' || brand === 'xai') && input.websockets !== undefined) {
     next.websockets = input.websockets;
   }
   if (brand === 'claude' && input.cloak) {
-    next.cloak = {
-      mode: input.cloak.mode.trim() || undefined,
-      strictMode: input.cloak.strictMode,
-      sensitiveWords: parseTextList(input.cloak.sensitiveWordsText),
-      cacheUserId: input.cloak.cacheUserId === true,
-    };
+    next.cloak = buildCloakConfig(input.cloak, (existing as ProviderKeyConfig | null)?.cloak);
   }
   if (brand === 'claude') {
     next.fingerprintProfile = input.fingerprintProfile?.trim() || undefined;
@@ -195,7 +239,7 @@ const buildClaudeApiConfig = (
     'claude',
     {
       ...input,
-      baseUrl: CLAUDE_API_BASE_URL,
+      baseUrl: existing ? existing.baseUrl ?? '' : CLAUDE_API_BASE_URL,
     },
     existing
   ) as ProviderKeyConfig;
@@ -213,6 +257,8 @@ const buildOpenAIConfig = (
           entry.existingApiKey?.trim() || existing?.apiKeyEntries?.[index]?.apiKey?.trim() || '';
         return {
           apiKey: entry.apiKey.trim() || fallbackApiKey,
+          // Persisted key position: keeps unknown key fields when the entry is edited.
+          sourceIndex: entry.sourceIndex,
           proxyUrl: entry.proxyUrl.trim() || undefined,
           weight: entry.weight,
           authIndex: entry.authIndex?.trim() || undefined,
@@ -227,7 +273,9 @@ const buildOpenAIConfig = (
     prefix: input.prefix.trim() || undefined,
     apiKeyEntries,
     disabled: input.disabled,
-    disableCooling: input.disableCooling === true,
+    ...pickProviderBehavior(input, 'openaiCompatibility'),
+    disableCooling: input.disableCooling,
+    ...(input.runtimePolicy ? buildRuntimePolicy(input.runtimePolicy) : {}),
     headers: Object.keys(headers).length ? headers : undefined,
     models: models.length ? models : undefined,
     priority: input.priority,
@@ -263,9 +311,11 @@ const buildSponsorOpenAIConfig = (
     ...(existing ?? {}),
     name: providerName,
     baseUrl: urls.openai,
+    ...pickProviderBehavior(entry, 'openaiCompatibility'),
     prefix: entry.prefix.trim() || undefined,
     disabled: entry.disabled,
-    disableCooling: entry.disableCooling === true,
+    disableCooling: entry.disableCooling,
+    ...(entry.runtimePolicy ? buildRuntimePolicy(entry.runtimePolicy) : {}),
     priority: entry.priority,
     apiKeyEntries,
     models: models.length ? models : undefined,
@@ -288,12 +338,14 @@ const buildSponsorProviderKeyConfig = (
   return {
     ...(existing ?? {}),
     apiKey,
-    baseUrl: protocol === 'claude' ? urls.anthropic : urls.codex,
+    baseUrl: existing ? existing.baseUrl : protocol === 'claude' ? urls.anthropic : urls.codex,
+    ...pickProviderBehavior(entry, protocol),
     proxyUrl: entry.proxyUrl.trim() || undefined,
     prefix: entry.prefix.trim() || undefined,
     priority: entry.priority,
     weight: entry.weight,
-    disableCooling: entry.disableCooling === true,
+    disableCooling: entry.disableCooling,
+    ...(entry.runtimePolicy ? buildRuntimePolicy(entry.runtimePolicy) : {}),
     excludedModels: excluded,
     models: models.length ? models : undefined,
   };
@@ -314,12 +366,13 @@ const buildSponsorGeminiConfig = (
   return {
     ...(existing ?? {}),
     apiKey,
-    baseUrl: urls.gemini,
+    baseUrl: existing ? existing.baseUrl : urls.gemini,
     proxyUrl: entry.proxyUrl.trim() || undefined,
     prefix: entry.prefix.trim() || undefined,
     priority: entry.priority,
     weight: entry.weight,
-    disableCooling: entry.disableCooling === true,
+    disableCooling: entry.disableCooling,
+    ...(entry.runtimePolicy ? buildRuntimePolicy(entry.runtimePolicy) : {}),
     excludedModels: excluded,
     models: models.length ? models : undefined,
   };
@@ -328,6 +381,38 @@ const buildSponsorGeminiConfig = (
 const normalizeSponsorKeyEntries = (
   entries: SponsorKeyEntryInput[] | undefined
 ): SponsorKeyEntryInput[] => (entries ?? []).filter((entry) => sponsorEntryApiKey(entry));
+
+const readSponsorSnapshot = async (
+  brand: SponsorProviderBrand,
+  snapshot?: SponsorProviderRaw
+): Promise<SponsorProviderRaw> => {
+  const generation = apiClient.getConnectionGeneration();
+  const original = snapshot ? structuredClone(snapshot) : undefined;
+  const { value } = await readConfigSnapshot('/config/api-keys', {});
+  const latest = normalizeConfigResponse({ 'api-keys': value });
+  if (!apiClient.isCurrentConnection(generation))
+    throw new Error('Configuration connection changed');
+  const raw =
+    brand === 'code0'
+      ? buildCode0Raw(latest)
+      : brand === 'fennoAI'
+        ? buildFennoAIRaw(latest)
+        : brand === 'qiniuCloud'
+          ? buildQiniuCloudRaw(latest)
+          : brand === 'kimi'
+            ? buildKimiRaw(latest)
+            : buildInfistarRaw(latest);
+  // Compare persisted provider state only: source snapshots and injected auth indexes vary
+  // between reads without being configuration changes.
+  const project = (value: SponsorProviderRaw) =>
+    JSON.stringify(value, (key, field: unknown) =>
+      key === 'source' || key === 'authIndex' ? undefined : field
+    );
+  if (original && project(original) !== project(raw)) {
+    throw new Error('Provider configuration changed; refresh and try again.');
+  }
+  return raw;
+};
 
 const toggleSponsorConfig = async (raw: SponsorProviderRaw, disabled: boolean) => {
   for (const item of raw.gemini) {
@@ -358,7 +443,7 @@ const toggleSponsorConfig = async (raw: SponsorProviderRaw, disabled: boolean) =
     });
   }
   for (const item of raw.openai) {
-    await providersApi.updateOpenAIProviderDisabled(item.index, disabled);
+    await providersApi.updateOpenAIProviderDisabled(item.index, disabled, item.config.source);
   }
 };
 
@@ -369,8 +454,7 @@ const toggleSponsorConfig = async (raw: SponsorProviderRaw, disabled: boolean) =
 export function useProviderWorkbench(): UseProviderWorkbenchResult {
   const connectionStatus = useAuthStore((s) => s.connectionStatus);
   const config = useConfigStore((s) => s.config);
-  const fetchConfig = useConfigStore((s) => s.fetchConfig);
-  const updateConfigValue = useConfigStore((s) => s.updateConfigValue);
+  const refreshProviders = useConfigStore((s) => s.refreshProviders);
   const isCacheValid = useConfigStore((s) => s.isCacheValid);
 
   const [isPending, setIsPending] = useState<boolean>(() => !isCacheValid());
@@ -383,32 +467,26 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
 
   const connected = connectionStatus === 'connected';
 
+  const refreshRequest = useRef(0);
   const refetch = useCallback(async () => {
+    const request = ++refreshRequest.current;
+    const generation = apiClient.getConnectionGeneration();
+    const isCurrent = () =>
+      request === refreshRequest.current && apiClient.isCurrentConnection(generation);
     setIsFetching(true);
     setErrorMessage(null);
     try {
-      const [configResult, vertexResult, openaiResult] = await Promise.allSettled([
-        fetchConfig(undefined, true),
-        providersApi.getVertexConfigs(),
-        providersApi.getOpenAIProviders(),
-      ]);
-      if (configResult.status !== 'fulfilled') {
-        throw configResult.reason;
-      }
-      if (vertexResult.status === 'fulfilled') {
-        updateConfigValue('vertex-api-key', vertexResult.value || []);
-      }
-      if (openaiResult.status === 'fulfilled') {
-        updateConfigValue('openai-compatibility', openaiResult.value || []);
-      }
+      if (!(await refreshProviders()) || !isCurrent()) return;
       setFetchedAt(new Date().toISOString());
     } catch (err) {
-      setErrorMessage(getErrorMessage(err) || 'Failed to load providers');
+      if (isCurrent()) setErrorMessage(getErrorMessage(err) || 'Failed to load providers');
     } finally {
-      setIsPending(false);
-      setIsFetching(false);
+      if (isCurrent()) {
+        setIsPending(false);
+        setIsFetching(false);
+      }
     }
-  }, [fetchConfig, updateConfigValue]);
+  }, [refreshProviders]);
 
   const refreshSnapshot = useCallback(() => {
     setFetchedAt(new Date().toISOString());
@@ -454,7 +532,8 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
               !isCode0CodexProvider(item) &&
               !isFennoAICodexProvider(item) &&
               !isQiniuCloudCodexProvider(item) &&
-              !isInfistarCodexProvider(item)
+              !isInfistarCodexProvider(item) &&
+              !isKimiCodexProvider(item)
             ) {
               out.push(codexToResource(item, index));
             }
@@ -472,6 +551,7 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
                 !isFennoAIClaudeProvider(item) &&
                 !isQiniuCloudClaudeProvider(item) &&
                 !isInfistarClaudeProvider(item) &&
+                !isKimiClaudeProvider(item) &&
                 !isClaudeApiProvider(item)
               ) {
                 out.push(claudeToResource(item, index));
@@ -492,6 +572,9 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
             []
           );
           break;
+        case 'meta':
+          resources = (config.metaApiKeys ?? []).map((c, i) => metaToResource(c, i));
+          break;
         case 'vertex':
           resources = (config.vertexApiKeys ?? []).map((c, i) => vertexToResource(c, i));
           break;
@@ -501,7 +584,8 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
               if (
                 !isCode0OpenAIProvider(item) &&
                 !isQiniuCloudOpenAIProvider(item) &&
-                !isInfistarOpenAIProvider(item)
+                !isInfistarOpenAIProvider(item) &&
+                !isKimiOpenAIProvider(item)
               ) {
                 out.push(openaiToResource(item, index));
               }
@@ -530,6 +614,11 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           resources = sponsorResource ? [sponsorResource] : [];
           break;
         }
+        case 'kimi': {
+          const sponsorResource = kimiToResource(buildKimiRaw(config));
+          resources = sponsorResource ? [sponsorResource] : [];
+          break;
+        }
       }
       return {
         id: brand,
@@ -545,16 +634,13 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
   /* ------------------- mutations ------------------- */
 
   const persistSponsorConfig = useCallback(
-    async (brand: SponsorProviderBrand, input: ProviderEntryFormInput) => {
+    async (
+      brand: SponsorProviderBrand,
+      input: ProviderEntryFormInput,
+      snapshot?: SponsorProviderRaw
+    ) => {
       const definition = getSponsorProviderDefinition(brand);
-      const raw =
-        brand === 'code0'
-          ? buildCode0Raw(config)
-          : brand === 'fennoAI'
-            ? buildFennoAIRaw(config)
-            : brand === 'qiniuCloud'
-              ? buildQiniuCloudRaw(config)
-              : buildInfistarRaw(config);
+      const raw = await readSponsorSnapshot(brand, snapshot);
       const entries = normalizeSponsorKeyEntries(input.sponsorKeyEntries);
       const openaiEntry = entries.find((entry) => entry.protocol === 'openai');
       const claudeEntry = entries.find((entry) => entry.protocol === 'claude');
@@ -576,7 +662,11 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           }
         } else {
           for (const item of raw.gemini) {
-            await providersApi.deleteGeminiKey(item.config.apiKey, item.config.baseUrl);
+            await providersApi.deleteGeminiKey(
+              item.config.apiKey,
+              item.config.baseUrl,
+              item.config.source
+            );
           }
         }
       }
@@ -600,7 +690,11 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
         }
       } else {
         for (const item of raw.codex) {
-          await providersApi.deleteCodexConfig(item.config.apiKey, item.config.baseUrl);
+          await providersApi.deleteCodexConfig(
+            item.config.apiKey,
+            item.config.baseUrl,
+            item.config.source
+          );
         }
       }
 
@@ -623,7 +717,11 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
         }
       } else {
         for (const item of raw.claude) {
-          await providersApi.deleteClaudeConfig(item.config.apiKey, item.config.baseUrl);
+          await providersApi.deleteClaudeConfig(
+            item.config.apiKey,
+            item.config.baseUrl,
+            item.config.source
+          );
         }
       }
 
@@ -645,14 +743,18 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           await providersApi.createOpenAIProvider(next);
         }
       } else if (currentOpenAI) {
-        await providersApi.deleteOpenAIProvider(currentOpenAI.index);
+        await providersApi.deleteOpenAIProvider(currentOpenAI.index, currentOpenAI.config.source);
       }
     },
-    [config]
+    []
   );
 
   const createProvider = useCallback(
     async (brand: ProviderBrand, input: ProviderEntryFormInput) => {
+      const generation = apiClient.getConnectionGeneration();
+      const refresh = async () => {
+        if (apiClient.isCurrentConnection(generation)) await refetch();
+      };
       setMutating(true);
       try {
         if (brand === 'gemini') {
@@ -677,6 +779,10 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           );
         } else if (brand === 'claudeApi') {
           await providersApi.createClaudeConfig(buildClaudeApiConfig(input));
+        } else if (brand === 'meta') {
+          await providersApi.createMetaConfig(
+            buildProviderKeyConfig('meta', input) as ProviderKeyConfig
+          );
         } else if (brand === 'vertex') {
           await providersApi.createVertexConfig(
             buildProviderKeyConfig('vertex', input) as ProviderKeyConfig
@@ -684,14 +790,14 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
         } else if (brand === 'openaiCompatibility') {
           await providersApi.createOpenAIProvider(buildOpenAIConfig(input));
         } else if (
-          brand === 'code0' ||
-          brand === 'fennoAI' ||
-          brand === 'qiniuCloud' ||
-          brand === 'infistar'
+          isMultiProtocolSponsorBrand(brand)
         ) {
-          await runSponsorMutationWithRecovery(() => persistSponsorConfig(brand, input), refetch);
+          await runSponsorMutationWithRecovery(() => persistSponsorConfig(brand, input), refresh);
         }
-        await refetch();
+        await refresh();
+      } catch (error) {
+        if (!isSponsorPartialMutationError(error)) await refresh();
+        throw error;
       } finally {
         setMutating(false);
       }
@@ -701,6 +807,10 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
 
   const updateProvider = useCallback(
     async (resource: ProviderResource, input: ProviderEntryFormInput) => {
+      const generation = apiClient.getConnectionGeneration();
+      const refresh = async () => {
+        if (apiClient.isCurrentConnection(generation)) await refetch();
+      };
       setMutating(true);
       try {
         const brand = resource.brand;
@@ -746,6 +856,13 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
             selector.baseUrl,
             buildClaudeApiConfig(input, resource.raw as ProviderKeyConfig)
           );
+        } else if (brand === 'meta' && selector.brand === 'meta') {
+          const existing = resource.raw as ProviderKeyConfig;
+          await providersApi.updateMetaConfig(
+            selector.apiKey,
+            selector.baseUrl,
+            buildProviderKeyConfig('meta', input, existing) as ProviderKeyConfig
+          );
         } else if (brand === 'vertex' && selector.brand === 'vertex') {
           const existing = resource.raw as ProviderKeyConfig;
           await providersApi.updateVertexConfig(
@@ -760,14 +877,17 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
             buildOpenAIConfig(input, resource.raw as OpenAIProviderConfig)
           );
         } else if (
-          brand === 'code0' ||
-          brand === 'fennoAI' ||
-          brand === 'qiniuCloud' ||
-          brand === 'infistar'
+          isMultiProtocolSponsorBrand(brand)
         ) {
-          await runSponsorMutationWithRecovery(() => persistSponsorConfig(brand, input), refetch);
+          await runSponsorMutationWithRecovery(
+            () => persistSponsorConfig(brand, input, resource.raw as SponsorProviderRaw),
+            refresh
+          );
         }
-        await refetch();
+        await refresh();
+      } catch (error) {
+        if (!isSponsorPartialMutationError(error)) await refresh();
+        throw error;
       } finally {
         setMutating(false);
       }
@@ -777,59 +897,117 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
 
   const deleteProvider = useCallback(
     async (resource: ProviderResource) => {
+      const generation = apiClient.getConnectionGeneration();
+      const refresh = async () => {
+        if (apiClient.isCurrentConnection(generation)) await refetch();
+      };
       setMutating(true);
       try {
         const sel = resource.selector;
         if (sel.brand === 'gemini') {
-          await providersApi.deleteGeminiKey(sel.apiKey, sel.baseUrl);
+          await providersApi.deleteGeminiKey(
+            sel.apiKey,
+            sel.baseUrl,
+            (resource.raw as ProviderKeyConfig).source
+          );
         } else if (sel.brand === 'interactions') {
-          await providersApi.deleteInteractionsKey(sel.apiKey, sel.baseUrl);
-          const next = (config?.interactionsApiKeys ?? []).filter((_, index) => index !== sel.index);
-          updateConfigValue('interactions-api-key', next);
+          await providersApi.deleteInteractionsKey(
+            sel.apiKey,
+            sel.baseUrl,
+            (resource.raw as ProviderKeyConfig).source
+          );
         } else if (sel.brand === 'codex') {
-          await providersApi.deleteCodexConfig(sel.apiKey, sel.baseUrl);
+          await providersApi.deleteCodexConfig(
+            sel.apiKey,
+            sel.baseUrl,
+            (resource.raw as ProviderKeyConfig).source
+          );
         } else if (sel.brand === 'xai') {
-          await providersApi.deleteXAIConfig(sel.apiKey, sel.baseUrl);
+          await providersApi.deleteXAIConfig(
+            sel.apiKey,
+            sel.baseUrl,
+            (resource.raw as ProviderKeyConfig).source
+          );
         } else if (sel.brand === 'claude') {
-          await providersApi.deleteClaudeConfig(sel.apiKey, sel.baseUrl);
+          await providersApi.deleteClaudeConfig(
+            sel.apiKey,
+            sel.baseUrl,
+            (resource.raw as ProviderKeyConfig).source
+          );
         } else if (sel.brand === 'claudeApi') {
-          await providersApi.deleteClaudeConfig(sel.apiKey, sel.baseUrl);
+          await providersApi.deleteClaudeConfig(
+            sel.apiKey,
+            sel.baseUrl,
+            (resource.raw as ProviderKeyConfig).source
+          );
+        } else if (sel.brand === 'meta') {
+          await providersApi.deleteMetaConfig(
+            sel.apiKey,
+            sel.baseUrl,
+            (resource.raw as ProviderKeyConfig).source
+          );
         } else if (sel.brand === 'vertex') {
-          await providersApi.deleteVertexConfig(sel.apiKey, sel.baseUrl);
+          await providersApi.deleteVertexConfig(
+            sel.apiKey,
+            sel.baseUrl,
+            (resource.raw as ProviderKeyConfig).source
+          );
         } else if (sel.brand === 'openaiCompatibility') {
-          await providersApi.deleteOpenAIProvider(sel.index);
+          await providersApi.deleteOpenAIProvider(
+            sel.index,
+            (resource.raw as OpenAIProviderConfig).source
+          );
         } else if (
-          sel.brand === 'code0' ||
-          sel.brand === 'fennoAI' ||
-          sel.brand === 'qiniuCloud' ||
-          sel.brand === 'infistar'
+          isMultiProtocolSponsorBrand(sel.brand)
         ) {
+          const raw = await readSponsorSnapshot(sel.brand, resource.raw as SponsorProviderRaw);
           await runSponsorMutationWithRecovery(async () => {
-            const raw = resource.raw as SponsorProviderRaw;
             for (const item of raw.gemini) {
-              await providersApi.deleteGeminiKey(item.config.apiKey, item.config.baseUrl);
+              await providersApi.deleteGeminiKey(
+                item.config.apiKey,
+                item.config.baseUrl,
+                item.config.source
+              );
             }
             for (const item of raw.codex) {
-              await providersApi.deleteCodexConfig(item.config.apiKey, item.config.baseUrl);
+              await providersApi.deleteCodexConfig(
+                item.config.apiKey,
+                item.config.baseUrl,
+                item.config.source
+              );
             }
             for (const item of raw.claude) {
-              await providersApi.deleteClaudeConfig(item.config.apiKey, item.config.baseUrl);
+              await providersApi.deleteClaudeConfig(
+                item.config.apiKey,
+                item.config.baseUrl,
+                item.config.source
+              );
             }
             for (const index of getSponsorOpenAIDeleteIndices(raw)) {
-              await providersApi.deleteOpenAIProvider(index);
+              const target = raw.openai.find((item) => item.index === index);
+              if (!target)
+                throw new Error('Provider configuration changed; refresh and try again.');
+              await providersApi.deleteOpenAIProvider(index, target.config.source);
             }
-          }, refetch);
+          }, refresh);
         }
-        await refetch();
+        await refresh();
+      } catch (error) {
+        if (!isSponsorPartialMutationError(error)) await refresh();
+        throw error;
       } finally {
         setMutating(false);
       }
     },
-    [config?.interactionsApiKeys, refetch, updateConfigValue]
+    [refetch]
   );
 
   const toggleDisabled = useCallback(
     async (resource: ProviderResource, disabled: boolean) => {
+      const generation = apiClient.getConnectionGeneration();
+      const refresh = async () => {
+        if (apiClient.isCurrentConnection(generation)) await refetch();
+      };
       setMutating(true);
       try {
         const brand = resource.brand;
@@ -857,6 +1035,7 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
           (brand === 'xai' && selector.brand === 'xai') ||
           (brand === 'claude' && selector.brand === 'claude') ||
           (brand === 'claudeApi' && selector.brand === 'claudeApi') ||
+          (brand === 'meta' && selector.brand === 'meta') ||
           (brand === 'vertex' && selector.brand === 'vertex')
         ) {
           const current = resource.raw as ProviderKeyConfig;
@@ -870,23 +1049,27 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
             await providersApi.updateXAIConfig(selector.apiKey, selector.baseUrl, next);
           } else if (selector.brand === 'claude' || selector.brand === 'claudeApi') {
             await providersApi.updateClaudeConfig(selector.apiKey, selector.baseUrl, next);
+          } else if (selector.brand === 'meta') {
+            await providersApi.updateMetaConfig(selector.apiKey, selector.baseUrl, next);
           } else if (selector.brand === 'vertex') {
             await providersApi.updateVertexConfig(selector.apiKey, selector.baseUrl, next);
           }
         } else if (brand === 'openaiCompatibility' && selector.brand === 'openaiCompatibility') {
-          await providersApi.updateOpenAIProviderDisabled(selector.index, disabled);
-        } else if (
-          brand === 'code0' ||
-          brand === 'fennoAI' ||
-          brand === 'qiniuCloud' ||
-          brand === 'infistar'
-        ) {
-          await runSponsorMutationWithRecovery(
-            () => toggleSponsorConfig(resource.raw as SponsorProviderRaw, disabled),
-            refetch
+          await providersApi.updateOpenAIProviderDisabled(
+            selector.index,
+            disabled,
+            (resource.raw as OpenAIProviderConfig).source
           );
+        } else if (
+          isMultiProtocolSponsorBrand(brand)
+        ) {
+          const raw = await readSponsorSnapshot(brand, resource.raw as SponsorProviderRaw);
+          await runSponsorMutationWithRecovery(() => toggleSponsorConfig(raw, disabled), refresh);
         }
-        await refetch();
+        await refresh();
+      } catch (error) {
+        if (!isSponsorPartialMutationError(error)) await refresh();
+        throw error;
       } finally {
         setMutating(false);
       }

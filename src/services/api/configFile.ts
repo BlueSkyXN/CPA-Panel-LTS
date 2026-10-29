@@ -1,27 +1,55 @@
-/**
- * 配置文件相关 API（/config.yaml）
- */
-
+import { parseDocument, isMap } from 'yaml';
 import { apiClient } from './client';
+import { configRevision, configRevisionUnavailable } from './configRevision';
+
+export interface ConfigYamlSnapshot {
+  readonly content: string;
+  readonly generation: number;
+  /** ETag of the v8 `/config.yaml` read; every save must send it as If-Match. */
+  readonly revision: string;
+}
+
+const YAML_ACCEPT = 'application/yaml, text/yaml, text/plain';
+
+function guardConnection(generation: number): void {
+  if (!apiClient.isCurrentConnection(generation))
+    throw new Error('Configuration connection changed');
+}
+
+export function assertV8ConfigMapping(content: unknown): asserts content is string {
+  if (typeof content !== 'string') throw new Error('Invalid configuration response');
+  const doc = parseDocument(content);
+  if (doc.errors.length || !isMap(doc.contents) || doc.get('config-version') !== 8)
+    throw new Error('Invalid v8 configuration mapping');
+}
 
 export const configFileApi = {
-  async fetchConfigYaml(): Promise<string> {
+  async fetchConfigYaml(): Promise<ConfigYamlSnapshot> {
+    const generation = apiClient.getConnectionGeneration();
     const response = await apiClient.getRaw('/config.yaml', {
       responseType: 'text',
-      headers: { Accept: 'application/yaml, text/yaml, text/plain' }
+      headers: { Accept: YAML_ACCEPT },
     });
+    guardConnection(generation);
     const data: unknown = response.data;
-    if (typeof data === 'string') return data;
-    if (data === undefined || data === null) return '';
-    return String(data);
+    if (typeof data !== 'string') throw new Error('Invalid configuration response');
+    assertV8ConfigMapping(data);
+    return Object.freeze({ content: data, generation, revision: configRevision(response, true) });
   },
 
-  async saveConfigYaml(content: string): Promise<void> {
+  /** 412/428 surface to the caller as a conflict; the draft must be reviewed against a reload. */
+  async saveConfigYaml(content: string, snapshot: ConfigYamlSnapshot): Promise<void> {
+    const { generation, revision } = snapshot;
+    guardConnection(generation);
+    assertV8ConfigMapping(content);
+    if (!revision) throw configRevisionUnavailable();
     await apiClient.put('/config.yaml', content, {
       headers: {
         'Content-Type': 'application/yaml',
-        Accept: 'application/json, text/plain, */*'
-      }
+        Accept: 'application/json, text/plain, */*',
+        'If-Match': revision,
+      },
     });
-  }
+    guardConnection(generation);
+  },
 };

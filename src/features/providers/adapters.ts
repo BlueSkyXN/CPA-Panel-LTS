@@ -21,6 +21,12 @@ import {
   resolveInfistarBaseUrl,
 } from './infistar';
 import {
+  KIMI_DISPLAY_NAME,
+  KIMI_PROTOCOL_LABELS,
+  getKimiProtocolUrls,
+  resolveKimiBaseUrl,
+} from './kimi';
+import {
   QINIU_CLOUD_DISPLAY_NAME,
   QINIU_CLOUD_PROTOCOL_LABELS,
   getQiniuCloudProtocolUrls,
@@ -60,7 +66,7 @@ const truncateForId = (value: string | undefined | null): string => {
 };
 
 function providerKeyToResource(
-  brand: 'gemini' | 'interactions' | 'codex' | 'xai' | 'claude' | 'claudeApi' | 'vertex',
+  brand: 'gemini' | 'interactions' | 'codex' | 'meta' | 'xai' | 'claude' | 'claudeApi' | 'vertex',
   config: GeminiKeyConfig | ProviderKeyConfig,
   index: number
 ): ProviderResource {
@@ -354,3 +360,14 @@ export function infistarToResource(raw: SponsorProviderRaw): ProviderResource | 
     getProtocolUrls: getInfistarProtocolUrls,
   });
 }
+
+export function kimiToResource(raw: SponsorProviderRaw): ProviderResource | null {
+  return sponsorRawToResource('kimi', raw, {
+    displayName: KIMI_DISPLAY_NAME,
+    protocolLabels: KIMI_PROTOCOL_LABELS,
+    resolveBaseUrl: resolveKimiBaseUrl,
+    getProtocolUrls: getKimiProtocolUrls,
+  });
+}
+
+export function metaToResource(config: ProviderKeyConfig, index: number): ProviderResource { return providerKeyToResource('meta', config, index); }

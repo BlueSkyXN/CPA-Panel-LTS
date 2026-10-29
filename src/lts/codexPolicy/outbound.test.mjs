@@ -24,9 +24,9 @@ function editYaml(source, patch, target=source) {
 }
 
 test('setting transport writes only codex.outbound.transport and keeps siblings and comments',()=>{
-  const source='codex:\n  cache-affinity:\n    strategy: legacy # keep-me\n  outbound:\n    future-knob: 3\n';
+  const source='upstream:\n  codex:\n    cache-affinity:\n      strategy: legacy # keep-me\n    outbound:\n      future-knob: 3\n';
   const result=editYaml(source,{codexOutboundTransport:'auto',codexOutboundWebsocketThresholdBytes:'524288'});
-  const codex=parse(result.yaml).codex;
+  const codex=parse(result.yaml).upstream?.codex;
   assert.deepEqual(codex.outbound,{'future-knob':3,transport:'auto','websocket-threshold-bytes':524288});
   assert.equal(codex['cache-affinity'].strategy,'legacy');
   assert.ok(result.yaml.includes('keep-me'));
@@ -36,28 +36,28 @@ test('setting transport writes only codex.outbound.transport and keeps siblings 
 });
 
 test('absent outbound keys read as Core defaults and unrelated edits write nothing',()=>{
-  const source='debug: false\ncodex:\n  identity-confuse: false\n';
+  const source='observability: {logs: {debug: false}}\nupstream:\n  codex:\n    identity-confuse: false\n';
   const result=editYaml(source,{debug:true});
   assert.equal(result.values.codexOutboundTransport,'');
   assert.equal(result.values.codexOutboundRequestCompression,'');
   assert.equal(result.values.codexOutboundAcceptEncoding,'');
-  assert.equal(parse(result.yaml).codex.outbound,undefined);
+  assert.equal(parse(result.yaml).upstream?.codex.outbound,undefined);
 });
 
 test('compression and Accept-Encoding round-trip; clearing a value removes only that key',()=>{
-  const source='codex:\n  outbound:\n    transport: auto\n';
+  const source='upstream:\n  codex:\n    outbound:\n      transport: auto\n';
   const set=editYaml(source,{codexOutboundRequestCompression:'none',codexOutboundAcceptEncoding:'legacy'});
-  assert.deepEqual(parse(set.yaml).codex.outbound,{transport:'auto','request-compression':'none','accept-encoding':'legacy'});
+  assert.deepEqual(parse(set.yaml).upstream?.codex.outbound,{transport:'auto','request-compression':'none','accept-encoding':'legacy'});
   const cleared=editYaml(set.yaml,{codexOutboundRequestCompression:'',codexOutboundAcceptEncoding:'',codexOutboundTransport:''});
-  assert.equal(parse(cleared.yaml)?.codex?.outbound,undefined);
+  assert.equal(parse(cleared.yaml)?.upstream?.codex?.outbound,undefined);
 });
 
 test('unknown values stay untouched until edited; invalid edits fail safely',()=>{
-  const source='codex:\n  outbound:\n    transport: future-mode\n    accept-encoding: br\n';
+  const source='upstream:\n  codex:\n    outbound:\n      transport: future-mode\n      accept-encoding: br\n';
   const result=editYaml(source,{debug:true});
   assert.equal(result.values.codexOutboundTransport,'future-mode');
-  assert.equal(parse(result.yaml).codex.outbound.transport,'future-mode');
-  assert.equal(parse(result.yaml).codex.outbound['accept-encoding'],'br');
+  assert.equal(parse(result.yaml).upstream?.codex.outbound.transport,'future-mode');
+  assert.equal(parse(result.yaml).upstream?.codex.outbound['accept-encoding'],'br');
   assert.throws(()=>editYaml(source,{codexOutboundTransport:'grpc'}),error=>error.code==='visual_apply_failed');
   assert.throws(()=>editYaml('debug: false\n',{codexOutboundWebsocketThresholdBytes:'-1'}),error=>error.code==='visual_apply_failed');
   assert.equal(readCodexOutbound('malformed').transport,'__unsupported__');
@@ -66,7 +66,7 @@ test('unknown values stay untouched until edited; invalid edits fail safely',()=
 });
 
 test('aliased Codex mappings fail safely instead of discarding anchors',()=>{
-  const source='base: &cfg {outbound: {transport: auto}, preserved: true}\ncodex: *cfg\n';
+  const source='base: &cfg {outbound: {transport: auto}, preserved: true}\nupstream:\n  codex: *cfg\n';
   assert.throws(()=>editYaml(source,{codexOutboundTransport:'websocket'}),error=>error.code==='visual_apply_failed');
 });
 

@@ -2,6 +2,7 @@
 """在临时真实 Core 中验证按量查询、旧新算法等价和浏览器请求，不访问生产。"""
 from __future__ import annotations
 
+from panel_browser import PanelBrowser, launch_chromium
 import importlib.util
 import argparse
 import io
@@ -58,11 +59,12 @@ def node_check(data, rules=False):
 def browser_check(api, app_url, count):
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
-        browser = p.chromium.launch()
+        browser = launch_chromium(p)
         try:
             context = browser.new_context(locale="en-US")
             context.add_init_script("localStorage.setItem('cli-proxy-language', JSON.stringify({state:{language:'en'},version:0}));")
-            page = context.new_page()
+            # The connected workspace renders in an isolated iframe; scope DOM calls to it.
+            page = PanelBrowser(context.new_page())
             page.set_default_timeout(30000)
             errors, requests = [], []
             page.on("pageerror", lambda error: errors.append(str(error)))
@@ -74,11 +76,12 @@ def browser_check(api, app_url, count):
             page.get_by_label("Remember password").check(force=True)
             page.get_by_role("button", name=re.compile(r"^(Login|Connect)$", re.I)).click()
             page.wait_for_url(lambda url: "#/login" not in url)
-            for route, query_path in [("/usage", "/usage/query/summary"), ("/usage/pricing", "/usage/query/pricing")]:
+            # A distinct query string reloads the host so each route mounts afresh.
+            for index, (route, query_path) in enumerate([("/usage", "/usage/query/summary"), ("/usage/pricing", "/usage/query/pricing")]):
                 with page.expect_response(lambda response: response.url.endswith(query_path) and response.status == 200):
-                    page.goto(app_url + "/#" + route)
+                    page.goto(f"{app_url}/?usage-query={index}#{route}")
                 page.wait_for_timeout(250)
-            page.goto(app_url + "/#/usage/events?range=all")
+            page.goto(app_url + "/?usage-query=events#/usage/events?range=all")
             page.locator('[data-testid="usage-events-workspace"] tbody tr').first.wait_for()
             assert page.locator('[data-testid="usage-events-workspace"] tbody tr').count() == 100
             first = page.locator('[data-testid="usage-events-workspace"] tbody tr').first.inner_text()
@@ -91,11 +94,11 @@ def browser_check(api, app_url, count):
             assert page.locator('[data-testid="usage-events-workspace"] tbody tr').count() == 100
             page.set_viewport_size({"width": 390, "height": 844})
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1"), "mobile document overflow"
-            for route in ["/core", "/ai-providers/legacy", "/auth-files"]:
-                page.goto(app_url + "/#" + route)
+            for route in ["/core", "/ai-providers", "/auth-files"]:
+                page.goto(f"{app_url}/?usage-query-route={route}#{route}")
                 page.wait_for_timeout(350)
             page.route("**/usage/query/summary", lambda route: route.fulfill(status=503, content_type="application/json", body='{"error":"query-failure-test"}'))
-            page.goto(app_url + "/#/usage")
+            page.goto(app_url + "/?usage-query=failure#/usage")
             page.get_by_text("query-failure-test", exact=True).wait_for()
             page.unroute("**/usage/query/summary")
             full = [path for path in requests if path.endswith("/v0/management/usage")]
@@ -122,7 +125,7 @@ def legacy_panel_check(api, directory, ref):
     core.INDEX_HTML = source / "dist/index.html"
     try:
         with core.run_static_server(core.find_free_port()) as server, sync_playwright() as p:
-            browser = p.chromium.launch()
+            browser = launch_chromium(p)
             try:
                 context = browser.new_context(locale="en-US")
                 context.add_init_script("localStorage.setItem('cli-proxy-language', JSON.stringify({state:{language:'en'},version:0}));")
@@ -152,12 +155,13 @@ def legacy_panel_check(api, directory, ref):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--core-dir", default=str(ROOT.parent / "CPA-Core-LTS"), help="CPA-Core-LTS v8 checkout（只读；在临时目录构建）")
     parser.add_argument("--legacy-panel", action="store_true", help="同时构建旧 Panel，验证旧 Panel + 新 Core")
     parser.add_argument("--legacy-panel-ref", default="7d00037", help="本地可解析的旧 Panel Git ref，默认固定在按量查询迁移前")
     args = parser.parse_args()
     now = int(time.time() * 1000)
     with tempfile.TemporaryDirectory(prefix="cpa-usage-query-") as directory:
-        with core.run_core(ROOT.parent / "CPA-Core-LTS", Path(directory)) as runtime:
+        with core.run_core(Path(args.core_dir).expanduser().resolve(), Path(directory)) as runtime:
             api = runtime.api_url
             for count, previous in [(10000, 0), (100000, 10000)]:
                 receipt, _ = call(api, "/usage/import", seed_payload(previous, count, now))

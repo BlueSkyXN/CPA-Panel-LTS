@@ -29,7 +29,7 @@
   background: var(--border-color);
   border-radius: $radius-full;
   position: relative;
-  transition: background $transition-fast;
+  transition: background-color var(--dur-hover, 200ms) var(--ease-out-strong, ease-out);
 }
 
 .thumb {
@@ -41,7 +41,7 @@
   background: #fff;
   border-radius: $radius-full;
   box-shadow: $shadow-sm;
-  transition: transform $transition-fast;
+  transition: transform var(--dur-hover, 200ms) var(--ease-out-strong, ease-out);
 }
 
 .root input:checked + .track {
@@ -55,4 +55,13 @@
 .label {
   color: var(--text-primary);
   font-weight: 600;
+}
+
+.root input:focus-visible + .track {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 2px;
+}
+.disabled .track { opacity: 0.5; }
+@media (prefers-reduced-motion: reduce) {
+  .track, .thumb { transition: none; }
 }

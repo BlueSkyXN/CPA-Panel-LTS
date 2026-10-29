@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/icons';
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { pluginsApi } from '@/services/api';
+import { isConfigNotJSONCompatible } from '@/services/api/config';
 import { useAuthStore, useConfigStore, useNotificationStore } from '@/stores';
 import { getErrorMessage, isRecord } from '@/utils/helpers';
 import type { PluginConfigField, PluginListEntry, PluginListResponse } from '@/types';
@@ -185,6 +186,16 @@ export function PluginsPage() {
 
       setEditingPlugin(null);
       setDraft(null);
+      if (isConfigNotJSONCompatible(err)) {
+        showConfirmation({
+          title: t('plugin_management.yaml_required_title'),
+          message: t('plugin_management.yaml_required_message'),
+          confirmText: t('plugin_management.open_yaml'),
+          cancelText: t('common.cancel'),
+          onConfirm: () => navigate('/config?tab=source'),
+        });
+        return;
+      }
       showNotification(
         hasStatus(err, 404)
           ? t('plugin_management.config_not_found')

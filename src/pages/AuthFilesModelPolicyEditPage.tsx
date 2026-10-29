@@ -75,6 +75,9 @@ export function AuthFilesModelPolicyEditPage() {
   const [baselineReady, setBaselineReady] = useState(false);
   const [unsupported, setUnsupported] = useState(false);
   const loadRequestRef = useRef(0);
+  const policySnapshotRef = useRef<Awaited<
+    ReturnType<typeof authFilesApi.getOauthModelPolicySnapshot>
+  > | null>(null);
 
   const [allowDraft, setAllowDraft] = useState<PolicyListDraft>(emptyListDraft());
   const [denyDraft, setDenyDraft] = useState<PolicyListDraft>(emptyListDraft());
@@ -102,24 +105,23 @@ export function AuthFilesModelPolicyEditPage() {
     setInitialLoading(true);
     setInitialLoadError(null);
     setBaselineReady(false);
+    policySnapshotRef.current = null;
     setUnsupported(false);
 
     try {
-      const [filesResult, policyResult, legacyResult] = await Promise.allSettled([
+      const [filesResult, policyResult] = await Promise.allSettled([
         authFilesApi.list(),
-        authFilesApi.getOauthModelPolicy(),
-        authFilesApi.getOauthExcludedModels(),
+        authFilesApi.getOauthModelPolicySnapshot(),
       ]);
       if (requestId !== loadRequestRef.current) return;
 
       if (filesResult.status === 'fulfilled') {
         setFiles(filesResult.value?.files ?? []);
       }
-      if (legacyResult.status === 'fulfilled') {
-        setLegacyExcluded(legacyResult.value ?? {});
-      }
       if (policyResult.status === 'fulfilled') {
-        setPolicies(policyResult.value ?? {});
+        policySnapshotRef.current = policyResult.value;
+        setPolicies(policyResult.value.value);
+        setLegacyExcluded(policyResult.value.excludedModels);
         setBaselineReady(true);
         return;
       }
@@ -248,6 +250,7 @@ export function AuthFilesModelPolicyEditPage() {
     const hasAllow = allowDraft.enabled || allowModels.length > 0;
     const hasDeny = denyDraft.enabled || denyModels.length > 0;
 
+    if (!policySnapshotRef.current) return;
     setSaving(true);
     try {
       await authFilesApi.saveOauthModelPolicy(
@@ -257,7 +260,8 @@ export function AuthFilesModelPolicyEditPage() {
               allowlist: hasAllow ? { enabled: allowDraft.enabled, models: allowModels } : null,
               denylist: hasDeny ? { enabled: denyDraft.enabled, models: denyModels } : null,
             }
-          : null
+          : null,
+        policySnapshotRef.current
       );
       showNotification(t('model_policy.save_success'), 'success');
       allowNextNavigation();
@@ -281,7 +285,7 @@ export function AuthFilesModelPolicyEditPage() {
     unsupported,
   ]);
 
-  // 两次写入按顺序执行：新 denylist 成功后再删旧键，第二步失败时旧限制仍保留。
+  // 同一次条件写入保存新 denylist 并移除对应旧规则。
   const handleMigrateLegacy = useCallback(() => {
     if (!resolvedProviderKey || legacyRules.length === 0) return;
     showConfirmation({
@@ -291,17 +295,22 @@ export function AuthFilesModelPolicyEditPage() {
       cancelText: t('common.cancel'),
       variant: 'danger',
       onConfirm: async () => {
+        if (!policySnapshotRef.current) return;
         setSaving(true);
         try {
           const merged = parseListText(`${denyDraft.text}\n${legacyRules.join('\n')}`);
-          await authFilesApi.saveOauthModelPolicy(resolvedProviderKey, {
-            allowlist:
-              allowDraft.enabled || parseListText(allowDraft.text).length > 0
-                ? { enabled: allowDraft.enabled, models: parseListText(allowDraft.text) }
-                : null,
-            denylist: { enabled: true, models: merged },
-          });
-          await authFilesApi.deleteOauthExcludedEntry(resolvedProviderKey);
+          await authFilesApi.saveOauthModelPolicy(
+            resolvedProviderKey,
+            {
+              allowlist:
+                allowDraft.enabled || parseListText(allowDraft.text).length > 0
+                  ? { enabled: allowDraft.enabled, models: parseListText(allowDraft.text) }
+                  : null,
+              denylist: { enabled: true, models: merged },
+            },
+            policySnapshotRef.current,
+            true
+          );
           showNotification(t('model_policy.migrate_success'), 'success');
           await loadInitialData();
         } catch (err: unknown) {

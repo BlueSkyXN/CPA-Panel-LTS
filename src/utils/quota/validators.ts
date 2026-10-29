@@ -9,6 +9,7 @@ export function resolveAuthProvider(file: AuthFileItem): string {
   const raw = file.provider ?? file.type ?? '';
   const key = String(raw).trim().toLowerCase().replace(/_/g, '-');
   if (key === 'x-ai' || key === 'grok') return 'xai';
+  if (key === 'kimi-ai') return 'kimi';
   return key;
 }
 
@@ -66,4 +67,11 @@ export function isIgnoredGeminiCliModel(modelId: string): boolean {
   return GEMINI_CLI_IGNORED_MODEL_PREFIXES.some(
     (prefix) => modelId === prefix || modelId.startsWith(`${prefix}-`)
   );
+}
+
+// Built-in quota views keep precedence even when a plugin also advertises the provider.
+export function isPluginQuotaFile(file: AuthFileItem): boolean {
+  const provider = resolveAuthProvider(file);
+  if (['antigravity', 'claude', 'codex', 'gemini-cli', 'kimi', 'xai', 'devin', 'meta'].includes(provider)) return false;
+  return file.supportsQuota === true || file['supports_quota'] === true;
 }

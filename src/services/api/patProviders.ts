@@ -1,4 +1,4 @@
-import { apiClient } from './client';
+import { ltsExtensionClient } from './client';
 import { pluginsApi } from './plugins';
 import {
   parsePatSummary,
@@ -68,7 +68,7 @@ export const patProvidersApi = {
     };
   },
   async summary(provider: PatProvider, authIndex: string) {
-    const response = await apiClient.get<unknown>(`/plugins/${provider}/summary`, {
+    const response = await ltsExtensionClient.get<unknown>(`/plugins/${provider}/summary`, {
       params: { auth_index: authIndex },
     });
     return parsePatSummary(response, provider, authIndex);

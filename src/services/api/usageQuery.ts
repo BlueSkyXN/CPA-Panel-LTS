@@ -1,4 +1,4 @@
-import { apiClient } from './client';
+import { ltsExtensionClient } from './client';
 import { isRecord } from '@/utils/helpers';
 import type {
   UsageQueryDetails,
@@ -88,8 +88,10 @@ export function decodeUsageQuerySession(v: unknown): UsageQuerySession {
     !number(v.now_ms) ||
     !number(v.max_page_size) ||
     !strings(v.models) ||
-    (v.export_version !== undefined && (!Number.isSafeInteger(v.export_version) || Number(v.export_version) < 1)) ||
-    (v.max_export_page_size !== undefined && (!Number.isSafeInteger(v.max_export_page_size) || Number(v.max_export_page_size) < 1)) ||
+    (v.export_version !== undefined &&
+      (!Number.isSafeInteger(v.export_version) || Number(v.export_version) < 1)) ||
+    (v.max_export_page_size !== undefined &&
+      (!Number.isSafeInteger(v.max_export_page_size) || Number(v.max_export_page_size) < 1)) ||
     (v.export_version === 1 && v.max_export_page_size === undefined) ||
     (v.analytics_version !== undefined &&
       (!number(v.analytics_version) || !Number.isSafeInteger(v.analytics_version))) ||
@@ -162,21 +164,21 @@ export function decodeUsageQueryDetails(v: unknown): UsageQueryDetails {
 
 export const usageQueryApi = {
   capabilities: async () =>
-    decodeUsageQuerySession(await apiClient.get<unknown>('/usage/query/capabilities')),
+    decodeUsageQuerySession(await ltsExtensionClient.get<unknown>('/usage/query/capabilities')),
   summary: async (q: UsageQueryRequest, signal?: AbortSignal) =>
     decodeUsageQuerySummary(
-      await apiClient.post<unknown>('/usage/query/summary', q, { signal, timeout: 30_000 })
+      await ltsExtensionClient.post<unknown>('/usage/query/summary', q, { signal, timeout: 30_000 })
     ),
   pricing: async (q: UsageQueryRequest, signal?: AbortSignal) =>
     decodeUsageQuerySummary(
-      await apiClient.post<unknown>('/usage/query/pricing', q, { signal, timeout: 30_000 })
+      await ltsExtensionClient.post<unknown>('/usage/query/pricing', q, { signal, timeout: 30_000 })
     ),
   exportPage: async (q: UsageQueryRequest, signal?: AbortSignal) =>
     decodeUsageQueryExport(
-      await apiClient.post<unknown>('/usage/query/export', q, { signal, timeout: 30_000 })
+      await ltsExtensionClient.post<unknown>('/usage/query/export', q, { signal, timeout: 30_000 })
     ),
   details: async (q: UsageQueryRequest, signal?: AbortSignal) =>
     decodeUsageQueryDetails(
-      await apiClient.post<unknown>('/usage/query/details', q, { signal, timeout: 30_000 })
+      await ltsExtensionClient.post<unknown>('/usage/query/details', q, { signal, timeout: 30_000 })
     ),
 };

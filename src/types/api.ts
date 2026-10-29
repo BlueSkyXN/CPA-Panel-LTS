@@ -36,4 +36,6 @@ export type ApiError = Error & {
   apiCode?: string;
   details?: unknown;
   data?: unknown;
+  /** Response headers, retained for v8 config revisions (ETag) on error responses. */
+  headers?: Record<string, unknown>;
 };

@@ -33,49 +33,69 @@ function apply(source, patch) {
   return result;
 }
 
+const ag = (body) => `oauth:\n  providers:\n    antigravity:\n${body}`;
+
 test('loads Antigravity words without dirtying the config', () => {
-  const result = apply('antigravity:\n  sensitive-words: [word-a, word-b]\n');
+  const result = apply(ag('      sensitive-words: [word-a, word-b]\n'));
   assert.deepEqual(result.words, ['word-a', 'word-b']);
   assert.equal(result.dirty, false);
 });
 
 test('word edits trim blanks and retain unknown YAML, comments and signature flags', () => {
-  const result = apply('# keep-comment\nantigravity:\n  sensitive-words: [old]\n  future-option: true\nantigravity-signature-cache-enabled: false\n', {
-    antigravitySensitiveWords: [' word-a ', '', 'word-b'],
-  });
+  const result = apply(
+    '# keep-comment\n' +
+      ag('      sensitive-words: [old]\n      future-option: true\n      signature-cache-enabled: false\n'),
+    { antigravitySensitiveWords: [' word-a ', '', 'word-b'] }
+  );
   assert.equal(result.dirty, true);
   assert.deepEqual(parse(result.yaml), {
-    antigravity: { 'sensitive-words': ['word-a', 'word-b'], 'future-option': true },
-    'antigravity-signature-cache-enabled': false,
+    oauth: {
+      providers: {
+        antigravity: {
+          'sensitive-words': ['word-a', 'word-b'],
+          'future-option': true,
+          'signature-cache-enabled': false,
+        },
+      },
+    },
   });
   assert.match(result.yaml, /# keep-comment/);
 });
 
-test('clearing words removes only the managed list and empty parent', () => {
-  for (const extra of ['', '  future-option: true\n']) {
-    const result = apply(`debug: true\nantigravity:\n  sensitive-words: [old]\n${extra}`, { antigravitySensitiveWords: [] });
-    assert.deepEqual(parse(result.yaml), extra ? { debug: true, antigravity: { 'future-option': true } } : { debug: true });
+test('clearing words removes only the managed list', () => {
+  for (const extra of ['', '      future-option: true\n']) {
+    const result = apply(
+      'observability: {logs: {debug: true}}\n' + ag(`      sensitive-words: [old]\n${extra}`),
+      { antigravitySensitiveWords: [] }
+    );
+    const output = parse(result.yaml);
+    assert.equal(output.observability.logs.debug, true);
+    assert.equal(output.oauth?.providers?.antigravity?.['sensitive-words'], undefined);
+    if (extra) assert.equal(output.oauth.providers.antigravity['future-option'], true);
   }
 });
 
 test('equal lists stay clean and unrelated changes preserve unmanaged words', () => {
-  const source = 'debug: false\nantigravity:\n  sensitive-words: [word-a]\n';
+  const source = 'observability: {logs: {debug: false}}\n' + ag('      sensitive-words: [word-a]\n');
   assert.equal(apply(source, { antigravitySensitiveWords: ['word-a'] }).dirty, false);
-  assert.deepEqual(parse(apply(source, { debug: true }).yaml).antigravity, { 'sensitive-words': ['word-a'] });
+  assert.deepEqual(parse(apply(source, { debug: true }).yaml).oauth.providers.antigravity, {
+    'sensitive-words': ['word-a'],
+  });
 });
 
 test('visual edits preserve unknown nested Core config under the same parent', () => {
-  const source = [
-    'antigravity:',
-    '  connection-pool:',
-    '    enabled: true',
-    '    idle-conn-timeout: 30s',
-    '    max-idle-conns-per-host: 2',
-    '  sensitive-words: [word-a]',
-    '',
-  ].join('\n');
+  const source = ag(
+    [
+      '      connection-pool:',
+      '        enabled: true',
+      '        idle-conn-timeout: 30s',
+      '        max-idle-conns-per-host: 2',
+      '      sensitive-words: [word-a]',
+      '',
+    ].join('\n')
+  );
   const result = apply(source, { antigravitySensitiveWords: ['word-b'] });
-  assert.deepEqual(parse(result.yaml).antigravity, {
+  assert.deepEqual(parse(result.yaml).oauth.providers.antigravity, {
     'connection-pool': {
       enabled: true,
       'idle-conn-timeout': '30s',

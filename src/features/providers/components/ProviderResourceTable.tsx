@@ -28,6 +28,7 @@ import {
 import type { OpenAIProviderConfig } from '@/types';
 import type { StatusBarData } from '@/utils/recentRequests';
 import type { ProviderResource } from '../types';
+import { resolveFullUsageStatus, type ProviderFullUsage } from '../fullUsageStatus';
 import { isMultiProtocolSponsorBrand } from '../sponsorDefinitions';
 import styles from './ProviderResourceTable.module.scss';
 import statusBarStyles from './providerStatusBar.module.scss';
@@ -37,6 +38,8 @@ interface ProviderResourceTableProps {
   selectedId?: string | null;
   disableMutations?: boolean;
   usageByProvider?: ProviderRecentUsageMap;
+  /** LTS: complete usage statistics; primary status source when available. */
+  fullUsage?: ProviderFullUsage;
   onView: (resource: ProviderResource) => void;
   onEdit: (resource: ProviderResource) => void;
   onDelete: (resource: ProviderResource) => void;
@@ -83,6 +86,7 @@ export function ProviderResourceTable({
   selectedId,
   disableMutations,
   usageByProvider,
+  fullUsage,
   onView,
   onEdit,
   onDelete,
@@ -235,29 +239,40 @@ export function ProviderResourceTable({
               <TableCell>
                 <div className={styles.statusCell}>
                   {renderStatus(resource)}
-                  {usageByProvider && !isSponsorResource(resource) ? (
-                    <>
-                      {(() => {
-                        const stats = resolveTotalStats(resource, usageByProvider);
-                        return (
-                          <div className={styles.stats}>
-                            <span className={`${styles.statPill} ${styles.statSuccess}`}>
-                              {t('stats.success')}: {stats.success}
-                            </span>
-                            <span className={`${styles.statPill} ${styles.statFailure}`}>
-                              {t('stats.failure')}: {stats.failure}
-                            </span>
-                          </div>
-                        );
-                      })()}
-                      <div className={styles.statusBarWrap}>
-                        <ProviderStatusBar
-                          statusData={resolveStatusBarData(resource, usageByProvider)}
-                          styles={statusBarStyles}
-                        />
-                      </div>
-                    </>
-                  ) : null}
+                  {(() => {
+                    if (isSponsorResource(resource)) return null;
+                    // Full usage (auth-index attribution) first; Core recent requests only as fallback.
+                    const usage = fullUsage
+                      ? resolveFullUsageStatus(resource, fullUsage)
+                      : usageByProvider
+                        ? {
+                            stats: resolveTotalStats(resource, usageByProvider),
+                            statusData: resolveStatusBarData(resource, usageByProvider),
+                          }
+                        : null;
+                    if (!usage) return null;
+                    return (
+                      <>
+                        <div
+                          className={styles.stats}
+                          data-usage-source={fullUsage ? 'full' : 'recent'}
+                        >
+                          <span className={`${styles.statPill} ${styles.statSuccess}`}>
+                            {t('stats.success')}: {usage.stats.success}
+                          </span>
+                          <span className={`${styles.statPill} ${styles.statFailure}`}>
+                            {t('stats.failure')}: {usage.stats.failure}
+                          </span>
+                        </div>
+                        <div className={styles.statusBarWrap}>
+                          <ProviderStatusBar
+                            statusData={usage.statusData}
+                            styles={statusBarStyles}
+                          />
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </TableCell>
               <TableCell

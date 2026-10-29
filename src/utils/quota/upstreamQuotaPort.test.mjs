@@ -223,33 +223,28 @@ test('parses current xAI billing supplements without breaking legacy fields', ()
 });
 
 test('uses the current official Grok Shell identity for xAI billing requests', () => {
-  const { XAI_GROK_CLIENT_VERSION, buildXaiGrokUserAgent, buildXaiRequestHeaders } =
-    quotaConstants;
+  const { XAI_GROK_CLIENT_VERSION, buildXaiGrokUserAgent, buildXaiRequestHeaders } = quotaConstants;
 
-  assert.equal(XAI_GROK_CLIENT_VERSION, '1.0.3');
+  assert.equal(XAI_GROK_CLIENT_VERSION, '1.0.46');
   assert.equal(
     buildXaiGrokUserAgent('MacIntel', 'Mozilla/5.0 (Macintosh; ARM64 Mac OS X)'),
-    'grok-pager/1.0.3 grok-shell/1.0.3 (macos; aarch64)'
+    'grok-pager/1.0.46 grok-shell/1.0.46 (macos; aarch64)'
   );
   assert.equal(
     buildXaiGrokUserAgent('MacIntel', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)'),
-    'grok-pager/1.0.3 grok-shell/1.0.3 (macos; x86_64)'
+    'grok-pager/1.0.46 grok-shell/1.0.46 (macos; x86_64)'
   );
   assert.equal(
-    buildXaiGrokUserAgent(
-      'MacIntel',
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
-      'macOS'
-    ),
-    'grok-pager/1.0.3 grok-shell/1.0.3 (macos; x86_64)'
+    buildXaiGrokUserAgent('MacIntel', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', 'macOS'),
+    'grok-pager/1.0.46 grok-shell/1.0.46 (macos; x86_64)'
   );
   assert.equal(
     buildXaiGrokUserAgent('Linux x86_64', 'Mozilla/5.0 (X11; Linux x86_64)'),
-    'grok-pager/1.0.3 grok-shell/1.0.3 (linux; x86_64)'
+    'grok-pager/1.0.46 grok-shell/1.0.46 (linux; x86_64)'
   );
   assert.equal(
     buildXaiGrokUserAgent('Win32', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'),
-    'grok-pager/1.0.3 grok-shell/1.0.3 (windows; x86_64)'
+    'grok-pager/1.0.46 grok-shell/1.0.46 (windows; x86_64)'
   );
   const headers = buildXaiRequestHeaders();
   assert.deepEqual(
@@ -257,7 +252,7 @@ test('uses the current official Grok Shell identity for xAI billing requests', (
     {
       Authorization: 'Bearer $TOKEN$',
       'x-xai-token-auth': 'xai-grok-cli',
-      'x-grok-client-version': '1.0.3',
+      'x-grok-client-version': '1.0.46',
       'x-grok-client-mode': 'interactive',
       accept: 'application/json',
       'user-agent': '<validated separately>',
@@ -265,7 +260,7 @@ test('uses the current official Grok Shell identity for xAI billing requests', (
   );
   assert.match(
     headers['user-agent'],
-    /^grok-pager\/1\.0\.3 grok-shell\/1\.0\.3 \((?:macos|windows|linux|unknown); (?:aarch64|x86_64|unknown)\)$/
+    /^grok-pager\/1\.0\.46 grok-shell\/1\.0\.46 \((?:macos|windows|linux|unknown); (?:aarch64|x86_64|unknown)\)$/
   );
 });
 
@@ -286,7 +281,7 @@ test('parses Antigravity quota-summary groups and current request identity', () 
   ]);
   assert.equal(
     quotaConstants.ANTIGRAVITY_REQUEST_HEADERS['User-Agent'],
-    'antigravity/cli/1.0.13 (aidev_client; os_type=darwin; arch=arm64)'
+    'antigravity/hub/2.24.0 (aidev_client; os_type=darwin; arch=arm64; cl=1000335682)'
   );
 
   const groups = buildAntigravityQuotaGroups({
@@ -351,9 +346,7 @@ test('loads Antigravity project metadata and keeps subscription lookup best-effo
         groups: [
           {
             displayName: 'Gemini models',
-            buckets: [
-              { bucketId: 'weekly', displayName: 'Weekly limit', remainingFraction: 0.5 },
-            ],
+            buckets: [{ bucketId: 'weekly', displayName: 'Weekly limit', remainingFraction: 0.5 }],
           },
         ],
       },
@@ -402,14 +395,10 @@ test('does not render a pseudo monthly row for weekly xAI credits with prepaid b
   assert.ok(billing);
 
   const markup = renderToStaticMarkup(
-    XAI_CONFIG.renderQuotaItems(
-      { status: 'success', billing },
-      i18n.t.bind(i18n),
-      {
-        styles: new Proxy({}, { get: (_target, key) => String(key) }),
-        QuotaProgressBar: () => null,
-      }
-    )
+    XAI_CONFIG.renderQuotaItems({ status: 'success', billing }, i18n.t.bind(i18n), {
+      styles: new Proxy({}, { get: (_target, key) => String(key) }),
+      QuotaProgressBar: () => null,
+    })
   );
 
   assert.match(markup, new RegExp(i18n.t('xai_quota.weekly_limit')));
@@ -477,6 +466,7 @@ test('invalidates model and quota caches together after auth-file mutation', () 
     'auth.json': { status: 'idle', rows: [] },
   });
   const before = useQuotaStore.getState().cacheGeneration;
+  const fileBefore = useQuotaStore.getState().fileGenerations['auth.json'] ?? 0;
 
   invalidateAuthFileDerivedCaches(
     (names) => {
@@ -486,7 +476,8 @@ test('invalidates model and quota caches together after auth-file mutation', () 
   );
 
   assert.deepEqual(invalidatedNames, ['auth.json']);
-  assert.equal(useQuotaStore.getState().cacheGeneration, before + 1);
+  assert.equal(useQuotaStore.getState().cacheGeneration, before);
+  assert.equal(useQuotaStore.getState().fileGenerations['auth.json'], fileBefore + 1);
   assert.deepEqual(useQuotaStore.getState().kimiQuota, {});
 });
 
@@ -738,4 +729,32 @@ test('uses the Kimi theme surface without changing other auth providers', () => 
   assert.equal(authFileConstants.isThemeSurfaceIconProvider(' KIMI '), true);
   assert.equal(authFileConstants.isThemeSurfaceIconProvider('codex'), false);
   assert.equal(authFileConstants.getThemeSurfaceIconBackground(), '#000000');
+});
+
+test('Antigravity remaining labels and availability respect structured window and weekly exhaustion', async () => {
+  const labels = await vite.ssrLoadModule('/src/utils/quota/antigravityLabels.ts');
+  for (const label of ['Weekly Limit Remaining', 'Weekly Limit: Remaining']) {
+    assert.equal(labels.resolveAntigravityBucketLabelKey(label), 'weekly_limit');
+  }
+  assert.equal(labels.resolveAntigravityBucketLabelKey('future label', '5h'), 'five_hour_limit');
+  assert.deepEqual(labels.resolveAntigravityGroupModels('Gemini models', 'Models within this group: Gemini Pro'), ['Gemini Pro', 'Gemini Argon']);
+  assert.deepEqual(labels.resolveAntigravityGroupModels('Gemini models', 'Models within this group: Gemini Argon'), ['Gemini Argon']);
+  const five = { label: 'Five Hour Limit Remaining', remainingFraction: 1 };
+  assert.equal(labels.shouldShowAntigravityQuotaAvailable(five, [five, { label: 'Weekly Limit Remaining', remainingFraction: 0 }]), false);
+  assert.equal(labels.shouldShowAntigravityQuotaAvailable(five, [five, { label: 'Weekly Limit Remaining', remainingFraction: 0.1 }]), true);
+});
+
+test('Claude dollar balances remain distinct from extra usage minor units and scoped limits', async () => {
+  const { normalizeClaudeUsageSnapshot } = await vite.ssrLoadModule('/src/services/api/claudeUsage.ts');
+  const { CLAUDE_CONFIG } = await vite.ssrLoadModule('/src/components/quota/quotaConfigs.ts');
+  const payload = {extra_usage:{is_enabled:false,used_credits:125,monthly_limit:1000,currency:'USD',user_disabled:true},iguana_necktie:{utilization:25,resets_at:'2026-10-25T00:00:00Z',limit_dollars:20,used_dollars:5,remaining_dollars:15},limits:[{kind:'weekly_scoped',percent:40,scope:{model:{display_name:'Fable'}},is_active:true}]};
+  const snapshot=normalizeClaudeUsageSnapshot(payload);
+  assert.equal(snapshot.extraUsage.usedCredits,125);
+  assert.equal(snapshot.dollarWindows[0].remainingDollars,15);
+  assert.deepEqual(buildClaudeQuotaWindows(payload,(key)=>key).map((row)=>row.id),['cloud-session-credits','seven-day-fable']);
+  const view=CLAUDE_CONFIG.renderQuotaItems(CLAUDE_CONFIG.buildSuccessState({windows:[],planType:null,...snapshot}),i18n.getFixedT('en'),{styles:{},QuotaProgressBar:()=>null});
+  const html=renderToStaticMarkup(view);
+  assert.match(html,/\$1\.25/);assert.match(html,/\$10\.00/);assert.match(html,/\$15\.00/);assert.match(html,/\$20\.00/);
+  assert.doesNotMatch(html,/NaN|No quota/);
+  assert.equal(normalizeClaudeUsageSnapshot({extra_usage:{used_credits:null}}).extraUsage.usedCredits,null);
 });

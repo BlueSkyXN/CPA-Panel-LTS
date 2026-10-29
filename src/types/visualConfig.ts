@@ -27,6 +27,7 @@ export type PayloadParamValidationErrorCode =
   | 'payload_invalid_json';
 
 export type VisualConfigFieldPath =
+	| 'reasoningEffortRules'
   | 'flowControlRulesText'
   | 'port'
   | 'errorLogsMaxFiles'
@@ -47,6 +48,7 @@ export type VisualConfigFieldPath =
   | 'streaming.nonstreamKeepaliveInterval';
 
 export type VisualConfigValidationErrorCode =
+	| 'reasoning_effort_rules'
   | 'flow_control_config'
   | 'port_range'
   | 'non_negative_integer'
@@ -95,6 +97,14 @@ export type PayloadFilterRule = {
   params: string[];
 };
 
+export type ReasoningEffortRule = {
+  id: string;
+  models: string[];
+  mode: string;
+  effort: string;
+  sourceFingerprint?: string;
+};
+
 export interface StreamingConfig {
   keepaliveSeconds: string;
   bootstrapRetries: string;
@@ -122,6 +132,7 @@ export type VisualConfigValues = FlowControlValues & {
   tlsKey: string;
   rmAllowRemote: boolean;
   rmSecretKey: string;
+  githubToken: string;
   rmDisableControlPanel: boolean;
   rmDisableAutoUpdatePanel: boolean;
   rmPanelRepo: string;
@@ -158,6 +169,7 @@ export type VisualConfigValues = FlowControlValues & {
   enableGeminiCliEndpoint: boolean;
   antigravitySignatureCacheEnabled: boolean;
   antigravitySensitiveWords: string[];
+  devinSensitiveWords: string[];
   antigravitySignatureBypassStrict: boolean;
   claudeHeaderUserAgent: string;
   claudeHeaderPackageVersion: string;
@@ -200,6 +212,7 @@ export type VisualConfigValues = FlowControlValues & {
   payloadOverrideRules: PayloadRule[];
   payloadOverrideRawRules: PayloadRule[];
   payloadFilterRules: PayloadFilterRule[];
+  reasoningEffortRules: ReasoningEffortRule[];
   streaming: StreamingConfig;
 };
 
@@ -217,6 +230,7 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   tlsKey: '',
   rmAllowRemote: false,
   rmSecretKey: '',
+  githubToken: '',
   rmDisableControlPanel: false,
   rmDisableAutoUpdatePanel: false,
   rmPanelRepo: '',
@@ -243,16 +257,17 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   disableImageGeneration: 'false',
   gptImage2BaseModel: '',
   authAutoRefreshWorkers: '',
-  quotaSwitchProject: true,
-  quotaSwitchPreviewModel: true,
+  quotaSwitchProject: false,
+  quotaSwitchPreviewModel: false,
   quotaAntigravityCredits: false,
   routingStrategy: 'round-robin',
   routingSessionAffinity: false,
   routingSessionAffinityTTL: '',
-  wsAuth: false,
+  wsAuth: true,
   enableGeminiCliEndpoint: false,
   antigravitySignatureCacheEnabled: true,
   antigravitySensitiveWords: [],
+  devinSensitiveWords: [],
   antigravitySignatureBypassStrict: false,
   claudeHeaderUserAgent: '',
   claudeHeaderPackageVersion: '',
@@ -289,6 +304,7 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   codexAbnormalReasoningRetryHedgeDelayMs: '1000',
   codexAbnormalReasoningRetryRequireDistinctAuth: true,
   payloadDefaultRules: [],
+  reasoningEffortRules: [],
   payloadDefaultRawRules: [],
   payloadOverrideRules: [],
   payloadOverrideRawRules: [],

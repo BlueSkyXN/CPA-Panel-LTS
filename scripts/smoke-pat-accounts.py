@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """PAT 表单和额度的 mock-Core 浏览器回归，不连接真实账号。"""
+from panel_browser import PanelBrowser, launch_chromium
 from email.parser import BytesParser
 from email.policy import default
 import importlib.util
@@ -32,7 +33,12 @@ def main():
         nonlocal auths
         request = route.request
         url = urlparse(request.url)
-        path = url.path.removeprefix("/v0/management")
+        if url.path.startswith("/v8/management"):
+            # v8 routes: credentials replace auth-files; plugin config is a v8 config node.
+            path = re.sub(r"^/credentials", "/auth-files", url.path.removeprefix("/v8/management"))
+            path = re.sub(r"^/config/plugins/configs/([^/]+)$", r"/plugins/\1/config", path)
+        else:
+            path = url.path.removeprefix("/v0/management")
         query = parse_qs(url.query)
         result = None
         if path == "/plugins":
@@ -93,11 +99,13 @@ def main():
             route.continue_()
         else:
             route.fulfill(status=200, content_type="application/json", body=json.dumps(result),
-                          headers={"Access-Control-Allow-Origin": "*", "x-cpa-support-plugin": "true"})
+                          headers={"Access-Control-Allow-Origin": "*", "x-cpa-support-plugin": "true",
+                                   "Access-Control-Expose-Headers": "etag,x-cpa-support-plugin",
+                                   "ETag": state.etag()})
 
     with smoke.run_server(smoke.StaticPanelHandler, app_port), smoke.run_server(smoke.MockCoreHandler, api_port, state):
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch()
+            browser = launch_chromium(playwright)
             context = browser.new_context(locale="en-US", viewport={"width": 1440, "height": 1000})
             context.add_init_script("if (!localStorage.getItem('cli-proxy-language')) localStorage.setItem('cli-proxy-language', JSON.stringify({state:{language:'en'},version:0}));")
             page = PanelBrowser(context.new_page())
@@ -107,6 +115,7 @@ def main():
             errors = []
             page.on("pageerror", lambda error: errors.append(str(error)))
             page.route("**/v0/management/**", api)
+            page.route("**/v8/management/**", api)
             base = f"http://127.0.0.1:{app_port}/management.html"
             page.goto(base + "#/login")
             page.locator('input[type="checkbox"]').first.check(force=True)

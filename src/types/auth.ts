@@ -20,6 +20,7 @@ export interface AuthState {
   serverBuildDate: string | null;
   serverRuntimeKind: ServerRuntimeKind;
   supportsPlugin: boolean;
+  supportsReasoningEffortPolicy: boolean;
   pluginSupportKnown: boolean;
   pluginSupportSource: PluginSupportSource;
   supportsFlowControl: boolean;

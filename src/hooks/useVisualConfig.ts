@@ -1,5 +1,13 @@
-import { readCodexCacheAffinity, isCodexCacheAffinityStrategy } from '@/lts/codexPolicy/cacheAffinity';
-import { readZcodeContextUsage, isZcodeContextUsageMode } from '@/lts/codexPolicy/zcodeContextUsage';
+import { projectConfigForVisual, applyVisualProjection } from '@/utils/v8VisualProjection';
+import { readConfigBoolean } from '@/utils/configBoolean';
+import {
+  readCodexCacheAffinity,
+  isCodexCacheAffinityStrategy,
+} from '@/lts/codexPolicy/cacheAffinity';
+import {
+  readZcodeContextUsage,
+  isZcodeContextUsageMode,
+} from '@/lts/codexPolicy/zcodeContextUsage';
 import {
   isCodexOutboundAcceptEncoding,
   isCodexOutboundRequestCompression,
@@ -9,7 +17,7 @@ import {
 import { FLOW_FIELDS, flowControlValidation, readFlowControlValues } from '@/lts/flowControl/model';
 import { writeFlowControlValues } from '@/lts/flowControl/yaml';
 import { useCallback, useMemo, useReducer } from 'react';
-import { isAlias, isMap, isNode, isScalar, isSeq, parse as parseYaml, parseDocument } from 'yaml';
+import { isAlias, isMap, isNode, isScalar, isSeq, parseDocument } from 'yaml';
 import type { Node, Pair, YAMLMap, YAMLSeq } from 'yaml';
 import type {
   CodexAbnormalReasoningRetryAction,
@@ -33,6 +41,12 @@ import type {
   PayloadParamValidationErrorCode,
 } from '@/types/visualConfig';
 import { DEFAULT_VISUAL_VALUES } from '@/types/visualConfig';
+import { useAuthStore } from '@/stores/useAuthStore';
+import {
+  parseReasoningEffortRules,
+  syncReasoningEffortRules,
+  validReasoningEffortRules,
+} from '@/components/config/reasoningEffort';
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -108,11 +122,7 @@ function deleteIfMapEmpty(doc: YamlDocument, path: YamlPath): void {
 }
 
 function setBooleanInDoc(doc: YamlDocument, path: YamlPath, value: boolean): void {
-  if (value) {
-    doc.setIn(path, true);
-    return;
-  }
-  if (docHas(doc, path)) doc.setIn(path, false);
+  doc.setIn(path, value);
 }
 
 function setStringInDoc(doc: YamlDocument, path: YamlPath, value: unknown): void {
@@ -164,7 +174,7 @@ function setIntFromStringInDoc(doc: YamlDocument, path: YamlPath, value: unknown
   }
 
   const parsed = Number(trimmed);
-  if (Number.isFinite(parsed)) {
+  if (Number.isSafeInteger(parsed)) {
     doc.setIn(path, parsed);
     return;
   }
@@ -208,7 +218,7 @@ function parseCodexAbnormalReasoningRetryAction(
       return 'disabled';
     }
   }
-  return enabled === true ? 'retry' : 'disabled';
+  return readConfigBoolean(enabled) ? 'retry' : 'disabled';
 }
 
 function parseCodexAbnormalReasoningRetryClientUsageAggregation(
@@ -280,7 +290,11 @@ function payloadNodeIdentity(node: unknown): unknown {
   const metadata = [node.comment, node.commentBefore, node.anchor, node.tag];
   if (isAlias(node)) return ['alias', metadata, node.source];
   if (isMap(node)) {
-    return ['map', metadata, node.items.map(pair => [payloadNodeIdentity(pair.key), payloadNodeIdentity(pair.value)])];
+    return [
+      'map',
+      metadata,
+      node.items.map((pair) => [payloadNodeIdentity(pair.key), payloadNodeIdentity(pair.value)]),
+    ];
   }
   if (isSeq(node)) return ['seq', metadata, node.items.map(payloadNodeIdentity)];
   return ['scalar', metadata, node.value];
@@ -290,20 +304,30 @@ function snapshotPayloadSections(
   doc: YamlDocument,
   payload: Record<string, unknown> | null
 ): Record<PayloadDirtyField, string> {
-  return Object.fromEntries(PAYLOAD_DIRTY_FIELDS.map(field => {
-    const section = PAYLOAD_SECTIONS[field];
-    // resolved value 也参与比较，捕获定义在该子树之外的 anchor 被修改的情况。
-    return [field, JSON.stringify([payloadNodeIdentity(doc.getIn(['payload', section], true)), payload?.[section]])];
-  })) as Record<PayloadDirtyField, string>;
+  return Object.fromEntries(
+    PAYLOAD_DIRTY_FIELDS.map((field) => {
+      const section = PAYLOAD_SECTIONS[field];
+      // resolved value 也参与比较，捕获定义在该子树之外的 anchor 被修改的情况。
+      return [
+        field,
+        JSON.stringify([
+          payloadNodeIdentity(doc.getIn(['payload', section], true)),
+          payload?.[section],
+        ]),
+      ];
+    })
+  ) as Record<PayloadDirtyField, string>;
 }
 
 // codex.outbound visual fields: [field, YAML key under codex.outbound, accepted-value check].
 const CODEX_OUTBOUND_FIELDS: ReadonlyArray<
   readonly [
-    | 'codexOutboundTransport'
-    | 'codexOutboundWebsocketThresholdBytes'
-    | 'codexOutboundRequestCompression'
-    | 'codexOutboundAcceptEncoding',
+    (
+      | 'codexOutboundTransport'
+      | 'codexOutboundWebsocketThresholdBytes'
+      | 'codexOutboundRequestCompression'
+      | 'codexOutboundAcceptEncoding'
+    ),
     string,
     (value: string) => boolean,
   ]
@@ -346,14 +370,14 @@ function hasCodexAbnormalReasoningRetryDirtyFields(dirtyFields: Set<string>): bo
 function getNonNegativeIntegerError(value: string): 'non_negative_integer' | undefined {
   const trimmed = value.trim();
   if (!trimmed) return undefined;
-  if (!/^-?\d+$/.test(trimmed)) return 'non_negative_integer';
+  if (getIntegerError(trimmed)) return 'non_negative_integer';
   return Number(trimmed) >= 0 ? undefined : 'non_negative_integer';
 }
 
 function getIntegerError(value: string): 'integer' | undefined {
   const trimmed = value.trim();
   if (!trimmed) return undefined;
-  return /^-?\d+$/.test(trimmed) ? undefined : 'integer';
+  return /^-?\d+$/.test(trimmed) && Number.isSafeInteger(Number(trimmed)) ? undefined : 'integer';
 }
 
 function getNonNegativeIntegerListError(values: string[]): 'non_negative_integer' | undefined {
@@ -384,15 +408,19 @@ export function getVisualConfigValidationErrors(
 ): VisualConfigValidationErrors {
   return {
     ...flowControlValidation(values, dirtyFields),
+    reasoningEffortRules:
+      dirtyFields.has('reasoningEffortRules') && !validReasoningEffortRules(values.reasoningEffortRules)
+        ? 'reasoning_effort_rules'
+        : undefined,
     port: getPortError(values.port),
     errorLogsMaxFiles: getNonNegativeIntegerError(values.errorLogsMaxFiles),
     logsMaxTotalSizeMb: getNonNegativeIntegerError(values.logsMaxTotalSizeMb),
     redisUsageQueueRetentionSeconds: getRedisRetentionError(values.redisUsageQueueRetentionSeconds),
     requestRetry: getNonNegativeIntegerError(values.requestRetry),
-    maxRetryCredentials: getNonNegativeIntegerError(values.maxRetryCredentials),
-    maxRetryInterval: getNonNegativeIntegerError(values.maxRetryInterval),
+    maxRetryCredentials: getIntegerError(values.maxRetryCredentials),
+    maxRetryInterval: getIntegerError(values.maxRetryInterval),
     transientErrorCooldownSeconds: getIntegerError(values.transientErrorCooldownSeconds),
-    authAutoRefreshWorkers: getNonNegativeIntegerError(values.authAutoRefreshWorkers),
+    authAutoRefreshWorkers: getIntegerError(values.authAutoRefreshWorkers),
     codexAbnormalReasoningRetryMaxRetries: getNonNegativeIntegerError(
       values.codexAbnormalReasoningRetryMaxRetries
     ),
@@ -408,9 +436,9 @@ export function getVisualConfigValidationErrors(
     codexAbnormalReasoningRetryReasoningTokens: getNonNegativeIntegerListError(
       values.codexAbnormalReasoningRetryReasoningTokens
     ),
-    'streaming.keepaliveSeconds': getNonNegativeIntegerError(values.streaming.keepaliveSeconds),
-    'streaming.bootstrapRetries': getNonNegativeIntegerError(values.streaming.bootstrapRetries),
-    'streaming.nonstreamKeepaliveInterval': getNonNegativeIntegerError(
+    'streaming.keepaliveSeconds': getIntegerError(values.streaming.keepaliveSeconds),
+    'streaming.bootstrapRetries': getIntegerError(values.streaming.bootstrapRetries),
+    'streaming.nonstreamKeepaliveInterval': getIntegerError(
       values.streaming.nonstreamKeepaliveInterval
     ),
   };
@@ -786,7 +814,7 @@ function parsePluginStoreAuthRules(raw: unknown): PluginStoreAuthRule[] {
         headerName: typeof record['header-name'] === 'string' ? record['header-name'] : '',
         headerValueEnv:
           typeof record['header-value-env'] === 'string' ? record['header-value-env'] : '',
-        allowInsecure: Boolean(record['allow-insecure'] ?? record.allow_insecure),
+        allowInsecure: readConfigBoolean(record['allow-insecure'] ?? record.allow_insecure),
       };
       return rule.match.trim() ||
         rule.type !== 'none' ||
@@ -1101,7 +1129,7 @@ function syncEntryMap<T extends { id: string }>(
   const items = entries.map((entry) => {
     const key = getKey(entry).trim();
     const pair = pairsById.get(entry.id) ?? doc.createPair(key, getValue(entry));
-    const prior = baseline.find(candidate => candidate.id === entry.id);
+    const prior = baseline.find((candidate) => candidate.id === entry.id);
     if (isScalar(pair.key)) pair.key.value = key;
     else pair.key = doc.createNode(key);
     // 未修改的对象/alias 保留原节点；不能因编辑同级参数而重建它们。
@@ -1124,29 +1152,65 @@ function syncConditionSequence(
   baseline: PayloadParamEntry[] | undefined,
   desired: PayloadParamEntry[] | undefined
 ): void {
+  // Unedited conditions retain their original grouping and nested value comments.
+  if (JSON.stringify(baseline ?? []) === JSON.stringify(desired ?? [])) return;
+
   const entries = (desired ?? []).filter((entry) => entry.path.trim());
   if (entries.length === 0) {
     deleteMapValue(modelMap, key);
     return;
   }
   const seq = ensureSeqValue(doc, modelMap, key);
-  const nodesById = new Map((baseline ?? []).map((entry, index) => [entry.id, seq.items[index]]));
+  if (seq.items.some(isAlias)) throw new VisualConfigApplyError('visual_apply_failed');
+  const flattened: YAMLMap[] = [];
+  seq.items.forEach((node, itemIndex) => {
+    if (isMap(node)) {
+      // Match parsePayloadConditions' Object.entries order, including numeric keys.
+      // Every map field is a condition, not an unknown extension field. The backend
+      // ANDs all fields across all maps, so singleton maps preserve its semantics.
+      Object.keys(node.toJSON()).forEach((path) => {
+        const pair = mapPair(node, path);
+        if (!pair) return;
+        const item = doc.createNode({}) as YAMLMap;
+        item.flow = node.flow;
+        item.items = [pair];
+        if (pair === node.items[0]) {
+          item.commentBefore = itemIndex === 0 ? seq.commentBefore : node.commentBefore;
+          item.spaceBefore = node.spaceBefore;
+        }
+        if (pair === node.items[node.items.length - 1]) item.comment = node.comment;
+        flattened.push(item);
+      });
+    } else if (isScalar(node) && typeof node.value === 'string') {
+      // Keep the parser's compatibility with scalar entries without shifting IDs.
+      const item = doc.createNode({ [node.value]: '' }) as YAMLMap;
+      preserveNodeComments(node, item);
+      if (itemIndex === 0) item.commentBefore = seq.commentBefore;
+      flattened.push(item);
+    }
+  });
+  const nodesById = new Map((baseline ?? []).map((entry, index) => [entry.id, flattened[index]]));
+  const priorById = new Map((baseline ?? []).map((entry) => [entry.id, entry]));
   const items = entries.map((entry) => {
-    const existing = nodesById.get(entry.id);
-    if (isAlias(existing)) throw new VisualConfigApplyError('visual_apply_failed');
-    const item = isMap(existing) ? existing : (doc.createNode({}) as YAMLMap);
-    const prior = baseline?.find((candidate) => candidate.id === entry.id);
-    syncEntryMap(
-      doc,
-      item,
-      prior ? [prior] : [],
-      [entry],
-      (value) => value.path,
-      (value) => serializePayloadParamEntryValue(value)
-    );
+    const item = nodesById.get(entry.id) ?? (doc.createNode({}) as YAMLMap);
+    const prior = priorById.get(entry.id);
+    const pair = item.items[0];
+    if (pair) {
+      if (isScalar(pair.key)) pair.key.value = entry.path.trim();
+      else pair.key = doc.createNode(entry.path.trim());
+      if (prior?.value !== entry.value || prior?.valueType !== entry.valueType) {
+        updatePairValue(doc, pair, serializePayloadParamEntryValue(entry));
+      }
+    } else {
+      item.items.push(doc.createPair(entry.path.trim(), serializePayloadParamEntryValue(entry)));
+    }
     return item;
   });
-  replaceSequenceItems(seq, items);
+  // These are new singleton wrappers; replaceSequenceItems would discard their
+  // comments because they are not members of the original sequence.
+  seq.items = items;
+  seq.commentBefore = items[0]?.commentBefore;
+  if (items[0]) items[0].commentBefore = undefined;
 }
 
 function syncPayloadModels(
@@ -1374,6 +1438,7 @@ function getNextDirtyFields(
       'tlsKey',
       'rmAllowRemote',
       'rmSecretKey',
+      'githubToken',
       'rmDisableControlPanel',
       'rmPanelRepo',
       'authDir',
@@ -1414,7 +1479,20 @@ function getNextDirtyFields(
   if (Object.prototype.hasOwnProperty.call(patch, 'antigravitySensitiveWords')) {
     updateDirty(
       'antigravitySensitiveWords',
-      areStringArraysEqual(nextValues.antigravitySensitiveWords, baselineValues.antigravitySensitiveWords)
+      areStringArraysEqual(
+        nextValues.antigravitySensitiveWords,
+        baselineValues.antigravitySensitiveWords
+      )
+    );
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, 'devinSensitiveWords')) {
+    updateDirty(
+      'devinSensitiveWords',
+      areStringArraysEqual(
+        nextValues.devinSensitiveWords,
+        baselineValues.devinSensitiveWords
+      )
     );
   }
 
@@ -1464,6 +1542,12 @@ function getNextDirtyFields(
     );
   }
 
+  if (Object.prototype.hasOwnProperty.call(patch, 'reasoningEffortRules')) {
+    updateDirty(
+      'reasoningEffortRules',
+      JSON.stringify(nextValues.reasoningEffortRules) === JSON.stringify(baselineValues.reasoningEffortRules)
+    );
+  }
   if (Object.prototype.hasOwnProperty.call(patch, 'payloadDefaultRules')) {
     updateDirty(
       'payloadDefaultRules',
@@ -1589,12 +1673,12 @@ export function useVisualConfig() {
 
   const loadVisualValuesFromYaml = useCallback((yamlContent: string) => {
     try {
-      const document = parseDocument(yamlContent);
+      const document = projectConfigForVisual(yamlContent);
       if (document.errors.length > 0) {
         throw new Error(document.errors[0]?.message ?? 'Invalid YAML');
       }
 
-      const parsedRaw: unknown = parseYaml(yamlContent) || {};
+      const parsedRaw: unknown = document.toJS();
       const parsed = asRecord(parsedRaw) ?? {};
       const tls = asRecord(parsed.tls);
       const remoteManagement = asRecord(parsed['remote-management']);
@@ -1620,17 +1704,20 @@ export function useVisualConfig() {
         host: typeof parsed.host === 'string' ? parsed.host : '',
         port: String(parsed.port ?? ''),
 
-        tlsEnable: Boolean(tls?.enable),
+        tlsEnable: readConfigBoolean(tls?.enable),
         tlsCert: typeof tls?.cert === 'string' ? tls.cert : '',
         tlsKey: typeof tls?.key === 'string' ? tls.key : '',
 
-        rmAllowRemote: Boolean(remoteManagement?.['allow-remote']),
+        githubToken: typeof parsed['github-token'] === 'string' ? parsed['github-token'] : '',
+        rmAllowRemote: readConfigBoolean(remoteManagement?.['allow-remote']),
         rmSecretKey:
           typeof remoteManagement?.['secret-key'] === 'string'
             ? remoteManagement['secret-key']
             : '',
-        rmDisableControlPanel: Boolean(remoteManagement?.['disable-control-panel']),
-        rmDisableAutoUpdatePanel: Boolean(remoteManagement?.['disable-auto-update-panel']),
+        rmDisableControlPanel: readConfigBoolean(remoteManagement?.['disable-control-panel']),
+        rmDisableAutoUpdatePanel: readConfigBoolean(
+          remoteManagement?.['disable-auto-update-panel']
+        ),
         rmPanelRepo:
           typeof remoteManagement?.['panel-github-repository'] === 'string'
             ? remoteManagement['panel-github-repository']
@@ -1640,41 +1727,45 @@ export function useVisualConfig() {
 
         authDir: typeof parsed['auth-dir'] === 'string' ? parsed['auth-dir'] : '',
         apiKeysText: resolveApiKeysText(parsed),
-        pluginsEnabled: Boolean(plugins?.enabled),
+        pluginsEnabled: readConfigBoolean(plugins?.enabled),
         pluginStoreSources: parsePluginStoreSources(plugins?.['store-sources']),
         pluginStoreAuth: parsePluginStoreAuthRules(plugins?.['store-auth']),
 
-        debug: Boolean(parsed.debug),
-        commercialMode: Boolean(parsed['commercial-mode']),
-        loggingToFile: Boolean(parsed['logging-to-file']),
+        debug: readConfigBoolean(parsed.debug),
+        commercialMode: readConfigBoolean(parsed['commercial-mode']),
+        loggingToFile: readConfigBoolean(parsed['logging-to-file']),
         logsMaxTotalSizeMb: String(parsed['logs-max-total-size-mb'] ?? ''),
         errorLogsMaxFiles: String(parsed['error-logs-max-files'] ?? ''),
-        usageStatisticsEnabled: Boolean(parsed['usage-statistics-enabled']),
+        usageStatisticsEnabled: readConfigBoolean(parsed['usage-statistics-enabled']),
         redisUsageQueueRetentionSeconds: String(
           parsed['redis-usage-queue-retention-seconds'] ?? ''
         ),
 
         proxyUrl: typeof parsed['proxy-url'] === 'string' ? parsed['proxy-url'] : '',
-        forceModelPrefix: Boolean(parsed['force-model-prefix']),
-        passthroughHeaders: Boolean(parsed['passthrough-headers']),
+        forceModelPrefix: readConfigBoolean(parsed['force-model-prefix']),
+        passthroughHeaders: readConfigBoolean(parsed['passthrough-headers']),
         requestRetry: String(parsed['request-retry'] ?? ''),
         maxRetryCredentials: String(parsed['max-retry-credentials'] ?? ''),
         maxRetryInterval: String(parsed['max-retry-interval'] ?? ''),
         transientErrorCooldownSeconds: String(parsed['transient-error-cooldown-seconds'] ?? ''),
-        disableCooling: Boolean(parsed['disable-cooling']),
+        disableCooling: readConfigBoolean(parsed['disable-cooling']),
         disableImageGeneration: parseDisableImageGenerationMode(parsed['disable-image-generation']),
         gptImage2BaseModel:
           typeof parsed['gpt-image-2-base-model'] === 'string'
             ? parsed['gpt-image-2-base-model']
             : '',
         authAutoRefreshWorkers: String(parsed['auth-auto-refresh-workers'] ?? ''),
-        wsAuth: Boolean(parsed['ws-auth']),
-        enableGeminiCliEndpoint: Boolean(parsed['enable-gemini-cli-endpoint']),
-        antigravitySignatureCacheEnabled: Boolean(
-          parsed['antigravity-signature-cache-enabled'] ?? true
+        wsAuth: readConfigBoolean(parsed['ws-auth'], true),
+        enableGeminiCliEndpoint: readConfigBoolean(parsed['enable-gemini-cli-endpoint']),
+        antigravitySignatureCacheEnabled: readConfigBoolean(
+          parsed['antigravity-signature-cache-enabled'],
+          true
         ),
-        antigravitySignatureBypassStrict: Boolean(parsed['antigravity-signature-bypass-strict']),
+        antigravitySignatureBypassStrict: readConfigBoolean(
+          parsed['antigravity-signature-bypass-strict']
+        ),
         antigravitySensitiveWords: parseStringList(antigravity?.['sensitive-words']),
+        devinSensitiveWords: parseStringList(asRecord(parsed.devin)?.['sensitive-words']),
 
         claudeHeaderUserAgent:
           typeof claudeHeaderDefaults?.['user-agent'] === 'string'
@@ -1693,7 +1784,7 @@ export function useVisualConfig() {
           typeof claudeHeaderDefaults?.arch === 'string' ? claudeHeaderDefaults.arch : '',
         claudeHeaderTimeout:
           typeof claudeHeaderDefaults?.timeout === 'string' ? claudeHeaderDefaults.timeout : '',
-        claudeHeaderStabilizeDeviceProfile: Boolean(
+        claudeHeaderStabilizeDeviceProfile: readConfigBoolean(
           claudeHeaderDefaults?.['stabilize-device-profile']
         ),
         ...readFlowControlValues(parsed),
@@ -1705,7 +1796,7 @@ export function useVisualConfig() {
           typeof codexHeaderDefaults?.['beta-features'] === 'string'
             ? codexHeaderDefaults['beta-features']
             : '',
-        codexIdentityConfuse: Boolean(codex?.['identity-confuse']),
+        codexIdentityConfuse: readConfigBoolean(codex?.['identity-confuse']),
         codexZcodeContextUsage: readZcodeContextUsage(codex?.['zcode-context-usage']),
         codexCacheAffinityStrategy: readCodexCacheAffinity(codex?.['cache-affinity']),
         ...(() => {
@@ -1737,10 +1828,10 @@ export function useVisualConfig() {
         codexAbnormalReasoningRetryAuthIds: parseStringList(
           codexAbnormalReasoningRetry?.['auth-ids']
         ),
-        codexAbnormalReasoningRetryStreamBuffer:
-          typeof codexAbnormalReasoningRetry?.['stream-buffer'] === 'boolean'
-            ? codexAbnormalReasoningRetry['stream-buffer']
-            : DEFAULT_VISUAL_VALUES.codexAbnormalReasoningRetryStreamBuffer,
+        codexAbnormalReasoningRetryStreamBuffer: readConfigBoolean(
+          codexAbnormalReasoningRetry?.['stream-buffer'],
+          DEFAULT_VISUAL_VALUES.codexAbnormalReasoningRetryStreamBuffer
+        ),
         codexAbnormalReasoningRetryStreamBufferMaxBytes: String(
           codexAbnormalReasoningRetry?.['stream-buffer-max-bytes'] ??
             DEFAULT_VISUAL_VALUES.codexAbnormalReasoningRetryStreamBufferMaxBytes
@@ -1763,7 +1854,7 @@ export function useVisualConfig() {
         codexAbnormalReasoningRetryFallbackPolicy: parseCodexAbnormalReasoningRetryFallbackPolicy(
           codexAbnormalReasoningRetry?.['fallback-policy']
         ),
-        codexAbnormalReasoningRetryHedgedRetryEnabled: Boolean(
+        codexAbnormalReasoningRetryHedgedRetryEnabled: readConfigBoolean(
           codexAbnormalReasoningHedgedRetry?.enabled
         ),
         codexAbnormalReasoningRetryHedgedRetryMode: parseCodexAbnormalReasoningRetryHedgedRetryMode(
@@ -1773,17 +1864,17 @@ export function useVisualConfig() {
           codexAbnormalReasoningHedgedRetry?.['hedge-delay-ms'] ??
             DEFAULT_VISUAL_VALUES.codexAbnormalReasoningRetryHedgeDelayMs
         ),
-        codexAbnormalReasoningRetryRequireDistinctAuth:
-          typeof codexAbnormalReasoningHedgedRetry?.['require-distinct-auth'] === 'boolean'
-            ? codexAbnormalReasoningHedgedRetry['require-distinct-auth']
-            : DEFAULT_VISUAL_VALUES.codexAbnormalReasoningRetryRequireDistinctAuth,
+        codexAbnormalReasoningRetryRequireDistinctAuth: readConfigBoolean(
+          codexAbnormalReasoningHedgedRetry?.['require-distinct-auth'],
+          DEFAULT_VISUAL_VALUES.codexAbnormalReasoningRetryRequireDistinctAuth
+        ),
 
-        quotaSwitchProject: Boolean(quotaExceeded?.['switch-project'] ?? true),
-        quotaSwitchPreviewModel: Boolean(quotaExceeded?.['switch-preview-model'] ?? true),
-        quotaAntigravityCredits: Boolean(quotaExceeded?.['antigravity-credits'] ?? false),
+        quotaSwitchProject: readConfigBoolean(quotaExceeded?.['switch-project']),
+        quotaSwitchPreviewModel: readConfigBoolean(quotaExceeded?.['switch-preview-model']),
+        quotaAntigravityCredits: readConfigBoolean(quotaExceeded?.['antigravity-credits'] ?? false),
 
         routingStrategy: parseRoutingStrategy(routing?.strategy),
-        routingSessionAffinity: Boolean(
+        routingSessionAffinity: readConfigBoolean(
           routing?.['session-affinity'] ?? routing?.sessionAffinity ?? routing?.['sessionAffinity']
         ),
         routingSessionAffinityTTL:
@@ -1796,6 +1887,7 @@ export function useVisualConfig() {
                 : '',
 
         payloadDefaultRules: parsePayloadRules(payload?.default),
+        reasoningEffortRules: parseReasoningEffortRules(parsed['reasoning-effort']),
         payloadDefaultRawRules: parseRawPayloadRules(payload?.['default-raw']),
         payloadOverrideRules: parsePayloadRules(payload?.override),
         payloadOverrideRawRules: parseRawPayloadRules(payload?.['override-raw']),
@@ -1808,7 +1900,11 @@ export function useVisualConfig() {
         },
       };
 
-      dispatch({ type: 'load_success', values: newValues, payloadBaseline: snapshotPayloadSections(document, payload) });
+      dispatch({
+        type: 'load_success',
+        values: newValues,
+        payloadBaseline: snapshotPayloadSections(document, payload),
+      });
       return { ok: true as const };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Invalid YAML';
@@ -1820,10 +1916,12 @@ export function useVisualConfig() {
   const applyVisualChangesToYaml = useCallback(
     (currentYaml: string): string => {
       try {
-        const doc = parseDocument(currentYaml);
+        const doc = projectConfigForVisual(currentYaml);
+        const before = doc.clone();
         if (doc.errors.length > 0) throw new VisualConfigApplyError('visual_apply_failed');
         if (hasPayloadDirtyFields(dirtyFields)) {
-          if (isAlias(doc.getIn(['payload'], true))) throw new VisualConfigApplyError('visual_apply_failed');
+          if (isAlias(doc.getIn(['payload'], true)))
+            throw new VisualConfigApplyError('visual_apply_failed');
           const currentPayload = asRecord(asRecord(doc.toJS())?.payload);
           const currentSnapshots = snapshotPayloadSections(doc, currentPayload);
           for (const field of PAYLOAD_DIRTY_FIELDS) {
@@ -1852,6 +1950,8 @@ export function useVisualConfig() {
           if (dirtyFields.has('tlsKey')) setStringInDoc(doc, ['tls', 'key'], values.tlsKey);
           deleteIfMapEmpty(doc, ['tls']);
         }
+
+        if (dirtyFields.has('githubToken')) setStringInDoc(doc, ['github-token'], values.githubToken);
 
         const remoteManagementDirty =
           dirtyFields.has('rmAllowRemote') ||
@@ -2018,8 +2118,22 @@ export function useVisualConfig() {
         }
         if (dirtyFields.has('antigravitySensitiveWords')) {
           ensureMapInDoc(doc, ['antigravity']);
-          setStringListInDoc(doc, ['antigravity', 'sensitive-words'], values.antigravitySensitiveWords);
+          setStringListInDoc(
+            doc,
+            ['antigravity', 'sensitive-words'],
+            values.antigravitySensitiveWords
+          );
           deleteIfMapEmpty(doc, ['antigravity']);
+        }
+
+        if (dirtyFields.has('devinSensitiveWords')) {
+          ensureMapInDoc(doc, ['devin']);
+          setStringListInDoc(
+            doc,
+            ['devin', 'sensitive-words'],
+            values.devinSensitiveWords
+          );
+          deleteIfMapEmpty(doc, ['devin']);
         }
 
         const claudeHeadersDirty =
@@ -2095,24 +2209,37 @@ export function useVisualConfig() {
           deleteIfMapEmpty(doc, ['codex-header-defaults']);
         }
 
-        const abnormalReasoningRetryDirty =
-          hasCodexAbnormalReasoningRetryDirtyFields(dirtyFields);
+        const abnormalReasoningRetryDirty = hasCodexAbnormalReasoningRetryDirtyFields(dirtyFields);
         const outboundDirty = CODEX_OUTBOUND_FIELDS.some(([field]) => dirtyFields.has(field));
         const contextUsageDirty = dirtyFields.has('codexZcodeContextUsage');
-        const codexDirty = dirtyFields.has('codexIdentityConfuse') || dirtyFields.has('codexCacheAffinityStrategy') || contextUsageDirty || outboundDirty || abnormalReasoningRetryDirty;
+        const codexDirty =
+          dirtyFields.has('codexIdentityConfuse') ||
+          dirtyFields.has('codexCacheAffinityStrategy') ||
+          contextUsageDirty ||
+          outboundDirty ||
+          abnormalReasoningRetryDirty;
         if (codexDirty) {
           if (contextUsageDirty) {
             const codexNode = doc.getIn(['codex'], true);
-            if (codexNode && !isMap(codexNode) && !(isScalar(codexNode) && codexNode.value == null)) {
+            if (
+              codexNode &&
+              !isMap(codexNode) &&
+              !(isScalar(codexNode) && codexNode.value == null)
+            ) {
               throw new VisualConfigApplyError('visual_apply_failed');
             }
           }
-          if (outboundDirty &&
-              (isAlias(doc.getIn(['codex'], true)) || isAlias(doc.getIn(['codex', 'outbound'], true)))) {
+          if (
+            outboundDirty &&
+            (isAlias(doc.getIn(['codex'], true)) || isAlias(doc.getIn(['codex', 'outbound'], true)))
+          ) {
             throw new VisualConfigApplyError('visual_apply_failed');
           }
-          if (dirtyFields.has('codexCacheAffinityStrategy') &&
-              (isAlias(doc.getIn(['codex'], true)) || isAlias(doc.getIn(['codex', 'cache-affinity'], true)))) {
+          if (
+            dirtyFields.has('codexCacheAffinityStrategy') &&
+            (isAlias(doc.getIn(['codex'], true)) ||
+              isAlias(doc.getIn(['codex', 'cache-affinity'], true)))
+          ) {
             throw new VisualConfigApplyError('visual_apply_failed');
           }
           ensureMapInDoc(doc, ['codex']);
@@ -2142,7 +2269,8 @@ export function useVisualConfig() {
                 continue;
               }
               if (value === '') {
-                if (docHas(doc, ['codex', 'outbound', key])) doc.deleteIn(['codex', 'outbound', key]);
+                if (docHas(doc, ['codex', 'outbound', key]))
+                  doc.deleteIn(['codex', 'outbound', key]);
                 continue;
               }
               if (!isKnown(value)) throw new VisualConfigApplyError('visual_apply_failed');
@@ -2357,6 +2485,13 @@ export function useVisualConfig() {
           setIntFromStringInDoc(doc, ['nonstream-keepalive-interval'], nonstreamKeepaliveInterval);
         }
 
+        if (dirtyFields.has('reasoningEffortRules')) {
+          if (!useAuthStore.getState().supportsReasoningEffortPolicy) {
+            throw new Error('Core does not support reasoning effort policies');
+          }
+          syncReasoningEffortRules(doc, baselineValues.reasoningEffortRules, values.reasoningEffortRules);
+        }
+
         if (hasPayloadDirtyFields(dirtyFields)) {
           ensureMapInDoc(doc, ['payload']);
           if (dirtyFields.has('payloadDefaultRules')) {
@@ -2405,7 +2540,7 @@ export function useVisualConfig() {
           deleteIfMapEmpty(doc, ['payload']);
         }
 
-        return doc.toString({ indent: 2, lineWidth: 120, minContentWidth: 0 });
+        return applyVisualProjection(currentYaml, before, doc);
       } catch (error: unknown) {
         if (error instanceof VisualConfigApplyError) throw error;
         // 不将包含配置值的底层 YAML 异常带入 UI，也不返回原文伪装成成功。

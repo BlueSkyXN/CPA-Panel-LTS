@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """配额分组可见性的 mock-Core 浏览器回归；先构建 dist，不连接真实账号。"""
 
-from panel_browser import PanelBrowser
+from panel_browser import PanelBrowser, launch_chromium
 import importlib.util
 import json
 from pathlib import Path
@@ -32,14 +32,14 @@ def main():
 
     with smoke.run_server(smoke.StaticPanelHandler, app_port), smoke.run_server(smoke.MockCoreHandler, api_port, state):
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch()
+            browser = launch_chromium(playwright)
             context = browser.new_context(locale="en-US", viewport={"width": 1440, "height": 1000})
             context.add_init_script("localStorage.setItem('cli-proxy-language', JSON.stringify({state:{language:'en'},version:0}));")
             page = PanelBrowser(context.new_page())
             page.set_default_timeout(10000)
             errors = []
             page.on("pageerror", lambda error: errors.append(str(error)))
-            page.route("**/v0/management/auth-files", auth_files)
+            page.route("**/v8/management/credentials", auth_files)
             base = f"http://127.0.0.1:{app_port}/management.html"
             page.goto(base + "#/login")
             page.locator('input[type="checkbox"]').first.check(force=True)

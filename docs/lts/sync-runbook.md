@@ -10,7 +10,17 @@
 
 ## Summary
 
-最新分支复查和逐提交决策见 [2026-09-12 intake](upstream-intake-20260912.md)：自有四分支已合并，上游 main 仍为 `v1.22.15`；新增审查 dev 至 `7aa8618`，在现有架构内适配模型请求失效、配置模式合并、payload AST 保留和 OAuth attempt 隔离。此前 OAuth 表单适配见 [2026-09-11 intake](upstream-intake-20260911.md)，快捷键、Sheet、俄语和 Antigravity 适配见 [2026-09-07 intake](upstream-intake-20260907.md)。
+`main` 统一维护 V8 Panel，后续 selective-port 从最新 `origin/main` 创建短期分支。下列带日期的 intake 保留当时的接入决策与评审状态。
+
+V8 增量审查见 [2026-10-28 intake](upstream-intake-20261028-v8.md)：官方 Panel main 至 `64b4f5ae` 的三个提交，配套 Core 同步目标为 `9717e325b`。
+
+V8 已延期业务功能的后续接入见 [2026-10-23 功能对齐](v8-feature-alignment-20261023.md)。
+
+V8 接入期审查见 [2026-10-23 intake](upstream-intake-20261023-v8.md)：官方 main 至 `714de076` 的 52 项逐项记录，Core 配套至 `d946c4fb`。
+
+V8 接入期的逐提交审查见 [2026-10-03 intake](upstream-intake-20261003-v8.md)：官方 main 固定到 `ee79a794`，94 项分别记录适配、等价、部分、拒绝与延期；各项是否接纳仍以记录中的分类为准。
+
+此前分支复查和逐提交决策见 [2026-09-12 intake](upstream-intake-20260912.md)：自有四分支已合并，上游 main 仍为 `v1.22.15`；新增审查 dev 至 `7aa8618`，在现有架构内适配模型请求失效、配置模式合并、payload AST 保留和 OAuth attempt 隔离。此前 OAuth 表单适配见 [2026-09-11 intake](upstream-intake-20260911.md)，快捷键、Sheet、俄语和 Antigravity 适配见 [2026-09-07 intake](upstream-intake-20260907.md)。
 
 `CPA-Panel-LTS` should not use the same full-sync strategy as `CPA-Core-LTS`.
 

@@ -8,6 +8,9 @@ import {
   GEMINI_CLI_CONFIG,
   KIMI_CONFIG,
   XAI_CONFIG,
+  PLUGIN_CONFIG,
+  DEVIN_CONFIG,
+  META_CONFIG,
 } from '@/components/quota';
 import {
   captureQuotaCacheGeneration,
@@ -34,6 +37,9 @@ const getQuotaConfig = (type: QuotaProviderType) => {
   if (type === 'codex') return CODEX_CONFIG;
   if (type === 'kimi') return KIMI_CONFIG;
   if (type === 'xai') return XAI_CONFIG;
+  if (type === 'devin') return DEVIN_CONFIG;
+  if (type === 'meta') return META_CONFIG;
+  if (type === 'plugin') return PLUGIN_CONFIG;
   return GEMINI_CLI_CONFIG;
 };
 
@@ -56,6 +62,9 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
     if (quotaType === 'codex') return state.codexQuota[file.name] as QuotaState;
     if (quotaType === 'kimi') return state.kimiQuota[file.name] as QuotaState;
     if (quotaType === 'xai') return state.xaiQuota[file.name] as QuotaState;
+    if (quotaType === 'devin') return state.devinQuota[file.name] as QuotaState;
+    if (quotaType === 'meta') return state.metaQuota[file.name] as QuotaState;
+    if (quotaType === 'plugin') return state.pluginQuota[file.name] as QuotaState;
     return state.geminiCliQuota[file.name] as QuotaState;
   });
 
@@ -67,6 +76,9 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
     if (quotaType === 'codex') return state.setCodexQuota as unknown as (updater: unknown) => void;
     if (quotaType === 'kimi') return state.setKimiQuota as unknown as (updater: unknown) => void;
     if (quotaType === 'xai') return state.setXaiQuota as unknown as (updater: unknown) => void;
+    if (quotaType === 'devin') return state.setDevinQuota as unknown as (updater: unknown) => void;
+    if (quotaType === 'meta') return state.setMetaQuota as unknown as (updater: unknown) => void;
+    if (quotaType === 'plugin') return state.setPluginQuota as unknown as (updater: unknown) => void;
     return state.setGeminiCliQuota as unknown as (updater: unknown) => void;
   });
 
@@ -74,7 +86,7 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
     if (disableControls) return;
     if (isRuntimeOnlyAuthFile(file)) return;
     if (file.disabled) return;
-    if (quota?.status === 'loading') return;
+    if (quota?.status === 'loading' || resettingQuota) return;
 
     const config = getQuotaConfig(quotaType) as unknown as {
       i18nPrefix: string;
@@ -84,7 +96,7 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
       buildErrorState: (message: string, status?: number) => unknown;
       renderQuotaItems: (quota: unknown, t: TFunction, helpers: unknown) => unknown;
     };
-    const cacheGeneration = captureQuotaCacheGeneration();
+    const cacheGeneration = captureQuotaCacheGeneration(file.name);
     const previousQuota = quota;
 
     updateQuotaState((prev: Record<string, unknown>) => ({
@@ -115,14 +127,13 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
         );
       });
     }
-  }, [disableControls, file, quota, quotaType, showNotification, t, updateQuotaState]);
+  }, [disableControls, file, quota, quotaType, resettingQuota, showNotification, t, updateQuotaState]);
 
   const resetQuotaForFile = useCallback(() => {
     if (disableControls) return;
     if (isRuntimeOnlyAuthFile(file)) return;
     if (file.disabled) return;
-    if (quota?.status === 'loading') return;
-    if (resettingQuota) return;
+    if (quota?.status === 'loading' || resettingQuota) return;
 
     const config = getQuotaConfig(quotaType) as unknown as {
       resetQuota?: (file: AuthFileItem, t: TFunction) => Promise<unknown>;
@@ -136,7 +147,7 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
       t,
       showConfirmation,
       onConfirm: async () => {
-        const cacheGeneration = captureQuotaCacheGeneration();
+        const cacheGeneration = captureQuotaCacheGeneration(file.name);
         setResettingQuota(true);
         try {
           const data = await resetQuota(file, t);
@@ -180,13 +191,14 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
   const canRefreshQuota = !disableControls && !file.disabled && !resettingQuota;
   const canUseResetQuota = canRefreshQuota && quotaStatus !== 'loading';
   const showResetQuotaAction = quota !== undefined && Boolean(config.canResetQuota?.(quota));
-  const resetQuotaAction = config.resetQuota && showResetQuotaAction ? (
-    {
-      disabled: !canUseResetQuota,
-      loading: resettingQuota,
-      onClick: () => resetQuotaForFile(),
-    }
-  ) : undefined;
+  const resetQuotaAction =
+    config.resetQuota && showResetQuotaAction
+      ? {
+          disabled: !canUseResetQuota,
+          loading: resettingQuota,
+          onClick: () => resetQuotaForFile(),
+        }
+      : undefined;
   const quotaErrorMessage = resolveQuotaErrorMessage(
     t,
     quota?.errorStatus,

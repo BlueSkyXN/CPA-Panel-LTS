@@ -14,12 +14,15 @@ import {
   updateThinkingBudgetJson,
   updateThinkingLevelsJson,
 } from '../../thinkingLevels';
-import type { ModelEntryInput } from '../../types';
+import type { ModelEntryInput, ProviderBrand } from '../../types';
+import { ModelAdvancedFields } from './ModelAdvancedFields';
 import styles from './sharedForm.module.scss';
 
 const COLLAPSED_LIMIT = 10;
 
 interface ModelEntriesEditorProps {
+  /** Enables upstream advanced model capabilities for API-key providers. */
+  providerBrand?: ProviderBrand;
   models: ModelEntryInput[];
   supportsImage: boolean;
   supportsThinking: boolean;
@@ -31,6 +34,7 @@ interface ModelEntriesEditorProps {
 }
 
 export function ModelEntriesEditor({
+  providerBrand,
   models,
   supportsImage,
   supportsThinking,
@@ -66,7 +70,7 @@ export function ModelEntriesEditor({
   return (
     <>
       {visible.map((entry, idx) => {
-        const hasExtendedOptions = supportsImage || supportsThinking;
+        const hasExtendedOptions = supportsImage || supportsThinking || Boolean(providerBrand);
         const expanded = hasExtendedOptions && expandedIdx === idx;
         const hasThinking = supportsThinking && (entry.thinkingJson ?? '').trim().length > 0;
         let thinkingConfig: Record<string, unknown> | undefined;
@@ -328,6 +332,14 @@ export function ModelEntriesEditor({
                       />
                     </Collapsible>
                   </div>
+                ) : null}
+                {providerBrand ? (
+                  <ModelAdvancedFields
+                    entry={entry}
+                    providerBrand={providerBrand}
+                    disabled={mutating}
+                    onUpdate={(patch) => onUpdate(idx, patch)}
+                  />
                 ) : null}
               </div>
             ) : null}

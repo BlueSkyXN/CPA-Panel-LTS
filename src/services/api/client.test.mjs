@@ -12,7 +12,7 @@ const vite = await createServer({
   server: { middlewareMode: true },
 });
 
-const [{ apiClient }, { parseApiErrorResponse }, versionUtils] = await Promise.all([
+const [{ apiClient, ltsExtensionClient }, { parseApiErrorResponse }, versionUtils] = await Promise.all([
   vite.ssrLoadModule('/src/services/api/client.ts'),
   vite.ssrLoadModule('/src/services/api/apiError.ts'),
   vite.ssrLoadModule('/src/utils/version.ts'),
@@ -26,6 +26,21 @@ const unauthorizedError = (config, data) =>
     headers: {},
     config,
   });
+
+test('reasoning effort capability is read from the current Core and cleared by an older config response', async () => {
+  const observed = [];
+  const listener = (event) => observed.push(event.detail.supported);
+  window.addEventListener('server-reasoning-effort-policy-update', listener);
+  try {
+    apiClient.setConfig({ apiBase: 'https://policy.example.test', managementKey: 'synthetic' });
+    await apiClient.get('/config.yaml', { adapter: async (config) => ({ data: 'config-version: 8', status: 200, statusText: 'OK', headers: { 'x-cpa-reasoning-effort-policy': '1' }, config }) });
+    assert.equal(observed.at(-1), true);
+    await apiClient.get('/config.yaml', { adapter: async (config) => ({ data: 'config-version: 8', status: 200, statusText: 'OK', headers: {}, config }) });
+    assert.equal(observed.at(-1), false);
+  } finally {
+    window.removeEventListener('server-reasoning-effort-policy-update', listener);
+  }
+});
 
 test('switch preparation blocks new writes and tracks in-flight mutations until completion', async () => {
   const lifecycle = await vite.ssrLoadModule('/src/services/connectionSession.ts');
@@ -110,9 +125,43 @@ test('binds connection details when the request is created', async () => {
 
   await pending;
 
-  assert.equal(capturedConfig.baseURL, 'https://old-core.example.test/v0/management');
+  assert.equal(capturedConfig.baseURL, 'https://old-core.example.test/v8/management');
   assert.equal(capturedConfig.headers.get('Authorization'), 'Bearer old-management-key');
   assert.equal(capturedConfig.__cpaConnectionGeneration, initialGeneration);
+});
+
+test('the LTS extension client shares connection state but targets /v0/management', async () => {
+  const generation = ltsExtensionClient.setConfig({
+    apiBase: 'https://core.example.test/v8/management',
+    managementKey: 'shared-key',
+  });
+  assert.equal(apiClient.getConnectionGeneration(), generation);
+  assert.equal(apiClient.getConnectionRevision(), generation);
+  const seen = [];
+  const adapter = async (config) => {
+    seen.push({ base: config.baseURL, auth: config.headers.get('Authorization') });
+    return { data: {}, status: 200, statusText: 'OK', headers: {}, config };
+  };
+  await apiClient.get('/config', { adapter });
+  await ltsExtensionClient.get('/usage', { adapter });
+  assert.deepEqual(seen, [
+    { base: 'https://core.example.test/v8/management', auth: 'Bearer shared-key' },
+    { base: 'https://core.example.test/v0/management', auth: 'Bearer shared-key' },
+  ]);
+  apiClient.clearConfig();
+  assert.equal(ltsExtensionClient.isCurrentConnection(generation), false);
+});
+
+test('raw LTS extension fetches (Flow SSE) target /v0/management, management targets /v8', async () => {
+  const { computeApiUrl, computeLtsExtensionApiUrl } = await vite.ssrLoadModule(
+    '/src/utils/connection.ts'
+  );
+  assert.equal(computeApiUrl('core.example.test:8317/v0/management'), 'http://core.example.test:8317/v8/management');
+  assert.equal(
+    computeLtsExtensionApiUrl('https://core.example.test/v8/management/'),
+    'https://core.example.test/v0/management'
+  );
+  assert.equal(computeLtsExtensionApiUrl(''), '');
 });
 
 test('prefers a human-readable Management API message and preserves the stable code', () => {
@@ -253,4 +302,63 @@ test('a stale 401 keeps its parsed error but cannot log out the current connecti
   } finally {
     window.removeEventListener('unauthorized', onUnauthorized);
   }
+});
+
+test('captured OAuth cleanup stays on its original connection and late 401 cannot log out the replacement', async () => {
+  apiClient.setConfig({ apiBase: 'https://original.example.test', managementKey: 'synthetic-original' });
+  const captured = apiClient.captureConnection();
+  const generation = apiClient.setConfig({ apiBase: 'https://replacement.example.test', managementKey: 'synthetic-replacement' });
+  let unauthorized = 0;
+  const listener = () => unauthorized++;
+  window.addEventListener('unauthorized', listener);
+  try {
+    await assert.rejects(captured.delete('/oauth/session', { params: { state: 'synthetic-old-state' }, adapter: async (config) => {
+      assert.equal(config.baseURL, 'https://original.example.test/v8/management');
+      assert.equal(config.headers.Authorization, 'Bearer synthetic-original');
+      throw unauthorizedError(config, { error: 'expired' });
+    }}));
+    assert.equal(unauthorized, 0);
+    assert.equal(apiClient.getConnectionGeneration(), generation);
+  } finally { window.removeEventListener('unauthorized', listener); }
+});
+
+test('frozen connection allows only targeted OAuth session cleanup on the captured server', async () => {
+  const lifecycle = await vite.ssrLoadModule('/src/services/connectionSession.ts');
+  apiClient.setConfig({ apiBase: 'https://original.example.test', managementKey: 'synthetic-original' });
+  const captured = apiClient.captureConnection();
+  lifecycle.setSessionFrozen(true);
+  let calls = 0;
+  const adapter = async (config) => {
+    calls++;
+    assert.equal(config.baseURL, 'https://original.example.test/v8/management');
+    assert.equal(config.headers.Authorization, 'Bearer synthetic-original');
+    return { data: {status:'ok'}, status: 200, statusText: 'OK', headers: {}, config };
+  };
+  try {
+    await captured.delete('/oauth/session', {params:{state:'synthetic-state'},adapter});
+    for (const path of ['/credentials', '/config', '/oauth/session/extra']) {
+      await assert.rejects(captured.delete(path, {adapter}), /Connection switch/);
+    }
+    assert.equal(calls, 1);
+    assert.equal(lifecycle.hasActiveWrites(), false);
+  } finally { lifecycle.setSessionFrozen(false); }
+});
+
+
+test('deployed management.html detects its reverse proxy prefix without query or hash', async () => {
+  const { detectApiBaseFromLocation } = await vite.ssrLoadModule('/src/utils/connection.ts');
+  const previous = window.location;
+  try {
+    for (const [url, expected] of [
+      ['https://test.example/uat/management.html?view=1#/login','https://test.example/uat'],
+      ['http://localhost:8317/team/dev/management.html#/config','http://localhost:8317/team/dev'],
+      ['http://localhost:8317/management.html','http://localhost:8317'],
+      ['http://localhost:5173/index.html','http://localhost:5173'],
+      ['file:///tmp/management.html',''],
+      ['about:blank',''],
+    ]) {
+      window.location = new URL(url);
+      assert.equal(detectApiBaseFromLocation(), expected, url);
+    }
+  } finally { window.location = previous; }
 });
