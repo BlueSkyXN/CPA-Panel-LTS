@@ -1436,6 +1436,7 @@
 }
 
 .requestEventsTableWrapper {
+  container-type: inline-size;
   overflow: auto;
   max-height: 460px;
   border: 1px solid var(--border-color);
@@ -1911,15 +1912,53 @@
 }
 
 .requestEventsTierBlue {
-  color: color-mix(in srgb, #0284c7 75%, var(--text-primary));
-  background: color-mix(in srgb, #0ea5e9 15%, transparent);
-  border: 1px solid color-mix(in srgb, #0ea5e9 50%, var(--border-color));
+  color: #1d4ed8;
+  background: color-mix(in srgb, #3b82f6 12%, transparent);
+  border: 1px solid color-mix(in srgb, #3b82f6 40%, var(--border-color));
+
+  :global([data-theme='aurora-nebula']) & {
+    color: #bfdbfe;
+  }
+}
+
+.requestEventsTierBlueFast {
+  color: #7e22ce;
+  background: color-mix(in srgb, #a855f7 12%, transparent);
+  border: 1px solid color-mix(in srgb, #a855f7 40%, var(--border-color));
+
+  :global([data-theme='aurora-nebula']) & {
+    color: #e9d5ff;
+  }
 }
 
 .requestEventsTierStd {
-  color: color-mix(in srgb, #2563eb 58%, var(--text-primary));
-  background: color-mix(in srgb, #2563eb 11%, transparent);
-  border: 1px solid color-mix(in srgb, #2563eb 34%, var(--border-color));
+  color: #0e7490;
+  background: color-mix(in srgb, #06b6d4 12%, transparent);
+  border: 1px solid color-mix(in srgb, #06b6d4 40%, var(--border-color));
+
+  :global([data-theme='aurora-nebula']) & {
+    color: #67e8f9;
+  }
+}
+
+.requestEventsTierStdUnknown {
+  color: #52525b;
+  background: color-mix(in srgb, #71717a 10%, transparent);
+  border: 1px dashed color-mix(in srgb, #71717a 40%, var(--border-color));
+
+  :global([data-theme='aurora-nebula']) & {
+    color: #d4d4d8;
+  }
+}
+
+.requestEventsTierFastUnknown {
+  color: #9d174d;
+  background: color-mix(in srgb, #ec4899 10%, transparent);
+  border: 1px dashed color-mix(in srgb, #ec4899 40%, var(--border-color));
+
+  :global([data-theme='aurora-nebula']) & {
+    color: #fbcfe8;
+  }
 }
 
 @include mobile {
@@ -2504,12 +2543,24 @@
 }
 
 .requestEventsDetailGrid {
-  dl {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
-    gap: 10px 20px;
-    margin: 0;
+  position: sticky;
+  left: 14px;
+  // 展开内容随可视区域排布，避免被宽表格拉到横向滚动区域外。
+  width: calc(100cqw - 28px);
+  max-width: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  align-items: start;
+  gap: 16px 24px;
+  margin: 0;
+  line-height: 1.5;
+  white-space: normal;
+  overflow-wrap: anywhere;
+
+  > div {
+    min-width: 0;
   }
+
   dt {
     font-size: 11px;
     font-weight: 600;
@@ -2519,13 +2570,22 @@
   dd {
     margin: 0;
     display: flex;
-    flex-wrap: wrap;
-    gap: 4px 12px;
+    flex-direction: column;
+    gap: 4px;
     font-size: 12.5px;
-    align-items: baseline;
+    align-items: flex-start;
+  }
+
+  .requestEventsFailureReason,
+  .upstreamModelDiff {
+    max-width: 100%;
+    margin-top: 0;
+    white-space: normal;
   }
 }
 
 .requestEventsDetailItem {
-  white-space: nowrap;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }

@@ -4602,10 +4602,10 @@ def run_usage_service_tier_smoke(page: Any) -> None:
             "Non-cache Token value cells still expose disruptive hover explanations: "
             f"{unexpected_value_tooltips!r}"
         )
-    for expected_label in ["Fast ?", "Std ?", "none", "low", "high", "xhigh", "max"]:
+    for expected_label in ["FAST ?", "STD ?", "none", "low", "high", "xhigh", "max"]:
         card.get_by_text(expected_label, exact=True).first.wait_for()
     resolved_fast_flows = card.locator('[data-service-tier-flow="resolved"]').filter(
-        has_text="Fast"
+        has_text="FAST"
     )
     if resolved_fast_flows.count() != 1:
         raise AssertionError(
@@ -4618,24 +4618,24 @@ def run_usage_service_tier_smoke(page: Any) -> None:
             f"Expected three compact request-to-effective tier flows, found {combined_flows.count()}"
         )
     for index in range(combined_flows.count()):
-        if combined_flows.nth(index).inner_text().replace("\n", "").replace(" ", "") != "Fast→Std?":
+        if combined_flows.nth(index).inner_text().replace("\n", "").replace(" ", "") != "FAST→STD?":
             raise AssertionError(
                 "Combined tier flow must keep the unknown response-program marker: "
                 f"{combined_flows.nth(index).inner_text()!r}"
             )
     outbound_flow = card.locator(
         '[data-service-tier-flow="combined"]'
-        '[aria-label*="Resolved: Std (evidence: CPA outbound)"]'
+        '[aria-label*="Resolved: STD (evidence: CPA outbound)"]'
     )
     if outbound_flow.count() != 1:
         raise AssertionError("Outbound-resolved tier flow did not expose precise evidence")
     outbound_description = outbound_flow.first.get_attribute("aria-label") or ""
     for expected in [
-        "Client request: Fast (raw: fast)",
-        "CPA outbound: Std (raw: standard)",
+        "Client request: FAST (raw: fast)",
+        "CPA outbound: STD (raw: standard)",
         "Upstream response: Missing",
         "Effective: Missing",
-        "Resolved: Std (evidence: CPA outbound)",
+        "Resolved: STD (evidence: CPA outbound)",
     ]:
         if expected not in outbound_description:
             raise AssertionError(
@@ -4648,11 +4648,11 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     if unknown_flow.count() != 1:
         raise AssertionError("Unknown response tier was not preserved in the accessible chain")
     unknown_description = unknown_flow.first.get_attribute("aria-label") or ""
-    if "Resolved: Std (evidence: assumed fallback)" not in unknown_description:
+    if "Resolved: STD (evidence: assumed fallback)" not in unknown_description:
         raise AssertionError(
             f"Unknown response tier was presented as confirmed: {unknown_description!r}"
         )
-    priority_row = rows.filter(has_text="12").filter(has_text="Fast").first
+    priority_row = rows.filter(has_text="12").filter(has_text="FAST").first
     priority_cells = [text.strip() for text in priority_row.locator("td").all_inner_texts()]
     priority_token_values = [cell.splitlines()[0] for cell in priority_cells[-9:-1]]
     if priority_token_values != ["12", "0", "8", "6", "2", "12", "4", "23"]:
@@ -4915,7 +4915,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
         )
 
     tier_select = card.get_by_label("Tier", exact=True)
-    for option_label, expected_rows in [("Fast", 1), ("Std", 1), ("Fast → Std", 3), ("Std → Fast", 0)]:
+    for option_label, expected_rows in [("FAST", 1), ("STD", 1), ("FAST → STD", 3), ("STD → FAST", 0)]:
         tier_select.click()
         page.get_by_role("option", name=option_label, exact=True).click()
         wait_for_row_count(expected_rows)

@@ -583,7 +583,7 @@ test('previously selected filters survive a workspace remount via the session dr
     // The restored selection stays visible instead of silently resetting to All.
     assert.match(markup, />gpt-b</);
     assert.match(markup, />missing-auth-index</);
-    assert.match(markup, /Fast</);
+    assert.match(markup, /FAST</);
     assert.equal((markup.match(/data-request-cost-status=/g) ?? []).length, 0);
   } finally {
     sessionStorage.removeItem('cpa-request-event-filters-v1');
@@ -643,12 +643,12 @@ test('restored request key filter shows the remembered label, not the raw token'
 test('combines response-confirmed Blue with speed without inferring legacy program', async () => {
   await i18n.changeLanguage('en');
   const cases = [
-    ['standard', 'standard', 'Std'],
-    ['priority', 'standard', 'Fast'],
+    ['standard', 'standard', 'STD'],
+    ['priority', 'standard', 'FAST'],
     ['standard', 'daybreak_blue', 'BLUE'],
     ['priority', 'daybreak_blue', 'BLUE FAST'],
-    ['standard', undefined, 'Std ?'],
-    ['priority', 'daybreak_red', 'Fast ?'],
+    ['standard', undefined, 'STD ?'],
+    ['priority', 'daybreak_red', 'FAST ?'],
   ];
   const usage = { apis: { 'POST /v1/responses': { models: {
     'gpt-5.6-sol': { details: cases.map(([speed, program], index) => ({
