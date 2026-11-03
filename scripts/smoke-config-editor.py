@@ -349,7 +349,17 @@ def run_zcode_context_usage_smoke(page, state):
         assert field.get_by_role('radio', name='Disabled (default)', exact=True).is_checked()
         assert page.locator('button[aria-label="Save"]').is_disabled()
         assert 'extra native token count' in field.inner_text()
-        source = original.replace('codex:\n', 'codex:\n  zcode-context-usage: disabled # context-policy\n  future-context: preserve\n', 1)
+        source, inserted = re.subn(
+            r'(?m)^([ \t]*)codex:[ \t]*$',
+            lambda match: (
+                f'{match.group(0)}\n'
+                f'{match.group(1)}  zcode-context-usage: disabled # context-policy\n'
+                f'{match.group(1)}  future-context: preserve'
+            ),
+            original,
+            count=1,
+        )
+        assert inserted == 1, 'Context policy fixture requires a Codex config mapping'
         field = load(source)
         for label, mode in [('Observe', 'observe'), ('Correct', 'correct'), ('Disabled (default)', 'disabled')]:
             field.get_by_role('radio', name=label, exact=True).check()
@@ -664,11 +674,21 @@ def run():
                 assert page.get_by_test_id('config-page-introduction').inner_text().strip()
                 check_layout(page)
                 visited_pages.append(path)
-        assert len(visited_pages) == len(set(visited_pages)) == 29
+        # configNavigation.test.mjs 验证合并后的说明注册表与 CONFIG_DOMAINS 一致。
+        expected_pages = set()
+        for catalog in [ROOT / 'src/i18n/locales/en.json', ROOT / 'src/lts/i18n/en.lts.json']:
+            guidance = json.loads(catalog.read_text())['config_management']['editor']['guidance']['pages']
+            expected_pages.update(f'{domain}/{page}' for domain, pages in guidance.items() for page in pages)
+        assert len(visited_pages) == len(set(visited_pages)), f'Duplicate page visits: {visited_pages}'
+        assert set(visited_pages) == expected_pages, {
+            'missing': sorted(expected_pages - set(visited_pages)),
+            'unexpected': sorted(set(visited_pages) - expected_pages),
+        }
         assert not errors, errors
         context.close()
         browser.close()
     STOP.set()
+    print(f'Visited {len(visited_pages)} configuration pages exactly once.')
     print('Configuration editor browser regression passed: native mode choices, keyboard navigation, inline prerequisites, rule identity on rename/delete, shared drafts, hidden Raw errors, YAML roundtrip, SSE visibility, 6 viewports, 3 themes, 4 languages and rendered contrast.')
     print(f'Screenshots: {OUTPUT}')
 
