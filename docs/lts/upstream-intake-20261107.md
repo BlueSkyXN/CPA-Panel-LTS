@@ -12,7 +12,7 @@ Panel 从官方 main `64b4f5aed19b8f791eb21eb9e785ea379ea05b44`（2026-10-28 int
 | `38990aec` | direct-port | Panel commit `7263bdb2`：Grok client 版本 1.0.46 → 1.0.70，常量与 xAI header 断言同步。 |
 | `94a5b84d` | adapt-port | Panel commit `14dfc71d`：`crypto.randomUUID` 在纯 HTTP 部署不可用，reset grant 请求 ID 改为 `getRandomValues` 16 字节回退，native UUID 优先。落地在 LTS 自有 `src/components/quota/claudeGrants/`。 |
 | `82f6abbb` | direct-port，部分延期 | Panel commit `845455ed`：GPT 家族吸收 `codex-*` 模式，新增 xiaomi/stepfun 家族与亮色图标、测试。upstream 的 light/dark 双图标渲染属更早未接入族，dark 变体随该族延期。 |
-| `953fb244` | reject | aiCodeMirror 是带 `AI_CODE_MIRROR_AFFILIATE_URL` 的返利/推广型第三方中转 provider；商业推广入口按 LTS 约定排除。 |
+| `953fb244` | reject | aiCodeMirror 是带 affiliate 返利链接常量的推广型第三方中转 provider；商业推广入口按 LTS 约定排除。 |
 | `18f88de6` | reject | Double 11 campaign card，商业推广。 |
 | `e1295b5a` | reject | tr locale 引入新语言基建并改写 upstream `AGENTS.md`；LTS 保持四套 shared locale + `*.lts.json` overlay 契约。 |
 | `eea7482e` | reject | AuthFilesToolbar 样式修复在 LTS 无落点（authFiles 工具栏结构不同）。 |

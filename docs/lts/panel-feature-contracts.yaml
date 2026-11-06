@@ -1179,7 +1179,7 @@ features:
       - parseXaiAutoTopupPayload
       - preserveAutoTopup
       - x-grok-client-mode
-      - grok-pager/1.0.46
+      - grok-pager/1.0.70
       - assert_xai_billing_identity
       - assert_xai_user_identity_lookup
       - assert_xai_auto_topup_identity

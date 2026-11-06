@@ -1336,7 +1336,7 @@ require_file_contains scripts/smoke-lts-panel.py "rate-limit-reset-credits/consu
 require_file_contains scripts/smoke-lts-panel.py "cli-chat-proxy.grok.com/v1/billing"
 require_file_contains src/utils/quota/constants.ts "XAI_USER_URL"
 require_file_contains src/utils/quota/constants.ts "XAI_AUTO_TOPUP_URL"
-require_file_contains src/utils/quota/constants.ts "XAI_GROK_CLIENT_VERSION = '1.0.46'"
+require_file_contains src/utils/quota/constants.ts "XAI_GROK_CLIENT_VERSION = '1.0.70'"
 require_file_contains src/utils/quota/constants.ts "buildXaiGrokUserAgent"
 require_file_contains src/utils/quota/constants.ts "buildXaiRequestHeaders"
 require_file_contains src/utils/quota/constants.ts 'grok-pager/${XAI_GROK_CLIENT_VERSION}'
