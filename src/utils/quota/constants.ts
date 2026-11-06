@@ -139,7 +139,7 @@ export const XAI_BILLING_WEEKLY_URL = 'https://cli-chat-proxy.grok.com/v1/billin
 export const XAI_BILLING_MONTHLY_URL = 'https://cli-chat-proxy.grok.com/v1/billing';
 export const XAI_USER_URL = 'https://cli-chat-proxy.grok.com/v1/user';
 export const XAI_AUTO_TOPUP_URL = 'https://cli-chat-proxy.grok.com/v1/auto-topup-rule';
-export const XAI_GROK_CLIENT_VERSION = '1.0.46';
+export const XAI_GROK_CLIENT_VERSION = '1.0.70';
 
 type NavigatorUADataLike = {
   platform?: string;

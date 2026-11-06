@@ -27,6 +27,8 @@ import iconGlm from '@/assets/icons/glm.svg';
 import iconGrok from '@/assets/icons/grok.svg';
 import iconDeepseek from '@/assets/icons/deepseek.svg';
 import iconMinimax from '@/assets/icons/minimax.svg';
+import iconXiaomi from '@/assets/icons/xiaomi.svg';
+import iconStepfun from '@/assets/icons/stepfun.svg';
 import styles from './SystemPage.module.scss';
 
 const MODEL_CATEGORY_ICONS: Record<string, string> = {
@@ -39,6 +41,8 @@ const MODEL_CATEGORY_ICONS: Record<string, string> = {
   grok: iconGrok,
   deepseek: iconDeepseek,
   minimax: iconMinimax,
+  xiaomi: iconXiaomi,
+  stepfun: iconStepfun,
 };
 
 export function SystemPage() {
