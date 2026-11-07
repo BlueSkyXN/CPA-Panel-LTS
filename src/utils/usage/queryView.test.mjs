@@ -159,3 +159,61 @@ test('query views are tagged summaries, never full snapshots or synthetic reques
   assert.equal('apis' in view, false);
   assert.equal('details' in view, false);
 });
+
+test('API model rows carry the cost that sums to the endpoint total', () => {
+  const profile = pricing.createDefaultPriceProfileV3();
+  const priceGroup = (model, prompt, output, requests) => ({
+    model,
+    tier: 'std',
+    evidence: 'effective',
+    band: 'short',
+    requests,
+    tokens: (prompt + output) * requests,
+    prompt: prompt * requests,
+    cache_read: 0,
+    cache_write: 0,
+    output: output * requests,
+  });
+  const group = (model, prompt, output, requests, success, failure, withPrices) => ({
+    api: 'caller-key',
+    model,
+    metrics: {
+      requests,
+      success,
+      failure,
+      tokens: (prompt + output) * requests,
+      ...(withPrices ? { prices: [priceGroup(model, prompt, output, requests)] } : {}),
+    },
+  });
+  const rows = [
+    ['glm-5.3-flashx', 800_000, 200_000, 4, 4, 0],
+    ['unknown-model', 500_000, 100_000, 2, 1, 1],
+  ];
+  const summary = (withPrices) => ({
+    version: 1,
+    bound: 'test',
+    now_ms: 0,
+    totals: { requests: 6, success: 5, failure: 1, tokens: 5_200_000 },
+    groups: {
+      api_models: rows.map(([model, prompt, output, requests, success, failure]) =>
+        group(model, prompt, output, requests, success, failure, withPrices)
+      ),
+    },
+  });
+  const view = query.makeUsageQueryView(summary(false), summary(true));
+  const [api] = query.queryApiStats(view, profile);
+  assert.equal(api.endpoint.includes('caller-key'), false);
+  const flashx = api.models['glm-5.3-flashx'];
+  assert.equal(flashx.requests, 4);
+  assert.equal(flashx.successCount, 4);
+  assert.equal(flashx.failureCount, 0);
+  assert.ok(Math.abs(flashx.cost - (800_000 * 0.37 + 200_000 * 1.25) * 4 / 1_000_000) < 1e-9);
+  assert.equal(flashx.pricingCoverage.pricedRequests, 4);
+  const unknown = api.models['unknown-model'];
+  assert.equal(unknown.cost, 0);
+  assert.equal(unknown.pricingCoverage.pricedRequests, 0);
+  assert.equal(unknown.pricingCoverage.unmatchedRequests, 2);
+  assert.ok(Math.abs(api.totalCost - flashx.cost) < 1e-9);
+  assert.equal(api.pricingCoverage.pricedRequests, 4);
+  assert.equal(api.pricingCoverage.totalRequests, 6);
+});
