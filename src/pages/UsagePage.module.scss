@@ -509,6 +509,12 @@
 
 .modelRowPlain {
   grid-template-columns: 1fr auto auto;
+
+  // 声明顺序在 .modelRow 的 mobile 块之后，需在移动端重新收成单列，
+  // 否则关闭定价时三列布局会覆盖单列规则。
+  @include mobile {
+    grid-template-columns: 1fr;
+  }
 }
 
 .modelName {

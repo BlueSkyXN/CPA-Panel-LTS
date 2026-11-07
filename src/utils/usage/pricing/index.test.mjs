@@ -20,7 +20,7 @@ test('catalog is versioned, self-describing, exact, and keeps provider rate boun
   const sol = pricing.findCatalogEntry('gpt-5.6-sol');
   assert.equal(pricing.PRICE_CATALOG_AS_OF, '2026-10-03');
   assert.equal(sol.currency, 'USD');
-  assert.deepEqual(sol.aliases, ['gpt-5.6']);
+  assert.deepEqual(sol.aliases, ['gpt-5.6', 'gpt-daybreak-blue-latest']);
   assert.equal(sol.sourceUrl, 'https://developers.openai.com/api/docs/pricing');
   assert.equal(sol.pricingNotesUrl, 'https://developers.openai.com/api/docs/models/gpt-5.6-sol');
   assert.equal(sol.standard.long.basis, 'inputTokens');
@@ -390,11 +390,34 @@ test('matches direct custom, canonical preset, explicit alias, and unmatched wit
     ['kimi-for-coding-highspeed', 'kimi-k2.7-code-highspeed'],
     ['grok-4.5-latest', 'grok-4.5'],
     ['grok-build-latest', 'grok-4.5'],
+    ['gpt-daybreak-blue-latest', 'gpt-5.6-sol'],
   ]) {
     const resolved = pricing.resolvePriceProfile(alias, profile);
     assert.equal(resolved.modelMatch, 'alias');
     assert.equal(resolved.resolvedModel, canonicalModel);
   }
+
+  // gpt-daybreak-blue-latest 是官方弃用别名（指向 gpt-5.6-sol），必须走目录
+  // 别名解析并继承 canonical 的自定义价格；对别名本身设置 override 仍然生效。
+  const solOverrideProfile = {
+    ...pricing.createDefaultPriceProfileV3(),
+    overrides: {
+      'gpt-5.6-sol': { standard: { short: { input: 1, cachedInput: 0, output: 2 } } },
+    },
+  };
+  const daybreakInherited = pricing.resolvePriceProfile('gpt-daybreak-blue-latest', solOverrideProfile);
+  assert.equal(daybreakInherited.modelMatch, 'alias');
+  assert.equal(daybreakInherited.resolvedModel, 'gpt-5.6-sol');
+  assert.equal(daybreakInherited.usesCustomOverride, true);
+  assert.deepEqual(daybreakInherited.standard.short, { input: 1, cachedInput: 0, output: 2 });
+  const daybreakDirect = pricing.resolvePriceProfile('gpt-daybreak-blue-latest', {
+    ...pricing.createDefaultPriceProfileV3(),
+    overrides: {
+      'gpt-daybreak-blue-latest': { standard: { short: { input: 3, cachedInput: 0, output: 4 } } },
+    },
+  });
+  assert.equal(daybreakDirect.modelMatch, 'custom');
+  assert.deepEqual(daybreakDirect.standard.short, { input: 3, cachedInput: 0, output: 4 });
 });
 
 test('v2 migration preserves Auto cache-write, explicit zero, and old string values', () => {

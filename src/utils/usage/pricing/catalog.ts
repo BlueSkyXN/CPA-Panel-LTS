@@ -194,7 +194,9 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
   },
   {
     canonicalModel: 'gpt-5.6-sol',
-    aliases: ['gpt-5.6'],
+    // gpt-5.6 与 gpt-daybreak-blue-latest 均为官方别名（Daybreak 已标注弃用，
+    // 快照版本指向本模型）；目录别名复用本条目的价格与 canonical override。
+    aliases: ['gpt-5.6', 'gpt-daybreak-blue-latest'],
     currency: 'USD',
     // 用户提供的价格表：促销价至少持续至 2026-11-21，不推测到期后的价格。
     standard: { short: rateCard(4, 0.4, 5, 20), long: longCard(rateCard(8, 0.8, 10, 30)) },
@@ -525,24 +527,6 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
     standard: { short: rateCard(2, 0.1, undefined, 10) },
     sourceUrl: GEMINI_PRICING_SOURCE_URL,
     asOf: GEMINI_CATALOG_AS_OF,
-  },
-  {
-    // 官方标注为弃用别名，快照版本指向 gpt-5.6-sol，建议改用最新 cyber 模型。
-    canonicalModel: 'gpt-daybreak-blue-latest',
-    aliases: [],
-    currency: 'USD',
-    standard: {
-      short: rateCard(4, 0.4, 5, 20),
-      long: longCard(rateCard(8, 0.8, 10, 30)),
-    },
-    fast: {
-      short: rateCard(8, 0.8, 10, 40),
-      long: rateCard(16, 1.6, 20, 60),
-      longSupported: true,
-    },
-    sourceUrl: OPENAI_PRICING_SOURCE_URL,
-    pricingNotesUrl: modelPricingNotesUrl('gpt-daybreak-blue-latest'),
-    asOf: '2026-11-07',
   },
   {
     canonicalModel: 'doubao-seed-2.1-pro',
