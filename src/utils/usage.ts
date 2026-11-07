@@ -226,10 +226,16 @@ export interface ApiStats {
   totalTokens: number;
   totalCost: number;
   pricingCoverage: PricingCoverage;
-  models: Record<
-    string,
-    { requests: number; successCount: number; failureCount: number; tokens: number }
-  >;
+  models: Record<string, ApiModelStats>;
+}
+
+export interface ApiModelStats {
+  requests: number;
+  successCount: number;
+  failureCount: number;
+  tokens: number;
+  cost: number;
+  pricingCoverage: PricingCoverage;
 }
 
 export interface ModelStatsSummary {
@@ -1153,10 +1159,7 @@ export function getApiStats(
 
   Object.entries(apis).forEach(([endpoint, apiData]) => {
     if (!isRecord(apiData)) return;
-    const models: Record<
-      string,
-      { requests: number; successCount: number; failureCount: number; tokens: number }
-    > = {};
+    const models: Record<string, ApiModelStats> = {};
     let derivedSuccessCount = 0;
     let derivedFailureCount = 0;
     const pricingCoverages: PricingCoverage[] = [];
@@ -1185,19 +1188,20 @@ export function getApiStats(
         }
         return estimateUsageDetailCost(detail, priceProfile);
       });
-      pricingCoverages.push(
-        reconcileModelPricingCoverage(
-          aggregateCostEstimateCoverage(modelPricingInputs),
-          modelData.total_requests,
-          modelData.total_tokens
-        )
+      const modelPricingCoverage = reconcileModelPricingCoverage(
+        aggregateCostEstimateCoverage(modelPricingInputs),
+        modelData.total_requests,
+        modelData.total_tokens
       );
+      pricingCoverages.push(modelPricingCoverage);
 
       models[modelName] = {
         requests: Number(modelData.total_requests) || 0,
         successCount,
         failureCount,
         tokens: Number(modelData.total_tokens) || 0,
+        cost: modelPricingCoverage.estimatedAmount,
+        pricingCoverage: modelPricingCoverage,
       };
       derivedSuccessCount += successCount;
       derivedFailureCount += failureCount;

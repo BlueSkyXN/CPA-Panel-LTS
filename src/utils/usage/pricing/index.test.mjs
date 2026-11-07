@@ -181,7 +181,7 @@ test('catalog is versioned, self-describing, exact, and keeps provider rate boun
 
   const grok47Fast = pricing.findCatalogEntry('grok-4.7-fast');
   assert.equal(grok47Fast.currency, 'USD');
-  assert.deepEqual(grok47Fast.aliases, []);
+  assert.deepEqual(grok47Fast.aliases, ['grok-4.7-build-fast']);
   assert.deepEqual(grok47Fast.standard.short, { input: 4, cachedInput: 1, output: 12 });
   assert.deepEqual(grok47Fast.standard.long, {
     thresholdTokens: 200_001,
@@ -1392,4 +1392,74 @@ test('Fast import rejects invalid or ambiguous long cards instead of silently dr
   }
   profile.overrides.local = { standard: { short: card.standard.short }, fast: card.fast };
   assert.equal(pricing.preflightPriceProfileImportV3(profile).valid, false);
+});
+
+test('November 2026 catalog additions price the previously unmatched models', () => {
+  const glm = pricing.findCatalogEntry('glm-5.3-flashx');
+  assert.deepEqual(glm.aliases, ['glm-5.3-flashx-legal']);
+  assert.deepEqual(glm.standard.short, { input: 0.37, cachedInput: 0.075, output: 1.25 });
+  assert.equal(glm.standard.long, undefined);
+  assert.equal(glm.fast, undefined);
+  assert.equal(glm.asOf, '2026-11-07');
+  assert.equal(glm.sourceUrl, 'https://docs.z.ai/guides/overview/pricing');
+  const flashx = pricing.estimateUsageCost('glm-5.3-flashx', {
+    input_tokens: 1_000_000, cache_read_tokens: 200_000, output_tokens: 1_000_000,
+  }, undefined, tier());
+  assert.equal(flashx.status, 'priced');
+  assert.equal(flashx.rates.cacheWrite, undefined);
+  approx(flashx.amount, 0.37 * 0.8 + 0.075 * 0.2 + 1.25);
+  assert.equal(pricing.findCatalogEntry('glm-5.3-flashx-legal').canonicalModel, 'glm-5.3-flashx');
+
+  for (const [model, short, long] of [
+    ['gpt-6.1-terra', [1, 0.05, 1.25, 5], [2, 0.1, 2.5, 7.5]],
+    ['gpt-daybreak-blue-latest', [4, 0.4, 5, 20], [8, 0.8, 10, 30]],
+  ]) {
+    for (const [input, band, rates] of [[200_000, 'short', short], [300_000, 'long', long]]) {
+      const estimate = pricing.estimateUsageCost(model, {
+        input_tokens: input, cache_read_tokens: 30_000,
+        cache_creation_tokens: 40_000, output_tokens: 100_000,
+      }, undefined, tier('fast'));
+      assert.equal(estimate.status, 'priced', model);
+      assert.equal(estimate.contextBand, band);
+      assert.deepEqual(estimate.rates, {
+        input: rates[0] * 2, cachedInput: rates[1] * 2,
+        cacheWrite: rates[2] * 2, output: rates[3] * 2,
+      });
+    }
+  }
+  assert.deepEqual(
+    pricing.findCatalogEntry('gpt-daybreak-blue-latest').standard,
+    pricing.findCatalogEntry('gpt-5.6-sol').standard
+  );
+
+  const gemini = pricing.findCatalogEntry('gemini-4-argon');
+  assert.deepEqual(gemini.standard.short, { input: 2, cachedInput: 0.1, output: 10 });
+  assert.equal(gemini.standard.long, undefined);
+  assert.equal(gemini.asOf, '2026-11-07');
+  assert.equal(gemini.sourceUrl, 'https://aistudio.google.com/docs/pricing');
+  const argon = pricing.estimateUsageCost('gemini-4-argon', {
+    input_tokens: 300_000, cache_read_tokens: 50_000, output_tokens: 100_000,
+  }, undefined, tier());
+  assert.equal(argon.contextBand, 'short');
+  approx(argon.amount, 250_000 * 2 / 1_000_000 + 50_000 * 0.1 / 1_000_000 + 100_000 * 10 / 1_000_000);
+
+  const buildFast = pricing.findCatalogEntry('grok-4.7-build-fast');
+  assert.equal(buildFast.canonicalModel, 'grok-4.7-fast');
+  assert.equal(buildFast.modelMatch ?? 'alias', 'alias');
+  const alias = pricing.estimateUsageCost('grok-4.7-build-fast', {
+    input_tokens: 100_000, output_tokens: 50_000,
+  }, undefined, tier());
+  assert.equal(alias.status, 'priced');
+  assert.equal(alias.modelMatch, 'alias');
+  assert.equal(alias.resolvedModel, 'grok-4.7-fast');
+  assert.deepEqual(alias.rates, { input: 4, cachedInput: 1, output: 12 });
+  const longAlias = pricing.estimateUsageCost('grok-4.7-build-fast', {
+    input_tokens: 200_000, output_tokens: 10_000,
+  }, undefined, tier());
+  assert.equal(longAlias.contextBand, 'short');
+  const above = pricing.estimateUsageCost('grok-4.7-build-fast', {
+    input_tokens: 200_001, output_tokens: 10_000,
+  }, undefined, tier());
+  assert.equal(above.contextBand, 'long');
+  assert.deepEqual(above.rates, { input: 6, cachedInput: 1.5, output: 18 });
 });

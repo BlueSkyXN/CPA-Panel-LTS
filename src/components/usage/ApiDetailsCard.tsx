@@ -149,7 +149,10 @@ export function ApiDetailsCard({ apiStats, loading, showPricing }: ApiDetailsCar
                     {isExpanded && (
                       <div id={panelId} className={styles.apiModels}>
                         {Object.entries(api.models).map(([model, stats]) => (
-                          <div key={model} className={styles.modelRow}>
+                          <div
+                            key={model}
+                            className={`${styles.modelRow} ${showPricing ? '' : styles.modelRowPlain}`}
+                          >
                             <span className={styles.modelName}>{model}</span>
                             <span className={styles.modelStat}>
                               <span className={styles.requestCountCell}>
@@ -169,6 +172,22 @@ export function ApiDetailsCard({ apiStats, loading, showPricing }: ApiDetailsCar
                             <span className={styles.modelStat}>
                               {formatCompactNumber(stats.tokens)}
                             </span>
+                            {showPricing && (
+                              <span
+                                className={styles.modelStat}
+                                title={
+                                  stats.pricingCoverage.pricedRequests > 0 &&
+                                  stats.pricingCoverage.pricedRequests <
+                                    stats.pricingCoverage.totalRequests
+                                    ? t('usage_stats.pricing_cost_incomplete')
+                                    : undefined
+                                }
+                              >
+                                {stats.pricingCoverage.pricedRequests > 0
+                                  ? formatUsd(stats.cost)
+                                  : '--'}
+                              </span>
+                            )}
                           </div>
                         ))}
                       </div>

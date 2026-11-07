@@ -134,15 +134,21 @@ export function queryApiStats(view: UsageQueryView, profile: PriceProfileV3): Ap
     row.successCount += m.success;
     row.failureCount += m.failure;
     row.totalTokens += m.tokens;
+    const modelPrices = prices.get(queryGroupKey(group));
+    const modelInputs = (modelPrices?.prices ?? []).map((p) =>
+      priceInput(p, preparePriceProfile(profile))
+    );
+    const modelPricingCoverage = aggregateCostEstimateCoverage(modelInputs);
     row.models[group.model ?? ''] = {
       requests: m.requests,
       successCount: m.success,
       failureCount: m.failure,
       tokens: m.tokens,
+      cost: modelPricingCoverage.estimatedAmount,
+      pricingCoverage: modelPricingCoverage,
     };
     const list = inputs.get(api) ?? [];
-    for (const p of prices.get(queryGroupKey(group))?.prices ?? [])
-      list.push(priceInput(p, preparePriceProfile(profile)));
+    list.push(...modelInputs);
     inputs.set(api, list);
     apis.set(api, row);
   }
