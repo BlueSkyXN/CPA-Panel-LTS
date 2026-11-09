@@ -1903,7 +1903,7 @@ def assert_xai_billing_identity(
     expected_headers = {
         "Authorization": "Bearer $TOKEN$",
         "x-xai-token-auth": "xai-grok-cli",
-        "x-grok-client-version": "1.0.46",
+        "x-grok-client-version": "1.0.70",
         "x-grok-client-mode": "interactive",
         "accept": "application/json",
         "x-userid": "xai-user-smoke",
@@ -1915,7 +1915,7 @@ def assert_xai_billing_identity(
             continue
         user_agent = headers.get("user-agent", "")
         if re.fullmatch(
-            r"grok-pager/1\.0\.46 grok-shell/1\.0\.46 "
+            r"grok-pager/1\.0\.70 grok-shell/1\.0\.70 "
             r"\((?:macos|windows|linux|unknown); (?:aarch64|x86_64|unknown)\)",
             user_agent,
         ):
