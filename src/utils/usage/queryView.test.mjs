@@ -217,3 +217,74 @@ test('API model rows carry the cost that sums to the endpoint total', () => {
   assert.equal(api.pricingCoverage.pricedRequests, 4);
   assert.equal(api.pricingCoverage.totalRequests, 6);
 });
+
+test('credential pricing coverage is keyed by normalized source and auth index', () => {
+  const profile = pricing.createDefaultPriceProfileV3();
+  const priceGroup = (model, prompt, output, requests) => ({
+    model,
+    tier: 'std',
+    evidence: 'effective',
+    band: 'short',
+    requests,
+    tokens: (prompt + output) * requests,
+    prompt: prompt * requests,
+    cache_read: 0,
+    cache_write: 0,
+    output: output * requests,
+  });
+  const credentialGroup = (source, authIndex, model, prompt, output, requests, withPrices) => ({
+    source,
+    auth_index: authIndex,
+    metrics: {
+      requests,
+      success: requests,
+      failure: 0,
+      tokens: (prompt + output) * requests,
+      input: prompt * requests,
+      output: output * requests,
+      ...(withPrices ? { prices: [priceGroup(model, prompt, output, requests)] } : {}),
+    },
+  });
+  const rows = [
+    ['zcode-coding-plan', 'zcode-coding-plan-a.json', 'glm-5.3-flashx', 800_000, 200_000, 4],
+    ['zcode-coding-plan', 'zcode-coding-plan-b.json', 'glm-5.3-flashx', 500_000, 100_000, 2],
+    ['codex', 'codex-a.json', 'unknown-model', 500_000, 100_000, 3],
+  ];
+  const summary = (withPrices) => ({
+    version: 1,
+    bound: 'test',
+    now_ms: 0,
+    totals: { requests: 9, success: 9, failure: 0, tokens: 0 },
+    groups: {
+      credentials: rows.map(([source, authIndex, model, prompt, output, requests]) =>
+        credentialGroup(source, authIndex, model, prompt, output, requests, withPrices)
+      ),
+    },
+  });
+  const view = query.makeUsageQueryView(summary(false), summary(true));
+  const coverageByKey = query.queryCredentialPricing(view, profile);
+  assert.equal(coverageByKey.size, 3);
+  // normalizeUsageSourceId 给非密钥文本加 t: 前缀，与 Core 侧 source 规范一致。
+  const priced = coverageByKey.get(
+    JSON.stringify(['t:zcode-coding-plan', 'zcode-coding-plan-a.json'])
+  );
+  assert.ok(priced);
+  assert.equal(priced.pricedRequests, 4);
+  assert.equal(priced.totalRequests, 4);
+  assert.ok(
+    Math.abs(priced.estimatedAmount - (800_000 * 0.37 + 200_000 * 1.25) * 4 / 1_000_000) < 1e-9
+  );
+  const unmatched = coverageByKey.get(JSON.stringify(['t:codex', 'codex-a.json']));
+  assert.ok(unmatched);
+  assert.equal(unmatched.pricedRequests, 0);
+  assert.equal(unmatched.unmatchedRequests, 3);
+  // 无 pricing 查询时 coverage 存在但为空，消费方据此显示 "--"。
+  const plainView = query.makeUsageQueryView(summary(false), null);
+  const plainCoverage = query.queryCredentialPricing(plainView, profile);
+  const plainPriced = plainCoverage.get(
+    JSON.stringify(['t:zcode-coding-plan', 'zcode-coding-plan-a.json'])
+  );
+  assert.ok(plainPriced);
+  assert.equal(plainPriced.pricedRequests, 0);
+  assert.equal(plainPriced.totalRequests, 0);
+});

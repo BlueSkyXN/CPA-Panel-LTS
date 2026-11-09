@@ -215,6 +215,21 @@ export function queryPricingModels(
     .sort((a, b) => b.requestCount - a.requestCount || a.modelName.localeCompare(b.modelName));
 }
 
+export function queryCredentialPricing(
+  view: UsageQueryView,
+  source: PriceProfileV3
+): Map<string, ReturnType<typeof queryCoverage>> {
+  const profile = preparePriceProfile(source);
+  const prices = pricedGroups(view, 'credentials');
+  const result = new Map<string, ReturnType<typeof queryCoverage>>();
+  for (const group of view.summary.groups.credentials ?? []) {
+    const key = JSON.stringify([normalizeUsageSourceId(group.source ?? ''), group.auth_index ?? '']);
+    if (result.has(key)) continue;
+    result.set(key, queryCoverage(prices.get(queryGroupKey(group)), profile));
+  }
+  return result;
+}
+
 function queryAxis(
   view: UsageQueryView,
   period: 'hour' | 'day',

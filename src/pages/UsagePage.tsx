@@ -283,7 +283,7 @@ export function UsagePage() {
   };
   const summaryQuery = useUsageQuerySummary(invalidCustomRange ? null : querySession, queryRequest);
   const pricingQuery = useUsageQuerySummary(invalidCustomRange ? null : querySession, {
-    ...queryRequest, modules: ['models', 'api_models', 'hours', 'days', 'minutes'],
+    ...queryRequest, modules: ['models', 'api_models', 'credentials', 'hours', 'days', 'minutes'],
     rules: buildQueryPriceRules(querySession?.models ?? [], priceProfile),
   }, true);
   const queryView = useMemo(() => makeUsageQueryView(summaryQuery.data, pricingQuery.data), [summaryQuery.data, pricingQuery.data]);
@@ -589,6 +589,8 @@ export function UsagePage() {
           <CredentialStatsCard
             usage={filteredUsage}
             loading={loading}
+            showPricing={showPricing}
+            priceProfile={priceProfile}
             geminiKeys={config?.geminiApiKeys || []}
             claudeConfigs={config?.claudeApiKeys || []}
             codexConfigs={config?.codexApiKeys || []}
