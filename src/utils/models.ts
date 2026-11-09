@@ -12,7 +12,7 @@ export interface ModelInfo {
 }
 
 const MODEL_CATEGORIES = [
-  { id: 'gpt', label: 'GPT', patterns: [/gpt/i, /\bo\d\b/i, /\bo\d+\.?/i, /\bchatgpt/i] },
+  { id: 'gpt', label: 'GPT', patterns: [/gpt/i, /\bo\d\b/i, /\bo\d+\.?/i, /\bchatgpt/i, /\bcodex(?:[-/_]|$)/i] },
   { id: 'claude', label: 'Claude', patterns: [/claude/i] },
   { id: 'gemini', label: 'Gemini', patterns: [/gemini/i, /\bgai\b/i] },
   { id: 'kimi', label: 'Kimi', patterns: [/kimi/i] },
@@ -20,7 +20,13 @@ const MODEL_CATEGORIES = [
   { id: 'glm', label: 'GLM', patterns: [/glm/i, /chatglm/i] },
   { id: 'grok', label: 'Grok', patterns: [/grok/i] },
   { id: 'deepseek', label: 'DeepSeek', patterns: [/deepseek/i] },
-  { id: 'minimax', label: 'MiniMax', patterns: [/minimax/i, /abab/i] }
+  { id: 'minimax', label: 'MiniMax', patterns: [/minimax/i, /abab/i] },
+  { id: 'xiaomi', label: 'Xiaomi', patterns: [/xiaomi/i, /\bmimo\b/i, /小米/] },
+  {
+    id: 'stepfun',
+    label: 'StepFun',
+    patterns: [/stepfun/i, /\bstep[-_.]?(?:\d|r1|audio|1o|tts|asr|router)/i, /阶跃/]
+  }
 ];
 
 const matchCategory = (text: string) => {

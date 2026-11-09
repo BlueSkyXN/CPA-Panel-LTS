@@ -225,26 +225,26 @@ test('parses current xAI billing supplements without breaking legacy fields', ()
 test('uses the current official Grok Shell identity for xAI billing requests', () => {
   const { XAI_GROK_CLIENT_VERSION, buildXaiGrokUserAgent, buildXaiRequestHeaders } = quotaConstants;
 
-  assert.equal(XAI_GROK_CLIENT_VERSION, '1.0.46');
+  assert.equal(XAI_GROK_CLIENT_VERSION, '1.0.70');
   assert.equal(
     buildXaiGrokUserAgent('MacIntel', 'Mozilla/5.0 (Macintosh; ARM64 Mac OS X)'),
-    'grok-pager/1.0.46 grok-shell/1.0.46 (macos; aarch64)'
+    'grok-pager/1.0.70 grok-shell/1.0.70 (macos; aarch64)'
   );
   assert.equal(
     buildXaiGrokUserAgent('MacIntel', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)'),
-    'grok-pager/1.0.46 grok-shell/1.0.46 (macos; x86_64)'
+    'grok-pager/1.0.70 grok-shell/1.0.70 (macos; x86_64)'
   );
   assert.equal(
     buildXaiGrokUserAgent('MacIntel', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', 'macOS'),
-    'grok-pager/1.0.46 grok-shell/1.0.46 (macos; x86_64)'
+    'grok-pager/1.0.70 grok-shell/1.0.70 (macos; x86_64)'
   );
   assert.equal(
     buildXaiGrokUserAgent('Linux x86_64', 'Mozilla/5.0 (X11; Linux x86_64)'),
-    'grok-pager/1.0.46 grok-shell/1.0.46 (linux; x86_64)'
+    'grok-pager/1.0.70 grok-shell/1.0.70 (linux; x86_64)'
   );
   assert.equal(
     buildXaiGrokUserAgent('Win32', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'),
-    'grok-pager/1.0.46 grok-shell/1.0.46 (windows; x86_64)'
+    'grok-pager/1.0.70 grok-shell/1.0.70 (windows; x86_64)'
   );
   const headers = buildXaiRequestHeaders();
   assert.deepEqual(
@@ -252,7 +252,7 @@ test('uses the current official Grok Shell identity for xAI billing requests', (
     {
       Authorization: 'Bearer $TOKEN$',
       'x-xai-token-auth': 'xai-grok-cli',
-      'x-grok-client-version': '1.0.46',
+      'x-grok-client-version': '1.0.70',
       'x-grok-client-mode': 'interactive',
       accept: 'application/json',
       'user-agent': '<validated separately>',
@@ -260,7 +260,7 @@ test('uses the current official Grok Shell identity for xAI billing requests', (
   );
   assert.match(
     headers['user-agent'],
-    /^grok-pager\/1\.0\.46 grok-shell\/1\.0\.46 \((?:macos|windows|linux|unknown); (?:aarch64|x86_64|unknown)\)$/
+    /^grok-pager\/1\.0\.70 grok-shell\/1\.0\.70 \((?:macos|windows|linux|unknown); (?:aarch64|x86_64|unknown)\)$/
   );
 });
 

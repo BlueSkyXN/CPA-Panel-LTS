@@ -12,6 +12,8 @@
 
 `main` 统一维护 V8 Panel，后续 selective-port 从最新 `origin/main` 创建短期分支。下列带日期的 intake 保留当时的接入决策与评审状态。
 
+V8 增量审查见 [2026-11-07 intake](upstream-intake-20261107.md)：官方 Panel main 至 `953fb244` 的 30 个提交（v1.26.x → v1.27.3），移植 Grok 1.0.70、纯 HTTP reset request ID 回退、xiaomi/stepfun 模型族；登录重写、quota tier 族、routing 页、plugin OAuth entries、storage encryption v2、tr locale、推广类入口按记录 defer/reject，配套 Core 同步目标为 `c2f402b45`。
+
 V8 增量审查见 [2026-10-28 intake](upstream-intake-20261028-v8.md)：官方 Panel main 至 `64b4f5ae` 的三个提交，配套 Core 同步目标为 `9717e325b`。
 
 V8 已延期业务功能的后续接入见 [2026-10-23 功能对齐](v8-feature-alignment-20261023.md)。
