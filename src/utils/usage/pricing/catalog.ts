@@ -24,6 +24,8 @@ export const XAI_GROK_47_FAST_PRICING_SOURCE_URL =
 export const XAI_GROK_47_FAST_CATALOG_AS_OF = '2026-10-13';
 export const DOUBAO_PRICING_SOURCE_URL = 'https://www.volcengine.com/docs/82379/1099320';
 export const DOUBAO_CATALOG_AS_OF = '2026-10-10';
+export const GEMINI_PRICING_SOURCE_URL = 'https://aistudio.google.com/docs/pricing';
+export const GEMINI_CATALOG_AS_OF = '2026-11-07';
 export const ANTHROPIC_PRICING_SOURCE_URL =
   'https://platform.claude.com/docs/en/about-claude/pricing';
 export const ANTHROPIC_MODEL_IDS_SOURCE_URL =
@@ -124,6 +126,23 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
     asOf: GPT6_ASTRA_CATALOG_AS_OF,
   },
   {
+    canonicalModel: 'gpt-6.1-terra',
+    aliases: [],
+    currency: 'USD',
+    standard: {
+      short: rateCard(1, 0.05, 1.25, 5),
+      long: longCard(rateCard(2, 0.1, 2.5, 7.5)),
+    },
+    fast: {
+      short: rateCard(2, 0.1, 2.5, 10),
+      long: rateCard(4, 0.2, 5, 15),
+      longSupported: true,
+    },
+    sourceUrl: OPENAI_PRICING_SOURCE_URL,
+    pricingNotesUrl: modelPricingNotesUrl('gpt-6.1-terra'),
+    asOf: '2026-11-07',
+  },
+  {
     canonicalModel: 'gpt-6.1-sol',
     aliases: [],
     currency: 'USD',
@@ -175,7 +194,9 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
   },
   {
     canonicalModel: 'gpt-5.6-sol',
-    aliases: ['gpt-5.6'],
+    // gpt-5.6 与 gpt-daybreak-blue-latest 均为官方别名（Daybreak 已标注弃用，
+    // 快照版本指向本模型）；目录别名复用本条目的价格与 canonical override。
+    aliases: ['gpt-5.6', 'gpt-daybreak-blue-latest'],
     currency: 'USD',
     // 用户提供的价格表：促销价至少持续至 2026-11-21，不推测到期后的价格。
     standard: { short: rateCard(4, 0.4, 5, 20), long: longCard(rateCard(8, 0.8, 10, 30)) },
@@ -388,6 +409,16 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
     sourceUrl: ZAI_PRICING_SOURCE_URL,
     asOf: '2026-09-03',
   },
+  {
+    canonicalModel: 'glm-5.3-flashx',
+    aliases: ['glm-5.3-flashx-legal'],
+    currency: 'USD',
+    // Z.AI 官方价目：FlashX 约为 Flash 的 2.5 倍，输入 $0.37 是页面原文而非四舍五入。
+    // 缓存存储限时免费，未公布缓存写入单价，保持 Auto 继承输入价。
+    standard: { short: rateCard(0.37, 0.075, undefined, 1.25) },
+    sourceUrl: ZAI_PRICING_SOURCE_URL,
+    asOf: '2026-11-07',
+  },
   // Kimi keeps one flat rate per model id. Do not add long-context bands for the
   // same Kimi model; reduced-context SKUs such as kimi-k3-256k are separate models.
   {
@@ -475,7 +506,7 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
     // Cursor / Grok Build 的独立产品价格；不表示公共 API 的 Priority 档。
     // 官方规定超过 200K 提示词 token 才提价；引擎使用包含边界的门槛。
     canonicalModel: 'grok-4.7-fast',
-    aliases: [],
+    aliases: ['grok-4.7-build-fast'],
     currency: 'USD',
     standard: {
       short: rateCard(4, 1, undefined, 12),
@@ -488,6 +519,16 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
     // Volcano Ark quotes CNY list prices; these USD rates are the confirmed
     // CNY 6 / 1.2 / 30 per 1M tokens converted at 6.8, standard
     // online-inference tier (the cheaper low-priority tier is not applied).
+    canonicalModel: 'gemini-4-argon',
+    aliases: [],
+    currency: 'USD',
+    // 官方现价有效至 2026-11-30；2026-12-01 起翻倍，不在此推测到期后的价格。
+    // 仅有隐式缓存，无长上下文分档。
+    standard: { short: rateCard(2, 0.1, undefined, 10) },
+    sourceUrl: GEMINI_PRICING_SOURCE_URL,
+    asOf: GEMINI_CATALOG_AS_OF,
+  },
+  {
     canonicalModel: 'doubao-seed-2.1-pro',
     aliases: [],
     currency: 'USD',

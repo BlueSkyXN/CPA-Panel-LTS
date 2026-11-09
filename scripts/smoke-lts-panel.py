@@ -3188,6 +3188,12 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
             "grok-4.3",
             "grok-4.7",
             "grok-4.7-fast",
+            "glm-5.3-flashx",
+            "gemini-4-argon",
+            "gpt-6.1-terra",
+            # gpt-daybreak-blue-latest 是 gpt-5.6-sol 的官方弃用别名，
+            # 目录按 canonicalModel 渲染，不再有独立行；别名解析与
+            # override 继承由定价单测覆盖。
             "doubao-seed-2.1-pro",
             "claude-haiku-4-5-20251001",
             "claude-sonnet-4-5-20250929",
