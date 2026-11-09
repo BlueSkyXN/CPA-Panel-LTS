@@ -267,3 +267,47 @@ test('Codex reset requires an explicit confirmed code and never clears unrelated
     assert.ok(calls>1,'confirmed reset must continue to quota readback');
   } finally {apiCallApi.request=beforeRequest;apiClient.post=beforePost;}
 });
+
+test('Copilot quota retains zero, reset dates, and unlimited descriptions in the plugin card', async () => {
+  const { PLUGIN_CONFIG } = await load('components/quota/pluginQuota.tsx');
+  const { useAuthStore } = await load('stores/useAuthStore.ts');
+  const beforeAuth = useAuthStore.getState();
+  const beforePost = apiClient.post;
+  const file = normalizeAuthFilesResponse({ files: [{
+    name: 'copilot-synthetic.json', type: 'copilot', auth_index: 'synthetic-copilot',
+    supports_quota: true, quota_provider: 'copilot', quota_plugin_id: 'cpa-provider-copilot',
+  }] }).files[0];
+  assert.equal(PLUGIN_CONFIG.filterFn(file), true);
+  assert.equal(PLUGIN_CONFIG.filterFn({ ...file, disabled: true }), false);
+  try {
+    useAuthStore.setState({ pluginSupportKnown: true, supportsPlugin: true });
+    apiClient.post = async (path, body) => {
+      assert.equal(path, '/plugins/cpa-provider-copilot/quota');
+      assert.deepEqual(body, { auth_index: 'synthetic-copilot' });
+      return {
+        subscription: { plan: 'business' },
+        summary: [{ key: 'chat_remaining', label: 'Chat remaining', value: 0, unit: 'requests' }],
+        groups: [{ displayName: 'Copilot usage', buckets: [
+          { window: 'chat', remainingFraction: 0, resetTime: '2030-01-01', description: 'Chat: 0 / 300' },
+          { window: 'completions', remainingFraction: 1, resetTime: '2030-01-01', description: 'Completions: unlimited' },
+        ] }],
+      };
+    };
+    const data = await PLUGIN_CONFIG.fetchQuota(file, (key) => key);
+    assert.equal(data.summary[0].value, 0);
+    assert.equal(data.subscription.plan, 'business');
+    const chat = data.groups[0].buckets.find((bucket) => bucket.window === 'chat');
+    assert.equal(chat.remainingFraction, 0);
+    assert.equal(chat.resetTime, '2030-01-01');
+    const markup = renderToStaticMarkup(PLUGIN_CONFIG.renderQuotaItems(data, (key) => key, {
+      styles: {}, QuotaProgressBar: ({ percent }) => createElement('meter', { value: percent, max: 100 }),
+    }));
+    assert.ok(markup.includes('Chat: 0 / 300'));
+    assert.ok(markup.includes('Completions: unlimited'));
+    assert.ok(markup.includes('2030'));
+    assert.ok(!markup.includes('copilot-usage-completions'));
+  } finally {
+    apiClient.post = beforePost;
+    useAuthStore.setState({ pluginSupportKnown: beforeAuth.pluginSupportKnown, supportsPlugin: beforeAuth.supportsPlugin });
+  }
+});

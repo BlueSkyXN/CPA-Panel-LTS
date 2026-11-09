@@ -62,7 +62,7 @@ export const PLUGIN_CONFIG: QuotaConfig<PluginQuotaState, PluginQuotaData> = {
             {group.buckets.map((bucket) => (
               <div key={bucket.id} className={classes.quotaRow}>
                 <div className={classes.quotaRowHeader}>
-                  <span>{bucket.label}</span>
+                  <span>{bucket.description || bucket.label}</span>
                   <span>
                     {t('plugin_quota.remaining_percent', {
                       percent: Math.round(bucket.remainingFraction * 100),
