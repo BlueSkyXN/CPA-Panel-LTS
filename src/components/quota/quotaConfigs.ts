@@ -154,6 +154,7 @@ export interface QuotaConfig<TState, TData> {
   buildErrorState: (message: string, status?: number) => TState;
   batchConcurrency?: number;
   batchDelayMs?: number;
+  sectionClassName?: string;
   cardClassName: string;
   controlsClassName: string;
   controlClassName: string;

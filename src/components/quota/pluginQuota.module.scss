@@ -1,0 +1,174 @@
+.section:global(.card) {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr));
+  align-items: start;
+  gap: 16px;
+}
+
+.card {
+  padding: 20px;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.plan {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-secondary);
+}
+
+.planValue {
+  padding: 3px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: capitalize;
+  overflow-wrap: anywhere;
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 10px;
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+}
+
+.metricLabel {
+  color: var(--text-secondary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.metricAmount {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-primary);
+
+  strong {
+    font-size: 28px;
+    line-height: 1.2;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.025em;
+    overflow-wrap: anywhere;
+  }
+}
+
+.metricUnit {
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.group + .group {
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color);
+}
+
+.groupTitle {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.bucket {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.bucketHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.bucketLabel {
+  min-width: 0;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.remaining {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.unlimited {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border-radius: 4px;
+  color: var(--success-badge-text);
+  background: var(--success-badge-bg);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.description,
+.reset,
+.empty {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.groupReset {
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
+}
+
+.reset {
+  font-variant-numeric: tabular-nums;
+}

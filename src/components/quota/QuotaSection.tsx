@@ -311,6 +311,7 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
 
   return (
     <Card
+      className={config.sectionClassName}
       title={titleNode}
       extra={
         <div className={styles.headerActions}>
