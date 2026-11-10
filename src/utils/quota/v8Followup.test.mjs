@@ -270,6 +270,8 @@ test('Codex reset requires an explicit confirmed code and never clears unrelated
 
 test('Copilot quota retains zero, reset dates, and unlimited descriptions in the plugin card', async () => {
   const { PLUGIN_CONFIG } = await load('components/quota/pluginQuota.tsx');
+  const { default: i18n } = await load('i18n/index.ts');
+  const t = i18n.getFixedT('en');
   const { useAuthStore } = await load('stores/useAuthStore.ts');
   const beforeAuth = useAuthStore.getState();
   const beforePost = apiClient.post;
@@ -299,15 +301,72 @@ test('Copilot quota retains zero, reset dates, and unlimited descriptions in the
     const chat = data.groups[0].buckets.find((bucket) => bucket.window === 'chat');
     assert.equal(chat.remainingFraction, 0);
     assert.equal(chat.resetTime, '2030-01-01');
-    const markup = renderToStaticMarkup(PLUGIN_CONFIG.renderQuotaItems(data, (key) => key, {
+    const markup = renderToStaticMarkup(PLUGIN_CONFIG.renderQuotaItems(data, t, {
       styles: {}, QuotaProgressBar: ({ percent }) => createElement('meter', { value: percent, max: 100 }),
     }));
-    assert.ok(markup.includes('Chat: 0 / 300'));
-    assert.ok(markup.includes('Completions: unlimited'));
-    assert.ok(markup.includes('2030'));
+    assert.ok(markup.includes('0 / 300'));
+    assert.ok(markup.includes('aria-valuenow="0"'));
+    assert.ok(markup.includes(t('plugin_quota.unlimited')));
+    assert.ok(!markup.includes('aria-valuenow="100"'), 'unlimited is shown without a percentage meter');
+    assert.equal((markup.match(/<time /g) || []).length, 1, 'identical reset instants share one footer');
+    assert.ok(markup.includes('dateTime="2030-01-01T00:00:00.000Z"'));
     assert.ok(!markup.includes('copilot-usage-completions'));
   } finally {
     apiClient.post = beforePost;
     useAuthStore.setState({ pluginSupportKnown: beforeAuth.pluginSupportKnown, supportsPlugin: beforeAuth.supportsPlugin });
   }
+});
+
+test('plugin quota keeps unknown descriptions and per-bucket resets, and does not infer unlimited from 100%', async () => {
+  const { PLUGIN_CONFIG } = await load('components/quota/pluginQuota.tsx');
+  const { buildAntigravityQuotaGroups } = await load('utils/quota/builders.ts');
+  const { default: i18n } = await load('i18n/index.ts');
+  const t = i18n.getFixedT('en');
+  const groups = buildAntigravityQuotaGroups({ groups: [
+    { displayName: 'Copilot usage', buckets: [
+      { window: 'chat', remainingFraction: 1 },
+      { window: 'future_window', remainingFraction: 0.25, displayName: 'Future quota', description: 'Details from a future provider', resetTime: 'invalid' },
+    ] },
+    { displayName: 'Custom provider', buckets: [
+      { window: 'first', remainingFraction: 0.5, displayName: 'First allowance', description: 'Provider-defined detail', resetTime: '2030-02-01T00:00:00Z' },
+      { window: 'second', remainingFraction: 0, displayName: 'Second allowance', resetTime: '2030-02-02T00:00:00Z' },
+    ] },
+  ] });
+  const markup = renderToStaticMarkup(PLUGIN_CONFIG.renderQuotaItems({ groups, subscription: null, summary: [] }, t, {
+    styles: {}, QuotaProgressBar: () => null,
+  }));
+  assert.ok(markup.includes('aria-valuenow="100"'));
+  assert.ok(!markup.includes(t('plugin_quota.unlimited')));
+  for (const text of ['Future quota', 'Details from a future provider', 'Custom provider', 'First allowance', 'Provider-defined detail', 'Second allowance']) {
+    assert.ok(markup.includes(text));
+  }
+  assert.equal((markup.match(/<time /g) || []).length, 2);
+  assert.ok(!markup.includes('Invalid Date'));
+});
+
+test('plugin quota uses descriptions as labels for Core SDK buckets without display names', async () => {
+  const { PLUGIN_CONFIG } = await load('components/quota/pluginQuota.tsx');
+  const { buildAntigravityQuotaGroups } = await load('utils/quota/builders.ts');
+  const { default: i18n } = await load('i18n/index.ts');
+  const groups = buildAntigravityQuotaGroups({ groups: [
+    { displayName: 'Custom quota', buckets: [
+      { window: 'daily', remainingFraction: 0.5, description: 'Daily request allowance' },
+      { window: 'weekly', remainingFraction: 0.75, description: 'Weekly request allowance' },
+      { window: 'legacy', remainingFraction: 0 },
+    ] },
+    { displayName: 'Copilot usage', buckets: [
+      { window: 'future_window', remainingFraction: 0.25, description: 'Future request allowance' },
+    ] },
+  ] });
+  const markup = renderToStaticMarkup(PLUGIN_CONFIG.renderQuotaItems({ groups, subscription: null, summary: [] }, i18n.getFixedT('en'), {
+    styles: {}, QuotaProgressBar: () => null,
+  }));
+  for (const label of ['Daily request allowance', 'Weekly request allowance', 'Future request allowance']) {
+    assert.ok(markup.includes(`aria-label="${label}"`), `meter must use the readable label: ${label}`);
+    assert.equal(markup.split(`>${label}<`).length - 1, 1, 'the visible label must not be repeated as a description');
+  }
+  for (const id of ['custom-quota-daily', 'custom-quota-weekly', 'copilot-usage-future_window']) {
+    assert.ok(!markup.includes(id), `generated ID must not replace an available description: ${id}`);
+  }
+  assert.ok(markup.includes('aria-label="custom-quota-legacy"'), 'buckets without a description retain their fallback label');
 });

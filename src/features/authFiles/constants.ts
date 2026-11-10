@@ -2,6 +2,7 @@ import type { TFunction } from 'i18next';
 import iconAntigravity from '@/assets/icons/antigravity.svg';
 import iconClaude from '@/assets/icons/claude.svg';
 import iconCodex from '@/assets/icons/codex.svg';
+import iconCopilot from '@/assets/icons/copilot.svg';
 import iconGemini from '@/assets/icons/gemini.svg';
 import iconGrok from '@/assets/icons/grok.svg';
 import iconIflow from '@/assets/icons/iflow.svg';
@@ -90,6 +91,7 @@ export const AUTH_FILE_ICONS: Record<string, AuthFileIconAsset> = {
   aistudio: iconGemini,
   claude: iconClaude,
   codex: iconCodex,
+  copilot: iconCopilot,
   gemini: iconGemini,
   'gemini-cli': iconGemini,
   xai: iconGrok,
