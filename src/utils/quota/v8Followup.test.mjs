@@ -343,3 +343,30 @@ test('plugin quota keeps unknown descriptions and per-bucket resets, and does no
   assert.equal((markup.match(/<time /g) || []).length, 2);
   assert.ok(!markup.includes('Invalid Date'));
 });
+
+test('plugin quota uses descriptions as labels for Core SDK buckets without display names', async () => {
+  const { PLUGIN_CONFIG } = await load('components/quota/pluginQuota.tsx');
+  const { buildAntigravityQuotaGroups } = await load('utils/quota/builders.ts');
+  const { default: i18n } = await load('i18n/index.ts');
+  const groups = buildAntigravityQuotaGroups({ groups: [
+    { displayName: 'Custom quota', buckets: [
+      { window: 'daily', remainingFraction: 0.5, description: 'Daily request allowance' },
+      { window: 'weekly', remainingFraction: 0.75, description: 'Weekly request allowance' },
+      { window: 'legacy', remainingFraction: 0 },
+    ] },
+    { displayName: 'Copilot usage', buckets: [
+      { window: 'future_window', remainingFraction: 0.25, description: 'Future request allowance' },
+    ] },
+  ] });
+  const markup = renderToStaticMarkup(PLUGIN_CONFIG.renderQuotaItems({ groups, subscription: null, summary: [] }, i18n.getFixedT('en'), {
+    styles: {}, QuotaProgressBar: () => null,
+  }));
+  for (const label of ['Daily request allowance', 'Weekly request allowance', 'Future request allowance']) {
+    assert.ok(markup.includes(`aria-label="${label}"`), `meter must use the readable label: ${label}`);
+    assert.equal(markup.split(`>${label}<`).length - 1, 1, 'the visible label must not be repeated as a description');
+  }
+  for (const id of ['custom-quota-daily', 'custom-quota-weekly', 'copilot-usage-future_window']) {
+    assert.ok(!markup.includes(id), `generated ID must not replace an available description: ${id}`);
+  }
+  assert.ok(markup.includes('aria-label="custom-quota-legacy"'), 'buckets without a description retain their fallback label');
+});

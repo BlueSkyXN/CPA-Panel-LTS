@@ -140,9 +140,11 @@ export const PLUGIN_CONFIG: QuotaConfig<PluginQuotaState, PluginQuotaData> = {
               {group.buckets.map((bucket) => {
                 const definition =
                   isCopilot && bucket.window ? COPILOT_BUCKETS.get(bucket.window) : undefined;
+                const fallbackLabel =
+                  bucket.label === bucket.id ? bucket.description || bucket.label : bucket.label;
                 const label = definition
                   ? t(`plugin_quota.copilot.${definition.labelKey}`)
-                  : bucket.label;
+                  : fallbackLabel;
                 const detail = isCopilot
                   ? copilotBucketDetail(bucket)
                   : { description: bucket.description, unlimited: false };
@@ -173,7 +175,7 @@ export const PLUGIN_CONFIG: QuotaConfig<PluginQuotaState, PluginQuotaData> = {
                         />
                       </div>
                     )}
-                    {detail.description && !detail.unlimited && (
+                    {detail.description && detail.description !== label && !detail.unlimited && (
                       <div className={styles.description}>{detail.description}</div>
                     )}
                     {reset && renderReset(reset)}
