@@ -166,7 +166,7 @@ export function LiveMonitor({ data, live, setLive, liveState, history, onRefresh
           {blockers.map(([key, count]) => <span key={key} className={styles.blocker}>{lookup(key)} · {count}</span>)}
         </div>}
       </div>
-      <FlowTrend history={history} liveState={liveState} />
+      <FlowTrend history={history} liveState={liveState} data={data} />
       <p className={styles.sampleLine}>
         {t('flow_control.sampled')}: {state?.['sampled-at'] ? new Date(state['sampled-at']).toLocaleString() : '—'}
         {' · '}{t('flow_control.v3_revision')} {state?.['policy-revision'] ?? '—'}

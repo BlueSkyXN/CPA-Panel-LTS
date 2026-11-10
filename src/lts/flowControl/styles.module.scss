@@ -23,6 +23,14 @@
   --flow-requests: #477fa5;
   --flow-attempts: #8b5cf6;
   --flow-waiting: #d97706;
+  --flow-series-1: #477fa5;
+  --flow-series-2: #a96be8;
+  --flow-series-3: #d97706;
+  --flow-series-4: #0f9b8e;
+  --flow-series-5: #db527a;
+  --flow-series-6: #76933e;
+  --flow-series-7: #777fe0;
+  --flow-series-8: #b67a4d;
   padding: 20px;
   border: 1px solid var(--border-color);
   border-radius: 12px;
@@ -57,6 +65,8 @@
   small { display: block; color: var(--text-secondary); font-size: 11px; margin-top: 4px; }
 }
 .trendPanel { border-block: 1px solid var(--border-color); padding: 18px 0; margin: 16px 0; }
+.trendControls, .trendFilters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 12px 0; }
+.trendGrouped { stroke: inherit; stroke-width: 2; stroke-dasharray: inherit; fill: none; }
 .trendPlot { display: flex; gap: 10px; height: 160px; min-width: 0; }
 .trendScale { display: flex; flex-direction: column; justify-content: space-between; color: var(--text-secondary); font-size: 11px; padding: 8px 0; min-width: 24px; text-align: right; }
 .trend { height: 160px; width: 100%; min-width: 0; overflow: visible; }
@@ -66,7 +76,7 @@
 .trendWaiting { stroke: var(--flow-waiting); stroke-width: 2; stroke-dasharray: 3 3; fill: none; }
 .trendPoint { fill: var(--bg-primary); stroke-width: 1.5; stroke-dasharray: none; }
 .trendLegend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--text-secondary); }
-.trendLegend span { display: inline-flex; align-items: center; gap: 6px; }
+.trendLegend span { display: inline-flex; align-items: center; gap: 6px; overflow-wrap: anywhere; min-width: 0; }
 .trendLegend i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .dotRequests { background: var(--flow-requests); }
 .dotActive { background: var(--flow-attempts); }
@@ -141,6 +151,7 @@
 @media(max-width:720px){.groupGrid{grid-template-columns:1fr;}.groupGrid>strong,.groupGrid>p{grid-column:1;}.selectionGrid{grid-template-columns:1fr;}}
 
 @media (max-width: 560px) {
+  .trendControls, .trendFilters { grid-template-columns: 1fr; }
   .kpis { gap: 8px; }
   .kpi { padding: 12px 10px; min-height: 0; }
   .kpiIcon { display: none; }

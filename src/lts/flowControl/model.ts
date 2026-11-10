@@ -269,6 +269,63 @@ export interface FlowStatus {
     activity?: FlowActivity[];
     'activity-total'?: number;
     'activity-truncated'?: boolean;
+    breakdown?: FlowBreakdown;
+}
+export interface FlowSummaryGroup {
+    stage: 'request' | 'attempt';
+    key?: string;
+    model?: string;
+    provider?: string;
+    account?: string;
+    active: number;
+    waiting: number;
+}
+export interface FlowBreakdown {
+    groups: FlowSummaryGroup[];
+    omitted: { 'active-requests': number; 'active-attempts': number; waiting: number };
+    truncated: boolean;
+}
+
+// Reject an incomplete extension independently so legacy totals remain usable.
+export function parseFlowBreakdown(raw: unknown, totals: Record<string, unknown>): FlowBreakdown | undefined {
+    const data = asRecord(raw);
+    const omitted = asRecord(data?.omitted);
+    if (!data || !Array.isArray(data.groups) || data.groups.length > 128 || !omitted || typeof data.truncated !== 'boolean') return undefined;
+    const sums = { 'active-requests': 0, 'active-attempts': 0, waiting: 0 };
+    for (const field of ['active-requests', 'active-attempts', 'waiting'] as const) {
+        if (!integer(omitted[field], 0, 100000)) return undefined;
+        sums[field] = omitted[field] as number;
+    }
+    if (data.truncated !== Object.values(sums).some(value => value > 0)) return undefined;
+    const groups: FlowSummaryGroup[] = [];
+    const seen = new Set<string>();
+    for (const value of data.groups) {
+        const row = asRecord(value);
+        if (!row || (row.stage !== 'request' && row.stage !== 'attempt') || !integer(row.active, 0, 100000) || !integer(row.waiting, 0, 100000)) return undefined;
+        for (const field of ['key', 'account', 'provider', 'model'] as const) {
+            if (row[field] !== undefined && (typeof row[field] !== 'string' || (row[field] as string).length > 1024)) return undefined;
+        }
+        for (const field of ['key', 'account'] as const) {
+            if (row[field] && !/^(anonymous|[a-f0-9]{64})$/.test(row[field] as string)) return undefined;
+        }
+        if (row.stage === 'request' && (row.provider || row.account)) return undefined;
+        const group: FlowSummaryGroup = {
+            stage: row.stage, active: row.active as number, waiting: row.waiting as number,
+            key: row.key as string | undefined, model: row.model as string | undefined,
+            provider: row.provider as string | undefined, account: row.account as string | undefined,
+        };
+        const identity = JSON.stringify([group.stage, group.key ?? '', group.model ?? '', group.provider ?? '', group.account ?? '']);
+        if (seen.has(identity)) return undefined;
+        seen.add(identity);
+        sums[group.stage === 'request' ? 'active-requests' : 'active-attempts'] += group.active;
+        sums.waiting += group.waiting;
+        groups.push(group);
+    }
+    if (Object.entries(sums).some(([field, sum]) => sum !== totals[field])) return undefined;
+    return { groups, omitted: sumsFromOmitted(omitted), truncated: data.truncated };
+}
+function sumsFromOmitted(omitted: Record<string, unknown>): FlowBreakdown['omitted'] {
+    return { 'active-requests': omitted['active-requests'] as number, 'active-attempts': omitted['active-attempts'] as number, waiting: omitted.waiting as number };
 }
 export interface FlowCapabilities {
     supported: boolean;
@@ -328,7 +385,7 @@ export function parseFlowCapabilities(raw: unknown): FlowCapabilities | null {
         'events-enabled': Number(data['schema-version']) >= 3 ? data['events-enabled'] === true : data['events-supported'] === true,
         'events-interval-ms': integer(data['events-interval-ms'], 500, 30000) ? data['events-interval-ms'] : 2000,
         'model-options': Array.isArray(data['model-options']) ? data['model-options'].filter((v): v is FlowModelOption => { const x = asRecord(v); return !!x && typeof x.ref === 'string' && typeof x.model === 'string' && typeof x.provider === 'string'; }) : [],
-        'explain-supported': data['explain-supported'] === true, state: { ...state, ...(asRecord(data.policy) ? { policy: data.policy } : {}) } as unknown as FlowStatus };
+        'explain-supported': data['explain-supported'] === true, state: { ...state, breakdown: parseFlowBreakdown(state.breakdown, state), ...(asRecord(data.policy) ? { policy: data.policy } : {}) } as unknown as FlowStatus };
 }
 export const FLOW_DIMENSIONS = ['key', 'model', 'provider', 'account', 'credential', 'auth-kind'] as const;
 export type FlowDimension = typeof FLOW_DIMENSIONS[number];
@@ -372,7 +429,7 @@ export function parseFlowEvent(raw: unknown): FlowStatus | null {
             return null;
     if (typeof state['sampled-at'] !== 'string' || typeof state['process-id'] !== 'string')
         return null;
-    return state as unknown as FlowStatus;
+    return { ...state, breakdown: parseFlowBreakdown(state.breakdown, state) } as unknown as FlowStatus;
 }
 export interface FlowObservation {
     realtime: boolean;
@@ -453,7 +510,7 @@ export function setSelection(rule: FlowRule, field: 'models' | 'keys' | 'account
 }
 export function mergeSummary(previous: FlowStatus, next: FlowStatus): FlowStatus {
     // SSE carries no catalogs/policy/detail arrays; those remain manual reads.
-    return { ...previous, ...next, policy: previous.policy, buckets: previous.buckets, activity: undefined, resources: next.resources };
+    return { ...previous, ...next, policy: previous.policy, buckets: previous.buckets, activity: undefined, resources: next.resources, breakdown: next.breakdown };
 }
 export function mergeMigration(original: FlowRule[], converted: FlowRule[]): FlowRule[] {
     return converted.map(r => {

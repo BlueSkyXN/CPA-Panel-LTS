@@ -1,0 +1,83 @@
+{
+  "schema-version": 3,
+  "supported": true,
+  "features": [
+    "grouped-summary"
+  ],
+  "keys": [
+    {
+      "ref": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "label": "Caller A"
+    },
+    {
+      "ref": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "label": "Caller B"
+    }
+  ],
+  "accounts": [
+    {
+      "ref": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "label": "Credential A",
+      "provider": "p"
+    },
+    {
+      "ref": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "label": "Credential B",
+      "provider": "p"
+    }
+  ],
+  "state": {
+    "enabled": true,
+    "active-requests": 2,
+    "active-attempts": 4,
+    "waiting": 2,
+    "queued-bytes": 0,
+    "sampled-at": "2026-11-10T00:00:00Z",
+    "process-id": "grouped-fixture",
+    "policy-revision": 1,
+    "breakdown": {
+      "groups": [
+        {
+          "stage": "attempt",
+          "key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "model": "alpha",
+          "provider": "p",
+          "account": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "active": 2,
+          "waiting": 1
+        },
+        {
+          "stage": "attempt",
+          "key": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "model": "alpha",
+          "provider": "p",
+          "account": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "active": 1,
+          "waiting": 0
+        },
+        {
+          "stage": "attempt",
+          "key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "model": "beta",
+          "provider": "p",
+          "account": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "active": 1,
+          "waiting": 1
+        },
+        {
+          "stage": "request",
+          "key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "model": "public-alpha",
+          "active": 2,
+          "waiting": 0
+        }
+      ],
+      "omitted": {
+        "active-requests": 0,
+        "active-attempts": 0,
+        "waiting": 0
+      },
+      "truncated": false
+    }
+  }
+}

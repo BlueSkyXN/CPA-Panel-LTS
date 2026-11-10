@@ -1514,6 +1514,8 @@ require_file_contains src/components/layout/MainLayout.tsx "path: '/analytics/fl
 require_file_contains src/components/layout/MainLayout.tsx "path: '/analytics/flow/config'"
 require_file_contains src/router/MainRoutes.tsx "path: '/analytics/observability'"
 require_file_contains src/pages/FlowDashboardPage.tsx "LiveMonitor"
+require_file_contains src/lts/flowControl/FlowTrend.tsx "grouped-summary"
+require_file_contains src/lts/flowControl/model.ts "parseFlowBreakdown"
 require_file_contains src/pages/ObservabilityPage.tsx "UsageAnalyticsSection"
 require_file_contains src/services/connectionSession.ts "'/analytics/flow/config'"
 require_file_contains src/stores/useAuthStore.ts "flowSupportKnown"
