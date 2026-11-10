@@ -2,7 +2,7 @@
   "schema-version": 3,
   "supported": true,
   "features": [
-    "grouped-summary"
+    "on-demand-grouped-summary"
   ],
   "keys": [
     {
@@ -39,34 +39,20 @@
       "groups": [
         {
           "stage": "attempt",
-          "key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "model": "alpha",
           "provider": "p",
-          "account": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-          "active": 2,
+          "active": 3,
           "waiting": 1
         },
         {
           "stage": "attempt",
-          "key": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-          "model": "alpha",
-          "provider": "p",
-          "account": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-          "active": 1,
-          "waiting": 0
-        },
-        {
-          "stage": "attempt",
-          "key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "model": "beta",
           "provider": "p",
-          "account": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
           "active": 1,
           "waiting": 1
         },
         {
           "stage": "request",
-          "key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "model": "public-alpha",
           "active": 2,
           "waiting": 0
@@ -77,7 +63,8 @@
         "active-attempts": 0,
         "waiting": 0
       },
-      "truncated": false
+      "truncated": false,
+      "view": "model"
     }
   }
 }

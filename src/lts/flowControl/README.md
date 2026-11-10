@@ -29,7 +29,7 @@ request层复选公开别名；attempt层使用Core返回的已解析目标。�
 - `SelectionField.tsx`：搜索复选、全部/明确集合、保存的未列出选项。
 - `RuleInspector.tsx`：调用Core的只读解释，显示本阶段容量与交叉矩阵。
 - `LiveMonitor.tsx`：汇总、资源样本、手动分页详情，不在每次SSE后自动请求详情。
-- `FlowTrend.tsx` / `grouping.ts`：按指标拆线、交叉筛选和曲线选择；只消费 `grouped-summary` 共享摘要，分组不完整时保留采样缺口。
+- `FlowTrend.tsx` / `grouping.ts`：一次订阅一个观察维度、同视图本地切指标和曲线选择；只消费 `on-demand-grouped-summary` 摘要，分组不完整时保留采样缺口。
 - `useStatus.ts`：可停止观察、标签页暂停、仅重连观察、按策略变化刷新目录。
 - `model.ts` / `yaml.ts`：数据校验与仅编辑字段写回，保留未知字段及注释。
 
@@ -39,7 +39,9 @@ request层复选公开别名；attempt层使用Core返回的已解析目标。�
 
 schema仍为3。新增可选字段：`configuration-failure`、`configured-policy`、`model-options-truncated`、目标`aliases/accounts`，并增加`resolved-model-options/last-good-policy`特性声明。未保存草稿、已保存期望策略、已应用策略分开处理。
 
-`grouped-summary` 特性启用 `state.breakdown`：`groups` 中每条包含 `stage/key/model/provider/account/active/waiting`，`omitted` 保存省略的用户调用、上游执行和等待数量，`truncated` 标识省略。解析时核对身份唯一、引用格式、有界行数和各指标总和；扩展异常仅使该次分组样本不可用，总量继续显示。request 模型与 attempt 目标保留阶段和 Provider 身份。Core 与 Panel 使用相同的 `grouped-summary.json` 合成夹具核对计数。
+`on-demand-grouped-summary` 特性启用按需分组。普通状态、summary 和无 query 的 events 只返回总量，不构造 breakdown；非总量 SSE 使用 `?view=model|account|key|provider`。`state.breakdown` 包含 `view/groups/omitted/truncated`；每行只带 `stage/active/waiting` 和当前维度身份，模型视图的 attempt 另带 Provider，request 的 account/provider 身份为空。解析器按订阅视图核对字段、身份唯一性、有界行数、编码身份长度及总量，错视图帧不会进入历史，异常分组保留缺口。Core 与 Panel 使用字节一致的 `grouped-summary.json` 合成模型视图夹具核对计数。
+
+默认未开始观察、默认 total。开始后一次只订阅一个维度；换视图取消旧订阅并清空本段历史，最多保留 60 个样本。切指标和选线只在本地处理；total 不构造分组曲线，选线面板展开才构造搜索候选。停止保留已采曲线，暂停和缺失处留断点。旧能力 marker 不开启新分组。
 
 旧单目标explain继续可用，非法停用草稿返回不完整说明；不是panic或默认放行。预览是某个阶段当前的容量判断，不预留许可、不替代完整路由和首次联合申请。
 

@@ -6,7 +6,7 @@ import { computeLtsExtensionApiUrl } from '@/utils/connection';
 import { getConnectionFrameElement } from '@/services/connectionRuntime';
 import {
   asRecord, canObserveLive, mergeSummary, parseFlowCapabilities, parseFlowEvent,
-  type FlowSupport, type FlowStatus,
+  type FlowSupport, type FlowStatus, type FlowView,
 } from './model';
 import { FlowSSEDecoder } from './sse';
 import { appendFlowSample, type FlowPoint } from './history';
@@ -28,6 +28,14 @@ export function useFlowControlStatus({ active = true, observationVisible = true 
   const [support, setSupport] = useState<FlowSupport>({ state: 'loading' });
   const loadedPolicyState = useRef<FlowStatus | null>(null);
   const [live, setLive] = useState(false);
+  const [view, setView] = useState<FlowView>('total');
+  const observationGeneration = useRef(0);
+  const changeView = (next: FlowView) => {
+    if (next === view) return;
+    observationGeneration.current++;
+    setHistory([]);
+    setView(next);
+  };
   const [liveState, setLiveState] = useState<FlowLiveState>('off');
   const [visible, setVisible] = useState(isObservationVisible);
   const [history, setHistory] = useState<FlowPoint[]>([]);
@@ -71,6 +79,15 @@ export function useFlowControlStatus({ active = true, observationVisible = true 
   const ready = support.state === 'ready' && support.data.supported;
   const enabled = canObserveLive(support.state === 'ready' ? support.data : null);
   const interval = support.state === 'ready' ? support.data['events-interval-ms'] : 2000;
+  const groupingSupported = support.state === 'ready' && support.data.features?.includes('on-demand-grouped-summary') === true;
+
+  useEffect(() => {
+    if (support.state === 'ready' && !support.data.features?.includes('on-demand-grouped-summary') && view !== 'total') {
+      observationGeneration.current++;
+      setHistory([]);
+      setView('total');
+    }
+  }, [support, view]);
 
   useEffect(() => {
     if (!live) { setLiveState('off'); return; }
@@ -80,8 +97,10 @@ export function useFlowControlStatus({ active = true, observationVisible = true 
     // A newly opened page must wait for its fresh capability read, not connect using the previous visit's state.
     if (!loadedPolicyState.current) { setLiveState('connecting'); return; }
     if (!enabled) { setLiveState('disabled'); return; }
+    if (view !== 'total' && !groupingSupported) { setLiveState('connecting'); return; }
 
     let stopped = false;
+    const generation = ++observationGeneration.current;
     let permanent = false;
     let failures = 0;
     let controller: AbortController | undefined;
@@ -93,15 +112,15 @@ export function useFlowControlStatus({ active = true, observationVisible = true 
     let lastProcess = loadedPolicyState.current?.['process-id'] ?? '';
     const clearWatchdog = () => { if (watchdog) clearTimeout(watchdog); };
     const serverDisabled = () => {
+      if (stopped || generation !== observationGeneration.current) return;
       permanent = true;
-      if (stopped) return;
       setLiveState('disabled');
       setSupport((old) => old.state === 'ready'
         ? { ...old, data: { ...old.data, 'events-enabled': false } } : old);
     };
     let firstFrame = true;
     const accept = (state: FlowStatus) => {
-      if (stopped) return;
+      if (stopped || generation !== observationGeneration.current) return;
       setSupport((old) => old.state === 'ready' ? {
         state: 'ready',
         data: {
@@ -122,7 +141,7 @@ export function useFlowControlStatus({ active = true, observationVisible = true 
       // not on every summary. A late response must not replace a newer summary.
       if ((lastRevision !== undefined && state['policy-revision'] !== lastRevision) || restarted) {
         void ltsExtensionClient.get<unknown>(FLOW_CONTROL_ENDPOINTS.status).then((raw) => {
-          if (stopped) return;
+          if (stopped || generation !== observationGeneration.current) return;
           const data = parseFlowCapabilities(raw);
           if (!data) return;
           setSupport((old) => {
@@ -149,10 +168,14 @@ export function useFlowControlStatus({ active = true, observationVisible = true 
       resetWatchdog();
       try {
         // Flow observation is an LTS extension served only under /v0/management.
-        const response = await fetch(`${computeLtsExtensionApiUrl(apiBase)}${FLOW_CONTROL_ENDPOINTS.events}`, {
+        const response = await fetch(`${computeLtsExtensionApiUrl(apiBase)}${FLOW_CONTROL_ENDPOINTS.events}${view === 'total' ? '' : `?view=${view}`}`, {
           headers: { Authorization: `Bearer ${managementKey}`, Accept: 'text/event-stream' },
           signal: controller.signal, cache: 'no-store', redirect: 'error',
         });
+        if (stopped || generation !== observationGeneration.current) {
+          await response.body?.cancel().catch(() => {});
+          return;
+        }
         if ([401, 403, 404, 409, 501].includes(response.status)) {
           permanent = true;
           if (response.status === 409) serverDisabled();
@@ -164,12 +187,14 @@ export function useFlowControlStatus({ active = true, observationVisible = true 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         const frames = new FlowSSEDecoder((raw) => {
+          if (stopped || generation !== observationGeneration.current) return;
           if (asRecord(raw)?.['realtime-disabled'] === true) {
             serverDisabled();
             controller?.abort();
             return;
           }
-          const state = parseFlowEvent(raw);
+          const state = parseFlowEvent(raw, view);
+          if (!state && asRecord(asRecord(raw)?.state)?.breakdown) return;
           if (!state) throw new Error('Invalid summary');
           accept(state);
           failures = 0;
@@ -192,7 +217,7 @@ export function useFlowControlStatus({ active = true, observationVisible = true 
       } finally {
         clearWatchdog();
       }
-      if (stopped || permanent) return;
+      if (stopped || generation !== observationGeneration.current || permanent) return;
       failures++;
       setLiveState('reconnecting');
       retry = setTimeout(() => { void connect(); }, Math.min(10000, 1000 * 2 ** Math.min(failures, 3)));
@@ -204,7 +229,7 @@ export function useFlowControlStatus({ active = true, observationVisible = true 
       clearWatchdog();
       if (retry) clearTimeout(retry);
     };
-  }, [apiBase, managementKey, connectionStatus, ready, enabled, interval, live, visible, revision, active, observationVisible, statusVersion]);
+  }, [apiBase, managementKey, connectionStatus, ready, enabled, interval, live, visible, revision, active, observationVisible, statusVersion, view, groupingSupported]);
 
-  return { support, refresh: () => setRevision((value) => value + 1), live, setLive, liveState, history };
+  return { support, refresh: () => setRevision((value) => value + 1), live, setLive, liveState, history, view, setView: changeView };
 }

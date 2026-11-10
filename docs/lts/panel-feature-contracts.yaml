@@ -1360,7 +1360,7 @@ features:
       - /v0/management/flow-control/migration-preview
     required_markers:
       - FlowControlFields
-      - grouped-summary
+      - on-demand-grouped-summary
       - parseFlowBreakdown
       - flow-control-settings
       - key-model
