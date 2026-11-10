@@ -29,6 +29,7 @@ request层复选公开别名；attempt层使用Core返回的已解析目标。�
 - `SelectionField.tsx`：搜索复选、全部/明确集合、保存的未列出选项。
 - `RuleInspector.tsx`：调用Core的只读解释，显示本阶段容量与交叉矩阵。
 - `LiveMonitor.tsx`：汇总、资源样本、手动分页详情，不在每次SSE后自动请求详情。
+- `FlowTrend.tsx` / `grouping.ts`：一次订阅一个观察维度、同视图本地切指标和曲线选择；只消费 `on-demand-grouped-summary` 摘要，分组不完整时保留采样缺口。
 - `useStatus.ts`：可停止观察、标签页暂停、仅重连观察、按策略变化刷新目录。
 - `model.ts` / `yaml.ts`：数据校验与仅编辑字段写回，保留未知字段及注释。
 
@@ -37,6 +38,10 @@ request层复选公开别名；attempt层使用Core返回的已解析目标。�
 继续使用原管理认证及`PUT /config.yaml`。GET `/flow-control`返回能力、配置和运行结果；GET `/summary`、`/events`、`/details`分别负责汇总、SSE、分页详情；POST `/preview`、`/migration-preview`只读解释。所有上述相对路径均位于`/v0/management/flow-control`下。
 
 schema仍为3。新增可选字段：`configuration-failure`、`configured-policy`、`model-options-truncated`、目标`aliases/accounts`，并增加`resolved-model-options/last-good-policy`特性声明。未保存草稿、已保存期望策略、已应用策略分开处理。
+
+`on-demand-grouped-summary` 特性启用按需分组。普通状态、summary 和无 query 的 events 只返回总量，不构造 breakdown；非总量 SSE 使用 `?view=model|account|key|provider`。`state.breakdown` 包含 `view/groups/omitted/truncated`；每行只带 `stage/active/waiting` 和当前维度身份，模型视图的 attempt 另带 Provider，request 的 account/provider 身份为空。解析器按订阅视图核对字段、身份唯一性、有界行数、编码身份长度及总量，错视图帧不会进入历史，异常分组保留缺口。Core 与 Panel 使用字节一致的 `grouped-summary.json` 合成模型视图夹具核对计数。
+
+默认未开始观察、默认 total。开始后一次只订阅一个维度；换视图取消旧订阅并清空本段历史，最多保留 60 个样本。切指标和选线只在本地处理；total 不构造分组曲线，选线面板展开才构造搜索候选。停止保留已采曲线，暂停和缺失处留断点。旧能力 marker 不开启新分组。
 
 旧单目标explain继续可用，非法停用草稿返回不完整说明；不是panic或默认放行。预览是某个阶段当前的容量判断，不预留许可、不替代完整路由和首次联合申请。
 
@@ -50,6 +55,8 @@ npm run check:lts
 npm run type-check
 npm run lint
 npm run build
+# 流控分组图交互、兼容与响应式检查；也可使用 Playwright 自带 Chromium。
+CPA_SMOKE_BROWSER_CHANNEL=chrome python3 scripts/smoke-flow-grouping.py
 ```
 
 `model/insights/refinement.test.mjs`可在实际TypeScript下独立执行，不能据此宣称YAML、React或浏览器通过。`yaml/view.test.mjs`需要项目真实依赖。不得以手写模块替身验证完整构建。

@@ -1,4 +1,4 @@
-import type { FlowStatus } from './model';
+import type { FlowBreakdown, FlowStatus } from './model';
 
 export type FlowPoint = {
   sampledAt: number;
@@ -6,6 +6,7 @@ export type FlowPoint = {
   attempts: number;
   waiting: number;
   breakBefore: boolean;
+  breakdown?: FlowBreakdown;
 };
 
 /** Keep server sampling times; never manufacture a fixed-duration history. */
@@ -24,6 +25,7 @@ export function appendFlowSample(
     requests: state['active-requests'],
     attempts: state['active-attempts'],
     waiting: state.waiting,
+    breakdown: state.breakdown,
     breakBefore: !!last && (discontinuity || sampledAt - last.sampledAt > Math.max(5000, intervalMs * 3)),
   };
   if (last?.sampledAt === sampledAt) {

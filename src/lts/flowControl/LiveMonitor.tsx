@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/icons';
 import { FLOW_CONTROL_ENDPOINTS } from '@/services/api/flowControl';
 import { ltsExtensionClient } from '@/services/api/client';
-import { asRecord, canObserveLive, type FlowActivity, type FlowCapabilities } from './model';
+import { asRecord, canObserveLive, type FlowActivity, type FlowCapabilities, type FlowView } from './model';
 import { referenceLabel } from './insights';
 import { type FlowLiveState } from './useStatus';
 import styles from './styles.module.scss';
@@ -22,6 +22,8 @@ type Props = {
   setLive: (value: boolean) => void;
   liveState: FlowLiveState;
   history: FlowPoint[];
+  view?: FlowView;
+  setView?: (view: FlowView) => void;
   onRefresh: () => void;
 };
 type DetailsPage = {
@@ -46,7 +48,7 @@ function mib(value: number | undefined | null) {
   return value == null ? '?' : `${(value / 1048576).toFixed(1)} MiB`;
 }
 
-export function LiveMonitor({ data, live, setLive, liveState, history, onRefresh }: Props) {
+export function LiveMonitor({ data, live, setLive, liveState, history, onRefresh, view = 'total', setView = () => {} }: Props) {
   const { t } = useTranslation();
   const state = data?.state;
   const [filters, setFilters] = useState({ state: '', stage: '', model: '' });
@@ -166,7 +168,7 @@ export function LiveMonitor({ data, live, setLive, liveState, history, onRefresh
           {blockers.map(([key, count]) => <span key={key} className={styles.blocker}>{lookup(key)} · {count}</span>)}
         </div>}
       </div>
-      <FlowTrend history={history} liveState={liveState} />
+      <FlowTrend history={history} liveState={liveState} data={data} view={view} setView={setView} />
       <p className={styles.sampleLine}>
         {t('flow_control.sampled')}: {state?.['sampled-at'] ? new Date(state['sampled-at']).toLocaleString() : '—'}
         {' · '}{t('flow_control.v3_revision')} {state?.['policy-revision'] ?? '—'}

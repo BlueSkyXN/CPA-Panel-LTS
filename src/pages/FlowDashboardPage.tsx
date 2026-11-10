@@ -14,7 +14,7 @@ export function FlowDashboardPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const active = usePageTransitionLayer()?.isCurrentLayer ?? true;
-  const { support, refresh, live, setLive, liveState, history } = useFlowControlStatus({ active });
+  const { support, refresh, live, setLive, liveState, history, view, setView } = useFlowControlStatus({ active });
   useHeaderRefresh(refresh, active);
   const data = support.state === 'ready' ? support.data : null;
   return (
@@ -63,6 +63,8 @@ export function FlowDashboardPage() {
             setLive={setLive}
             liveState={liveState}
             history={history}
+            view={view}
+            setView={setView}
             onRefresh={refresh}
           />
           <RuleInspector data={data} runningOnly />

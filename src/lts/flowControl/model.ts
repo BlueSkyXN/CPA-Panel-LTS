@@ -269,6 +269,85 @@ export interface FlowStatus {
     activity?: FlowActivity[];
     'activity-total'?: number;
     'activity-truncated'?: boolean;
+    breakdown?: FlowBreakdown;
+}
+export interface FlowSummaryGroup {
+    stage: 'request' | 'attempt';
+    key?: string;
+    model?: string;
+    provider?: string;
+    account?: string;
+    active: number;
+    waiting: number;
+}
+export type FlowView = 'total' | 'model' | 'account' | 'key' | 'provider';
+export interface FlowBreakdown {
+    view: Exclude<FlowView, 'total'>;
+    groups: FlowSummaryGroup[];
+    omitted: { 'active-requests': number; 'active-attempts': number; waiting: number };
+    truncated: boolean;
+}
+
+// Match Core's bound on JSON-escaped identity values (without structural bytes).
+function encodedFlowIdentityBytes(values: string[]): number {
+    if (values.reduce((length, value) => length + value.length, 0) > 1024) return 1025;
+    let bytes = 0;
+    for (const value of values) for (const char of value) {
+        const code = char.codePointAt(0)!;
+        bytes += code < 32 || '<>&\u2028\u2029'.includes(char) ? 6
+            : char === '"' || char === '\\' ? 2
+                : code <= 0x7f ? 1 : code <= 0x7ff ? 2 : code <= 0xffff ? 3 : 4;
+        if (bytes > 1024) return bytes;
+    }
+    return bytes;
+}
+
+// Reject an incomplete extension independently so legacy totals remain usable.
+export function parseFlowBreakdown(raw: unknown, totals: Record<string, unknown>, view: FlowView): FlowBreakdown | undefined {
+    const data = asRecord(raw);
+    const omitted = asRecord(data?.omitted);
+    if (view === 'total' || !data || data.view !== view || !Array.isArray(data.groups) || data.groups.length > 128 || !omitted || typeof data.truncated !== 'boolean') return undefined;
+    const sums = { 'active-requests': 0, 'active-attempts': 0, waiting: 0 };
+    for (const field of ['active-requests', 'active-attempts', 'waiting'] as const) {
+        if (!integer(omitted[field], 0, 100000)) return undefined;
+        sums[field] = omitted[field] as number;
+    }
+    if (data.truncated !== Object.values(sums).some(value => value > 0)) return undefined;
+    const groups: FlowSummaryGroup[] = [];
+    const seen = new Set<string>();
+    for (const value of data.groups) {
+        const row = asRecord(value);
+        if (!row || (row.stage !== 'request' && row.stage !== 'attempt') || !integer(row.active, 0, 100000) || !integer(row.waiting, 0, 100000)) return undefined;
+        const allowed = new Set(['stage', 'active', 'waiting', ...(view === 'model'
+            ? row.stage === 'attempt' ? ['model', 'provider'] : ['model']
+            : (row.stage === 'request' && (view === 'account' || view === 'provider')) ? [] : [view])]);
+        if (Object.keys(row).some(field => !allowed.has(field))) return undefined;
+        for (const field of ['key', 'account', 'provider', 'model'] as const) {
+            const value = row[field];
+            if (value !== undefined && (typeof value !== 'string')) return undefined;
+        }
+        for (const field of ['key', 'account'] as const) {
+            if (row[field] && !/^(anonymous|[a-f0-9]{64})$/.test(row[field] as string)) return undefined;
+        }
+        const identityValues = [row.stage, row.key ?? '', row.model ?? '', row.provider ?? '', row.account ?? ''] as string[];
+        if (encodedFlowIdentityBytes(identityValues) > 1024) return undefined;
+        const group: FlowSummaryGroup = {
+            stage: row.stage, active: row.active as number, waiting: row.waiting as number,
+            key: row.key as string | undefined, model: row.model as string | undefined,
+            provider: row.provider as string | undefined, account: row.account as string | undefined,
+        };
+        const identity = JSON.stringify([group.stage, group.key ?? '', group.model ?? '', group.provider ?? '', group.account ?? '']);
+        if (seen.has(identity)) return undefined;
+        seen.add(identity);
+        sums[group.stage === 'request' ? 'active-requests' : 'active-attempts'] += group.active;
+        sums.waiting += group.waiting;
+        groups.push(group);
+    }
+    if (Object.entries(sums).some(([field, sum]) => sum !== totals[field])) return undefined;
+    return { view: data.view as FlowBreakdown['view'], groups, omitted: sumsFromOmitted(omitted), truncated: data.truncated };
+}
+function sumsFromOmitted(omitted: Record<string, unknown>): FlowBreakdown['omitted'] {
+    return { 'active-requests': omitted['active-requests'] as number, 'active-attempts': omitted['active-attempts'] as number, waiting: omitted.waiting as number };
 }
 export interface FlowCapabilities {
     supported: boolean;
@@ -328,7 +407,7 @@ export function parseFlowCapabilities(raw: unknown): FlowCapabilities | null {
         'events-enabled': Number(data['schema-version']) >= 3 ? data['events-enabled'] === true : data['events-supported'] === true,
         'events-interval-ms': integer(data['events-interval-ms'], 500, 30000) ? data['events-interval-ms'] : 2000,
         'model-options': Array.isArray(data['model-options']) ? data['model-options'].filter((v): v is FlowModelOption => { const x = asRecord(v); return !!x && typeof x.ref === 'string' && typeof x.model === 'string' && typeof x.provider === 'string'; }) : [],
-        'explain-supported': data['explain-supported'] === true, state: { ...state, ...(asRecord(data.policy) ? { policy: data.policy } : {}) } as unknown as FlowStatus };
+        'explain-supported': data['explain-supported'] === true, state: { ...state, breakdown: undefined, ...(asRecord(data.policy) ? { policy: data.policy } : {}) } as unknown as FlowStatus };
 }
 export const FLOW_DIMENSIONS = ['key', 'model', 'provider', 'account', 'credential', 'auth-kind'] as const;
 export type FlowDimension = typeof FLOW_DIMENSIONS[number];
@@ -360,7 +439,7 @@ export const scopeDimensions: Record<string, string[]> = {
 export function dimensionsForRule(rule: Pick<FlowRule, 'scope' | 'group-by'>): string[] {
     return rule.scope === 'custom' ? [...(Array.isArray(rule['group-by']) ? rule['group-by'] : [])].sort() : scopeDimensions[rule.scope] ?? [];
 }
-export function parseFlowEvent(raw: unknown): FlowStatus | null {
+export function parseFlowEvent(raw: unknown, view: FlowView = 'total'): FlowStatus | null {
     const data = asRecord(raw);
     const state = asRecord(data?.state);
     if (![2, 3].includes(Number(data?.['schema-version'])) || !state)
@@ -372,7 +451,8 @@ export function parseFlowEvent(raw: unknown): FlowStatus | null {
             return null;
     if (typeof state['sampled-at'] !== 'string' || typeof state['process-id'] !== 'string')
         return null;
-    return state as unknown as FlowStatus;
+    if (view !== 'total' && state.breakdown !== undefined && asRecord(state.breakdown)?.view !== view) return null;
+    return { ...state, breakdown: parseFlowBreakdown(state.breakdown, state, view) } as unknown as FlowStatus;
 }
 export interface FlowObservation {
     realtime: boolean;
@@ -453,7 +533,7 @@ export function setSelection(rule: FlowRule, field: 'models' | 'keys' | 'account
 }
 export function mergeSummary(previous: FlowStatus, next: FlowStatus): FlowStatus {
     // SSE carries no catalogs/policy/detail arrays; those remain manual reads.
-    return { ...previous, ...next, policy: previous.policy, buckets: previous.buckets, activity: undefined, resources: next.resources };
+    return { ...previous, ...next, policy: previous.policy, buckets: previous.buckets, activity: undefined, resources: next.resources, breakdown: next.breakdown };
 }
 export function mergeMigration(original: FlowRule[], converted: FlowRule[]): FlowRule[] {
     return converted.map(r => {
