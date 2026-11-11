@@ -64,7 +64,16 @@ export function ModelAdvancedFields({
     <>
       {capabilities.maxContextLength ? textField('maxContextLength', true) : null}
       {checkbox('forceMapping')}
-      {capabilities.isCompat ? checkbox('isCompat') : null}
+      {capabilities.isCompat ? (
+        <>
+          {checkbox('isCompat')}
+          {providerBrand === 'codex' ? (
+            <small className={styles.labelHint}>
+              {t('providersPage.modelOptions.isCompatCodexHint')}
+            </small>
+          ) : null}
+        </>
+      ) : null}
       {capabilities.configurationUpdate ? checkbox('supportConfigurationUpdate') : null}
       {capabilities.modalities ? (
         <>

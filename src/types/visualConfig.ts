@@ -180,6 +180,7 @@ export type VisualConfigValues = FlowControlValues & {
   claudeHeaderStabilizeDeviceProfile: boolean;
   codexHeaderUserAgent: string;
   codexHeaderBetaFeatures: string;
+  codexOptimizeMultiAgentV2: boolean;
   codexIdentityConfuse: boolean;
   codexZcodeContextUsage: string;
   // Empty means the Core default; unknown values remain visible and untouched.
@@ -278,6 +279,7 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   claudeHeaderStabilizeDeviceProfile: false,
   codexHeaderUserAgent: '',
   codexHeaderBetaFeatures: '',
+  codexOptimizeMultiAgentV2: false,
   codexIdentityConfuse: false,
   codexZcodeContextUsage: '',
   codexCacheAffinityStrategy: '',

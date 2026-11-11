@@ -209,6 +209,11 @@ export const CONFIG_FIELDS = {
     yamlKey: 'codex-header-defaults.beta-features',
     fullWidth: false,
   },
+  codexOptimizeMultiAgentV2: {
+    labelKey: 'config_management.visual.sections.headers.codex_optimize_multi_agent_v2',
+    yamlKey: 'codex.optimize-multi-agent-v2',
+    fullWidth: true,
+  },
   codexCacheAffinityStrategy: {
     labelKey: 'codex_cache_affinity.title',
     yamlKey: 'codex.cache-affinity.strategy',
@@ -618,7 +623,12 @@ export const CONFIG_DOMAINS = [
       },
       {
         id: 'codex',
-        fields: ['codexHeaderUserAgent', 'codexHeaderBetaFeatures', 'codexIdentityConfuse'],
+        fields: [
+          'codexHeaderUserAgent',
+          'codexHeaderBetaFeatures',
+          'codexIdentityConfuse',
+          'codexOptimizeMultiAgentV2',
+        ],
       },
     ],
   },

@@ -1,7 +1,9 @@
 /**
  * LTS: provider status bars driven by the complete usage statistics (`/v0/management/usage`
  * via the LTS extension client, or the usage query workspace). Usage is attributed by the
- * auth index Core injects into v8 `api-keys`, falling back to API key/prefix sources.
+ * auth index Core injects into v8 `api-keys`. OpenAI-compatible entries use the index as
+ * authoritative when present, because a shared key can serve different base URLs; older
+ * unindexed entries still fall back to API key/prefix sources.
  * Core recent-request summaries are only a fallback when full usage is unavailable.
  */
 import {

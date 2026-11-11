@@ -1411,6 +1411,7 @@ function getNextDirtyFields(
       ...FLOW_FIELDS,
       'codexHeaderUserAgent',
       'codexHeaderBetaFeatures',
+      'codexOptimizeMultiAgentV2',
       'codexIdentityConfuse',
       'codexZcodeContextUsage',
       'codexCacheAffinityStrategy',
@@ -1796,6 +1797,7 @@ export function useVisualConfig() {
           typeof codexHeaderDefaults?.['beta-features'] === 'string'
             ? codexHeaderDefaults['beta-features']
             : '',
+        codexOptimizeMultiAgentV2: readConfigBoolean(codex?.['optimize-multi-agent-v2']),
         codexIdentityConfuse: readConfigBoolean(codex?.['identity-confuse']),
         codexZcodeContextUsage: readZcodeContextUsage(codex?.['zcode-context-usage']),
         codexCacheAffinityStrategy: readCodexCacheAffinity(codex?.['cache-affinity']),
@@ -2213,6 +2215,7 @@ export function useVisualConfig() {
         const outboundDirty = CODEX_OUTBOUND_FIELDS.some(([field]) => dirtyFields.has(field));
         const contextUsageDirty = dirtyFields.has('codexZcodeContextUsage');
         const codexDirty =
+          dirtyFields.has('codexOptimizeMultiAgentV2') ||
           dirtyFields.has('codexIdentityConfuse') ||
           dirtyFields.has('codexCacheAffinityStrategy') ||
           contextUsageDirty ||
@@ -2280,6 +2283,13 @@ export function useVisualConfig() {
           }
           if (dirtyFields.has('codexIdentityConfuse')) {
             setBooleanInDoc(doc, ['codex', 'identity-confuse'], values.codexIdentityConfuse);
+          }
+          if (dirtyFields.has('codexOptimizeMultiAgentV2')) {
+            setBooleanInDoc(
+              doc,
+              ['codex', 'optimize-multi-agent-v2'],
+              values.codexOptimizeMultiAgentV2
+            );
           }
           if (abnormalReasoningRetryDirty) {
             ensureMapInDoc(doc, ['codex', 'abnormal-reasoning-retry']);
