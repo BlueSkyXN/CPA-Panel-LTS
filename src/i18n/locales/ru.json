@@ -2162,6 +2162,8 @@
           "stabilize_device": "Стабилизировать профиль устройства",
           "stabilize_device_desc": "Фиксировать OS/Arch и стабилизировать программный отпечаток для учётных данных/API-ключа",
           "beta_features": "Экспериментальные функции",
+          "codex_optimize_multi_agent_v2": "Codex Multi-Agent v2 (optimize-multi-agent-v2)",
+          "codex_optimize_multi_agent_v2_desc": "Для Codex Desktop, codex-tui и codex_cli_rs. Обновляет сведения о моделях spawn_agent, запрашивает текстовые аргументы сообщений и преобразует только полностью текстовый agent_message. Для сторонних Responses endpoint в codex-api-key включите is-compat у моделей, которым нужно такое преобразование.",
           "codex_identity_confuse": "Смешивание личности Codex",
           "codex_identity_confuse_desc": "При маршрутизации с заполнением или привязке сессии переназначает ключ кэша и установочную личность Codex под выбранную запись авторизации",
           "codex_abnormal_reasoning_retry_title": "Стратегия защиты Codex от деградации",
@@ -3016,7 +3018,8 @@
       "showFewerEntries": "Показать меньше",
       "proxyBadge": "Прокси",
       "modelBadgeImage": "Image",
-      "modelBadgeThinking": "Thinking"
+      "modelBadgeThinking": "Thinking",
+      "modelBadgeCompat": "is-compat"
     },
     "delete": {
       "title": "Удалить ресурс",
@@ -3200,7 +3203,8 @@
       "maxContextLength": "Размер контекста",
       "contextHint": "Неотрицательное безопасное целое число; пустое поле — значение по умолчанию.",
       "forceMapping": "Заменять имя модели в ответе на псевдоним",
-      "isCompat": "Режим совместимости",
+      "isCompat": "is-compat (режим совместимости)",
+      "isCompatCodexHint": "Помечает эту модель Codex API Key как совместимую с upstream. Для преобразования сообщений Multi-Agent v2 также включите глобальный переключатель.",
       "supportConfigurationUpdate": "Разрешить обновление конфигурации",
       "inputModalitiesText": "Входные модальности",
       "outputModalitiesText": "Выходные модальности",

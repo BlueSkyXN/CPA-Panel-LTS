@@ -139,6 +139,11 @@ export function ModelEntriesEditor({
                     {t('providersPage.form.modelBadgeThinking')}
                   </span>
                 ) : null}
+                {!expanded && entry.isCompat === true ? (
+                  <span className={styles.entryBadge}>
+                    {t('providersPage.form.modelBadgeCompat')}
+                  </span>
+                ) : null}
                 {hasExtendedOptions ? (
                   <button
                     type="button"

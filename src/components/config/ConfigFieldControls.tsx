@@ -523,6 +523,17 @@ export function useConfigFieldControls({
         disabled={disabled}
       />
     ),
+    codexOptimizeMultiAgentV2: (
+      <ToggleRow
+        title={t('config_management.visual.sections.headers.codex_optimize_multi_agent_v2')}
+        description={t(
+          'config_management.visual.sections.headers.codex_optimize_multi_agent_v2_desc'
+        )}
+        checked={values.codexOptimizeMultiAgentV2}
+        disabled={disabled}
+        onChange={(codexOptimizeMultiAgentV2) => onChange({ codexOptimizeMultiAgentV2 })}
+      />
+    ),
     codexIdentityConfuse: (
       <ToggleRow
         title={t('config_management.visual.sections.headers.codex_identity_confuse')}

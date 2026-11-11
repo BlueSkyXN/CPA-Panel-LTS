@@ -350,6 +350,8 @@ type UsageIdentity = {
   authIndex?: unknown;
   apiKey?: string;
   prefix?: string;
+  /** Do not attribute an indexed credential from a shared API key when its index has no data. */
+  authIndexAuthoritative?: boolean;
 };
 import { isUsageQueryStatusIndex } from '@/utils/usageIndex';
 import { queryStatusBar } from '@/utils/usage/queryView';
@@ -357,8 +359,18 @@ import type { UsageQuerySummary } from '@/types/usageQuery';
 
 const queryGroupsForIdentity = (summary: UsageQuerySummary, identity: UsageIdentity) => {
   const auth = normalizeAuthIndex(identity.authIndex);
-  if (auth && summary.groups.credentials?.some((g) => normalizeAuthIndex(g.auth_index) === auth && g.metrics.requests > 0)) return (summary.groups.status ?? []).filter((g) => normalizeAuthIndex(g.auth_index) === auth);
-  const candidates = new Set(buildCandidateUsageSourceIds({ apiKey: identity.apiKey, prefix: identity.prefix }));
+  if (
+    auth &&
+    (identity.authIndexAuthoritative ||
+      summary.groups.credentials?.some(
+        (g) => normalizeAuthIndex(g.auth_index) === auth && g.metrics.requests > 0
+      ))
+  ) {
+    return (summary.groups.status ?? []).filter((g) => normalizeAuthIndex(g.auth_index) === auth);
+  }
+  const candidates = new Set(
+    buildCandidateUsageSourceIds({ apiKey: identity.apiKey, prefix: identity.prefix })
+  );
   return (summary.groups.status ?? []).filter((g) => candidates.has(normalizeUsageSourceId(g.source ?? '')));
 };
 
@@ -369,9 +381,8 @@ export const getStatsForIdentity = (
   const authIndexKey = normalizeAuthIndex(identity.authIndex);
   if (authIndexKey) {
     const stats = keyStats.byAuthIndex?.[authIndexKey];
-    if (stats) {
-      return { success: stats.success, failure: stats.failure };
-    }
+    if (stats) return { success: stats.success, failure: stats.failure };
+    if (identity.authIndexAuthoritative) return { success: 0, failure: 0 };
   }
 
   return getStatsBySource(identity.apiKey ?? '', keyStats, identity.prefix);
@@ -385,9 +396,7 @@ export const collectUsageDetailsForIdentity = (
   const authIndexKey = normalizeAuthIndex(identity.authIndex);
   if (authIndexKey) {
     const details = collectUsageDetailsForAuthIndices(usageDetailsByAuthIndex, [authIndexKey]);
-    if (details.length > 0) {
-      return details;
-    }
+    if (details.length > 0 || identity.authIndexAuthoritative) return details;
   }
 
   const candidates = buildCandidateUsageSourceIds({
@@ -430,7 +439,7 @@ export const getOpenAIProviderStats = (
 
   if (!provider.apiKeyEntries?.length) {
     const stats = getStatsForIdentity(
-      { authIndex: provider.authIndex, prefix: provider.prefix },
+      { authIndex: provider.authIndex, prefix: provider.prefix, authIndexAuthoritative: true },
       keyStats
     );
     return { success: stats.success, failure: stats.failure };
@@ -443,7 +452,10 @@ export const getOpenAIProviderStats = (
   }
 
   provider.apiKeyEntries.forEach((entry) => {
-    const stats = getStatsForIdentity({ authIndex: entry.authIndex, apiKey: entry.apiKey }, keyStats);
+    const stats = getStatsForIdentity(
+      { authIndex: entry.authIndex, apiKey: entry.apiKey, authIndexAuthoritative: true },
+      keyStats
+    );
     success += stats.success;
     failure += stats.failure;
   });
@@ -458,7 +470,7 @@ export const collectOpenAIProviderUsageDetails = (
 ): UsageDetail[] => {
   if (!provider.apiKeyEntries?.length) {
     return collectUsageDetailsForIdentity(
-      { authIndex: provider.authIndex, prefix: provider.prefix },
+      { authIndex: provider.authIndex, prefix: provider.prefix, authIndexAuthoritative: true },
       usageDetailsBySource,
       usageDetailsByAuthIndex
     );
@@ -478,7 +490,7 @@ export const collectOpenAIProviderUsageDetails = (
   provider.apiKeyEntries.forEach((entry) => {
     groups.push(
       collectUsageDetailsForIdentity(
-        { authIndex: entry.authIndex, apiKey: entry.apiKey },
+        { authIndex: entry.authIndex, apiKey: entry.apiKey, authIndexAuthoritative: true },
         usageDetailsBySource,
         usageDetailsByAuthIndex
       )
@@ -509,11 +521,28 @@ export const getOpenAIProviderFullUsageStatusData = (
 ): FullUsageStatusBarData => {
   if (isUsageQueryStatusIndex(usageDetailsBySource)) {
     const summary = usageDetailsBySource.summary;
-    const identities: UsageIdentity[] = !provider.apiKeyEntries?.length ? [{ authIndex: provider.authIndex, prefix: provider.prefix }] : [
-      ...(!normalizeAuthIndex(provider.authIndex) && provider.prefix ? [{ prefix: provider.prefix }] : []),
-      ...provider.apiKeyEntries.map((entry) => ({ authIndex: entry.authIndex, apiKey: entry.apiKey })),
-    ];
-    return queryStatusBar(identities.flatMap((identity) => queryGroupsForIdentity(summary, identity)), summary.now_ms);
+    const identities: UsageIdentity[] = !provider.apiKeyEntries?.length
+      ? [
+          {
+            authIndex: provider.authIndex,
+            prefix: provider.prefix,
+            authIndexAuthoritative: true,
+          },
+        ]
+      : [
+          ...(!normalizeAuthIndex(provider.authIndex) && provider.prefix
+            ? [{ prefix: provider.prefix }]
+            : []),
+          ...provider.apiKeyEntries.map((entry) => ({
+            authIndex: entry.authIndex,
+            apiKey: entry.apiKey,
+            authIndexAuthoritative: true,
+          })),
+        ];
+    return queryStatusBar(
+      identities.flatMap((identity) => queryGroupsForIdentity(summary, identity)),
+      summary.now_ms
+    );
   }
   return calculateStatusBarData(
     collectOpenAIProviderUsageDetails(provider, usageDetailsBySource, usageDetailsByAuthIndex)

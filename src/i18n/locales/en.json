@@ -2157,6 +2157,8 @@
           "stabilize_device": "Stabilize Device Profile",
           "stabilize_device_desc": "Pin OS/Arch and stabilize the software fingerprint per credential/API key",
           "beta_features": "Beta Features",
+          "codex_optimize_multi_agent_v2": "Codex Multi-Agent v2 (optimize-multi-agent-v2)",
+          "codex_optimize_multi_agent_v2_desc": "Applies to Codex Desktop, codex-tui, and codex_cli_rs. It refreshes spawn_agent model details, requests plaintext message arguments, and converts only fully plaintext agent_message input. For third-party Responses endpoints configured under codex-api-key, enable model-level is-compat where conversion is needed.",
           "codex_identity_confuse": "Codex Identity Confuse",
           "codex_identity_confuse_desc": "When fill-first routing or session affinity is used, remap Codex prompt_cache_key and installation identity for the selected auth",
           "codex_abnormal_reasoning_retry_title": "Codex Abnormal Reasoning Retry",
@@ -3018,7 +3020,8 @@
       "showFewerEntries": "Show fewer",
       "proxyBadge": "Proxy",
       "modelBadgeImage": "Image",
-      "modelBadgeThinking": "Thinking"
+      "modelBadgeThinking": "Thinking",
+      "modelBadgeCompat": "is-compat"
     },
     "delete": {
       "title": "Delete resource",
@@ -3202,7 +3205,8 @@
       "maxContextLength": "Context length",
       "contextHint": "Non-negative integer; leave empty to use the default.",
       "forceMapping": "Rewrite response model to alias",
-      "isCompat": "Compatibility mode",
+      "isCompat": "is-compat compatibility mode",
+      "isCompatCodexHint": "Mark this Codex API-key model as compatible with its upstream. Multi-Agent v2 message conversion also requires the global switch.",
       "supportConfigurationUpdate": "Allow configuration updates",
       "inputModalitiesText": "Input modalities",
       "outputModalitiesText": "Output modalities",

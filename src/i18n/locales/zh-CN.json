@@ -2155,6 +2155,8 @@
           "stabilize_device": "稳定设备指纹",
           "stabilize_device_desc": "固定 OS/Arch，并按凭据/API Key 稳定软件指纹",
           "beta_features": "实验功能",
+          "codex_optimize_multi_agent_v2": "Codex 多代理 v2 优化（optimize-multi-agent-v2）",
+          "codex_optimize_multi_agent_v2_desc": "适用于 Codex Desktop、codex-tui 和 codex_cli_rs。启用后刷新 spawn_agent 模型信息、请求明文消息参数，并只转换完全明文的 agent_message。通过 codex-api-key 接入第三方 Responses 上游时，在需要转换的模型上开启 is-compat。",
           "codex_identity_confuse": "Codex 身份混淆",
           "codex_identity_confuse_desc": "在填满优先或会话亲和性路由下，按所选认证重映射 Codex 缓存键与安装身份",
           "codex_abnormal_reasoning_retry_title": "Codex 降智对抗策略",
@@ -3016,7 +3018,8 @@
       "showFewerEntries": "收起",
       "proxyBadge": "代理",
       "modelBadgeImage": "图片",
-      "modelBadgeThinking": "Thinking"
+      "modelBadgeThinking": "Thinking",
+      "modelBadgeCompat": "is-compat"
     },
     "delete": {
       "title": "删除资源",
@@ -3200,7 +3203,8 @@
       "maxContextLength": "上下文长度",
       "contextHint": "非负安全整数；留空使用默认值。",
       "forceMapping": "将响应模型名称改写为别名",
-      "isCompat": "兼容模式",
+      "isCompat": "is-compat 兼容模式",
+      "isCompatCodexHint": "将此 Codex API Key 模型标记为兼容上游。多代理 v2 消息转换还需开启全局开关。",
       "supportConfigurationUpdate": "允许配置更新",
       "inputModalitiesText": "输入模态",
       "outputModalitiesText": "输出模态",
