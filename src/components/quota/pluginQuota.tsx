@@ -107,9 +107,13 @@ export const PLUGIN_CONFIG: QuotaConfig<PluginQuotaState, PluginQuotaData> = {
                           }).format(metric.value)
                         : number.format(metric.value)}
                     </strong>
-                    {metric.unit && (
+                    {(metric.unit || copilotMetric?.labelKey === 'premium_interactions') && (
                       <span className={styles.metricUnit}>
-                        {metric.unit === 'requests' ? t('plugin_quota.request_unit') : metric.unit}
+                        {copilotMetric?.labelKey === 'premium_interactions'
+                          ? t('plugin_quota.copilot.credits_unit')
+                          : metric.unit === 'requests'
+                            ? t('plugin_quota.request_unit')
+                            : metric.unit}
                       </span>
                     )}
                   </span>

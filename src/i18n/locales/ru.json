@@ -3371,10 +3371,11 @@
       "usage": "Использование",
       "chat": "Чат",
       "completions": "Автодополнение кода",
-      "premium_interactions": "Премиальные запросы",
+      "premium_interactions": "Премиальные кредиты",
       "chat_remaining": "Осталось запросов чата",
       "completions_remaining": "Осталось автодополнений",
-      "premium_interactions_remaining": "Осталось премиальных запросов"
+      "premium_interactions_remaining": "Осталось премиальных кредитов",
+      "credits_unit": "кред."
     },
     "unsupported": "Квоты плагинов недоступны на этом сервере.",
     "connection_changed": "Подключение изменилось. Обновите квоту."

@@ -3373,10 +3373,11 @@
       "usage": "Usage details",
       "chat": "Chat",
       "completions": "Code completions",
-      "premium_interactions": "Premium requests",
+      "premium_interactions": "Premium credits",
       "chat_remaining": "Chat requests remaining",
       "completions_remaining": "Code completions remaining",
-      "premium_interactions_remaining": "Premium requests remaining"
+      "premium_interactions_remaining": "Premium credits remaining",
+      "credits_unit": "credits"
     },
     "unsupported": "Plugin quota is unavailable on this server.",
     "connection_changed": "Connection changed. Refresh quota again."
