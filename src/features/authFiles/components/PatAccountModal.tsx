@@ -49,7 +49,7 @@ export function PatAccountModal({ file, onClose, onSaved }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [config, setConfig] = useState<Awaited<ReturnType<typeof patProvidersApi.configuration>>>();
-  const [configError, setConfigError] = useState(false);
+  const [configError, setConfigError] = useState('');
   const [accountLoadError, setAccountLoadError] = useState(false);
   const [retry, setRetry] = useState(0);
   const generation = useRef(0);
@@ -82,7 +82,7 @@ export function PatAccountModal({ file, onClose, onSaved }: Props) {
   useEffect(() => {
     const current = ++generation.current;
     setConfig(undefined);
-    setConfigError(false);
+    setConfigError('');
     setAccountLoadError(false);
     setInitialExtraModels(null);
     if (enabled) {
@@ -107,10 +107,14 @@ export function PatAccountModal({ file, onClose, onSaved }: Props) {
             setInitialExtraModels(models);
           }
         })
-        .catch((error) => {
+        .catch((error: unknown) => {
           if (current === generation.current) {
-            setConfigError(true);
             setAccountLoadError(error instanceof Error && error.message === 'account_load_failed');
+            setConfigError(
+              error instanceof Error && error.message === 'coding_plan_upgrade_required'
+                ? 'coding_plan_upgrade_required'
+                : 'plugin_unavailable'
+            );
           }
         });
     }
@@ -140,7 +144,7 @@ export function PatAccountModal({ file, onClose, onSaved }: Props) {
         );
       }
       if (!file) auth = buildAccountAuth(provider, label, pat, deviceId, undefined, models);
-    } catch (error) {
+    } catch (error: unknown) {
       setError(
         t(
           error instanceof Error && error.message === 'invalid_extra_models'
@@ -357,6 +361,14 @@ export function PatAccountModal({ file, onClose, onSaved }: Props) {
         </details>
       )}
       <p className="hint">{t('pat_accounts.storage_hint')}</p>
+      {provider === 'zcode-coding-plan' && (
+        <p className="hint">{t('pat_accounts.coding_plan_single_account_hint')}</p>
+      )}
+      {provider === 'zcode-coding-plan' && config && !config.hostLoggingAcknowledged && (
+        <p className="hint" role="status">
+          {t('pat_accounts.coding_plan_logging_required')}
+        </p>
+      )}
       {file && (
         <p className="hint">
           {t(
@@ -379,9 +391,9 @@ export function PatAccountModal({ file, onClose, onSaved }: Props) {
       {(!enabled || configError) && (
         <div className="error-box" role="alert">
           {t(
-            accountLoadError
+            accountLoadError && !configError
               ? 'pat_accounts.account_load_failed'
-              : 'pat_accounts.plugin_unavailable'
+              : `pat_accounts.${configError || 'plugin_unavailable'}`
           )}
           {enabled && (
             <Button variant="secondary" size="sm" onClick={() => setRetry((value) => value + 1)}>

@@ -72,6 +72,10 @@ export function AuthFilesOAuthExcludedEditPage() {
   const [modelsError, setModelsError] = useState<ModelsErrorKind | null>(null);
   const [customRule, setCustomRule] = useState('');
   const [saving, setSaving] = useState(false);
+  const [modelFilter, setModelFilter] = useState('');
+  // Shift+点击范围多选：记录最近一次普通点击的模型作为锚点。
+  const anchorModelIdRef = useRef<string | null>(null);
+  const shiftKeyDownRef = useRef(false);
 
   useEffect(() => {
     setProvider(providerFromParams);
@@ -94,6 +98,23 @@ export function AuthFilesOAuthExcludedEditPage() {
   }, [excluded, files, modelAlias]);
 
   const resolvedProviderKey = useMemo(() => normalizeProviderKey(provider), [provider]);
+  const modelFilterKey = useMemo(() => modelFilter.trim().toLowerCase(), [modelFilter]);
+  const visibleModels = useMemo(() => {
+    if (!modelFilterKey) return modelsList;
+    return modelsList.filter(
+      (model) =>
+        model.id.toLowerCase().includes(modelFilterKey) ||
+        (model.display_name ?? '').toLowerCase().includes(modelFilterKey)
+    );
+  }, [modelsList, modelFilterKey]);
+  const visibleSelectedCount = useMemo(
+    () =>
+      visibleModels.reduce(
+        (count, model) => (hasOAuthExcludedRule(selectedModels, model.id) ? count + 1 : count),
+        0
+      ),
+    [selectedModels, visibleModels]
+  );
   const isEditing = useMemo(() => {
     if (!resolvedProviderKey) return false;
     return Object.prototype.hasOwnProperty.call(excluded, resolvedProviderKey);
@@ -167,6 +188,18 @@ export function AuthFilesOAuthExcludedEditPage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleBack]);
 
+  useEffect(() => {
+    const syncShiftKey = (event: KeyboardEvent) => {
+      shiftKeyDownRef.current = event.shiftKey;
+    };
+    window.addEventListener('keydown', syncShiftKey);
+    window.addEventListener('keyup', syncShiftKey);
+    return () => {
+      window.removeEventListener('keydown', syncShiftKey);
+      window.removeEventListener('keyup', syncShiftKey);
+    };
+  }, []);
+
   const loadInitialData = useCallback(async () => {
     const requestId = ++loadRequestRef.current;
     setInitialLoading(true);
@@ -227,6 +260,8 @@ export function AuthFilesOAuthExcludedEditPage() {
   }, [loadInitialData]);
 
   useEffect(() => {
+    anchorModelIdRef.current = null;
+    setModelFilter('');
     if (!resolvedProviderKey) {
       setSelectedModels(new Set());
       return;
@@ -246,6 +281,7 @@ export function AuthFilesOAuthExcludedEditPage() {
 
     let cancelled = false;
     setModelsList([]);
+    anchorModelIdRef.current = null;
     setModelsLoading(true);
     setModelsError(null);
 
@@ -368,9 +404,56 @@ export function AuthFilesOAuthExcludedEditPage() {
     [applyProviderChange, contentDirty, resolvedProviderKey, showConfirmation, unsavedChangesDialog]
   );
 
-  const toggleModel = useCallback((modelId: string, checked: boolean) => {
-    setSelectedModels((prev) => new Set(updateOAuthExcludedRule(prev, modelId, checked)));
-  }, []);
+  const toggleModel = useCallback(
+    (modelId: string, checked: boolean, shiftRange = false) => {
+      if (!shiftRange) {
+        anchorModelIdRef.current = modelId;
+        setSelectedModels((prev) => new Set(updateOAuthExcludedRule(prev, modelId, checked)));
+        return;
+      }
+      // Shift+点击：以最近一次普通点击为锚点，把区间内的可见模型统一为目标状态。
+      const anchorId = anchorModelIdRef.current;
+      const anchorIndex = anchorId
+        ? visibleModels.findIndex((model) => model.id === anchorId)
+        : -1;
+      const targetIndex = visibleModels.findIndex((model) => model.id === modelId);
+      if (anchorIndex === -1 || targetIndex === -1) {
+        anchorModelIdRef.current = modelId;
+        setSelectedModels((prev) => new Set(updateOAuthExcludedRule(prev, modelId, checked)));
+        return;
+      }
+      const [start, end] =
+        anchorIndex <= targetIndex ? [anchorIndex, targetIndex] : [targetIndex, anchorIndex];
+      const rangeIds = visibleModels.slice(start, end + 1).map((model) => model.id);
+      const rangeKeys = new Set(rangeIds.map((id) => id.trim().toLowerCase()));
+      setSelectedModels((prev) => {
+        const kept = normalizeOAuthExcludedRules(prev).filter(
+          (value) => !rangeKeys.has(value.trim().toLowerCase())
+        );
+        return new Set(checked ? [...kept, ...rangeIds] : kept);
+      });
+    },
+    [visibleModels]
+  );
+
+  const selectVisibleModels = useCallback(() => {
+    setSelectedModels((prev) =>
+      new Set(normalizeOAuthExcludedRules([...prev, ...visibleModels.map((model) => model.id)]))
+    );
+  }, [visibleModels]);
+
+  const clearVisibleModels = useCallback(() => {
+    setSelectedModels((prev) => {
+      const visibleKeys = new Set(
+        visibleModels.map((model) => model.id.trim().toLowerCase())
+      );
+      return new Set(
+        normalizeOAuthExcludedRules(prev).filter(
+          (value) => !visibleKeys.has(value.trim().toLowerCase())
+        )
+      );
+    });
+  }, [visibleModels]);
 
   const handleAddCustomRule = useCallback(() => {
     if (!customRule.trim()) return;
@@ -603,35 +686,87 @@ export function AuthFilesOAuthExcludedEditPage() {
               )}
             </div>
 
+            {!modelsLoading && modelsList.length > 0 && (
+              <div className={styles.modelsToolbar}>
+                <input
+                  type="text"
+                  className={`input ${styles.modelsFilterInput}`}
+                  value={modelFilter}
+                  onChange={(event) => setModelFilter(event.target.value)}
+                  placeholder={t('oauth_excluded.models_filter_placeholder')}
+                  aria-label={t('oauth_excluded.models_filter_label')}
+                  disabled={disableControls || saving}
+                />
+                <div className={styles.modelsToolbarActions}>
+                  <span className={styles.modelsSelectedCount}>
+                    {t('oauth_excluded.models_selected_count', {
+                      selected: visibleSelectedCount,
+                      total: visibleModels.length,
+                    })}
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={selectVisibleModels}
+                    disabled={disableControls || saving || visibleModels.length === 0}
+                  >
+                    {t('oauth_excluded.models_select_all')}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={clearVisibleModels}
+                    disabled={disableControls || saving || visibleSelectedCount === 0}
+                  >
+                    {t('oauth_excluded.models_clear')}
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {modelsLoading ? (
               <div className={styles.loadingModels}>
                 <LoadingSpinner size={16} />
                 <span>{t('common.loading')}</span>
               </div>
             ) : modelsList.length > 0 ? (
-              <div className={styles.modelList}>
-                {modelsList.map((model) => {
-                  const checked = hasOAuthExcludedRule(selectedModels, model.id);
-                  return (
-                    <SelectionCheckbox
-                      key={model.id}
-                      checked={checked}
-                      disabled={disableControls || saving}
-                      onChange={(value) => toggleModel(model.id, value)}
-                      className={styles.modelItem}
-                      labelClassName={styles.modelText}
-                      label={
-                        <>
-                          <span className={styles.modelId}>{model.id}</span>
-                          {model.display_name && model.display_name !== model.id && (
-                            <span className={styles.modelDisplayName}>{model.display_name}</span>
-                          )}
-                        </>
-                      }
-                    />
-                  );
-                })}
-              </div>
+              visibleModels.length > 0 ? (
+                <div
+                  className={styles.modelList}
+                  onMouseDown={(event) => {
+                    // Shift+点击时阻止浏览器拖选文本，避免干扰范围多选。
+                    if (event.shiftKey) event.preventDefault();
+                  }}
+                >
+                  {visibleModels.map((model) => {
+                    const checked = hasOAuthExcludedRule(selectedModels, model.id);
+                    return (
+                      <SelectionCheckbox
+                        key={model.id}
+                        checked={checked}
+                        disabled={disableControls || saving}
+                        onChange={(value) => toggleModel(model.id, value, shiftKeyDownRef.current)}
+                        className={styles.modelItem}
+                        labelClassName={styles.modelText}
+                        label={
+                          <>
+                            <span className={styles.modelId}>{model.id}</span>
+                            {model.display_name && model.display_name !== model.id && (
+                              <span className={styles.modelDisplayName}>{model.display_name}</span>
+                            )}
+                          </>
+                        }
+                      />
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className={styles.emptyModels}>
+                  {t('oauth_excluded.models_filter_empty')}
+                </div>
+              )
             ) : resolvedProviderKey ? (
               <div className={styles.emptyModels}>
                 {modelsError

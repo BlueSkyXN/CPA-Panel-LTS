@@ -117,7 +117,9 @@ export function buildAccountAuth(
     // undefined 表示未编辑（例如旧插件）；显式空数组表示清除额外模型。
     if (extraModels !== undefined) auth.exmodel = normalizeAccountExtraModels(extraModels);
     // 已改为内联凭据；保留旧引用会被插件拒绝，其他账号设置继续沿用。
+    auth.request_retry = 0;
     delete auth.config_file;
+    delete auth.auth_mode;
     delete auth.pat;
     delete auth.access_token;
     return auth;
