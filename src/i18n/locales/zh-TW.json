@@ -3397,10 +3397,11 @@
       "usage": "用量明細",
       "chat": "對話",
       "completions": "程式碼補全",
-      "premium_interactions": "進階請求",
+      "premium_interactions": "進階積分",
       "chat_remaining": "剩餘對話次數",
       "completions_remaining": "剩餘補全次數",
-      "premium_interactions_remaining": "剩餘進階請求"
+      "premium_interactions_remaining": "剩餘進階積分",
+      "credits_unit": "積分"
     },
     "unsupported": "目前服務不支援外掛配額。",
     "connection_changed": "連線已切換，請重新整理配額。"

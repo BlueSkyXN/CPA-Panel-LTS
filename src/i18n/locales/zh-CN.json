@@ -3371,10 +3371,11 @@
       "usage": "用量明细",
       "chat": "对话",
       "completions": "代码补全",
-      "premium_interactions": "高级请求",
+      "premium_interactions": "高级积分",
       "chat_remaining": "剩余对话次数",
       "completions_remaining": "剩余补全次数",
-      "premium_interactions_remaining": "剩余高级请求"
+      "premium_interactions_remaining": "剩余高级积分",
+      "credits_unit": "积分"
     },
     "unsupported": "当前服务不支持插件额度。",
     "connection_changed": "连接已切换，请重新刷新额度。"
