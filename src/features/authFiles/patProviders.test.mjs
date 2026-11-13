@@ -8,6 +8,8 @@ const vite = await createServer({ appType: 'custom', logLevel: 'silent', server:
 const { buildAccountAuth, buildPatAuth, generateDeviceId, isAccountFormProvider, parsePatSummary, newPatAuthFileName, normalizeAccountExtraModels } = await vite.ssrLoadModule('/src/features/authFiles/patProviders.ts');
 const { PatSummaryDetails } = await vite.ssrLoadModule('/src/features/authFiles/components/PatAccountSummary.tsx');
 const { default: i18n } = await vite.ssrLoadModule('/src/i18n/index.ts');
+const { pluginsApi } = await vite.ssrLoadModule('/src/services/api/plugins.ts');
+const { patProvidersApi } = await vite.ssrLoadModule('/src/services/api/patProviders.ts');
 test.after(() => vite.close());
 
 test('ZCode extra models normalize, preserve credentials, and clear independently', () => {
@@ -37,7 +39,20 @@ test('ZCode extra model editing requires the loaded plugin feature version', asy
   const originalGetConfig = pluginsApi.getConfig;
   try {
     pluginsApi.getConfig = async () => ({});
-    for (const [version, supported] of [[undefined, false], ['0.5.0', false], ['0.6.0', true], ['0.6.1', true]]) {
+    // undefined 版本在严格校验下直接拒绝；其余版本先通过 0.4.0 门槛，再看 extra-models 开关。
+    const cases = [
+      ['0.5.0', false],
+      ['0.6.0', true],
+      ['0.6.1', true],
+    ];
+    await assert.rejects(
+      async () => {
+        pluginsApi.list = async () => ({ pluginsEnabled: true, plugins: [{ id: 'zcode-coding-plan', registered: true, effectiveEnabled: true, metadata: { version: undefined } }] });
+        await patProvidersApi.configuration('zcode-coding-plan');
+      },
+      /coding_plan_upgrade_required/
+    );
+    for (const [version, supported] of cases) {
       pluginsApi.list = async () => ({ pluginsEnabled: true, plugins: [{ id: 'zcode-coding-plan', registered: true, effectiveEnabled: true, metadata: { version } }] });
       const config = await patProvidersApi.configuration('zcode-coding-plan');
       assert.equal(config.supportsExtraModels, supported);
@@ -201,6 +216,75 @@ test('zcode inline migration removes legacy references and preserves shared acco
   });
   assert.equal(previous.config_file, '/synthetic/legacy-config.json');
   assert.equal(previous.api_key, 'old.fixture');
+});
+
+test('Coding Plan manual identity wins and generated identity persists across edits', () => {
+  const created = buildAccountAuth('zcode-coding-plan', 'New', 'key.part', '');
+  const edited = buildAccountAuth('zcode-coding-plan', 'Edited', 'rotated.key', '', created);
+  assert.equal(edited.device_id, created.device_id);
+  const manual = buildAccountAuth('zcode-coding-plan', 'Edited', 'rotated.key', ' imported-device ', created);
+  assert.equal(manual.device_id, 'imported-device');
+  assert.notEqual(created.device_id, manual.device_id);
+  assert.equal(created.api_key, 'key.part');
+});
+
+test('device identity hints explain optional import and no billing guarantee in every locale', () => {
+  const disclaimers = { en: 'does not guarantee', 'zh-CN': '不保证', 'zh-TW': '不保證', ru: 'не гарантирует' };
+  for (const [locale, disclaimer] of Object.entries(disclaimers)) {
+    const hint = i18n.getResource(locale, 'translation', 'pat_accounts.device_id_hint');
+    assert.ok(hint.includes('deviceMid'));
+    assert.ok(hint.includes(disclaimer));
+  }
+});
+
+test('Coding Plan migration replaces legacy fields without changing unrelated account settings', () => {
+  const previous = { type: 'zcode-coding-plan', config_file: '/synthetic/private.json', auth_mode: 'pat', pat: 'synthetic-pat', access_token: 'synthetic-token', request_retry: 5, prefix: 'team', priority: 3, note: 'keep', disabled: true };
+  const updated = buildAccountAuth('zcode-coding-plan', 'Updated', 'key.part', '', previous);
+  for (const key of ['config_file', 'auth_mode', 'pat', 'access_token']) assert.equal(updated[key], undefined);
+  for (const key of ['prefix', 'priority', 'note', 'disabled']) assert.equal(updated[key], previous[key]);
+  assert.equal(updated.request_retry, 0);
+  assert.equal(previous.config_file, '/synthetic/private.json');
+  for (const device of ['line\nbreak', 'bad\0device', '<placeholder>']) {
+    assert.throws(() => buildAccountAuth('zcode-coding-plan', '', 'key.part', device), /invalid_device_id/);
+  }
+});
+
+test('Coding Plan configuration requires inline-capable versions and reflects the upstream', async () => {
+  const originalList = pluginsApi.list;
+  const originalConfig = pluginsApi.getConfig;
+  let version = '0.4.0';
+  let settings = {};
+  let configReads = 0;
+  pluginsApi.list = async () => ({ pluginsEnabled: true, plugins: [{ id: 'zcode-coding-plan', registered: true, effectiveEnabled: true, metadata: { name: 'zcode-coding-plan', version } }] });
+  pluginsApi.getConfig = async () => { configReads++; return settings; };
+  try {
+    const initial = await patProvidersApi.configuration('zcode-coding-plan');
+    assert.equal(initial.endpoint, 'https://open.bigmodel.cn/api/anthropic/v1/messages');
+    assert.equal(initial.hostLoggingAcknowledged, false);
+    settings = { upstream: 'zai', host_logging_disabled: true };
+    const international = await patProvidersApi.configuration('zcode-coding-plan');
+    assert.equal(international.endpoint, 'https://api.z.ai/api/anthropic/v1/messages');
+    assert.equal(international.hostLoggingAcknowledged, true);
+    settings = { upstream: 'invalid' };
+    await assert.rejects(patProvidersApi.configuration('zcode-coding-plan'), /plugin_unavailable/);
+    const before = configReads;
+    for (const old of ['0.3.0', '', 'dev', '0.4.0-beta.1', '0.4.bad']) {
+      version = old;
+      await assert.rejects(patProvidersApi.configuration('zcode-coding-plan'), /coding_plan_upgrade_required/);
+    }
+    assert.equal(configReads, before);
+  } finally {
+    pluginsApi.list = originalList;
+    pluginsApi.getConfig = originalConfig;
+  }
+});
+
+test('all account compatibility and acknowledgement hints are translated', async () => {
+  for (const locale of ['en', 'zh-CN', 'zh-TW', 'ru']) {
+    for (const key of ['invalid_device_id', 'coding_plan_upgrade_required', 'coding_plan_single_account_hint', 'coding_plan_logging_required']) {
+      assert.equal(typeof i18n.getResource(locale, 'translation', `pat_accounts.${key}`), 'string');
+    }
+  }
 });
 
 const response = (quota) => ({ provider: 'qoder', auth_index: 'fixture-index', label: 'Fixture', account: { status: 'fallback' }, plan: { status: 'unsupported' }, quota, updated_at: '2026-09-09T00:00:00Z', cached: true });

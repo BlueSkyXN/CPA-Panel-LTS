@@ -36,6 +36,14 @@ export const patProvidersApi = {
     );
     if (!list.pluginsEnabled || !plugin) throw new Error('plugin_unavailable');
     if (provider === 'zcode-coding-plan') {
+      const version = plugin.metadata?.version;
+      if (
+        typeof version !== 'string' ||
+        !/^\d+\.\d+\.\d+(?:\+[0-9A-Za-z.-]+)?$/.test(version) ||
+        !pluginVersionAtLeast(version, '0.4.0')
+      ) {
+        throw new Error('coding_plan_upgrade_required');
+      }
       const config = await pluginsApi.getConfig(plugin.id);
       const region = config.upstream ?? 'bigmodel';
       if (region !== 'bigmodel' && region !== 'zai') throw new Error('plugin_unavailable');
@@ -45,7 +53,8 @@ export const patProvidersApi = {
           region === 'zai'
             ? 'https://api.z.ai/api/anthropic/v1/messages'
             : 'https://open.bigmodel.cn/api/anthropic/v1/messages',
-        supportsExtraModels: pluginVersionAtLeast(plugin.metadata?.version, '0.6.0'),
+        supportsExtraModels: pluginVersionAtLeast(version, '0.6.0'),
+        hostLoggingAcknowledged: config.host_logging_disabled === true,
       };
     }
     const config = await pluginsApi.getConfig(plugin.id);
