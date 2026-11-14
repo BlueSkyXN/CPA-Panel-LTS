@@ -16,7 +16,7 @@ import {
   ResetGrantPreflightError,
   resetGrantFailureMessageKey,
 } from './resetGrantOperations';
-import { selectResetGrant } from './selectResetGrant';
+import { canChooseResetGrant } from './resetGrantChoice';
 import { readResetGrantsForCard, scheduleResetGrantRead } from './resetGrantReads';
 
 /** Card-owned reads; the session-scoped journal owns spending and ambiguous retries. */
@@ -32,7 +32,6 @@ export function useClaudeResetGrants(
   const [session] = useState(() => apiClient.getConnectionRevision());
   const sessionActive =
     connectionStatus === 'connected' && session === apiClient.getConnectionRevision();
-  const showConfirmation = useNotificationStore((state) => state.showConfirmation);
   const showNotification = useNotificationStore((state) => state.showNotification);
   const now = useNow();
   const authIndex = normalizeAuthIndex(file.auth_index ?? file.authIndex);
@@ -79,64 +78,67 @@ export function useClaudeResetGrants(
   const operation = resetGrantOperations.inspect(key);
   const pending = operation && !operation.code ? operation : undefined;
   const expired = Boolean(pending && now - pending.createdAt >= RETRY_WINDOW_MS);
-  const selected = pending?.grantId ?? (status ? selectResetGrant(status, now)?.id : undefined);
-  const blocked = disabled || !sessionActive || !authIndex || busy || expired || !selected;
-  const confirm = () => {
-    if (blocked || lock.current || !selected || !authIndex) return;
+  // An uncertain claim must stay selectable even if discovery no longer lists it.
+  const grants = [...(status?.grants ?? [])];
+  if (pending && !grants.some((grant) => grant.id === pending.grantId)) grants.push(pending.grant);
+  const blocked = disabled || !sessionActive || !authIndex || busy || expired;
+  const canRedeemGrant = (grantId: unknown) =>
+    !blocked && canChooseResetGrant(status, pending?.grantId, grantId, now);
+  const confirm = (
+    grantId: string
+  ): Promise<{ code: string; unresolved: boolean } | null | undefined> => {
+    if (!canRedeemGrant(grantId) || lock.current || !authIndex) return Promise.resolve(null);
     const version = generation.current;
     const current = () =>
       session === apiClient.getConnectionRevision() && version === generation.current;
-    showConfirmation({
-      title: t('claude_reset.title'),
-      message: t(pending ? 'claude_reset.retry_confirm' : 'claude_reset.confirm_text', {
-        name: file.name,
-      }),
-      confirmText: t(pending ? 'claude_reset.retry' : 'claude_reset.confirm'),
-      variant: 'primary',
-      onConfirm: async () => {
-        if (!current() || lock.current || useAuthStore.getState().connectionStatus !== 'connected')
-          return;
-        lock.current = true;
-        setBusy(true);
-        try {
-          const answer = await resetGrantOperations.run(key, authIndex, selected);
-          if (!current()) return;
-          showNotification(
-            t(`claude_reset.${answer.unresolved ? 'unknown' : answer.code}`),
-            !answer.unresolved && (answer.code === 'reset' || answer.code === 'already_used')
-              ? 'success'
-              : 'error'
-          );
-        } catch (error: unknown) {
-          if (!current()) return;
-          const unresolved = resetGrantOperations.inspect(key);
-          showNotification(
-            t(
-              unresolved && !unresolved.code
-                ? 'claude_reset.unknown'
-                : resetGrantFailureMessageKey(error),
-              {
-                code: error instanceof ResetGrantPreflightError ? error.reason : '',
-              }
-            ),
-            'error'
-          );
-        } finally {
-          lock.current = false;
-          // A concurrent page-wide refresh can invalidate this read generation.
-          // Release the local lock regardless, but never refresh a replacement account.
-          setBusy(false);
-          setReload((value) => value + 1);
-          if (current()) onRefresh();
-        }
-      },
-    });
+    if (!current() || useAuthStore.getState().connectionStatus !== 'connected')
+      return Promise.resolve(null);
+    lock.current = true;
+    setBusy(true);
+    let lastAnswer: { code: string; unresolved: boolean } | null = null;
+    return (async () => {
+      try {
+        const answer = await resetGrantOperations.run(key, authIndex, grantId);
+        lastAnswer = { code: answer.unresolved ? 'unknown' : answer.code, unresolved: answer.unresolved };
+        if (!current()) return;
+        showNotification(
+          t(`claude_reset.${answer.unresolved ? 'unknown' : answer.code}`),
+          !answer.unresolved && (answer.code === 'reset' || answer.code === 'already_used')
+            ? 'success'
+            : 'error'
+        );
+      } catch (error: unknown) {
+        if (!current()) return;
+        const unresolved = resetGrantOperations.inspect(key);
+        showNotification(
+          t(
+            unresolved && !unresolved.code
+              ? 'claude_reset.unknown'
+              : resetGrantFailureMessageKey(error),
+            {
+              code: error instanceof ResetGrantPreflightError ? error.reason : '',
+            }
+          ),
+          'error'
+        );
+      } finally {
+        lock.current = false;
+        // A concurrent page-wide refresh can invalidate this read generation.
+        // Release the local lock regardless, but never refresh a replacement account.
+        setBusy(false);
+        setReload((value) => value + 1);
+        if (current()) onRefresh();
+      }
+    })().then((value) => value ?? lastAnswer);
   };
   return {
     count: status?.grants.reduce((sum, grant) => sum + grant.resetsLeft, 0) ?? null,
-    grants: status?.grants ?? [],
-    busy,
+    grants,
+    loading: !status && !message && !pending,
     blocked,
+    pendingGrantId: pending?.grantId,
+    canRedeemGrant,
+    busy,
     confirm,
     message: pending ? (expired ? 'expired' : 'unknown') : message,
     buttonLabel: pending ? 'retry' : 'use',
