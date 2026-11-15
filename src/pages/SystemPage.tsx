@@ -11,7 +11,7 @@ import {
   useNotificationStore,
   useModelsStore,
 } from '@/stores';
-import { configApi, versionApi } from '@/services/api';
+import { apiClient, configApi, modelsApi, versionApi } from '@/services/api';
 import { useApiKeysForModels } from '@/hooks/useApiKeysForModels';
 import { formatDateTimeValue } from '@/utils/format';
 import { classifyModels } from '@/utils/models';
@@ -92,7 +92,16 @@ export function SystemPage() {
 
   const resolveApiKeysForModels = useApiKeysForModels();
 
+  // 过期请求必须结束处理：换连接或发起新请求后，旧结果不再写状态、不再报成功。
+  const modelsRequestId = useRef(0);
+  const catalogRequestId = useRef(0);
+
   const fetchModels = async ({ forceRefresh = false }: { forceRefresh?: boolean } = {}) => {
+    const requestId = ++modelsRequestId.current;
+    const revision = apiClient.getConnectionRevision();
+    const isCurrent = () =>
+      requestId === modelsRequestId.current && revision === apiClient.getConnectionRevision();
+
     if (auth.connectionStatus !== 'connected') {
       setModelStatus({
         type: 'warning',
@@ -109,8 +118,10 @@ export function SystemPage() {
     setModelStatus({ type: 'muted', message: t('system_info.models_loading') });
     try {
       const apiKeys = await resolveApiKeysForModels({ force: forceRefresh });
+      if (!isCurrent()) return;
       const primaryKey = apiKeys[0];
       const list = await fetchModelsFromStore(auth.apiBase, primaryKey, forceRefresh);
+      if (!isCurrent()) return;
       const hasModels = list.length > 0;
       setModelStatus({
         type: hasModels ? 'success' : 'warning',
@@ -119,10 +130,45 @@ export function SystemPage() {
           : t('system_info.models_empty'),
       });
     } catch (err: unknown) {
+      if (!isCurrent()) return;
       const message = err instanceof Error ? err.message : typeof err === 'string' ? err : '';
       const suffix = message ? `: ${message}` : '';
       const text = `${t('system_info.models_error')}${suffix}`;
       setModelStatus({ type: 'error', message: text });
+    }
+  };
+
+  // 上游 2da3e263:区分「刷新列表」与「更新模型目录」两个动作的反馈。
+  const [catalogRefreshing, setCatalogRefreshing] = useState(false);
+  const handleCatalogRefresh = async () => {
+    if (catalogRefreshing || modelsLoading) return;
+    if (auth.connectionStatus !== 'connected') {
+      setModelStatus({ type: 'warning', message: t('notification.connection_required') });
+      return;
+    }
+    const requestId = ++catalogRequestId.current;
+    const revision = apiClient.getConnectionRevision();
+    const isCurrent = () =>
+      requestId === catalogRequestId.current && revision === apiClient.getConnectionRevision();
+    setCatalogRefreshing(true);
+    try {
+      const result = await modelsApi.refreshCatalog();
+      // 连接已切换：请求属于旧连接，不能报成功、也不能去刷新当前连接的列表。
+      if (result.stale || !isCurrent()) return;
+      setModelStatus({ type: 'muted', message: t('system_info.models_loading') });
+      await fetchModels({ forceRefresh: true });
+      if (!isCurrent()) return;
+      showNotification(t('system_info.models_catalog_refresh_success'), 'success');
+    } catch (err: unknown) {
+      if (!isCurrent()) return;
+      const message = err instanceof Error ? err.message : typeof err === 'string' ? err : '';
+      const suffix = message ? `: ${message}` : '';
+      setModelStatus({
+        type: 'error',
+        message: `${t('system_info.models_catalog_refresh_failed')}${suffix}`,
+      });
+    } finally {
+      if (isCurrent()) setCatalogRefreshing(false);
     }
   };
 
@@ -255,7 +301,13 @@ export function SystemPage() {
   }, []);
 
   useEffect(() => {
+    // 新连接不继承上一连接的刷新状态：把在途请求的序号作废，并清掉 loading。
+    setCatalogRefreshing(false);
     fetchModels();
+    return () => {
+      modelsRequestId.current += 1;
+      catalogRequestId.current += 1;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth.connectionStatus, auth.apiBase]);
 
@@ -375,17 +427,28 @@ export function SystemPage() {
         <Card
           title={t('system_info.models_title')}
           extra={
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => fetchModels({ forceRefresh: true })}
-              loading={modelsLoading}
-            >
-              {t('common.refresh')}
-            </Button>
+            <div className={styles.modelsActions}>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => fetchModels({ forceRefresh: true })}
+                loading={modelsLoading}
+              >
+                {t('system_info.models_refresh_button')}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleCatalogRefresh}
+                loading={catalogRefreshing}
+                disabled={modelsLoading}
+              >
+                {t('system_info.models_catalog_refresh_button')}
+              </Button>
+            </div>
           }
         >
-          <p className={styles.sectionDescription}>{t('system_info.models_desc')}</p>
+          <p className={styles.sectionDescription}>{t('system_info.models_desc')} {t('system_info.models_refresh_hint')}</p>
           {modelStatus && (
             <div className={`status-badge ${modelStatus.type}`}>{modelStatus.message}</div>
           )}

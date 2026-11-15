@@ -20,6 +20,11 @@ import {
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { pluginStoreApi } from '@/services/api';
 import { useAuthStore, useConfigStore, useNotificationStore } from '@/stores';
+import {
+  useInstalledPluginBusy,
+  usePluginMutationStore,
+  usePluginStoreBusy,
+} from '@/stores/usePluginMutationStore';
 import { getErrorMessage, isRecord } from '@/utils/helpers';
 import type { PluginStoreEntry, PluginStoreResponse } from '@/types';
 import {
@@ -464,6 +469,7 @@ export function PluginStorePage() {
   const navigate = useNavigate();
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
   const apiBase = useAuthStore((state) => state.apiBase);
+  const profileId = useAuthStore((state) => state.profileId);
   const clearConfigCache = useConfigStore((state) => state.clearCache);
   const showNotification = useNotificationStore((state) => state.showNotification);
 
@@ -473,6 +479,16 @@ export function PluginStorePage() {
   const [filter, setFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<StoreStatusFilter>('all');
   const [installingKey, setInstallingKey] = useState('');
+  const installedBusy = useInstalledPluginBusy();
+  const storeBusy = usePluginStoreBusy();
+  const syncPluginMutationConnection = usePluginMutationStore((state) => state.syncConnection);
+  const tryBeginStoreMutation = usePluginMutationStore((state) => state.tryBeginStoreMutation);
+  const endStoreMutation = usePluginMutationStore((state) => state.endStoreMutation);
+  // 与 /plugins 共用同一连接标识：切连接即作废两侧在途登记。
+  const connectionKey = `${profileId}:${apiBase}`;
+  useEffect(() => {
+    syncPluginMutationConnection(connectionKey);
+  }, [connectionKey, syncPluginMutationConnection]);
   const [restartRequiredKeys, setRestartRequiredKeys] = useState<string[]>([]);
   const [expandedDescriptionKeys, setExpandedDescriptionKeys] = useState<string[]>([]);
   const [overflowingDescriptionKeys, setOverflowingDescriptionKeys] = useState<string[]>([]);
@@ -489,6 +505,10 @@ export function PluginStorePage() {
   const [installVersion, setInstallVersion] = useState('');
 
   const connected = connectionStatus === 'connected';
+  // 上游 1e29f88f:已装插件变更在途时,store 安装/更新入口保持锁定。
+  // storeBusy 来自共享 token 登记：离开页面再回来时本组件的 installingKey
+  // 已重置，只有共享锁还记得上一笔安装仍在轮询。
+  const installBlocked = !connected || installedBusy || storeBusy;
 
   const loadStore = useCallback(async () => {
     if (!connected) {
@@ -655,10 +675,15 @@ export function PluginStorePage() {
 
   const runInstall = useCallback(
     async (entry: PluginStoreEntry, isUpdate: boolean, requestedVersion = '') => {
+      // 单一入口兜底：检查与取得锁同步完成，同一任务内第二笔拿不到锁、不发请求。
+      if (installBlocked) return;
+      const mutationToken = tryBeginStoreMutation();
+      if (!mutationToken) return;
       const entryKey = getStoreEntryKey(entry);
       const failedKey = isUpdate ? 'plugin_store.update_failed' : 'plugin_store.install_failed';
       const version = requestedVersion.trim();
       setInstallingKey(entryKey);
+      // 锁覆盖到轮询 settle 结束；组件卸载或路由切换都不释放，只有这里能放。
       try {
         const result = await pluginStoreApi.install(entry.id, {
           sourceId: entry.sourceId || undefined,
@@ -731,13 +756,15 @@ export function PluginStorePage() {
         showNotification(`${t(failedKey)}: ${getErrorMessage(err, t(failedKey))}`, 'error');
         throw err;
       } finally {
+        endStoreMutation(mutationToken);
         setInstallingKey('');
       }
     },
-    [clearConfigCache, showNotification, t]
+    [clearConfigCache, endStoreMutation, installBlocked, showNotification, t, tryBeginStoreMutation]
   );
 
   const handleInstall = (entry: PluginStoreEntry) => {
+    if (installBlocked) return;
     const isUpdate = entry.installed && entry.updateAvailable;
     setInstallOptionsEntry(entry);
     setInstallOptionsIsUpdate(isUpdate);
@@ -745,13 +772,13 @@ export function PluginStorePage() {
   };
 
   const handleInstallOptionsClose = useCallback(() => {
-    if (installingKey) return;
+    if (installingKey || storeBusy) return;
     setInstallOptionsEntry(null);
     setInstallVersion('');
-  }, [installingKey]);
+  }, [installingKey, storeBusy]);
 
   const handleInstallOptionsConfirm = useCallback(async () => {
-    if (!installOptionsEntry) return;
+    if (installBlocked || !installOptionsEntry) return;
     const requestedVersion = installVersion.trim();
 
     // Third-party plugins must clear the multi-step confirmation gauntlet first.
@@ -772,14 +799,14 @@ export function PluginStorePage() {
     } catch {
       // runInstall already surfaced a notification; keep the modal available for correction.
     }
-  }, [installOptionsEntry, installOptionsIsUpdate, installVersion, runInstall]);
+  }, [installBlocked, installOptionsEntry, installOptionsIsUpdate, installVersion, runInstall]);
 
   const handleGateConfirm = useCallback(async () => {
-    if (!gateEntry) return;
+    if (installBlocked || !gateEntry) return;
     await runInstall(gateEntry, gateIsUpdate, gateRequestedVersion);
     setGateOpen(false);
     setGateRequestedVersion('');
-  }, [gateEntry, gateIsUpdate, gateRequestedVersion, runInstall]);
+  }, [gateEntry, gateIsUpdate, gateRequestedVersion, installBlocked, runInstall]);
 
   const handleGateClose = useCallback(() => {
     setGateOpen(false);
@@ -807,7 +834,8 @@ export function PluginStorePage() {
     const sourceText = sourceName ? t('plugin_store.source_name', { source: sourceName }) : '';
     const metaItems = [versionText, sourceText, entry.author, entry.license].filter(Boolean);
     const isInstalling = installingKey === entryKey;
-    const hasPendingInstall = Boolean(installingKey);
+    // storeBusy 覆盖「安装仍在跑但本组件已重新挂载」的情形。
+    const hasPendingInstall = Boolean(installingKey) || storeBusy;
     const missingAuth = entry.authRequired && !entry.authConfigured;
     const isDescriptionExpanded = expandedDescriptionKeySet.has(entryKey);
     const isDescriptionOverflowing = overflowingDescriptionKeySet.has(entryKey);
@@ -826,7 +854,7 @@ export function PluginStorePage() {
         ? t('plugin_store.auth_configured')
         : t('plugin_store.auth_required')
       : '';
-    const actionDisabled = !connected || missingAuth || (hasPendingInstall && !isInstalling);
+    const actionDisabled = !connected || missingAuth || installedBusy || (hasPendingInstall && !isInstalling);
     const actionTitle = missingAuth ? t('plugin_store.auth_required_hint') : undefined;
 
     return (

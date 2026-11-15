@@ -20,6 +20,11 @@ import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { pluginsApi } from '@/services/api';
 import { isConfigNotJSONCompatible } from '@/services/api/config';
 import { useAuthStore, useConfigStore, useNotificationStore } from '@/stores';
+import {
+  useInstalledPluginBusy,
+  usePluginMutationStore,
+  usePluginStoreBusy,
+} from '@/stores/usePluginMutationStore';
 import { getErrorMessage, isRecord } from '@/utils/helpers';
 import type { PluginConfigField, PluginListEntry, PluginListResponse } from '@/types';
 import {
@@ -82,6 +87,24 @@ export function PluginsPage() {
   const [deletingID, setDeletingID] = useState('');
   const [openingConfigID, setOpeningConfigID] = useState('');
   const configRequestSeq = useRef(0);
+  const storeBusy = usePluginStoreBusy();
+  const installedBusy = useInstalledPluginBusy();
+  const syncPluginMutationConnection = usePluginMutationStore((state) => state.syncConnection);
+  const tryBeginInstalledMutation = usePluginMutationStore(
+    (state) => state.tryBeginInstalledMutation
+  );
+  const endInstalledMutation = usePluginMutationStore((state) => state.endInstalledMutation);
+  // 锁跟着连接走：切连接后旧登记的锁全部作废，旧连接的迟到结果也不能再锁新连接。
+  useEffect(() => {
+    syncPluginMutationConnection(connectionKey);
+  }, [connectionKey, syncPluginMutationConnection]);
+  // 锁由变更自身持有（begin/end 成对），因此本组件卸载不会误释放、remount 也不会提前解锁。
+  // 取得锁与检查是同步一步：同一任务内第二次触发拿不到锁，调用方必须直接返回，
+  // 既不设 busy 状态、也不发请求（否则第二个调用方的 finally 会清掉第一个的状态）。
+  const acquireInstalledMutation = useCallback(
+    () => tryBeginInstalledMutation(),
+    [tryBeginInstalledMutation]
+  );
 
   const connected = connectionStatus === 'connected';
 
@@ -168,7 +191,9 @@ export function PluginsPage() {
   );
 
   const openConfigSheet = async (plugin: PluginListEntry) => {
-    if (openingConfigID || mutatingID || deletingID) return;
+    if (openingConfigID || mutatingID || deletingID || storeBusy) return;
+    const token = acquireInstalledMutation();
+    if (!token) return;
 
     const requestSeq = configRequestSeq.current + 1;
     configRequestSeq.current = requestSeq;
@@ -206,6 +231,7 @@ export function PluginsPage() {
         'error'
       );
     } finally {
+      endInstalledMutation(token);
       if (configRequestSeq.current === requestSeq) {
         setOpeningConfigID('');
       }
@@ -213,7 +239,7 @@ export function PluginsPage() {
   };
 
   const closeConfigSheet = () => {
-    if (mutatingID || openingConfigID || deletingID) return;
+    if (mutatingID || openingConfigID || deletingID || storeBusy || installedBusy) return;
     setEditingPlugin(null);
     setDraft(null);
   };
@@ -223,7 +249,10 @@ export function PluginsPage() {
   };
 
   const handleTogglePlugin = async (plugin: PluginListEntry, enabled: boolean) => {
-    if (deletingID) return;
+    // 与删除/配置/Store 安装共用同一互斥：任一在途都不再发起启停。
+    if (!connected || mutatingID || openingConfigID || deletingID || storeBusy) return;
+    const token = acquireInstalledMutation();
+    if (!token) return;
     setMutatingID(plugin.id);
     try {
       await pluginsApi.updateEnabled(plugin.id, enabled);
@@ -251,12 +280,13 @@ export function PluginsPage() {
         'error'
       );
     } finally {
+      endInstalledMutation(token);
       setMutatingID('');
     }
   };
 
   const handleDeletePlugin = (plugin: PluginListEntry) => {
-    if (!connected || mutatingID || openingConfigID || deletingID) return;
+    if (!connected || mutatingID || openingConfigID || deletingID || storeBusy) return;
 
     const name = getPluginTitle(plugin);
     showConfirmation({
@@ -265,6 +295,10 @@ export function PluginsPage() {
       variant: 'danger',
       confirmText: t('plugin_management.delete_plugin'),
       onConfirm: async () => {
+        // 确认回调可能在同一个任务里被触发多次（同步双 click）：先同步取锁，
+        // 取不到就直接返回，既不发请求也不碰 busy 状态。
+        const token = acquireInstalledMutation();
+        if (!token) return;
         setDeletingID(plugin.id);
         setMutatingID(plugin.id);
         try {
@@ -290,6 +324,7 @@ export function PluginsPage() {
             restartRequired ? 'warning' : 'error'
           );
         } finally {
+          endInstalledMutation(token);
           setDeletingID('');
           setMutatingID('');
         }
@@ -298,7 +333,7 @@ export function PluginsPage() {
   };
 
   const handleSaveConfig = async () => {
-    if (!editingPlugin || !draft || openingConfigID || mutatingID || deletingID) return;
+    if (!editingPlugin || !draft || openingConfigID || mutatingID || deletingID || storeBusy) return;
     const { patch, errors } = buildPluginConfigPatch(draft, editingPlugin.configFields, t);
 
     if (Object.keys(errors).length > 0) {
@@ -320,6 +355,8 @@ export function PluginsPage() {
       return;
     }
 
+    const token = acquireInstalledMutation();
+    if (!token) return;
     setMutatingID(editingPlugin.id);
     try {
       if (hasConfigChanges) {
@@ -358,6 +395,7 @@ export function PluginsPage() {
         'error'
       );
     } finally {
+      endInstalledMutation(token);
       setMutatingID('');
     }
   };
@@ -561,7 +599,7 @@ export function PluginsPage() {
           variant="secondary"
           size="sm"
           onClick={loadPlugins}
-          disabled={!connected || loading || Boolean(mutatingID || deletingID)}
+          disabled={!connected || loading || Boolean(mutatingID || deletingID || storeBusy)}
           loading={loading}
         >
           <IconRefreshCw size={16} />
@@ -604,7 +642,7 @@ export function PluginsPage() {
             const github = plugin.metadata?.githubRepository.trim();
             const openingConfig = openingConfigID === plugin.id;
             const deletingPlugin = deletingID === plugin.id;
-            const actionBusy = Boolean(mutatingID || openingConfigID || deletingID);
+            const actionBusy = Boolean(mutatingID || openingConfigID || deletingID || storeBusy || installedBusy);
             const version = plugin.metadata?.version;
             const author = plugin.metadata?.author;
 
