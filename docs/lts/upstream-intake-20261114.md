@@ -38,3 +38,24 @@
 
 - **D1 交互 smoke v2 收口**：v1 的 8/8 证据作废（固定下标/空值比较/切换段未真正切换三处弱断言）。v2 脚本 18/18 全过（request_id/grant_id 从真实 payload.data 解析并断言格式、`{"result":"reset"}` 成功形状、未知结果保留 Retry 并复用原 request id、延迟响应下提交禁用且恰好一次 claim、⌘K 命令面板真实登出+重登无 reload、journal 清空、新操作新 id），三项反例检查均按预期失败。归档：Core L1 worktree `local/20261114-d1-grant-smoke/v2/`。dist 由 79597ef9 重建。
 - 验证补充：`validate:lts` 复跑绿；`resetGrantChoice.test.mjs` 保持接入 `test:auth-files`。
+
+
+## 2026-11-15 续作:冻结范围全分类定稿(953fb244..3d893ec8)
+
+| upstream | 内容 | 分类 | 落地/理由 |
+|---|---|---|---|
+| 36083b08 (#555) | claude extra usage 状态合并 | adapt-port | #150 `3f0ef170` |
+| d06a1105 (#554) | reset grants 显式选择对话框 | adapt-port | #150 `f9dcf358` |
+| 1e29f88f | store 安装与插件变更互斥 | adapt-port | **#151** `c64ef848`(跨路由共享 busy,LTS 双路由架构) |
+| 2da3e263 (#573) | 模型刷新双动作反馈 | adapt-port | **#151** `4578a501`(Core v8 `/models/refresh` 已存在;连接代际守卫用 LTS 惯用法) |
+| 99a95c4a | modelCatalogSync(authFiles 目录同步 UI) | defer | 依赖 upstream authFiles VaultHeader/模型目录刷新 UX 链路;LTS auth-files 模型面为 per-file `/auth-files/models/refresh`,无全局目录刷新基建;目录刷新语义已由 #151 SystemPage 动作覆盖主场景 |
+| 18906172 (#556) | Codex credit overage 展示 | defer | 2383 行,依赖 upstream stores/apiCall 通道与全新 provider UI 子树;隐式付费探测需产品决策 |
+| 28182ef9 / a4bad6e3 | plugins 页面族重构/本地化 | defer | 39 文件 4750 行,与 LTS capability-gated 架构冲突面大;可接纳的修复已由 #151 覆盖 |
+| 6b1b94a7 / 96ce4e1b | OAuth login proxy | defer | 大特性,LTS OAuth 登录面自有实现(既有"官方页面整体重写"延期类) |
+| 4a605466 / b616482b | quota/auth-files 卡片布局 | defer | UI 重构族;无独立正确性修复可拆 |
+| 6cc19fed | quota timeline 独立分组 | defer | 依赖 upstream resetInstants/relativeTime 全套;LTS 已移植所需两助手 |
+| 3d893ec8 | AutocompleteInput 归一化 | defer | 通用组件重构,随下轮 |
+| f974d570 | model rule saves guard | not-applicable | 上游 modelRules/useModelRulesData 架构 LTS 无对应(LTS 走 oauth.model-policy v8 编辑器,自有保存链路) |
+| ae4e74ed | authFiles OAuth 编辑器大重构 | defer | 官方页面整体重写类 |
+| 7b754b23 | OpenAI connectivity 测试 | defer | 依赖 upstream providers 目录结构(useConnectivityTest.ts 形态不同) |
+| 1c76da26+9c1deb66 | codexAccountSettings+revert | no-op | 上游自行 revert 净零 |
