@@ -257,6 +257,7 @@ export interface ClaudeExtraUsagePayload {
 
 /** Amounts are in minor currency units, unlike the separate dollar windows. */
 export interface ClaudeExtraUsage {
+  /** Anthropic's extra-usage setting, independent of CPA credential enablement. */
   isEnabled: boolean | null;
   monthlyLimit: number | null;
   usedCredits: number | null;

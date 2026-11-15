@@ -1031,11 +1031,18 @@ const renderClaudeItems = (
     catch { return `${(value/divisor).toFixed(2)} ${currency}`; }
   };
   if (extraUsage) {
-    const state = extraUsage.isEnabled === null ? 'plan_unknown' : extraUsage.isEnabled ? 'extra_usage_enabled' : 'extra_usage_disabled';
+    // Upstream #555 (36083b08): fold user-side off signals into the single
+    // status beside the label; only real reasons stay in the notes list.
+    const userDisabledSignal = extraUsage.userDisabled === true || extraUsage.disabledReason === 'user_disabled';
+    const state = userDisabledSignal || extraUsage.isEnabled === false
+      ? 'extra_usage_disabled'
+      : extraUsage.isEnabled === true
+        ? 'extra_usage_enabled'
+        : 'plan_unknown';
     const details = [
-      extraUsage.userDisabled ? t('claude_quota.extra_usage_user_disabled') : '',
       extraUsage.spendLimitReached ? t('claude_quota.extra_usage_spend_limit_reached') : '',
-      extraUsage.disabledReason ? t('claude_quota.extra_usage_disabled_reason', {reason:extraUsage.disabledReason}) : '',
+      extraUsage.disabledReason && extraUsage.disabledReason !== 'user_disabled'
+        ? t('claude_quota.extra_usage_disabled_reason', {reason:extraUsage.disabledReason}) : '',
     ].filter(Boolean);
     nodes.push(h('div', {key:'extra',className:styleMap.quotaRow},
       h('div',{className:styleMap.quotaRowHeader},h('span',null,t('claude_quota.extra_usage_label')),h('span',null,t(`claude_quota.${state}`))),

@@ -6,6 +6,7 @@ import {
   readClaudeOrganization,
   readClaudeResetGrants,
   type AnthropicResetSettledCode,
+  type AnthropicResetGrant,
 } from '@/services/api/claudeResetGrants';
 import { generateResetGrantRequestId } from './resetGrantRequestId';
 
@@ -46,6 +47,7 @@ async function readPreflight<T>(stage: 'organization' | 'status', read: () => Pr
 export const RETRY_WINDOW_MS = 10 * 60 * 1000;
 type Operation = {
   grantId: string;
+  grant: AnthropicResetGrant;
   organization: string;
   requestId: string;
   createdAt: number;
@@ -120,14 +122,18 @@ export function createResetGrantOperations(deps = defaultDependencies) {
                   : status.cooldownUntil && Date.parse(status.cooldownUntil) > now
                     ? 'cooldown'
                     : null);
-          if (reason) throw new ResetGrantPreflightError('eligibility', `blocked_${reason}`);
+          if (reason || !grant)
+            throw new ResetGrantPreflightError(
+              'eligibility',
+              `blocked_${reason ?? 'unknown_grant'}`
+            );
           let requestId: string;
           try {
             requestId = deps.requestId();
           } catch {
             throw new ResetGrantPreflightError('request_id', 'generation_failed');
           }
-          operation = { grantId, organization, requestId, createdAt: now };
+          operation = { grantId, grant, organization, requestId, createdAt: now };
           operations.set(key, operation);
         }
         // Re-check immediately before dispatch; never send against a replacement connection.
