@@ -142,3 +142,29 @@ v3 还记录了一条 v2 未触及的产品行为：写入在途时断开会被�
 Codex credit overage、OAuth login proxy、plugins 页面族重构、authFiles model catalog sync、
 quota/auth-files 卡片布局与时间线、autocomplete、connectivity 测试、OAuth 编辑器重构：
 沿用既有 defer 结论，本轮未移植，仍计入可见 backlog，不计为已更新。
+
+## 2026-11-16 批次：auth-files 模型目录同步、OAuth login proxy 与可拆修复
+
+配套 Core 同步终点 `43806c865`（v8.0.73）。本轮两项主交付 + 两项可拆维护修复，
+均按 LTS 架构 adapt-port / direct-port，不引入 upstream 页面重构。
+
+| 上游 | 内容 | 分类 | 落地 |
+|---|---|---|---|
+| 99a95c4a | auth-files 全局模型目录同步 | adapt-port | 分支 codex/auth-files-model-sync-20261116：新 useModelCatalogSync（复用 LTS modelsApi.refreshCatalog 连接守卫）；useAuthFilesModels 连接切换失效；useAuthFilesOauth diagram 列表随目录版本重载且丢弃迟到连接响应；入口挂 AuthFilesPage 既有 more-actions 菜单（不引入 VaultHeader）；四语言；6+1 回归入 test:auth-files |
+| 6b1b94a7 / 96ce4e1b | OAuth login proxy（内置+插件） | adapt-port | 分支 codex/oauth-login-proxy-20261116：loginProxy.ts 纯函数模块（镜像 Core validateOAuthSessionProxyURL 的 Go 语义）；startAuth 非空代理转 POST body（project_id 留 query）；OAuthPage 折叠式 LoginProxyField、非法值客户端拦截、后端 400 标记内联错误、waiting 卡脱敏展示、仅内存且连接切换清空；62 回归入 test:api-client |
+| 3d893ec8 | AutocompleteInput 归一化/过滤 | direct-port | 分支 codex/autocomplete-normalize-20261116：LTS AutocompleteInput.tsx 与 upstream 改前版本逐字一致，直接应用；bun 测试转 node:test 入 test:ui |
+| 7b754b23 | OpenAI connectivity token limits (#572) | adapt-port | 同分支：resolveModelConfig（trim/去括号后缀/名称先于别名）+ useMaxCompletionTokens 模型用 max_completion_tokens + signature 纳入能力位；LTS codex 探测保持 Responses 形态（upstream 该修复只对应 openaiCompatibility 探测）；16 用例矩阵入新 test:provider-connectivity |
+
+### 剩余 defer 定稿（2026-11-16 复核）
+
+| 上游 | 内容 | 实际差距与完成条件 |
+|---|---|---|
+| 18906172 (#556) | Codex credit overage 展示 | upstream 引入 credit 通道 + 2383 行 provider UI 子树；LTS 无对应 stores/apiCall 通道。属新业务策略（隐式付费探测展示），需产品决策后单列方案；完成条件=裁决 + 数据通道设计 |
+| 28182ef9 / a4bad6e3 | plugins 页面族重构/本地化 | 39 文件 4750 行，与 LTS capability-gated 双路由（/plugins + /plugin-store）架构冲突面大；可接纳的修复已由 #151 覆盖。完成条件=LTS 侧先裁决是否吸收 upstream 单页结构 |
+| 4a605466 / b616482b | quota/auth-files 卡片布局 | upstream 卡片布局族（889+215 行）依赖其卡容器组件；LTS 卡片为自有结构。完成条件=单独 UI 评审（非正确性修复） |
+| 6cc19fed | quota timeline 独立分组 | upstream QuotaTimeline 组件族（components/QuotaTimeline* + quotaTimelineModel）LTS 整体未移植；LTS quota 面为 QuotaCard/QuotaSection 结构，无 timeline 视图。完成条件=先整族移植 timeline 视图（上批已移植 resetInstants/relativeTime 两助手不改变该结论） |
+| ae4e74ed | authFiles OAuth 编辑器重构 | 3971 行官方页面整体重写类；LTS 编辑器走 oauth.model-policy v8 自有链路。完成条件=与 28182ef9 同类的页面结构裁决 |
+| f974d570 | model rule saves guard | not-applicable（上批结论维持）：上游 modelRules/useModelRulesData 架构 LTS 无对应 |
+
+已在上批落地或裁决的项（2da3e263、1e29f88f、1c76da26+9c1deb66 no-op）不重复。
+`defer` 仍是可见 backlog，不计为已移植。
