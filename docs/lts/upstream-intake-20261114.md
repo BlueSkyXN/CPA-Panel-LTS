@@ -59,3 +59,66 @@
 | ae4e74ed | authFiles OAuth 编辑器大重构 | defer | 官方页面整体重写类 |
 | 7b754b23 | OpenAI connectivity 测试 | defer | 依赖 upstream providers 目录结构(useConnectivityTest.ts 形态不同) |
 | 1c76da26+9c1deb66 | codexAccountSettings+revert | no-op | 上游自行 revert 净零 |
+
+
+## 2026-11-15 续作返工：store 互斥与模型刷新（评审后）
+
+上一版把两项 adapt-port 落地后，评审指出三处实现问题，本轮已修正并补回归。
+PR #151 的 base 已从 `main` 改为 `codex/upstream-quota-20261114`（即 #150 的分支），
+原生 stack `152` = `[#150, #151]`，base `main`。
+
+### 1e29f88f store 安装与插件变更互斥（返工）
+
+原实现把 busy 状态从组件状态发布到共享 store（`setInstalledBusy(...)`、
+`setStoreBusy(Boolean(installingKey))`），存在三个可达缺陷：
+
+| 缺陷 | 后果 | 修正 |
+|---|---|---|
+| 锁由组件状态发布 | 离开 `/plugins` 或 `/plugin-store` 时组件卸载，在途变更的锁被静默释放 | 改为 token 登记，由变更自身 `begin`/`end`，锁生命周期等于请求生命周期 |
+| 重新进入路由再次发布 `false` | 请求尚未 settle 就已解锁，仍可发起第二笔 | 同上；remount 不再写入锁状态 |
+| 锁无连接维度 | 切连接后旧连接的迟到结果仍能锁住新连接 | 登记按 `profileId:apiBase` 归属，连接变化即清空两侧 |
+| 启停只判 `deletingID` | 启停可与删除、store 安装并发 | 启停纳入完整互斥判断 |
+
+验证：`src/stores/usePluginMutationStore.test.mjs` 四例（锁生命周期跨越组件卸载、
+并发变更各自持锁、两路由共用命名空间、连接切换清空且忽略迟到释放），
+`scripts/plugin_mutation_lock.test.mjs` 静态契约改为 token 设计。行为测试对旧实现必失败。
+
+### 2da3e263 模型刷新反馈（返工）
+
+`refreshCatalog` 在连接已切换时 resolve 为 `{changedProviders: []}`，与「刷新成功但无变化」
+不可区分，于是页面显示成功提示并继续刷新**当前**连接的列表。
+
+- `refreshCatalog` 现返回 `{stale, changedProviders}`，过期响应置 `stale: true`；
+- `SystemPage` 对 `stale` 直接返回，不报成功、不触发当前连接的列表刷新；
+- `fetchModels` 与目录刷新都用「请求序号 + 连接代际」双门，连接变化时两者一起作废。
+
+验证：`src/services/api/modelsCatalogRefresh.test.mjs` 四例（过期成功、当前成功、
+过期失败被吞掉而当前失败仍抛、页面不走进成功分支）。
+
+### D1 交互验收：v2 → v3
+
+v2 的 18/18 被三项评审意见取代，v3 为 29/29（Panel head `2a94ba9b`，dist 由该树重建）：
+
+1. **未决操作下切换连接**：v2 只在全部 claim 结算后才切换，等于在空 journal 上验证清理。
+   v3 扣住一笔 claim 的响应使 journal 留下未决项，关闭对话框（journal 必须活过 unmount），
+   再切换连接，断言新会话既不继承待决身份、也不响应随后释放的迟到结果。
+2. **真实重复提交**：v2 单次点击后读 `disabled`，属 UI 状态检查。v3 在同一 task 内同步
+   派发两次 click，由产品自身的在途守卫拒绝第二次，mock 必须只看到一笔 claim。
+3. **可靠的重建判据**：v2 给 `location.reload` 打补丁计数，而真实重新加载的另一个文档
+   根本不会上报。v3 比对 `performance.timeOrigin`、写入文档的哨兵值、以及宿主 iframe
+   元素上的 `data-*` 标记。
+
+v3 还记录了一条 v2 未触及的产品行为：写入在途时断开会被拒绝
+（"This instance has an operation in progress. Wait before disconnecting."），
+因此切换只在 claim 结算成未决 journal 项之后才可达。
+
+反例（均应失败且已实测）：`request_id` 置空 → 4 条 id 断言失败；成功响应缺 `result`
+→ 成功关闭断言失败；用 `reload()` 代替连接切换 → 断开阻塞与 journal 存活两项失败。
+
+归档：Core L1 worktree `local/20261114-d1-grant-smoke/v3/`；v1/v2 在 README 中标注失效。
+
+### 剩余 defer 不变
+
+Codex credit overage、OAuth login proxy、plugins 页面族重构、authFiles model catalog sync、
+quota/auth-files 卡片布局与时间线、autocomplete、connectivity 测试、OAuth 编辑器重构：
+沿用既有 defer 结论，本轮未移植，仍计入可见 backlog，不计为已更新。
