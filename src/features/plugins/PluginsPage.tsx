@@ -90,23 +90,20 @@ export function PluginsPage() {
   const storeBusy = usePluginStoreBusy();
   const installedBusy = useInstalledPluginBusy();
   const syncPluginMutationConnection = usePluginMutationStore((state) => state.syncConnection);
-  const beginInstalledMutation = usePluginMutationStore((state) => state.beginInstalledMutation);
+  const tryBeginInstalledMutation = usePluginMutationStore(
+    (state) => state.tryBeginInstalledMutation
+  );
   const endInstalledMutation = usePluginMutationStore((state) => state.endInstalledMutation);
   // 锁跟着连接走：切连接后旧登记的锁全部作废，旧连接的迟到结果也不能再锁新连接。
   useEffect(() => {
     syncPluginMutationConnection(connectionKey);
   }, [connectionKey, syncPluginMutationConnection]);
   // 锁由变更自身持有（begin/end 成对），因此本组件卸载不会误释放、remount 也不会提前解锁。
-  const runInstalledMutation = useCallback(
-    async <T,>(operation: () => Promise<T>): Promise<T> => {
-      const token = beginInstalledMutation();
-      try {
-        return await operation();
-      } finally {
-        endInstalledMutation(token);
-      }
-    },
-    [beginInstalledMutation, endInstalledMutation]
+  // 取得锁与检查是同步一步：同一任务内第二次触发拿不到锁，调用方必须直接返回，
+  // 既不设 busy 状态、也不发请求（否则第二个调用方的 finally 会清掉第一个的状态）。
+  const acquireInstalledMutation = useCallback(
+    () => tryBeginInstalledMutation(),
+    [tryBeginInstalledMutation]
   );
 
   const connected = connectionStatus === 'connected';
@@ -194,7 +191,9 @@ export function PluginsPage() {
   );
 
   const openConfigSheet = async (plugin: PluginListEntry) => {
-    if (openingConfigID || mutatingID || deletingID || storeBusy || installedBusy) return;
+    if (openingConfigID || mutatingID || deletingID || storeBusy) return;
+    const token = acquireInstalledMutation();
+    if (!token) return;
 
     const requestSeq = configRequestSeq.current + 1;
     configRequestSeq.current = requestSeq;
@@ -203,12 +202,10 @@ export function PluginsPage() {
     setDraft(null);
 
     try {
-      await runInstalledMutation(async () => {
-        const currentConfig = await pluginsApi.getConfig(plugin.id);
-        if (configRequestSeq.current !== requestSeq) return;
+      const currentConfig = await pluginsApi.getConfig(plugin.id);
+      if (configRequestSeq.current !== requestSeq) return;
 
-        setDraft(buildPluginConfigDraft(plugin, currentConfig));
-      });
+      setDraft(buildPluginConfigDraft(plugin, currentConfig));
     } catch (err: unknown) {
       if (configRequestSeq.current !== requestSeq) return;
 
@@ -234,6 +231,7 @@ export function PluginsPage() {
         'error'
       );
     } finally {
+      endInstalledMutation(token);
       if (configRequestSeq.current === requestSeq) {
         setOpeningConfigID('');
       }
@@ -252,27 +250,27 @@ export function PluginsPage() {
 
   const handleTogglePlugin = async (plugin: PluginListEntry, enabled: boolean) => {
     // 与删除/配置/Store 安装共用同一互斥：任一在途都不再发起启停。
-    if (!connected || mutatingID || openingConfigID || deletingID || storeBusy || installedBusy) return;
+    if (!connected || mutatingID || openingConfigID || deletingID || storeBusy) return;
+    const token = acquireInstalledMutation();
+    if (!token) return;
     setMutatingID(plugin.id);
     try {
-      await runInstalledMutation(async () => {
-        await pluginsApi.updateEnabled(plugin.id, enabled);
-        clearConfigCache();
-        const status = await waitForPluginRuntimeState(plugin.id, enabled);
-        if (status === 'ready') {
-          notifyPluginResourcesChanged();
-          showNotification(t('plugin_management.toggle_success'), 'success');
-        } else {
-          showNotification(
-            t(
-              status === 'globalDisabled'
-                ? 'plugin_management.global_disabled_hint'
-                : 'plugin_management.runtime_pending'
-            ),
-            'warning'
-          );
-        }
-      });
+      await pluginsApi.updateEnabled(plugin.id, enabled);
+      clearConfigCache();
+      const status = await waitForPluginRuntimeState(plugin.id, enabled);
+      if (status === 'ready') {
+        notifyPluginResourcesChanged();
+        showNotification(t('plugin_management.toggle_success'), 'success');
+      } else {
+        showNotification(
+          t(
+            status === 'globalDisabled'
+              ? 'plugin_management.global_disabled_hint'
+              : 'plugin_management.runtime_pending'
+          ),
+          'warning'
+        );
+      }
     } catch (err: unknown) {
       showNotification(
         `${t('plugin_management.toggle_failed')}: ${getErrorMessage(
@@ -282,12 +280,13 @@ export function PluginsPage() {
         'error'
       );
     } finally {
+      endInstalledMutation(token);
       setMutatingID('');
     }
   };
 
   const handleDeletePlugin = (plugin: PluginListEntry) => {
-    if (!connected || mutatingID || openingConfigID || deletingID || storeBusy || installedBusy) return;
+    if (!connected || mutatingID || openingConfigID || deletingID || storeBusy) return;
 
     const name = getPluginTitle(plugin);
     showConfirmation({
@@ -296,25 +295,25 @@ export function PluginsPage() {
       variant: 'danger',
       confirmText: t('plugin_management.delete_plugin'),
       onConfirm: async () => {
-        // 确认框打开期间 store 可能已开始安装：确认时再判一次。
-        if (storeBusy) return;
+        // 确认回调可能在同一个任务里被触发多次（同步双 click）：先同步取锁，
+        // 取不到就直接返回，既不发请求也不碰 busy 状态。
+        const token = acquireInstalledMutation();
+        if (!token) return;
         setDeletingID(plugin.id);
         setMutatingID(plugin.id);
         try {
-          await runInstalledMutation(async () => {
-            const result = await pluginsApi.deletePlugin(plugin.id);
-            clearConfigCache();
-            if (editingPlugin?.id === plugin.id) {
-              setEditingPlugin(null);
-              setDraft(null);
-            }
-            await loadPlugins();
-            notifyPluginResourcesChanged();
-            showNotification(t('plugin_management.delete_success'), 'success');
-            if (result.restartRequired) {
-              showNotification(t('plugin_management.delete_restart_required'), 'warning');
-            }
-          });
+          const result = await pluginsApi.deletePlugin(plugin.id);
+          clearConfigCache();
+          if (editingPlugin?.id === plugin.id) {
+            setEditingPlugin(null);
+            setDraft(null);
+          }
+          await loadPlugins();
+          notifyPluginResourcesChanged();
+          showNotification(t('plugin_management.delete_success'), 'success');
+          if (result.restartRequired) {
+            showNotification(t('plugin_management.delete_restart_required'), 'warning');
+          }
         } catch (err: unknown) {
           const restartRequired = hasRestartRequiredError(err);
           const fallback = restartRequired
@@ -325,6 +324,7 @@ export function PluginsPage() {
             restartRequired ? 'warning' : 'error'
           );
         } finally {
+          endInstalledMutation(token);
           setDeletingID('');
           setMutatingID('');
         }
@@ -333,7 +333,7 @@ export function PluginsPage() {
   };
 
   const handleSaveConfig = async () => {
-    if (!editingPlugin || !draft || openingConfigID || mutatingID || deletingID || storeBusy || installedBusy) return;
+    if (!editingPlugin || !draft || openingConfigID || mutatingID || deletingID || storeBusy) return;
     const { patch, errors } = buildPluginConfigPatch(draft, editingPlugin.configFields, t);
 
     if (Object.keys(errors).length > 0) {
@@ -355,37 +355,37 @@ export function PluginsPage() {
       return;
     }
 
+    const token = acquireInstalledMutation();
+    if (!token) return;
     setMutatingID(editingPlugin.id);
     try {
-      await runInstalledMutation(async () => {
-        if (hasConfigChanges) {
-          await pluginsApi.patchConfig(editingPlugin.id, configPatch);
-        }
-        if (enabledChanged) {
-          await pluginsApi.updateEnabled(editingPlugin.id, patch.enabled === true);
-        }
-        clearConfigCache();
-        const status = enabledChanged
-          ? await waitForPluginRuntimeState(editingPlugin.id, patch.enabled === true)
-          : await loadPlugins().then((): PluginRuntimeWaitStatus => 'ready');
-        if (status === 'ready') {
-          notifyPluginResourcesChanged();
-        }
-        setEditingPlugin(null);
-        setDraft(null);
-        if (status === 'ready') {
-          showNotification(t('plugin_management.save_success'), 'success');
-        } else {
-          showNotification(
-            t(
-              status === 'globalDisabled'
-                ? 'plugin_management.global_disabled_hint'
-                : 'plugin_management.runtime_pending'
-            ),
-            'warning'
-          );
-        }
-      });
+      if (hasConfigChanges) {
+        await pluginsApi.patchConfig(editingPlugin.id, configPatch);
+      }
+      if (enabledChanged) {
+        await pluginsApi.updateEnabled(editingPlugin.id, patch.enabled === true);
+      }
+      clearConfigCache();
+      const status = enabledChanged
+        ? await waitForPluginRuntimeState(editingPlugin.id, patch.enabled === true)
+        : await loadPlugins().then((): PluginRuntimeWaitStatus => 'ready');
+      if (status === 'ready') {
+        notifyPluginResourcesChanged();
+      }
+      setEditingPlugin(null);
+      setDraft(null);
+      if (status === 'ready') {
+        showNotification(t('plugin_management.save_success'), 'success');
+      } else {
+        showNotification(
+          t(
+            status === 'globalDisabled'
+              ? 'plugin_management.global_disabled_hint'
+              : 'plugin_management.runtime_pending'
+          ),
+          'warning'
+        );
+      }
     } catch (err: unknown) {
       showNotification(
         `${t('plugin_management.save_failed')}: ${getErrorMessage(
@@ -395,6 +395,7 @@ export function PluginsPage() {
         'error'
       );
     } finally {
+      endInstalledMutation(token);
       setMutatingID('');
     }
   };

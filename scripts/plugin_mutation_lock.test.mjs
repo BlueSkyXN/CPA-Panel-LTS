@@ -11,9 +11,13 @@ const storePageSrc = readFileSync('src/features/plugins/PluginStorePage.tsx', 'u
 test('shared store keeps token registries for both directions', () => {
   assert.match(storeSrc, /installedTokens: ReadonlySet<string>/, 'installed locks must be token-based');
   assert.match(storeSrc, /storeTokens: ReadonlySet<string>/, 'store locks must be token-based');
-  assert.match(storeSrc, /beginInstalledMutation/, 'installed locks must be acquired by the mutation');
+  // Acquire must be check+register in one synchronous step, so a second
+  // trigger in the same task is refused instead of getting its own token.
+  assert.match(storeSrc, /tryBeginInstalledMutation: \(\) => string \| null/,
+    'installed-side acquire must be able to refuse');
+  assert.match(storeSrc, /tryBeginStoreMutation: \(\) => string \| null/,
+    'store-side acquire must be able to refuse');
   assert.match(storeSrc, /endInstalledMutation/, 'installed locks must be released by the mutation');
-  assert.match(storeSrc, /beginStoreMutation/, 'store locks must be acquired by the mutation');
   assert.match(storeSrc, /endStoreMutation/, 'store locks must be released by the mutation');
 });
 
@@ -39,22 +43,30 @@ test('no page publishes lock state from component state', () => {
   }
 });
 
-test('PluginsPage holds a token across every installed mutation and gates on storeBusy', () => {
-  const wrapped = pluginsSrc.match(/await runInstalledMutation\(/g) ?? [];
-  assert.ok(wrapped.length >= 4,
-    `delete/toggle/config-open/config-save must all hold a token (found ${wrapped.length})`);
+test('every installed mutation acquires the lock and bails out when refused', () => {
+  const acquires = pluginsSrc.match(/const token = acquireInstalledMutation\(\);/g) ?? [];
+  assert.ok(acquires.length >= 4,
+    `delete/toggle/config-open/config-save must all acquire the lock (found ${acquires.length})`);
+  const refusals = pluginsSrc.match(/if \(!token\) return;/g) ?? [];
+  assert.ok(refusals.length >= acquires.length,
+    'every acquire site must return without sending a request when refused');
   assert.match(pluginsSrc,
-    /const handleTogglePlugin = async[\s\S]{0,240}?if \(!connected \|\| mutatingID \|\| openingConfigID \|\| deletingID \|\| storeBusy \|\| installedBusy\) return;/,
+    /const handleTogglePlugin = async[\s\S]{0,240}?if \(!connected \|\| mutatingID \|\| openingConfigID \|\| deletingID \|\| storeBusy\) return;/,
     'toggle must share the full mutation guard');
-  const gated = pluginsSrc.match(/storeBusy/g) ?? [];
-  assert.ok(gated.length >= 4, `mutation guards must include storeBusy (found ${gated.length})`);
+  // The delete confirmation must take the lock BEFORE touching busy state,
+  // otherwise the refused second click still clears the first one's UI state.
+  assert.match(pluginsSrc,
+    /onConfirm: async \(\) => \{[\s\S]{0,300}?const token = acquireInstalledMutation\(\);\s*if \(!token\) return;\s*setDeletingID/,
+    'delete confirmation must acquire before setting busy state');
 });
 
 test('PluginStorePage blocks installs on both shared locks', () => {
   assert.match(storePageSrc, /const installBlocked = !connected \|\| installedBusy \|\| storeBusy/,
     'install entry must be blocked by installed mutations and by an in-flight store install');
-  assert.match(storePageSrc, /const mutationToken = beginStoreMutation\(\);/,
-    'the store install must hold a token for its whole settle window');
+  assert.match(storePageSrc, /const mutationToken = tryBeginStoreMutation\(\);/,
+    'the store install must acquire the shared lock and be able to refuse');
+  assert.match(storePageSrc, /if \(!mutationToken\) return;/,
+    'a refused store install must not send the request');
   assert.match(storePageSrc, /endStoreMutation\(mutationToken\);/,
     'the token must be released only when the install settles');
   for (const anchor of [

@@ -24,12 +24,12 @@ const busy = () => {
 
 test('a mutation keeps the lock until it settles, not until its component unmounts', async () => {
   const store = usePluginMutationStore.getState();
-  store.syncConnection('profile-a:http://core-a');
-  const token = usePluginMutationStore.getState().beginInstalledMutation();
+  store.syncConnection('profile-lifetime:http://core');
+  const token = usePluginMutationStore.getState().tryBeginInstalledMutation();
   assert.deepEqual(busy(), { installed: true, store: false });
 
   // Route round-trip: no component publishes "not busy" on remount.
-  usePluginMutationStore.getState().syncConnection('profile-a:http://core-a');
+  usePluginMutationStore.getState().syncConnection('profile-lifetime:http://core');
   assert.deepEqual(busy(), { installed: true, store: false },
     're-entering the same connection must not clear an in-flight lock');
 
@@ -41,38 +41,48 @@ test('a mutation keeps the lock until it settles, not until its component unmoun
   assert.deepEqual(busy(), { installed: false, store: false });
 });
 
-test('concurrent mutations each hold their own token', () => {
+test('a second synchronous acquire is refused while the first is in flight', () => {
   const store = usePluginMutationStore.getState();
-  store.syncConnection('profile-a:http://core-a');
-  const first = usePluginMutationStore.getState().beginInstalledMutation();
-  const second = usePluginMutationStore.getState().beginInstalledMutation();
+  store.syncConnection('profile-sync:http://core');
+  // The reviewed defect: two clicks dispatched in one task each got a token,
+  // so the delete confirmation issued two DELETE requests.
+  const first = usePluginMutationStore.getState().tryBeginInstalledMutation();
+  const second = usePluginMutationStore.getState().tryBeginInstalledMutation();
+  assert.ok(first, 'the first acquire must succeed');
+  assert.equal(second, null, 'the second acquire in the same task must be refused');
+  assert.equal(usePluginMutationStore.getState().installedTokens.size, 1,
+    'exactly one token may be registered');
+
   usePluginMutationStore.getState().endInstalledMutation(first);
-  assert.deepEqual(busy(), { installed: true, store: false },
-    'finishing one mutation must not unlock the other');
-  usePluginMutationStore.getState().endInstalledMutation(second);
   assert.deepEqual(busy(), { installed: false, store: false });
+  assert.ok(usePluginMutationStore.getState().tryBeginInstalledMutation(),
+    'a settled mutation releases the lock for the next attempt');
 });
 
 test('the two routes share one lock namespace', () => {
   const store = usePluginMutationStore.getState();
-  store.syncConnection('profile-a:http://core-a');
-  const installedToken = usePluginMutationStore.getState().beginInstalledMutation();
-  const storeToken = usePluginMutationStore.getState().beginStoreMutation();
-  assert.deepEqual(busy(), { installed: true, store: true },
-    'both directions must be observable at once so each page can gate the other');
-  usePluginMutationStore.getState().endStoreMutation(storeToken);
-  assert.deepEqual(busy(), { installed: true, store: false });
+  store.syncConnection('profile-shared:http://core');
+  const installedToken = usePluginMutationStore.getState().tryBeginInstalledMutation();
+  assert.ok(installedToken, 'installed-side acquire must succeed');
+  assert.equal(usePluginMutationStore.getState().tryBeginStoreMutation(), null,
+    'a store install must be refused while an installed-page mutation runs');
   usePluginMutationStore.getState().endInstalledMutation(installedToken);
+
+  const storeToken = usePluginMutationStore.getState().tryBeginStoreMutation();
+  assert.ok(storeToken, 'store-side acquire must succeed once the other side is free');
+  assert.equal(usePluginMutationStore.getState().tryBeginInstalledMutation(), null,
+    'an installed-page mutation must be refused while a store install runs');
+  usePluginMutationStore.getState().endStoreMutation(storeToken);
   assert.deepEqual(busy(), { installed: false, store: false });
 });
 
 test('a connection switch drops stale locks and ignores their late release', () => {
   const store = usePluginMutationStore.getState();
-  store.syncConnection('profile-a:http://core-a');
-  const staleToken = usePluginMutationStore.getState().beginStoreMutation();
+  store.syncConnection('profile-old:http://core-old');
+  const staleToken = usePluginMutationStore.getState().tryBeginStoreMutation();
   assert.deepEqual(busy(), { installed: false, store: true });
 
-  usePluginMutationStore.getState().syncConnection('profile-b:http://core-b');
+  usePluginMutationStore.getState().syncConnection('profile-new:http://core-new');
   assert.deepEqual(busy(), { installed: false, store: false },
     'a new connection must not inherit the previous connection lock');
 
@@ -81,7 +91,7 @@ test('a connection switch drops stale locks and ignores their late release', () 
   assert.deepEqual(busy(), { installed: false, store: false });
 
   // And the new connection can start its own mutation immediately.
-  const fresh = usePluginMutationStore.getState().beginStoreMutation();
+  const fresh = usePluginMutationStore.getState().tryBeginStoreMutation();
   assert.deepEqual(busy(), { installed: false, store: true });
   usePluginMutationStore.getState().endStoreMutation(fresh);
   assert.deepEqual(busy(), { installed: false, store: false });

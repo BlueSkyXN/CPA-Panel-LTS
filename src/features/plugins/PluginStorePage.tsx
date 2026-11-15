@@ -482,7 +482,7 @@ export function PluginStorePage() {
   const installedBusy = useInstalledPluginBusy();
   const storeBusy = usePluginStoreBusy();
   const syncPluginMutationConnection = usePluginMutationStore((state) => state.syncConnection);
-  const beginStoreMutation = usePluginMutationStore((state) => state.beginStoreMutation);
+  const tryBeginStoreMutation = usePluginMutationStore((state) => state.tryBeginStoreMutation);
   const endStoreMutation = usePluginMutationStore((state) => state.endStoreMutation);
   // 与 /plugins 共用同一连接标识：切连接即作废两侧在途登记。
   const connectionKey = `${profileId}:${apiBase}`;
@@ -675,14 +675,15 @@ export function PluginStorePage() {
 
   const runInstall = useCallback(
     async (entry: PluginStoreEntry, isUpdate: boolean, requestedVersion = '') => {
-      // 单一入口兜底：任何入口漏判都不会让两笔安装同时进网。
+      // 单一入口兜底：检查与取得锁同步完成，同一任务内第二笔拿不到锁、不发请求。
       if (installBlocked) return;
+      const mutationToken = tryBeginStoreMutation();
+      if (!mutationToken) return;
       const entryKey = getStoreEntryKey(entry);
       const failedKey = isUpdate ? 'plugin_store.update_failed' : 'plugin_store.install_failed';
       const version = requestedVersion.trim();
       setInstallingKey(entryKey);
       // 锁覆盖到轮询 settle 结束；组件卸载或路由切换都不释放，只有这里能放。
-      const mutationToken = beginStoreMutation();
       try {
         const result = await pluginStoreApi.install(entry.id, {
           sourceId: entry.sourceId || undefined,
@@ -759,7 +760,7 @@ export function PluginStorePage() {
         setInstallingKey('');
       }
     },
-    [beginStoreMutation, clearConfigCache, endStoreMutation, installBlocked, showNotification, t]
+    [clearConfigCache, endStoreMutation, installBlocked, showNotification, t, tryBeginStoreMutation]
   );
 
   const handleInstall = (entry: PluginStoreEntry) => {

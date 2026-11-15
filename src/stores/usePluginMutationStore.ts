@@ -9,6 +9,11 @@
  * - 组件卸载不释放锁（请求仍在跑），只有请求真正 settle 才释放；
  * - 重新进入路由不会用空的组件状态覆盖在途锁（旧实现会在 remount 时提前解锁）；
  * - 连接切换清空登记，旧连接的迟到结果不会锁住新连接。
+ *
+ * 取得锁必须是「检查 + 登记」一步完成（`tryBegin*`）：组件里的 busy 判断读的是
+ * 上一次渲染的闭包，同一 JS 任务内连续两次触发时两次都会看到「空闲」，
+ * 于是各拿一个 token、各发一次请求。`tryBegin*` 同步读取当前登记，第二次
+ * 调用立即失败，调用方不得再发请求。
  */
 
 import { create } from 'zustand';
@@ -19,9 +24,11 @@ interface PluginMutationState {
   installedTokens: ReadonlySet<string>;
   storeTokens: ReadonlySet<string>;
   syncConnection: (connectionKey: string) => void;
-  beginInstalledMutation: () => string;
+  /** 取得已装插件侧锁；已被占用（任一侧）时返回 null，调用方不得发请求。 */
+  tryBeginInstalledMutation: () => string | null;
   endInstalledMutation: (token: string) => void;
-  beginStoreMutation: () => string;
+  /** 取得 store 侧锁；已被占用（任一侧）时返回 null，调用方不得发请求。 */
+  tryBeginStoreMutation: () => string | null;
   endStoreMutation: (token: string) => void;
 }
 
@@ -42,40 +49,51 @@ const withToken = (
   return next;
 };
 
-export const usePluginMutationStore = create<PluginMutationState>((set) => ({
-  connectionKey: '',
-  installedTokens: new Set<string>(),
-  storeTokens: new Set<string>(),
-  syncConnection: (connectionKey) =>
-    set((state) => {
-      if (state.connectionKey === connectionKey) return state;
-      return {
-        connectionKey,
-        installedTokens: new Set<string>(),
-        storeTokens: new Set<string>(),
-      };
-    }),
-  beginInstalledMutation: () => {
-    const token = nextToken('installed');
-    set((state) => ({ installedTokens: withToken(state.installedTokens, token, true) }));
-    return token;
-  },
-  endInstalledMutation: (token) =>
-    set((state) => {
-      if (!state.installedTokens.has(token)) return state;
-      return { installedTokens: withToken(state.installedTokens, token, false) };
-    }),
-  beginStoreMutation: () => {
-    const token = nextToken('store');
-    set((state) => ({ storeTokens: withToken(state.storeTokens, token, true) }));
-    return token;
-  },
-  endStoreMutation: (token) =>
-    set((state) => {
-      if (!state.storeTokens.has(token)) return state;
-      return { storeTokens: withToken(state.storeTokens, token, false) };
-    }),
-}));
+export const usePluginMutationStore = create<PluginMutationState>((set, get) => {
+  // 两个方向共用一把锁：已装插件变更与 store 安装不得并发。
+  const busy = () => {
+    const state = get();
+    return state.installedTokens.size > 0 || state.storeTokens.size > 0;
+  };
+  return {
+    connectionKey: '',
+    installedTokens: new Set<string>(),
+    storeTokens: new Set<string>(),
+    syncConnection: (connectionKey) =>
+      set((state) => {
+        if (state.connectionKey === connectionKey) return state;
+        return {
+          connectionKey,
+          installedTokens: new Set<string>(),
+          storeTokens: new Set<string>(),
+        };
+      }),
+    tryBeginInstalledMutation: () => {
+      // No await between the check and the set: within one task the second
+      // synchronous caller observes the token registered by the first.
+      if (busy()) return null;
+      const token = nextToken('installed');
+      set((state) => ({ installedTokens: withToken(state.installedTokens, token, true) }));
+      return token;
+    },
+    endInstalledMutation: (token) =>
+      set((state) => {
+        if (!state.installedTokens.has(token)) return state;
+        return { installedTokens: withToken(state.installedTokens, token, false) };
+      }),
+    tryBeginStoreMutation: () => {
+      if (busy()) return null;
+      const token = nextToken('store');
+      set((state) => ({ storeTokens: withToken(state.storeTokens, token, true) }));
+      return token;
+    },
+    endStoreMutation: (token) =>
+      set((state) => {
+        if (!state.storeTokens.has(token)) return state;
+        return { storeTokens: withToken(state.storeTokens, token, false) };
+      }),
+  };
+});
 
 /** 已装插件页有变更在途（删除/启停/配置打开）。 */
 export const useInstalledPluginBusy = () =>

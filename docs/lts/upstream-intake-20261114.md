@@ -74,14 +74,28 @@ PR #151 的 base 已从 `main` 改为 `codex/upstream-quota-20261114`（即 #150
 
 | 缺陷 | 后果 | 修正 |
 |---|---|---|
-| 锁由组件状态发布 | 离开 `/plugins` 或 `/plugin-store` 时组件卸载，在途变更的锁被静默释放 | 改为 token 登记，由变更自身 `begin`/`end`，锁生命周期等于请求生命周期 |
+| 锁由组件状态发布 | 离开 `/plugins` 或 `/plugin-store` 时组件卸载，在途变更的锁被静默释放 | 改为 token 登记，由变更自身取得/释放，锁生命周期等于请求生命周期 |
 | 重新进入路由再次发布 `false` | 请求尚未 settle 就已解锁，仍可发起第二笔 | 同上；remount 不再写入锁状态 |
 | 锁无连接维度 | 切连接后旧连接的迟到结果仍能锁住新连接 | 登记按 `profileId:apiBase` 归属，连接变化即清空两侧 |
 | 启停只判 `deletingID` | 启停可与删除、store 安装并发 | 启停纳入完整互斥判断 |
+| **登记不拒绝第二笔** | 同一 JS 任务内两次触发各拿一个 token，各发一次请求；组件里的 busy 判断读的是上一次渲染的闭包，两次都看到「空闲」 | 改为 `tryBeginInstalledMutation()` / `tryBeginStoreMutation()`：**检查与登记同步一步完成**，取得失败返回 `null`，调用方不得发请求 |
 
-验证：`src/stores/usePluginMutationStore.test.mjs` 四例（锁生命周期跨越组件卸载、
-并发变更各自持锁、两路由共用命名空间、连接切换清空且忽略迟到释放），
-`scripts/plugin_mutation_lock.test.mjs` 静态契约改为 token 设计。行为测试对旧实现必失败。
+第二笔请求的缺口已实测复现并修复：对插件删除确认按钮在同一 task 内同步派发两次 `click`，
+修复前 mock 收到 **2 次** `DELETE .../plugins/mock-plugin`，修复后 **1 次**。
+`runInstall` 也改为先取锁再设 `installingKey`（原先先设状态，第二笔的 `finally`
+会清掉第一笔的 UI 状态）。删除确认回调同样改为先取锁、失败即返回。
+
+四个已装插件入口（删除/启停/打开配置/保存配置）统一经过 `acquireInstalledMutation()`，
+取不到锁时直接返回，不设 busy 状态、不发请求。
+
+验证：
+- `src/stores/usePluginMutationStore.test.mjs` 四例（锁生命周期跨越组件卸载、
+  **同一 task 内第二次取得被拒绝且只登记一个 token**、两路由共用命名空间且互斥双向生效、
+  连接切换清空且忽略迟到释放）；
+- `scripts/plugin_mutation_lock.test.mjs` 静态契约改为 `tryBegin*` 设计，并断言每个取得点
+  都有失败即返回，删除确认必须先取锁再设 busy 状态；
+- 浏览器反例 `local/20261115-plugin-delete-double-submit/`：同步双 click 下 mock 只收到一次 DELETE，
+  回退到旧实现时收到两次。
 
 ### 2da3e263 模型刷新反馈（返工）
 
@@ -97,16 +111,22 @@ PR #151 的 base 已从 `main` 改为 `codex/upstream-quota-20261114`（即 #150
 
 ### D1 交互验收：v2 → v3
 
-v2 的 18/18 被三项评审意见取代，v3 为 29/29（Panel head `2a94ba9b`，dist 由该树重建）：
+v2 的 18/18 被三项评审意见取代；v3 现为 **30/30**（Panel head `bf4f9b59e`，dist 由该树重建）：
 
 1. **未决操作下切换连接**：v2 只在全部 claim 结算后才切换，等于在空 journal 上验证清理。
-   v3 扣住一笔 claim 的响应使 journal 留下未决项，关闭对话框（journal 必须活过 unmount），
-   再切换连接，断言新会话既不继承待决身份、也不响应随后释放的迟到结果。
+   v3 扣住一笔 claim 的响应使 journal 留下未决项，关闭对话框、离开路由再返回
+   （tab-memory journal 必须同时活过 unmount 与路由往返），再切换连接，
+   断言新会话不继承待决身份。
+
+   **范围更正（评审指出）**：v3 并不证明「旧连接的迟到响应不污染新连接」——
+   产品在写入在途时拒绝断开（脚本已断言），所以到切换时 claim 已结算成未决 journal 项，
+   不存在可释放的迟到响应。正式结论是：**在途写入阻止断开；结果未知的 journal 能跨页面保留，
+   并在真实重连后隔离。**
 2. **真实重复提交**：v2 单次点击后读 `disabled`，属 UI 状态检查。v3 在同一 task 内同步
    派发两次 click，由产品自身的在途守卫拒绝第二次，mock 必须只看到一笔 claim。
 3. **可靠的重建判据**：v2 给 `location.reload` 打补丁计数，而真实重新加载的另一个文档
-   根本不会上报。v3 比对 `performance.timeOrigin`、写入文档的哨兵值、以及宿主 iframe
-   元素上的 `data-*` 标记。
+   根本不会上报。v3 分开报两个事实：**宿主**页面未 reload（`performance.timeOrigin` 不变）、
+   **应用 iframe** 已重建（新 `timeOrigin`、哨兵消失、新 iframe 元素上没有 `data-*` 标记）。
 
 v3 还记录了一条 v2 未触及的产品行为：写入在途时断开会被拒绝
 （"This instance has an operation in progress. Wait before disconnecting."），
