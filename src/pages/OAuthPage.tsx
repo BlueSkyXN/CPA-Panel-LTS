@@ -5,6 +5,8 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { useAuthStore, useNotificationStore } from '@/stores';
+import { LoginProxyField } from '@/components/providers/LoginProxyField';
+import { isInvalidProxyUrlError, maskProxyUrl, planLoginProxy } from '@/utils/loginProxy';
 import { apiClient } from '@/services/api/client';
 import { validateDevinCallback } from './devinOAuth';
 import iconDevin from '@/assets/icons/devin.svg';
@@ -31,6 +33,8 @@ interface ProviderState {
   status?: 'idle' | 'waiting' | 'success' | 'error';
   error?: string;
   polling?: boolean;
+  /** 本次尝试使用的登录代理（原值，仅内存；展示时必须脱敏）。 */
+  proxyUrl?: string;
   projectId?: string;
   projectIdError?: string;
   callbackUrl?: string;
@@ -223,6 +227,14 @@ export function OAuthPage() {
   const [states, setStates] = useState<Record<OAuthProvider, ProviderState>>(
     {} as Record<OAuthProvider, ProviderState>
   );
+  // 页面级登录代理：作用于从本页发起的登录。仅存于内存，不写 storage / URL；
+  // 连接切换或登出时随 provider 状态一起清空。Port of upstream 6b1b94a7/96ce4e1b.
+  const [loginProxy, setLoginProxyValue] = useState('');
+  const [loginProxyRejected, setLoginProxyRejected] = useState<string | null>(null);
+  const setLoginProxy = useCallback((value: string) => {
+    setLoginProxyValue(value);
+    if (!value.trim()) setLoginProxyRejected(null);
+  }, []);
   useEffect(
     () =>
       registerSessionLeaveCheck(() =>
@@ -276,6 +288,8 @@ export function OAuthPage() {
       ) {
         clearTimers();
         setStates({} as Record<OAuthProvider, ProviderState>);
+        setLoginProxyValue('');
+        setLoginProxyRejected(null);
       }
     });
     return () => {
@@ -380,6 +394,27 @@ export function OAuthPage() {
     if (provider === 'gemini-cli') {
       updateProviderState(provider, { projectIdError: undefined });
     }
+    // 非法代理值在任何请求发出前拦截；不存在“不带代理继续登录”的回退。
+    const proxyPlan = planLoginProxy(loginProxy);
+    if (proxyPlan.kind === 'invalid') {
+      const message = t('auth_login.login_proxy_invalid');
+      setLoginProxyRejected(loginProxy.trim());
+      updateProviderState(provider, {
+        url: undefined,
+        state: undefined,
+        status: 'error',
+        error: message,
+        polling: false,
+        callbackStatus: undefined,
+        callbackError: undefined,
+        callbackUrl: '',
+        callbackSubmitting: false,
+        userCode: undefined,
+        proxyUrl: undefined,
+      });
+      showNotification(message, 'error');
+      return;
+    }
     updateProviderState(provider, {
       url: undefined,
       state: undefined,
@@ -391,12 +426,14 @@ export function OAuthPage() {
       callbackUrl: '',
       callbackSubmitting: false,
       userCode: undefined,
+      proxyUrl: proxyPlan.kind === 'proxy' ? proxyPlan.url : undefined,
     });
     try {
       const res = await oauthApi.startAuth(provider, {
         client,
         projectId: provider === 'gemini-cli' ? projectId : undefined,
         signal: attempt.signal,
+        proxyUrl: proxyPlan.kind === 'proxy' ? proxyPlan.url : undefined,
       });
       if (provider === 'devin' || provider === 'meta') {
         if (res.state) {
@@ -440,7 +477,10 @@ export function OAuthPage() {
       startPolling(provider, res.state, attempt);
     } catch (err: unknown) {
       if (!attempt.isCurrent()) return;
-      const message = getErrorMessage(err);
+      // 后端拒绝代理（400 invalid proxy_url）时标记原值，让输入框显示内联错误。
+      const proxyRejected = proxyPlan.kind === 'proxy' && isInvalidProxyUrlError(err);
+      if (proxyRejected) setLoginProxyRejected(proxyPlan.url);
+      const message = proxyRejected ? t('auth_login.login_proxy_invalid') : getErrorMessage(err);
       updateProviderState(provider, { status: 'error', error: message, polling: false });
       showNotification(
         `${t(getAuthKey(provider, 'oauth_start_error'))}${message ? ` ${message}` : ''}`,
@@ -583,6 +623,7 @@ export function OAuthPage() {
       <h1 className={styles.pageTitle}>{t('nav.oauth', { defaultValue: 'OAuth' })}</h1>
 
       <div className={styles.content}>
+        <LoginProxyField value={loginProxy} rejectedValue={loginProxyRejected} onChange={setLoginProxy} />
         {PROVIDERS.map((provider) => {
           const state = states[provider.id] || {};
           const canSubmitCallback = CALLBACK_SUPPORTED.includes(provider.id) && Boolean(state.url);
@@ -640,6 +681,12 @@ export function OAuthPage() {
                         placeholder={t('auth_login.gemini_cli_project_id_placeholder')}
                       />
                     </div>
+                  )}
+                  {state.proxyUrl && (
+                    <p className={styles.proxyNote}>
+                      {t('auth_login.login_proxy_in_use')}
+                      <code className={styles.proxyValue}>{maskProxyUrl(state.proxyUrl)}</code>
+                    </p>
                   )}
                   {state.url && (
                     <div className={styles.authUrlBox}>

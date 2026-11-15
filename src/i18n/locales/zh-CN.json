@@ -1299,7 +1299,15 @@
     "meta_oauth_polling_error": "检查认证状态失败:",
     "meta_providers": "{{count}} 个提供商",
     "meta_waiting": "{{count}} 个等待授权",
-    "meta_added": "本次新增 {{count}} 个凭证"
+    "meta_added": "本次新增 {{count}} 个凭证",
+    "login_proxy_toggle": "登录代理",
+    "login_proxy_optional": "可选",
+    "login_proxy_status_invalid": "无效",
+    "login_proxy_label": "新登录使用的代理",
+    "login_proxy_placeholder": "socks5://user:pass@host:port",
+    "login_proxy_clear": "清除",
+    "login_proxy_invalid": "代理 URL 无效。请使用 http、https、socks5 或 socks5h 并填写主机（socks5 需要端口），不能包含路径或查询参数。",
+    "login_proxy_in_use": "本次登录通过代理"
   },
   "stats": {
     "success": "成功",

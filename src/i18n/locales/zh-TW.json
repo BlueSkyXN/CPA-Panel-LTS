@@ -1325,7 +1325,15 @@
     "meta_oauth_polling_error": "檢查驗證狀態失敗:",
     "meta_providers": "{{count}} 個提供商",
     "meta_waiting": "{{count}} 個等待授權",
-    "meta_added": "本次新增 {{count}} 個憑證"
+    "meta_added": "本次新增 {{count}} 個憑證",
+    "login_proxy_toggle": "登入代理",
+    "login_proxy_optional": "選填",
+    "login_proxy_status_invalid": "無效",
+    "login_proxy_label": "新登入使用的代理",
+    "login_proxy_placeholder": "socks5://user:pass@host:port",
+    "login_proxy_clear": "清除",
+    "login_proxy_invalid": "代理 URL 無效。請使用 http、https、socks5 或 socks5h 並填寫主機（socks5 需要連接埠），不能包含路徑或查詢參數。",
+    "login_proxy_in_use": "本次登入透過代理"
   },
   "stats": {
     "success": "成功",

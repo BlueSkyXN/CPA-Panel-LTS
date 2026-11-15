@@ -1301,7 +1301,15 @@
     "meta_oauth_polling_error": "Failed to check authentication status:",
     "meta_providers": "{{count}} providers",
     "meta_waiting": "{{count}} awaiting authorization",
-    "meta_added": "{{count}} added this session"
+    "meta_added": "{{count}} added this session",
+    "login_proxy_toggle": "Login proxy",
+    "login_proxy_optional": "Optional",
+    "login_proxy_status_invalid": "Invalid",
+    "login_proxy_label": "Proxy for new logins",
+    "login_proxy_placeholder": "socks5://user:pass@host:port",
+    "login_proxy_clear": "Clear",
+    "login_proxy_invalid": "Invalid proxy URL. Use http, https, socks5 or socks5h with a host (socks5 needs a port), and no path or query.",
+    "login_proxy_in_use": "Signing in through proxy"
   },
   "stats": {
     "success": "Success",
