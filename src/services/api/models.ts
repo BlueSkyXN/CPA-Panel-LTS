@@ -89,29 +89,37 @@ const resolveBearerTokenFromAuthorization = (headers: Record<string, string>): s
   return match?.[1]?.trim() || '';
 };
 
+export interface CatalogRefreshResult {
+  /** The response belonged to a superseded connection and must not be applied. */
+  stale: boolean;
+  changedProviders: string[];
+}
+
 export const modelsApi = {
   /**
    * Refresh the shared backend model catalog (v8 POST /models/refresh).
    * Port of upstream 2da3e263; the connection guard keeps a stale response
    * from a previous connection from updating the current view.
+   *
+   * `onStale` runs when the response belongs to a superseded connection, and
+   * the call resolves with `stale: true` so the caller can drop its own
+   * success path instead of reporting a refresh that never applied here.
    */
-  async refreshCatalog(onStale?: () => void): Promise<{ changedProviders: string[] }> {
+  async refreshCatalog(onStale?: () => void): Promise<CatalogRefreshResult> {
     const generation = apiClient.getConnectionRevision();
     const client = apiClient.captureConnection();
+    const stale = (): CatalogRefreshResult => {
+      onStale?.();
+      return { stale: true, changedProviders: [] };
+    };
     try {
       const response = await client.post<{ changed_providers: string[] | null }>(
         '/models/refresh'
       );
-      if (!apiClient.isCurrentConnection(generation)) {
-        onStale?.();
-        return { changedProviders: [] };
-      }
-      return { changedProviders: response.changed_providers ?? [] };
+      if (!apiClient.isCurrentConnection(generation)) return stale();
+      return { stale: false, changedProviders: response.changed_providers ?? [] };
     } catch (err) {
-      if (!apiClient.isCurrentConnection(generation)) {
-        onStale?.();
-        return { changedProviders: [] };
-      }
+      if (!apiClient.isCurrentConnection(generation)) return stale();
       throw err;
     }
   },

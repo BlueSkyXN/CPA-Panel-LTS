@@ -20,7 +20,11 @@ import {
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { pluginStoreApi } from '@/services/api';
 import { useAuthStore, useConfigStore, useNotificationStore } from '@/stores';
-import { usePluginMutationStore } from '@/stores/usePluginMutationStore';
+import {
+  useInstalledPluginBusy,
+  usePluginMutationStore,
+  usePluginStoreBusy,
+} from '@/stores/usePluginMutationStore';
 import { getErrorMessage, isRecord } from '@/utils/helpers';
 import type { PluginStoreEntry, PluginStoreResponse } from '@/types';
 import {
@@ -465,6 +469,7 @@ export function PluginStorePage() {
   const navigate = useNavigate();
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
   const apiBase = useAuthStore((state) => state.apiBase);
+  const profileId = useAuthStore((state) => state.profileId);
   const clearConfigCache = useConfigStore((state) => state.clearCache);
   const showNotification = useNotificationStore((state) => state.showNotification);
 
@@ -474,11 +479,16 @@ export function PluginStorePage() {
   const [filter, setFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<StoreStatusFilter>('all');
   const [installingKey, setInstallingKey] = useState('');
-  const setStoreBusy = usePluginMutationStore((state) => state.setStoreBusy);
-  const installedBusy = usePluginMutationStore((state) => state.installedBusy);
+  const installedBusy = useInstalledPluginBusy();
+  const storeBusy = usePluginStoreBusy();
+  const syncPluginMutationConnection = usePluginMutationStore((state) => state.syncConnection);
+  const beginStoreMutation = usePluginMutationStore((state) => state.beginStoreMutation);
+  const endStoreMutation = usePluginMutationStore((state) => state.endStoreMutation);
+  // 与 /plugins 共用同一连接标识：切连接即作废两侧在途登记。
+  const connectionKey = `${profileId}:${apiBase}`;
   useEffect(() => {
-    setStoreBusy(Boolean(installingKey));
-  }, [installingKey, setStoreBusy]);
+    syncPluginMutationConnection(connectionKey);
+  }, [connectionKey, syncPluginMutationConnection]);
   const [restartRequiredKeys, setRestartRequiredKeys] = useState<string[]>([]);
   const [expandedDescriptionKeys, setExpandedDescriptionKeys] = useState<string[]>([]);
   const [overflowingDescriptionKeys, setOverflowingDescriptionKeys] = useState<string[]>([]);
@@ -496,7 +506,9 @@ export function PluginStorePage() {
 
   const connected = connectionStatus === 'connected';
   // 上游 1e29f88f:已装插件变更在途时,store 安装/更新入口保持锁定。
-  const installBlocked = !connected || installedBusy || Boolean(installingKey);
+  // storeBusy 来自共享 token 登记：离开页面再回来时本组件的 installingKey
+  // 已重置，只有共享锁还记得上一笔安装仍在轮询。
+  const installBlocked = !connected || installedBusy || storeBusy;
 
   const loadStore = useCallback(async () => {
     if (!connected) {
@@ -663,10 +675,14 @@ export function PluginStorePage() {
 
   const runInstall = useCallback(
     async (entry: PluginStoreEntry, isUpdate: boolean, requestedVersion = '') => {
+      // 单一入口兜底：任何入口漏判都不会让两笔安装同时进网。
+      if (installBlocked) return;
       const entryKey = getStoreEntryKey(entry);
       const failedKey = isUpdate ? 'plugin_store.update_failed' : 'plugin_store.install_failed';
       const version = requestedVersion.trim();
       setInstallingKey(entryKey);
+      // 锁覆盖到轮询 settle 结束；组件卸载或路由切换都不释放，只有这里能放。
+      const mutationToken = beginStoreMutation();
       try {
         const result = await pluginStoreApi.install(entry.id, {
           sourceId: entry.sourceId || undefined,
@@ -739,10 +755,11 @@ export function PluginStorePage() {
         showNotification(`${t(failedKey)}: ${getErrorMessage(err, t(failedKey))}`, 'error');
         throw err;
       } finally {
+        endStoreMutation(mutationToken);
         setInstallingKey('');
       }
     },
-    [clearConfigCache, showNotification, t]
+    [beginStoreMutation, clearConfigCache, endStoreMutation, installBlocked, showNotification, t]
   );
 
   const handleInstall = (entry: PluginStoreEntry) => {
@@ -754,10 +771,10 @@ export function PluginStorePage() {
   };
 
   const handleInstallOptionsClose = useCallback(() => {
-    if (installingKey) return;
+    if (installingKey || storeBusy) return;
     setInstallOptionsEntry(null);
     setInstallVersion('');
-  }, [installingKey]);
+  }, [installingKey, storeBusy]);
 
   const handleInstallOptionsConfirm = useCallback(async () => {
     if (installBlocked || !installOptionsEntry) return;
@@ -816,7 +833,8 @@ export function PluginStorePage() {
     const sourceText = sourceName ? t('plugin_store.source_name', { source: sourceName }) : '';
     const metaItems = [versionText, sourceText, entry.author, entry.license].filter(Boolean);
     const isInstalling = installingKey === entryKey;
-    const hasPendingInstall = Boolean(installingKey);
+    // storeBusy 覆盖「安装仍在跑但本组件已重新挂载」的情形。
+    const hasPendingInstall = Boolean(installingKey) || storeBusy;
     const missingAuth = entry.authRequired && !entry.authConfigured;
     const isDescriptionExpanded = expandedDescriptionKeySet.has(entryKey);
     const isDescriptionOverflowing = overflowingDescriptionKeySet.has(entryKey);
