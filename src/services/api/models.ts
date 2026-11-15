@@ -91,6 +91,32 @@ const resolveBearerTokenFromAuthorization = (headers: Record<string, string>): s
 
 export const modelsApi = {
   /**
+   * Refresh the shared backend model catalog (v8 POST /models/refresh).
+   * Port of upstream 2da3e263; the connection guard keeps a stale response
+   * from a previous connection from updating the current view.
+   */
+  async refreshCatalog(onStale?: () => void): Promise<{ changedProviders: string[] }> {
+    const generation = apiClient.getConnectionRevision();
+    const client = apiClient.captureConnection();
+    try {
+      const response = await client.post<{ changed_providers: string[] | null }>(
+        '/models/refresh'
+      );
+      if (!apiClient.isCurrentConnection(generation)) {
+        onStale?.();
+        return { changedProviders: [] };
+      }
+      return { changedProviders: response.changed_providers ?? [] };
+    } catch (err) {
+      if (!apiClient.isCurrentConnection(generation)) {
+        onStale?.();
+        return { changedProviders: [] };
+      }
+      throw err;
+    }
+  },
+
+  /**
    * Fetch available models from /v1/models endpoint (for system info page)
    */
   async fetchModels(baseUrl: string, apiKey?: string, headers: Record<string, string> = {}) {

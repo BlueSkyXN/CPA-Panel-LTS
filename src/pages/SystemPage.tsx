@@ -11,7 +11,7 @@ import {
   useNotificationStore,
   useModelsStore,
 } from '@/stores';
-import { configApi, versionApi } from '@/services/api';
+import { configApi, modelsApi, versionApi } from '@/services/api';
 import { useApiKeysForModels } from '@/hooks/useApiKeysForModels';
 import { formatDateTimeValue } from '@/utils/format';
 import { classifyModels } from '@/utils/models';
@@ -123,6 +123,31 @@ export function SystemPage() {
       const suffix = message ? `: ${message}` : '';
       const text = `${t('system_info.models_error')}${suffix}`;
       setModelStatus({ type: 'error', message: text });
+    }
+  };
+
+  // 上游 2da3e263:区分「刷新列表」与「更新模型目录」两个动作的反馈。
+  const [catalogRefreshing, setCatalogRefreshing] = useState(false);
+  const handleCatalogRefresh = async () => {
+    if (auth.connectionStatus !== 'connected') {
+      setModelStatus({ type: 'warning', message: t('notification.connection_required') });
+      return;
+    }
+    setCatalogRefreshing(true);
+    try {
+      await modelsApi.refreshCatalog();
+      showNotification(t('system_info.models_catalog_refresh_success'), 'success');
+      setModelStatus({ type: 'muted', message: t('system_info.models_loading') });
+      await fetchModels({ forceRefresh: true });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : typeof err === 'string' ? err : '';
+      const suffix = message ? `: ${message}` : '';
+      setModelStatus({
+        type: 'error',
+        message: `${t('system_info.models_catalog_refresh_failed')}${suffix}`,
+      });
+    } finally {
+      setCatalogRefreshing(false);
     }
   };
 
@@ -375,17 +400,28 @@ export function SystemPage() {
         <Card
           title={t('system_info.models_title')}
           extra={
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => fetchModels({ forceRefresh: true })}
-              loading={modelsLoading}
-            >
-              {t('common.refresh')}
-            </Button>
+            <div className={styles.modelsActions}>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => fetchModels({ forceRefresh: true })}
+                loading={modelsLoading}
+              >
+                {t('system_info.models_refresh_button')}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleCatalogRefresh}
+                loading={catalogRefreshing}
+                disabled={modelsLoading}
+              >
+                {t('system_info.models_catalog_refresh_button')}
+              </Button>
+            </div>
           }
         >
-          <p className={styles.sectionDescription}>{t('system_info.models_desc')}</p>
+          <p className={styles.sectionDescription}>{t('system_info.models_desc')} {t('system_info.models_refresh_hint')}</p>
           {modelStatus && (
             <div className={`status-badge ${modelStatus.type}`}>{modelStatus.message}</div>
           )}
