@@ -20,6 +20,7 @@ import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { pluginsApi } from '@/services/api';
 import { isConfigNotJSONCompatible } from '@/services/api/config';
 import { useAuthStore, useConfigStore, useNotificationStore } from '@/stores';
+import { usePluginMutationStore } from '@/stores/usePluginMutationStore';
 import { getErrorMessage, isRecord } from '@/utils/helpers';
 import type { PluginConfigField, PluginListEntry, PluginListResponse } from '@/types';
 import {
@@ -82,6 +83,11 @@ export function PluginsPage() {
   const [deletingID, setDeletingID] = useState('');
   const [openingConfigID, setOpeningConfigID] = useState('');
   const configRequestSeq = useRef(0);
+  const setInstalledBusy = usePluginMutationStore((state) => state.setInstalledBusy);
+  const storeBusy = usePluginMutationStore((state) => state.storeBusy);
+  useEffect(() => {
+    setInstalledBusy(Boolean(mutatingID || openingConfigID || deletingID));
+  }, [mutatingID, openingConfigID, deletingID, setInstalledBusy]);
 
   const connected = connectionStatus === 'connected';
 
@@ -168,7 +174,7 @@ export function PluginsPage() {
   );
 
   const openConfigSheet = async (plugin: PluginListEntry) => {
-    if (openingConfigID || mutatingID || deletingID) return;
+    if (openingConfigID || mutatingID || deletingID || storeBusy) return;
 
     const requestSeq = configRequestSeq.current + 1;
     configRequestSeq.current = requestSeq;
@@ -213,7 +219,7 @@ export function PluginsPage() {
   };
 
   const closeConfigSheet = () => {
-    if (mutatingID || openingConfigID || deletingID) return;
+    if (mutatingID || openingConfigID || deletingID || storeBusy) return;
     setEditingPlugin(null);
     setDraft(null);
   };
@@ -256,7 +262,7 @@ export function PluginsPage() {
   };
 
   const handleDeletePlugin = (plugin: PluginListEntry) => {
-    if (!connected || mutatingID || openingConfigID || deletingID) return;
+    if (!connected || mutatingID || openingConfigID || deletingID || storeBusy) return;
 
     const name = getPluginTitle(plugin);
     showConfirmation({

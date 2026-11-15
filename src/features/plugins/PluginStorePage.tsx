@@ -20,6 +20,7 @@ import {
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { pluginStoreApi } from '@/services/api';
 import { useAuthStore, useConfigStore, useNotificationStore } from '@/stores';
+import { usePluginMutationStore } from '@/stores/usePluginMutationStore';
 import { getErrorMessage, isRecord } from '@/utils/helpers';
 import type { PluginStoreEntry, PluginStoreResponse } from '@/types';
 import {
@@ -473,6 +474,11 @@ export function PluginStorePage() {
   const [filter, setFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<StoreStatusFilter>('all');
   const [installingKey, setInstallingKey] = useState('');
+  const setStoreBusy = usePluginMutationStore((state) => state.setStoreBusy);
+  const installedBusy = usePluginMutationStore((state) => state.installedBusy);
+  useEffect(() => {
+    setStoreBusy(Boolean(installingKey));
+  }, [installingKey, setStoreBusy]);
   const [restartRequiredKeys, setRestartRequiredKeys] = useState<string[]>([]);
   const [expandedDescriptionKeys, setExpandedDescriptionKeys] = useState<string[]>([]);
   const [overflowingDescriptionKeys, setOverflowingDescriptionKeys] = useState<string[]>([]);
@@ -489,6 +495,8 @@ export function PluginStorePage() {
   const [installVersion, setInstallVersion] = useState('');
 
   const connected = connectionStatus === 'connected';
+  // 上游 1e29f88f:已装插件变更在途时,store 安装/更新入口保持锁定。
+  const installBlocked = !connected || installedBusy || Boolean(installingKey);
 
   const loadStore = useCallback(async () => {
     if (!connected) {
@@ -738,6 +746,7 @@ export function PluginStorePage() {
   );
 
   const handleInstall = (entry: PluginStoreEntry) => {
+    if (installBlocked) return;
     const isUpdate = entry.installed && entry.updateAvailable;
     setInstallOptionsEntry(entry);
     setInstallOptionsIsUpdate(isUpdate);
@@ -751,7 +760,7 @@ export function PluginStorePage() {
   }, [installingKey]);
 
   const handleInstallOptionsConfirm = useCallback(async () => {
-    if (!installOptionsEntry) return;
+    if (installBlocked || !installOptionsEntry) return;
     const requestedVersion = installVersion.trim();
 
     // Third-party plugins must clear the multi-step confirmation gauntlet first.
@@ -772,14 +781,14 @@ export function PluginStorePage() {
     } catch {
       // runInstall already surfaced a notification; keep the modal available for correction.
     }
-  }, [installOptionsEntry, installOptionsIsUpdate, installVersion, runInstall]);
+  }, [installBlocked, installOptionsEntry, installOptionsIsUpdate, installVersion, runInstall]);
 
   const handleGateConfirm = useCallback(async () => {
-    if (!gateEntry) return;
+    if (installBlocked || !gateEntry) return;
     await runInstall(gateEntry, gateIsUpdate, gateRequestedVersion);
     setGateOpen(false);
     setGateRequestedVersion('');
-  }, [gateEntry, gateIsUpdate, gateRequestedVersion, runInstall]);
+  }, [gateEntry, gateIsUpdate, gateRequestedVersion, installBlocked, runInstall]);
 
   const handleGateClose = useCallback(() => {
     setGateOpen(false);
@@ -826,7 +835,7 @@ export function PluginStorePage() {
         ? t('plugin_store.auth_configured')
         : t('plugin_store.auth_required')
       : '';
-    const actionDisabled = !connected || missingAuth || (hasPendingInstall && !isInstalling);
+    const actionDisabled = !connected || missingAuth || installedBusy || (hasPendingInstall && !isInstalling);
     const actionTitle = missingAuth ? t('plugin_store.auth_required_hint') : undefined;
 
     return (
