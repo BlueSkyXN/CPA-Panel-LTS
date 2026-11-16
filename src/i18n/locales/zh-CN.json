@@ -1304,6 +1304,7 @@
     "login_proxy_optional": "可选",
     "login_proxy_status_invalid": "无效",
     "login_proxy_label": "新登录使用的代理",
+    "login_proxy_hint": "此代理用于本次登录，并在登录成功后保存到新凭据，供后续请求继续使用。页面输入不会保留到下次打开，也不会修改全局代理。",
     "login_proxy_placeholder": "socks5://user:pass@host:port",
     "login_proxy_clear": "清除",
     "login_proxy_invalid": "代理 URL 无效。请使用 http、https、socks5 或 socks5h 并填写主机（socks5 需要端口），不能包含路径或查询参数。",

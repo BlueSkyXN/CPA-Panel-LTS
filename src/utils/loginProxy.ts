@@ -1,5 +1,10 @@
 /**
- * Session-only OAuth login proxy: local validation, request planning and display masking.
+ * OAuth login proxy: local validation, request planning and display masking.
+ *
+ * The proxy is used for the login attempt; after a successful login Core saves
+ * it to the new credential (record ProxyURL + metadata) for later requests.
+ * The page-side value itself is page memory only - cleared on connection
+ * switch or reload, and never written to the global proxy config.
  *
  * The validator mirrors the backend so an invalid value never leaves the browser:
  * `validateOAuthSessionProxyURL` (internal/api/handlers/management/auth_files_v8.go) on top of

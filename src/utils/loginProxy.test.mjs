@@ -205,3 +205,69 @@ test('a proxied gemini login keeps project_id in the query string', async () => 
     restore();
   }
 });
+
+// Backend 400 mapping through the real error path: an Axios adapter failure is
+// converted by the shared client's handleError (ApiError with status/apiCode)
+// before isInvalidProxyUrlError sees it. A bare `new Error("invalid
+// proxy_url")` without status 400 must stay unrecognized.
+test('isInvalidProxyUrlError recognizes backend rejections via the real client error path', async (t) => {
+  const cases = [
+    {
+      name: '400 with error code invalid proxy_url → recognized',
+      status: 400,
+      body: { error: 'invalid proxy_url' },
+      want: true,
+    },
+    {
+      name: '400 with the same code plus a detailed message → recognized',
+      status: 400,
+      body: { error: 'invalid proxy_url', message: 'invalid proxy_url: socks5 requires a port' },
+      want: true,
+    },
+    {
+      name: '400 with a different error code → not a proxy rejection',
+      status: 400,
+      body: { error: 'provider_disabled' },
+      want: false,
+    },
+    {
+      name: '500 with invalid proxy_url → not a proxy rejection',
+      status: 500,
+      body: { error: 'invalid proxy_url' },
+      want: false,
+    },
+  ];
+  for (const testCase of cases) {
+    await t.test(testCase.name, async () => {
+      apiClient.setConfig({ apiBase: 'http://core.test', managementKey: 'k' });
+      const original = apiClient.instance.defaults.adapter;
+      apiClient.instance.defaults.adapter = async (config) => {
+        const response = { data: testCase.body, status: testCase.status, statusText: '', headers: {}, config };
+        throw Object.assign(new Error(`Request failed with status code ${testCase.status}`), {
+          isAxiosError: true,
+          config,
+          request: {},
+          response,
+        });
+      };
+      try {
+        let caught;
+        try {
+          await oauthApi.startAuth('codex', { proxyUrl: PROXY });
+        } catch (error) {
+          caught = error;
+        }
+        assert.ok(caught, 'startAuth must reject when the backend refuses the proxy');
+        assert.equal(caught.name, 'ApiError', 'the shared client must convert the adapter failure');
+        assert.equal(caught.status, testCase.status);
+        assert.equal(
+          isInvalidProxyUrlError(caught),
+          testCase.want,
+          `isInvalidProxyUrlError(error=${JSON.stringify({ status: caught.status, apiCode: caught.apiCode, message: caught.message })})`
+        );
+      } finally {
+        apiClient.instance.defaults.adapter = original;
+      }
+    });
+  }
+});

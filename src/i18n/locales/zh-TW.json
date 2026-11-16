@@ -1330,6 +1330,7 @@
     "login_proxy_optional": "選填",
     "login_proxy_status_invalid": "無效",
     "login_proxy_label": "新登入使用的代理",
+    "login_proxy_hint": "此代理用於本次登入，並在登入成功後保存到新憑證，供後續請求繼續使用。頁面輸入不會保留到下次開啟，也不會修改全域代理。",
     "login_proxy_placeholder": "socks5://user:pass@host:port",
     "login_proxy_clear": "清除",
     "login_proxy_invalid": "代理 URL 無效。請使用 http、https、socks5 或 socks5h 並填寫主機（socks5 需要連接埠），不能包含路徑或查詢參數。",

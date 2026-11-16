@@ -227,8 +227,10 @@ export function OAuthPage() {
   const [states, setStates] = useState<Record<OAuthProvider, ProviderState>>(
     {} as Record<OAuthProvider, ProviderState>
   );
-  // 页面级登录代理：作用于从本页发起的登录。仅存于内存，不写 storage / URL；
-  // 连接切换或登出时随 provider 状态一起清空。Port of upstream 6b1b94a7/96ce4e1b.
+  // 页面级登录代理：用于从本页发起的登录；登录成功后由 Core 保存到新凭据
+  // （ProxyURL + metadata）供后续请求使用。输入框本身仅存于内存，不写 storage / URL，
+  // 连接切换或登出时随 provider 状态一起清空，且不影响已保存到凭据的代理，
+  // 也不修改全局代理。Port of upstream 6b1b94a7/96ce4e1b.
   const [loginProxy, setLoginProxyValue] = useState('');
   const [loginProxyRejected, setLoginProxyRejected] = useState<string | null>(null);
   const setLoginProxy = useCallback((value: string) => {

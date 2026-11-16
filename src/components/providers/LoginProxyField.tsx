@@ -12,9 +12,13 @@ export interface LoginProxyFieldProps {
 }
 
 /**
- * Optional page-level proxy for built-in and plugin OAuth logins. Collapsed by default so the one-click
- * tile flow stays the obvious path; while a value is set the collapsed row keeps showing it,
- * so an active proxy cannot be forgotten.
+ * Optional page-level proxy for built-in and plugin OAuth logins. The value is
+ * used for the login attempt and, once the login succeeds, Core saves it to the
+ * new credential for later requests; the field itself is page memory only (not
+ * kept across page loads, never touching the global proxy). Collapsed by
+ * default so the one-click tile flow stays the obvious path; while a value is
+ * set the collapsed row keeps showing it, so an active proxy cannot be
+ * forgotten.
  */
 export function LoginProxyField({ value, rejectedValue, onChange }: LoginProxyFieldProps) {
   const { t } = useTranslation();
@@ -89,6 +93,7 @@ export function LoginProxyField({ value, rejectedValue, onChange }: LoginProxyFi
         <label className={styles.label} htmlFor={inputId}>
           {t('auth_login.login_proxy_label')}
         </label>
+        <p className={styles.hint}>{t('auth_login.login_proxy_hint')}</p>
         <div className={styles.row}>
           <input
             ref={inputRef}

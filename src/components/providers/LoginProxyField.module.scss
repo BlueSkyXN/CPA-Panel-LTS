@@ -224,6 +224,14 @@
   }
 }
 
+.hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+}
+
 .error {
   margin: 0;
   font-size: 12px;
