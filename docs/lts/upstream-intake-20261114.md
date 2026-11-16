@@ -151,7 +151,7 @@ quota/auth-files 卡片布局与时间线、autocomplete、connectivity 测试�
 | 上游 | 内容 | 分类 | 落地 |
 |---|---|---|---|
 | 99a95c4a | auth-files 全局模型目录同步 | adapt-port | 分支 codex/auth-files-model-sync-20261116：新 useModelCatalogSync（复用 LTS modelsApi.refreshCatalog 连接守卫）；useAuthFilesModels 连接切换失效；useAuthFilesOauth diagram 列表随目录版本重载且丢弃迟到连接响应；入口挂 AuthFilesPage 既有 more-actions 菜单（不引入 VaultHeader）；四语言；6+1 回归入 test:auth-files |
-| 6b1b94a7 / 96ce4e1b | OAuth login proxy（内置+插件） | adapt-port | 分支 codex/oauth-login-proxy-20261116：loginProxy.ts 纯函数模块（镜像 Core validateOAuthSessionProxyURL 的 Go 语义）；startAuth 非空代理转 POST body（project_id 留 query）；OAuthPage 折叠式 LoginProxyField、非法值客户端拦截、后端 400 标记内联错误、waiting 卡脱敏展示、仅内存且连接切换清空；62 回归入 test:api-client |
+| 6b1b94a7 / 96ce4e1b | OAuth login proxy（内置+插件） | adapt-port | 分支 codex/oauth-login-proxy-20261116：loginProxy.ts 纯函数模块（镜像 Core validateOAuthSessionProxyURL 的 Go 语义）；startAuth 非空代理转 POST body（project_id 留 query）；OAuthPage 折叠式 LoginProxyField、非法值客户端拦截、后端 400 标记内联错误、waiting 卡脱敏展示、页面输入仅内存且连接切换清空（登录成功后 Core 将该代理保存到新凭据供后续请求使用，见 #154）；62+4 回归入 test:api-client |
 | 3d893ec8 | AutocompleteInput 归一化/过滤 | direct-port | 分支 codex/autocomplete-normalize-20261116：LTS AutocompleteInput.tsx 与 upstream 改前版本逐字一致，直接应用；bun 测试转 node:test 入 test:ui |
 | 7b754b23 | OpenAI connectivity token limits (#572) | adapt-port | 同分支：resolveModelConfig（trim/去括号后缀/名称先于别名）+ useMaxCompletionTokens 模型用 max_completion_tokens + signature 纳入能力位；LTS codex 探测保持 Responses 形态（upstream 该修复只对应 openaiCompatibility 探测）；16 用例矩阵入新 test:provider-connectivity |
 
