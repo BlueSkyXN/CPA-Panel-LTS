@@ -18,6 +18,7 @@ import {
   getTypeLabel,
   normalizeProviderKey,
 } from '@/features/authFiles/constants';
+import { needsSwitchConfirmation } from '@/features/authFiles/editor/providerSwitchContract';
 import {
   getModelAliasDraftSignature,
   isOAuthEditorDirty,
@@ -67,6 +68,10 @@ export function AuthFilesOAuthModelAliasEditPage() {
   const [initialProviderKey] = useState(() => normalizeProviderKey(providerFromParams));
 
   const [provider, setProvider] = useState(providerFromParams);
+  // The autocomplete text is decoupled from the provider being edited: typing
+  // only filters and must never reset mappings or the URL. `provider` changes
+  // exclusively through the commit path, after the unsaved-changes guard.
+  const [providerInput, setProviderInput] = useState(providerFromParams);
   const [files, setFiles] = useState<AuthFileItem[]>([]);
   const [excluded, setExcluded] = useState<Record<string, string[]>>({});
   const [modelAlias, setModelAlias] = useState<Record<string, OAuthModelAliasEntry[]>>({});
@@ -86,6 +91,7 @@ export function AuthFilesOAuthModelAliasEditPage() {
 
   useEffect(() => {
     setProvider(providerFromParams);
+    setProviderInput(providerFromParams);
   }, [providerFromParams]);
 
   const providerOptions = useMemo(() => {
@@ -283,38 +289,54 @@ export function AuthFilesOAuthModelAliasEditPage() {
     };
   }, [modelAliasUnsupported, resolvedProviderKey, showNotification, t]);
 
-  const applyProviderChange = useCallback(
-    (value: string) => {
-      setProvider(value);
-      const next = new URLSearchParams(searchParams);
-      const trimmed = value.trim();
-      if (trimmed) {
-        next.set('provider', trimmed);
-      } else {
-        next.delete('provider');
-      }
-      const nextSearch = next.toString();
-      allowNavigationTo(
-        `${location.pathname}${nextSearch ? `?${nextSearch}` : ''}${location.hash}`
-      );
-      setSearchParams(next, { replace: true });
-    },
-    [allowNavigationTo, location.hash, location.pathname, searchParams, setSearchParams]
-  );
+  // Typing only updates the autocomplete text; the provider being edited and
+  // the URL param change on commit (selection/Enter/blur/quick button), after
+  // the unsaved-changes guard.
+  const applyProviderChange = useCallback((value: string) => {
+    setProviderInput(value);
+  }, []);
 
-  const updateProvider = useCallback(
+  const commitProviderChange = useCallback(
     (value: string) => {
-      if (!contentDirty || normalizeProviderKey(value) === resolvedProviderKey) {
-        applyProviderChange(value);
+      const trimmed = value.trim();
+      const unchanged =
+        normalizeProviderKey(trimmed) === normalizeProviderKey(provider) &&
+        providerFromParams === provider;
+      if (unchanged) {
+        // Same edit target and URL: no navigation happens, so the router
+        // guard must stay armed — arming it here opened a window that a
+        // following Back silently used to drop unsaved drafts.
+        setProviderInput(trimmed);
+        return;
+      }
+      const apply = () => {
+        setProvider(trimmed);
+        setProviderInput(trimmed);
+        const next = new URLSearchParams(searchParams);
+        if (trimmed) {
+          next.set('provider', trimmed);
+        } else {
+          next.delete('provider');
+        }
+        const nextSearch = next.toString();
+        allowNavigationTo(
+          `${location.pathname}${nextSearch ? `?${nextSearch}` : ''}${location.hash}`
+        );
+        setSearchParams(next, { replace: true });
+      };
+      const stay = () => setProviderInput(provider);
+      if (!needsSwitchConfirmation(value, provider, contentDirty)) {
+        apply();
         return;
       }
       showConfirmation({
         ...unsavedChangesDialog,
         variant: 'danger',
-        onConfirm: () => applyProviderChange(value),
+        onConfirm: apply,
+        onCancel: stay,
       });
     },
-    [applyProviderChange, contentDirty, resolvedProviderKey, showConfirmation, unsavedChangesDialog]
+    [allowNavigationTo, contentDirty, location.hash, location.pathname, provider, providerFromParams, searchParams, setSearchParams, showConfirmation, unsavedChangesDialog]
   );
 
   const updateMappingEntry = useCallback(
@@ -477,8 +499,9 @@ export function AuthFilesOAuthModelAliasEditPage() {
                   <AutocompleteInput
                     id="oauth-model-alias-provider"
                     placeholder={t('oauth_model_alias.provider_placeholder')}
-                    value={provider}
-                    onChange={updateProvider}
+                    value={providerInput}
+                    onChange={applyProviderChange}
+                    onCommit={commitProviderChange}
                     options={providerOptions}
                     disabled={disableControls || saving}
                     wrapperStyle={{ marginBottom: 0 }}
@@ -497,7 +520,7 @@ export function AuthFilesOAuthModelAliasEditPage() {
                         type="button"
                         className={`${styles.tag} ${isActive ? styles.tagActive : ''}`}
                         aria-pressed={isActive}
-                        onClick={() => updateProvider(option)}
+                        onClick={() => commitProviderChange(option)}
                         disabled={disableControls || saving}
                       >
                         {getTypeLabel(t, option)}

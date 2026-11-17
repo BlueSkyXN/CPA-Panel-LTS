@@ -18,6 +18,7 @@ import {
   getTypeLabel,
   normalizeProviderKey,
 } from '@/features/authFiles/constants';
+import { needsSwitchConfirmation } from '@/features/authFiles/editor/providerSwitchContract';
 import type { OAuthModelPolicyList } from '@/types';
 import { getErrorMessage } from '@/utils/helpers';
 import styles from './AuthFilesOAuthExcludedEditPage.module.scss';
@@ -60,6 +61,11 @@ export function AuthFilesModelPolicyEditPage() {
   const providerFromParams = searchParams.get('provider') ?? '';
 
   const [provider, setProvider] = useState(providerFromParams);
+  // The autocomplete text is decoupled from the provider being edited: typing
+  // only filters and must never reset drafts, baselines, or the URL. `provider`
+  // changes exclusively through the commit path (selection/Enter/blur/quick
+  // button), after the unsaved-changes guard has run.
+  const [providerInput, setProviderInput] = useState(providerFromParams);
   const [files, setFiles] = useState<
     { name: string; type?: string; provider?: string; disabled?: boolean }[]
   >([]);
@@ -85,6 +91,7 @@ export function AuthFilesModelPolicyEditPage() {
 
   useEffect(() => {
     setProvider(providerFromParams);
+    setProviderInput(providerFromParams);
   }, [providerFromParams]);
 
   const resolvedProviderKey = useMemo(() => normalizeProviderKey(provider), [provider]);
@@ -199,13 +206,33 @@ export function AuthFilesModelPolicyEditPage() {
     [legacyExcluded, resolvedProviderKey]
   );
 
-  const applyProviderChange = useCallback(
+  // Typing only updates the autocomplete text; the provider being edited and
+  // the URL param change on commit (selection/Enter/blur/quick button), after
+  // the unsaved-changes guard. Writing the param per keystroke would remount
+  // the page through the router; letting it feed `provider` resets drafts.
+  const applyProviderChange = useCallback((value: string) => {
+    setProviderInput(value);
+  }, []);
+
+  const commitProviderChange = useCallback(
     (value: string) => {
+      const trimmed = value.trim();
+      const unchanged =
+        normalizeProviderKey(trimmed) === normalizeProviderKey(provider) &&
+        providerFromParams === provider;
+      if (unchanged) {
+        // Same edit target and URL: no navigation happens, so the router
+        // guard must stay armed — calling allowNextNavigation here opened a
+        // two-second window that a following Back silently used to drop
+        // unsaved drafts without confirmation.
+        setProviderInput(trimmed);
+        return;
+      }
       const apply = () => {
         allowNextNavigation();
-        setProvider(value);
+        setProvider(trimmed);
+        setProviderInput(trimmed);
         const next = new URLSearchParams(searchParams);
-        const trimmed = value.trim();
         if (trimmed) {
           next.set('provider', trimmed);
         } else {
@@ -213,8 +240,13 @@ export function AuthFilesModelPolicyEditPage() {
         }
         setSearchParams(next, { replace: true });
       };
-      if (isDirty && normalizeProviderKey(value) !== resolvedProviderKey) {
-        showConfirmation({ ...unsavedChangesDialog, onConfirm: apply });
+      const stay = () => setProviderInput(provider);
+      if (needsSwitchConfirmation(value, provider, isDirty)) {
+        showConfirmation({
+          ...unsavedChangesDialog,
+          onConfirm: apply,
+          onCancel: stay,
+        });
         return;
       }
       apply();
@@ -222,7 +254,8 @@ export function AuthFilesModelPolicyEditPage() {
     [
       allowNextNavigation,
       isDirty,
-      resolvedProviderKey,
+      provider,
+      providerFromParams,
       searchParams,
       setSearchParams,
       showConfirmation,
@@ -442,8 +475,9 @@ export function AuthFilesModelPolicyEditPage() {
                   <AutocompleteInput
                     id="model-policy-provider"
                     placeholder={t('oauth_excluded.provider_placeholder')}
-                    value={provider}
+                    value={providerInput}
                     onChange={applyProviderChange}
+                    onCommit={commitProviderChange}
                     options={providerOptions}
                     disabled={disableControls || saving}
                     wrapperStyle={{ marginBottom: 0 }}
@@ -462,7 +496,7 @@ export function AuthFilesModelPolicyEditPage() {
                         type="button"
                         className={`${styles.tag} ${isActive ? styles.tagActive : ''}`}
                         aria-pressed={isActive}
-                        onClick={() => applyProviderChange(option)}
+                        onClick={() => commitProviderChange(option)}
                         disabled={disableControls || saving}
                       >
                         {getTypeLabel(t, option)}
