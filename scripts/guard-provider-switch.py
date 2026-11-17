@@ -30,7 +30,7 @@ smoke = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(smoke)
 smoke.DIST = DIST
 smoke.INDEX_HTML = DIST / 'index.html'
-from panel_browser import PanelBrowser  # noqa: E402
+from panel_browser import PanelBrowser, launch_chromium  # noqa: E402
 
 
 class Handler(smoke.MockCoreHandler):
@@ -51,7 +51,9 @@ PAGES = [
 def main():
     app_port, api_port = smoke.find_free_port(), smoke.find_free_port()
     with smoke.run_server(smoke.StaticPanelHandler, app_port), smoke.run_server(Handler, api_port, smoke.MockCoreState()), sync_playwright() as p:
-        browser = p.chromium.launch(channel='chrome', headless=True)
+        # reuse the repo-wide launcher: Playwright Chromium by default,
+        # CPA_SMOKE_BROWSER_CHANNEL=chrome opts into a local Chrome
+        browser = launch_chromium(p, headless=True)
         ctx = browser.new_context(viewport={'width': 1440, 'height': 1000})
         ctx.add_init_script("localStorage.setItem('cli-proxy-language',JSON.stringify({state:{language:'en'},version:0}));")
         page = PanelBrowser(ctx.new_page())
