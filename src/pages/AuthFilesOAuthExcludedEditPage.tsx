@@ -370,38 +370,41 @@ export function AuthFilesOAuthExcludedEditPage() {
     };
   }, [excludedUnsupported, files, resolvedProviderKey, showNotification, t]);
 
-  const applyProviderChange = useCallback(
-    (value: string) => {
-      setProvider(value);
-      const next = new URLSearchParams(searchParams);
-      const trimmed = value.trim();
-      if (trimmed) {
-        next.set('provider', trimmed);
-      } else {
-        next.delete('provider');
-      }
-      const nextSearch = next.toString();
-      allowNavigationTo(
-        `${location.pathname}${nextSearch ? `?${nextSearch}` : ''}${location.hash}`
-      );
-      setSearchParams(next, { replace: true });
-    },
-    [allowNavigationTo, location.hash, location.pathname, searchParams, setSearchParams]
-  );
+  // Typing only updates local state; the provider param is mirrored into the
+  // URL on commit (selection/Enter/blur). Writing it per keystroke remounts the
+  // page through the router and destroys the input mid-typing.
+  const applyProviderChange = useCallback((value: string) => {
+    setProvider(value);
+  }, []);
 
-  const updateProvider = useCallback(
+  const commitProviderChange = useCallback(
     (value: string) => {
+      const apply = () => {
+        setProvider(value);
+        const next = new URLSearchParams(searchParams);
+        const trimmed = value.trim();
+        if (trimmed) {
+          next.set('provider', trimmed);
+        } else {
+          next.delete('provider');
+        }
+        const nextSearch = next.toString();
+        allowNavigationTo(
+          `${location.pathname}${nextSearch ? `?${nextSearch}` : ''}${location.hash}`
+        );
+        setSearchParams(next, { replace: true });
+      };
       if (!contentDirty || normalizeProviderKey(value) === resolvedProviderKey) {
-        applyProviderChange(value);
+        apply();
         return;
       }
       showConfirmation({
         ...unsavedChangesDialog,
         variant: 'danger',
-        onConfirm: () => applyProviderChange(value),
+        onConfirm: apply,
       });
     },
-    [applyProviderChange, contentDirty, resolvedProviderKey, showConfirmation, unsavedChangesDialog]
+    [allowNavigationTo, contentDirty, location.hash, location.pathname, resolvedProviderKey, searchParams, setSearchParams, showConfirmation, unsavedChangesDialog]
   );
 
   const toggleModel = useCallback(
@@ -576,7 +579,8 @@ export function AuthFilesOAuthExcludedEditPage() {
                     id="oauth-excluded-provider"
                     placeholder={t('oauth_excluded.provider_placeholder')}
                     value={provider}
-                    onChange={updateProvider}
+                    onChange={applyProviderChange}
+                    onCommit={commitProviderChange}
                     options={providerOptions}
                     disabled={disableControls || saving}
                     wrapperStyle={{ marginBottom: 0 }}
@@ -595,7 +599,7 @@ export function AuthFilesOAuthExcludedEditPage() {
                         type="button"
                         className={`${styles.tag} ${isActive ? styles.tagActive : ''}`}
                         aria-pressed={isActive}
-                        onClick={() => updateProvider(option)}
+                        onClick={() => commitProviderChange(option)}
                         disabled={disableControls || saving}
                       >
                         {getTypeLabel(t, option)}

@@ -26,6 +26,14 @@ interface AutocompleteInputProps {
   wrapperStyle?: React.CSSProperties;
   id?: string;
   rightElement?: ReactNode;
+  /**
+   * Fires when a value settles: an option was selected, Enter closed the
+   * dropdown, or the input lost focus. Pages that mirror the value into the
+   * URL (or another heavy side effect) should run it here, not in onChange —
+   * a router location change remounts the page and would destroy the input
+   * mid-typing otherwise.
+   */
+  onCommit?: (value: string) => void;
 }
 
 export function AutocompleteInput({
@@ -42,6 +50,7 @@ export function AutocompleteInput({
   wrapperStyle,
   id,
   rightElement,
+  onCommit,
 }: AutocompleteInputProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
@@ -50,6 +59,9 @@ export function AutocompleteInput({
   const containerRef = useRef<HTMLDivElement>(null);
   const inputWrapRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  // a click on an option blurs the input first; suppress the blur commit so
+  // the selection commit is the only one that fires
+  const commitScheduledRef = useRef(false);
   const [dropdownStyle, setDropdownStyle] = useState<CSSProperties | null>(null);
 
   const normalizedOptions = normalizeAutocompleteOptions(options);
@@ -114,7 +126,9 @@ export function AutocompleteInput({
   };
 
   const handleSelect = (selectedValue: string) => {
+    commitScheduledRef.current = true;
     onChange(selectedValue);
+    onCommit?.(selectedValue);
     setIsTyping(false);
     setIsOpen(false);
   };
@@ -139,6 +153,7 @@ export function AutocompleteInput({
       } else if (isOpen) {
         e.preventDefault();
         setIsOpen(false);
+        onCommit?.(value);
       }
     } else if (e.key === 'Escape') {
       setIsOpen(false);
@@ -159,6 +174,14 @@ export function AutocompleteInput({
           onFocus={openDropdown}
           onClick={() => !isOpen && openDropdown()}
           onKeyDown={handleKeyDown}
+          onBlur={() => {
+            setIsOpen(false);
+            if (commitScheduledRef.current) {
+              commitScheduledRef.current = false;
+              return;
+            }
+            onCommit?.(value);
+          }}
           placeholder={placeholder}
           disabled={disabled}
           autoComplete="off"
@@ -208,7 +231,11 @@ export function AutocompleteInput({
                   key={`${opt.value}-${index}`}
                   role="option"
                   aria-selected={opt.value === value}
-                  onClick={() => handleSelect(opt.value)}
+                  onMouseDown={(e) => {
+                    // keep input focus so the click completes before any blur
+                    e.preventDefault();
+                    handleSelect(opt.value);
+                  }}
                   style={{
                     padding: '8px 12px',
                     cursor: 'pointer',

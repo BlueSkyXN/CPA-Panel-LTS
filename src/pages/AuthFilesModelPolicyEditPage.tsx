@@ -199,7 +199,14 @@ export function AuthFilesModelPolicyEditPage() {
     [legacyExcluded, resolvedProviderKey]
   );
 
-  const applyProviderChange = useCallback(
+  // Typing only updates local state; the provider param is mirrored into the
+  // URL on commit (selection/Enter/blur). Writing it per keystroke remounts the
+  // page through the router and destroys the input mid-typing.
+  const applyProviderChange = useCallback((value: string) => {
+    setProvider(value);
+  }, []);
+
+  const commitProviderChange = useCallback(
     (value: string) => {
       const apply = () => {
         allowNextNavigation();
@@ -444,6 +451,7 @@ export function AuthFilesModelPolicyEditPage() {
                     placeholder={t('oauth_excluded.provider_placeholder')}
                     value={provider}
                     onChange={applyProviderChange}
+                    onCommit={commitProviderChange}
                     options={providerOptions}
                     disabled={disableControls || saving}
                     wrapperStyle={{ marginBottom: 0 }}
