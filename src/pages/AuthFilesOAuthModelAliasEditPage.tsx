@@ -302,10 +302,16 @@ export function AuthFilesOAuthModelAliasEditPage() {
       const unchanged =
         normalizeProviderKey(trimmed) === normalizeProviderKey(provider) &&
         providerFromParams === provider;
+      if (unchanged) {
+        // Same edit target and URL: no navigation happens, so the router
+        // guard must stay armed — arming it here opened a window that a
+        // following Back silently used to drop unsaved drafts.
+        setProviderInput(trimmed);
+        return;
+      }
       const apply = () => {
         setProvider(trimmed);
         setProviderInput(trimmed);
-        if (unchanged) return; // same target and URL: no navigation, no remount
         const next = new URLSearchParams(searchParams);
         if (trimmed) {
           next.set('provider', trimmed);

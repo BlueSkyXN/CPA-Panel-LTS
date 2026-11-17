@@ -220,11 +220,18 @@ export function AuthFilesModelPolicyEditPage() {
       const unchanged =
         normalizeProviderKey(trimmed) === normalizeProviderKey(provider) &&
         providerFromParams === provider;
+      if (unchanged) {
+        // Same edit target and URL: no navigation happens, so the router
+        // guard must stay armed — calling allowNextNavigation here opened a
+        // two-second window that a following Back silently used to drop
+        // unsaved drafts without confirmation.
+        setProviderInput(trimmed);
+        return;
+      }
       const apply = () => {
         allowNextNavigation();
         setProvider(trimmed);
         setProviderInput(trimmed);
-        if (unchanged) return; // same target and URL: no navigation, no remount
         const next = new URLSearchParams(searchParams);
         if (trimmed) {
           next.set('provider', trimmed);
