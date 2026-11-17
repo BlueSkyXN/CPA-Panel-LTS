@@ -75,11 +75,11 @@ function parseSensitiveWordsReplace(raw: unknown) {
 
 function parseSensitivePatternsReplace(raw: unknown): SensitivePatternReplacement[] {
   if (!Array.isArray(raw)) return [];
-  return raw.flatMap((item) => {
+  return raw.flatMap((item, sourceIndex) => {
     const rule = asRecord(item);
     // RE2 validation belongs to the backend; never trim regexes or replacement text.
     return typeof rule?.pattern === 'string' && typeof rule.replacement === 'string'
-      ? [{ pattern: rule.pattern, replacement: rule.replacement }]
+      ? [{ pattern: rule.pattern, replacement: rule.replacement, sourceIndex }]
       : [];
   });
 }
@@ -2421,10 +2421,10 @@ export function useVisualConfig() {
           if (!isMap(providerMap)) throw new VisualConfigApplyError('visual_apply_failed');
           if (Array.isArray(desired)) {
             const seq = ensureSeqValue(doc, providerMap, key);
-            const available = [...seq.items];
+            const originalNodes = [...seq.items];
             const items = desired.map((rule) => {
-              const index = available.findIndex((node) => isMap(node) && node.get('pattern') === rule.pattern);
-              const node = index >= 0 ? available.splice(index, 1)[0] : doc.createNode(rule);
+              const existing = rule.sourceIndex === undefined ? undefined : originalNodes[rule.sourceIndex];
+              const node = existing ?? doc.createNode({ pattern: rule.pattern, replacement: rule.replacement });
               if (!isMap(node)) throw new VisualConfigApplyError('visual_apply_failed');
               setMapValue(doc, node, 'pattern', rule.pattern);
               setMapValue(doc, node, 'replacement', rule.replacement);

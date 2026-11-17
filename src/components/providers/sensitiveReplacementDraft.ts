@@ -1,5 +1,12 @@
 export type LiteralReplacementDraft = { id: string; key: string; value: string; fresh?: boolean };
 
+export type PatternReplacementDraft = {
+  pattern: string;
+  replacement: string;
+  /** Original YAML sequence position; carried through edits, never serialized. */
+  sourceIndex?: number;
+};
+
 export const literalDraftFromMap = (value: Record<string, string>): LiteralReplacementDraft[] =>
   Object.entries(value).map(([key, value], index) => ({ id: `literal-${index}`, key, value }));
 

@@ -55,11 +55,17 @@ def fixture(marker):
     value = yaml_json(state.config_yaml)
     value.setdefault('oauth', {}).setdefault('providers', {}).setdefault('antigravity', {}).update({
         'sensitive-words-replace': {marker: 'original'},
-        'sensitive-patterns-replace': [{'pattern': '(?P<name>secret)', 'replacement': ' ${name} '}],
+        'sensitive-patterns-replace': [{'pattern': '(?P<name>secret)', 'replacement': ' ${name} ', 'future-rule': 'antigravity-original'}],
         'future-replacement-option': {'preserve': True},
     })
+    value['oauth']['providers'].setdefault('devin', {})['sensitive-patterns-replace'] = [
+        {'pattern': '^devin$', 'replacement': '', 'future-rule': 'devin-original'},
+    ]
     value.setdefault('requests', {}).setdefault('payload', {}).pop('replace', None)
     state.config_yaml = '# replacement-root-comment\n' + yaml_json(value, True)
+    state.config_yaml = state.config_yaml.replace(
+        '- pattern: (?P<name>secret)', '# antigravity-regex-comment\n        - pattern: (?P<name>secret)', 1,
+    ).replace('- pattern: ^devin$', '# devin-regex-comment\n        - pattern: ^devin$', 1)
     return state
 
 
@@ -142,12 +148,25 @@ def main():
         check('unmanaged YAML and root comment survive', ag['future-replacement-option'] == {'preserve': True} and '# replacement-root-comment' in a.config_yaml)
 
         regex = field('antigravitySensitivePatternsReplace', 'sensitive-patterns-replace')
+        regex.get_by_label('Regex pattern, row 1', exact=True).fill('(?P<name>renamed)')
+        save()
+        original = yaml_json(a.config_yaml)['oauth']['providers']['antigravity']['sensitive-patterns-replace'][0]
+        check('antigravity regex rename preserves original fields and comment',
+              original == {'pattern': '(?P<name>renamed)', 'replacement': ' ${name} ', 'future-rule': 'antigravity-original'}
+              and '# antigravity-regex-comment' in a.config_yaml)
         regex.get_by_role('button', name='Add regex rule').click()
         regex.get_by_label('Regex pattern, row 2', exact=True).fill('^private$')
         regex.get_by_role('button', name='Move regex row 2 up', exact=True).click()
         save()
         rules = yaml_json(a.config_yaml)['oauth']['providers']['antigravity']['sensitive-patterns-replace']
-        check('regex order, RE2 syntax and blank replacement persist', rules == [{'pattern': '^private$', 'replacement': ''}, {'pattern': '(?P<name>secret)', 'replacement': ' ${name} '}])
+        check('regex order, RE2 syntax and blank replacement persist', rules == [{'pattern': '^private$', 'replacement': ''}, {'pattern': '(?P<name>renamed)', 'replacement': ' ${name} ', 'future-rule': 'antigravity-original'}])
+        devin = field('devinSensitivePatternsReplace', 'sensitive-patterns-replace')
+        devin.get_by_label('Regex pattern, row 1', exact=True).fill('^devin-renamed$')
+        save()
+        original = yaml_json(a.config_yaml)['oauth']['providers']['devin']['sensitive-patterns-replace'][0]
+        check('devin regex rename preserves original fields and comment',
+              original == {'pattern': '^devin-renamed$', 'replacement': '', 'future-rule': 'devin-original'}
+              and '# devin-regex-comment' in a.config_yaml)
 
         payload = field('payloadReplaceRules', 'requests.payload.replace')
         payload.get_by_role('button', name='Add Rule', exact=True).click()

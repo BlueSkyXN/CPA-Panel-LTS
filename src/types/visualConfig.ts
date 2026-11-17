@@ -1,4 +1,4 @@
-import type { LiteralReplacementDraft } from '@/components/providers/sensitiveReplacementDraft';
+import type { LiteralReplacementDraft, PatternReplacementDraft } from '@/components/providers/sensitiveReplacementDraft';
 import { FLOW_DEFAULT_VALUES, type FlowControlValues } from '@/lts/flowControl/model';
 
 export type PayloadParamValueType = 'string' | 'number' | 'boolean' | 'json';
@@ -187,8 +187,8 @@ export type VisualConfigValues = FlowControlValues & {
   antigravitySignatureCacheEnabled: boolean;
   antigravitySensitiveWordsReplace: LiteralReplacementDraft[];
   devinSensitiveWordsReplace: LiteralReplacementDraft[];
-  antigravitySensitivePatternsReplace: { pattern: string; replacement: string }[];
-  devinSensitivePatternsReplace: { pattern: string; replacement: string }[];
+  antigravitySensitivePatternsReplace: PatternReplacementDraft[];
+  devinSensitivePatternsReplace: PatternReplacementDraft[];
   antigravitySensitiveWords: string[];
   devinSensitiveWords: string[];
   antigravitySignatureBypassStrict: boolean;

@@ -17,6 +17,7 @@
 - 保留 LTS Source/Visual 配置页、v8 projection、ETag/If-Match、未编辑 YAML、注释和并发 section 冲突检查；完整 usage、provider status、OAuth login proxy 持久化行为不变。
 - 字面替换在 UI 中持有完整行草稿。重复 key、空 key 均保留在草稿且阻止保存，避免转成 map 时覆盖或丢弃用户输入；只有保存边界才转换为 Core map。
 - 空 replacement 表示删除，匹配文字和 replacement 的空白原样保留。正则规则保持顺序并使用后端 Go RE2 语义；不使用浏览器 RegExp 判断 RE2 兼容性。Core 按其原有行为过滤无效正则。
+- 正则草稿保留原 YAML 节点位置，改名、排序及删除重复 pattern 后仍保留对应规则的注释和未知字段；该编辑标识不写入 YAML 或原生 API。
 - payload.replace 仅作用于选定的 user 消息文字。目标为全部 user 消息或从 1 开始的位置列表；替换按行序执行，位于 override 后、filter 前。不把数字、布尔或 null 隐式转换成字面字符串。
 - malformed source 保留 invalid 状态，用户可以修 YAML 或显式重置；LTS model scope、auth-kind、request-paths 和未知字段在规则编辑时保留。
 - 同一页切换配置分类仍保留草稿；两连接使用各自 runtime，切走/返回不会把另一连接的配置写入当前连接。
@@ -24,7 +25,7 @@
 
 ## 验证
 
-- `npm run validate:lts` 通过，包含新配置/Claude 原生 API 回归、原有 33 项 provider-switch 页面门禁，以及新增 23 项 replacement 页面门禁。type-check/build/contract 通过；lint 仅保留既有 useConnectivityTest cleanup warning。
+- `npm run validate:lts` 包含新配置/Claude 原生 API 回归、原有 33 项 provider-switch 页面门禁，以及 27 项 replacement 页面门禁（含 Antigravity/Devin 规则改名保留原节点）。返工定向配置测试、type-check/build/contract 和 replacement 页面门禁通过；最终完整门禁以当前 PR head 的 CI 为准。lint 仅保留既有 useConnectivityTest cleanup warning。
 - `scripts/guard-config-replacements.py` 驱动真实页面完成新增、空值、重复 key、非法位置、排序、保存、重载、清空、移动视口、连接切换和 Claude 凭据表单写入回读。保存断言关联实际 PUT 响应，不把请求期间的 disabled 状态当作写入完成。
 - 新浏览器门禁接入 `test:config-replacements`、`validate:lts` 和 LTS Panel Contract workflow，复用现有 Python/Playwright 安装步骤。
 - 三组真实浏览器 × 临时 Core 矩阵通过：候选 Panel × 候选 Core、候选 Panel × main Core、main Panel × 候选 Core。主线核验坐标分别为 Panel `f02f39d9`、Core `11195efd5`。

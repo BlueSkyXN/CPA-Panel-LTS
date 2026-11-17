@@ -56,6 +56,50 @@ for (const provider of ['antigravity', 'devin']) {
     const saved = run(initial, () => ({ [wordsField]: [], [patternsField]: [] }));
     assert.deepEqual(parse(saved.output).oauth.providers[provider], { 'future-option': { keep: true } });
   });
+  const duplicatePatterns = `oauth:
+  providers:
+    ${provider}:
+      sensitive-patterns-replace:
+        # first-rule
+        - pattern: same
+          replacement: ''
+          future-rule: first
+        # second-rule
+        - pattern: same
+          replacement: ''
+          future-rule: second
+`;
+  test(`${provider}: renaming and moving duplicate patterns preserves each original YAML node`, () => {
+    const saved = run(duplicatePatterns, (values) => ({ [patternsField]: [
+      { ...values[patternsField][1], pattern: 'renamed-second' },
+      { pattern: 'same', replacement: 'new' },
+      { ...values[patternsField][0], pattern: 'renamed-first' },
+    ] }));
+    assert.equal(saved.error, undefined);
+    assert.deepEqual(parse(saved.output).oauth.providers[provider]['sensitive-patterns-replace'], [
+      { pattern: 'renamed-second', replacement: '', 'future-rule': 'second' },
+      { pattern: 'same', replacement: 'new' },
+      { pattern: 'renamed-first', replacement: '', 'future-rule': 'first' },
+    ]);
+    assert.match(saved.output, /# first-rule/);
+    assert.match(saved.output, /# second-rule/);
+    assert.ok(saved.output.indexOf('# second-rule') < saved.output.indexOf('# first-rule'));
+    assert.deepEqual(run(saved.output).dirty, []);
+  });
+  test(`${provider}: moving identical patterns retains their distinct unmanaged fields`, () => {
+    const saved = run(duplicatePatterns, (values) => ({ [patternsField]: [...values[patternsField]].reverse() }));
+    assert.equal(saved.error, undefined);
+    assert.ok(saved.dirty.includes(patternsField));
+    assert.deepEqual(parse(saved.output).oauth.providers[provider]['sensitive-patterns-replace'].map((rule) => rule['future-rule']), ['second', 'first']);
+  });
+  test(`${provider}: deleting a duplicate and renaming its sibling preserves the remaining node`, () => {
+    const saved = run(duplicatePatterns, (values) => ({ [patternsField]: [{ ...values[patternsField][1], pattern: 'remaining' }] }));
+    assert.equal(saved.error, undefined);
+    assert.deepEqual(parse(saved.output).oauth.providers[provider]['sensitive-patterns-replace'], [
+      { pattern: 'remaining', replacement: '', 'future-rule': 'second' },
+    ]);
+    assert.match(saved.output, /# second-rule/);
+  });
   test(`${provider}: incomplete and duplicate literal drafts remain dirty and block saving`, () => {
     for (const rows of [[{ id: 'blank', key: '', value: 'unfinished' }], [{ id: 'a', key: 'same', value: '1' }, { id: 'b', key: 'same', value: '2' }]]) {
       const result = run(initial, () => ({ [wordsField]: rows }));

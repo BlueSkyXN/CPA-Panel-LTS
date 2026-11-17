@@ -2,10 +2,10 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { IconChevronDown, IconChevronUp, IconPlus, IconTrash2 } from '@/components/ui/icons';
 import { prefersReducedMotion } from '@/hooks/motion';
-import type { LiteralReplacementDraft } from './sensitiveReplacementDraft';
+import type { LiteralReplacementDraft, PatternReplacementDraft } from './sensitiveReplacementDraft';
 import styles from './SensitiveReplacementEditor.module.scss';
 
-type Pattern = { pattern: string; replacement: string };
+type Pattern = PatternReplacementDraft;
 /** `fresh`: created by the add button in this session; only these rows play the enter motion. */
 type PatternRow = Pattern & { id: string; fresh?: boolean };
 
@@ -413,7 +413,11 @@ export function PatternReplacementEditor({
     setDraft({ source: valueKey, rows: toPatternRows(value) });
   }
   const update = (rows: PatternRow[]) => {
-    const next = rows.map(({ pattern, replacement }) => ({ pattern, replacement }));
+    const next = rows.map(({ pattern, replacement, sourceIndex }) => ({
+      pattern,
+      replacement,
+      ...(sourceIndex === undefined ? {} : { sourceIndex }),
+    }));
     setDraft({ source: JSON.stringify(next), rows });
     onChange(next);
   };
