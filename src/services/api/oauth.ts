@@ -61,10 +61,13 @@ export interface OAuthStartOptions {
   signal?: AbortSignal;
   client?: ReturnType<typeof apiClient.captureConnection>;
   /**
-   * Session-only login proxy. Core only accepts `proxy_url` in a POST body
-   * (a query-string proxy_url is rejected), so a non-empty value switches the
+   * Login proxy. Core only accepts `proxy_url` in a POST body (a
+   * query-string proxy_url is rejected), so a non-empty value switches the
    * request to POST with provider/is_webui in the body; blank keeps the
-   * original GET form. Port of upstream 6b1b94a7.
+   * original GET form. Port of upstream 6b1b94a7 with the per-credential
+   * persistence confirmed against Core 27f3abfb: the proxy is used for this
+   * login and, once it succeeds, saved to the new credential for later
+   * requests; only the page-side input is memory-only.
    */
   proxyUrl?: string;
 }
