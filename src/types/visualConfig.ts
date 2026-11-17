@@ -1,3 +1,4 @@
+import type { LiteralReplacementDraft } from '@/components/providers/sensitiveReplacementDraft';
 import { FLOW_DEFAULT_VALUES, type FlowControlValues } from '@/lts/flowControl/model';
 
 export type PayloadParamValueType = 'string' | 'number' | 'boolean' | 'json';
@@ -27,6 +28,10 @@ export type PayloadParamValidationErrorCode =
   | 'payload_invalid_json';
 
 export type VisualConfigFieldPath =
+  | 'antigravitySensitiveWordsReplace'
+  | 'devinSensitiveWordsReplace'
+  | 'antigravitySensitivePatternsReplace'
+  | 'devinSensitivePatternsReplace'
 	| 'reasoningEffortRules'
   | 'flowControlRulesText'
   | 'port'
@@ -48,6 +53,7 @@ export type VisualConfigFieldPath =
   | 'streaming.nonstreamKeepaliveInterval';
 
 export type VisualConfigValidationErrorCode =
+  | 'sensitive_replacements_invalid'
 	| 'reasoning_effort_rules'
   | 'flow_control_config'
   | 'port_range'
@@ -77,6 +83,8 @@ export type PayloadModelEntry = {
   name: string;
   protocol?: string;
   scope?: string;
+  authKind?: string;
+  requestPaths?: string[];
   fromProtocol?: string;
   headers?: PayloadHeaderEntry[];
   match?: PayloadParamEntry[];
@@ -89,6 +97,15 @@ export type PayloadRule = {
   id: string;
   models: PayloadModelEntry[];
   params: PayloadParamEntry[];
+};
+
+export type PayloadReplaceRule = {
+  id: string;
+  models: PayloadRule['models'];
+  target: { role: string; all: boolean; positions: string };
+  replacements: { id: string; from: string; to: string }[];
+  /** Malformed source shape; clear explicitly after repairing the draft. */
+  invalid?: boolean;
 };
 
 export type PayloadFilterRule = {
@@ -168,6 +185,10 @@ export type VisualConfigValues = FlowControlValues & {
   wsAuth: boolean;
   enableGeminiCliEndpoint: boolean;
   antigravitySignatureCacheEnabled: boolean;
+  antigravitySensitiveWordsReplace: LiteralReplacementDraft[];
+  devinSensitiveWordsReplace: LiteralReplacementDraft[];
+  antigravitySensitivePatternsReplace: { pattern: string; replacement: string }[];
+  devinSensitivePatternsReplace: { pattern: string; replacement: string }[];
   antigravitySensitiveWords: string[];
   devinSensitiveWords: string[];
   antigravitySignatureBypassStrict: boolean;
@@ -213,6 +234,7 @@ export type VisualConfigValues = FlowControlValues & {
   payloadOverrideRules: PayloadRule[];
   payloadOverrideRawRules: PayloadRule[];
   payloadFilterRules: PayloadFilterRule[];
+  payloadReplaceRules: PayloadReplaceRule[];
   reasoningEffortRules: ReasoningEffortRule[];
   streaming: StreamingConfig;
 };
@@ -267,6 +289,10 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   wsAuth: true,
   enableGeminiCliEndpoint: false,
   antigravitySignatureCacheEnabled: true,
+  antigravitySensitiveWordsReplace: [],
+  devinSensitiveWordsReplace: [],
+  antigravitySensitivePatternsReplace: [],
+  devinSensitivePatternsReplace: [],
   antigravitySensitiveWords: [],
   devinSensitiveWords: [],
   antigravitySignatureBypassStrict: false,
@@ -311,6 +337,7 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   payloadOverrideRules: [],
   payloadOverrideRawRules: [],
   payloadFilterRules: [],
+  payloadReplaceRules: [],
   streaming: {
     keepaliveSeconds: '',
     bootstrapRetries: '',

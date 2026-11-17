@@ -138,6 +138,22 @@ export const CONFIG_FIELDS = {
     yamlKey: 'antigravity-signature-bypass-strict',
     fullWidth: false,
   },
+  antigravitySensitiveWordsReplace: {
+    labelKey: 'sensitive_replacements.literal_title',
+    yamlKey: 'oauth.providers.antigravity.sensitive-words-replace', fullWidth: true,
+  },
+  antigravitySensitivePatternsReplace: {
+    labelKey: 'sensitive_replacements.pattern_title',
+    yamlKey: 'oauth.providers.antigravity.sensitive-patterns-replace', fullWidth: true,
+  },
+  devinSensitiveWordsReplace: {
+    labelKey: 'sensitive_replacements.literal_title',
+    yamlKey: 'oauth.providers.devin.sensitive-words-replace', fullWidth: true,
+  },
+  devinSensitivePatternsReplace: {
+    labelKey: 'sensitive_replacements.pattern_title',
+    yamlKey: 'oauth.providers.devin.sensitive-patterns-replace', fullWidth: true,
+  },
   antigravitySensitiveWords: {
     labelKey: 'config_management.visual.sections.system.antigravity_sensitive_words',
     yamlKey: 'antigravity.sensitive-words',
@@ -475,6 +491,10 @@ export const CONFIG_FIELDS = {
     yamlKey: 'nonstream-keepalive-interval',
     fullWidth: false,
   },
+  payloadReplaceRules: {
+    labelKey: 'config_management.visual.payload_replace.title',
+    yamlKey: 'requests.payload.replace', fullWidth: true, heading: true,
+  },
   payloadDefaultRules: {
     labelKey: 'config_management.visual.sections.payload.default_rules',
     yamlKey: 'payload.default',
@@ -696,12 +716,14 @@ export const CONFIG_DOMAINS = [
           'antigravitySignatureCacheEnabled',
           'antigravitySignatureBypassStrict',
           'antigravitySensitiveWords',
+          'antigravitySensitiveWordsReplace',
+          'antigravitySensitivePatternsReplace',
           'quotaAntigravityCredits',
         ],
       },
       {
         id: 'devin',
-        fields: ['devinSensitiveWords'],
+        fields: ['devinSensitiveWords', 'devinSensitiveWordsReplace', 'devinSensitivePatternsReplace'],
       },
       {
         id: 'gemini',
@@ -723,7 +745,7 @@ export const CONFIG_DOMAINS = [
       },
       {
         id: 'overrides',
-        fields: ['payloadOverrideRules', 'payloadOverrideRawRules'],
+        fields: ['payloadOverrideRules', 'payloadOverrideRawRules', 'payloadReplaceRules'],
       },
       {
         id: 'filters',

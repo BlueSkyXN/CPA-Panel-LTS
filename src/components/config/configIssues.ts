@@ -1,4 +1,4 @@
-import { getPayloadParamValidationError } from '@/hooks/useVisualConfig';
+import { getPayloadParamValidationError, getPayloadReplaceValidationError } from '@/hooks/useVisualConfig';
 import type { VisualConfigValidationErrors, VisualConfigValues } from '@/types/visualConfig';
 import type { ConfigFieldId } from './configNavigation';
 
@@ -31,5 +31,6 @@ export function getConfigIssueFields(
     )
       fields.add(field);
   }
+  if (values.payloadReplaceRules.some(getPayloadReplaceValidationError)) fields.add('payloadReplaceRules');
   return fields;
 }
