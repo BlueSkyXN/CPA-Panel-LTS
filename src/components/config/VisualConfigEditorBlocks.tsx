@@ -1,3 +1,4 @@
+import { getValidationMessage, buildProtocolOptions, buildScopeOptions } from './payloadEditorOptions';
 import { memo, useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
@@ -11,7 +12,6 @@ import type {
   PayloadHeaderEntry,
   PayloadModelEntry,
   PayloadParamEntry,
-  PayloadParamValidationErrorCode,
   PayloadParamValueType,
   PayloadRule,
   PluginStoreAuthApplyTo,
@@ -22,7 +22,6 @@ import { makeClientId } from '@/types/visualConfig';
 import {
   getPayloadParamValidationError,
   VISUAL_CONFIG_PAYLOAD_VALUE_TYPE_OPTIONS,
-  VISUAL_CONFIG_PROTOCOL_OPTIONS,
 } from '@/hooks/useVisualConfig';
 import { generateSecureApiKey } from '@/utils/apiKey';
 import { maskApiKey } from '@/utils/format';
@@ -34,7 +33,7 @@ import { RuleDisclosure } from './RuleDisclosure';
 const EXPAND_THRESHOLD = 30;
 
 /** Auto-expanding textarea that collapses back to a single-line input on demand. */
-function ExpandableInput({
+export function ExpandableInput({
   value,
   placeholder,
   ariaLabel,
@@ -131,63 +130,6 @@ function ExpandableInput({
       </button>
     </div>
   );
-}
-
-function getValidationMessage(
-  t: ReturnType<typeof useTranslation>['t'],
-  errorCode?: PayloadParamValidationErrorCode
-) {
-  if (!errorCode) return undefined;
-  return t(`config_management.visual.validation.${errorCode}`);
-}
-
-function buildProtocolOptions(
-  t: ReturnType<typeof useTranslation>['t'],
-  rules: Array<{ models: PayloadModelEntry[] }>
-) {
-  const options: Array<{ value: string; label: string }> = VISUAL_CONFIG_PROTOCOL_OPTIONS.map(
-    (option) => ({
-      value: option.value,
-      label: t(option.labelKey, { defaultValue: option.defaultLabel }),
-    })
-  );
-  const seen = new Set<string>(options.map((option) => option.value));
-
-  for (const rule of rules) {
-    for (const model of rule.models) {
-      const protocol = model.protocol;
-      if (!protocol || !protocol.trim() || seen.has(protocol)) continue;
-      seen.add(protocol);
-      options.push({ value: protocol, label: protocol });
-    }
-  }
-
-  return options;
-}
-
-function buildScopeOptions(t: ReturnType<typeof useTranslation>['t'], currentScope?: string) {
-  const options = [
-    {
-      value: '',
-      label: t('config_management.visual.payload_rules.scope_any'),
-    },
-    {
-      value: 'requested',
-      label: t('config_management.visual.payload_rules.scope_requested'),
-    },
-    {
-      value: 'upstream',
-      label: t('config_management.visual.payload_rules.scope_upstream'),
-    },
-  ];
-  const trimmedScope = currentScope?.trim();
-  if (trimmedScope && !options.some((option) => option.value === trimmedScope)) {
-    options.push({
-      value: trimmedScope,
-      label: t('config_management.visual.payload_rules.scope_custom', { scope: trimmedScope }),
-    });
-  }
-  return options;
 }
 
 function normalizePayloadModelScope(scope: string): string | undefined {

@@ -70,5 +70,8 @@ jobs:
       - name: Real-page provider-switch gate (draft-safe switching)
         run: python3 scripts/guard-provider-switch.py
 
+      - name: Real-page replacement configuration gate
+        run: python3 scripts/guard-config-replacements.py
+
       - name: Lint
         run: npm run lint

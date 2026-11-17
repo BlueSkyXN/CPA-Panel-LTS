@@ -1,3 +1,4 @@
+import { serializeLiteralDraft } from '@/components/providers/sensitiveReplacementDraft';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { providersApi } from '@/services/api';
 import { apiClient } from '@/services/api/client';
@@ -178,14 +179,19 @@ export const buildCloakConfig = (
   input: NonNullable<ProviderEntryFormInput['cloak']>,
   existing?: ProviderKeyConfig['cloak']
 ): ProviderKeyConfig['cloak'] => {
+  const replacements = serializeLiteralDraft(input.sensitiveWordsReplace ?? []);
+  if (replacements === null) throw new Error('Invalid sensitive replacement draft');
   const cloak = {
     mode: input.mode.trim() || undefined,
     strictMode: input.strictMode,
     sensitiveWords: parseTextList(input.sensitiveWordsText),
+    ...(input.sensitiveWordsReplace !== undefined || existing?.sensitiveWordsReplace !== undefined ? { sensitiveWordsReplace: input.sensitiveWordsReplace !== undefined ? replacements : existing?.sensitiveWordsReplace } : {}),
+    ...(input.sensitivePatternsReplace !== undefined || existing?.sensitivePatternsReplace !== undefined ? { sensitivePatternsReplace: input.sensitivePatternsReplace ?? existing?.sensitivePatternsReplace } : {}),
     cacheUserId: input.cacheUserId === true,
   };
   const untouched =
-    !cloak.mode && cloak.strictMode !== true && !cloak.sensitiveWords?.length && !cloak.cacheUserId;
+    !cloak.mode && cloak.strictMode !== true && !cloak.sensitiveWords?.length && !cloak.cacheUserId &&
+    !Object.keys(cloak.sensitiveWordsReplace ?? {}).length && !cloak.sensitivePatternsReplace?.length;
   return existing || !untouched ? cloak : undefined;
 };
 

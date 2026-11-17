@@ -558,3 +558,30 @@ test('legacy model inputs preserve fields that are not visually editable', () =>
     },
   ]);
 });
+
+test('Claude replacement fields survive native API edits and explicit clearing', async () => {
+  const { buildCloakConfig } = await vite.ssrLoadModule('/src/features/providers/useProviderWorkbench.ts');
+  const { literalDraftFromMap } = await vite.ssrLoadModule('/src/components/providers/sensitiveReplacementDraft.ts');
+  core = installFakeV8Core(client.apiClient, {
+    'api-keys': { claude: [{ name: 'replacement-fixture', keys: [{
+      'api-key': 'synthetic-replacement-key', 'future-key': 'keep',
+      cloak: { 'sensitive-words-replace': { old: '' }, 'sensitive-patterns-replace': [{ pattern: '(?P<name>text)', replacement: '${name}' }], 'future-cloak': true },
+    }] }] },
+  });
+  let current = (await readConfig()).claudeApiKeys[0];
+  assert.deepEqual(current.cloak.sensitiveWordsReplace, { old: '' });
+  const input = { mode: '', strictMode: false, sensitiveWordsText: '', cacheUserId: false,
+    sensitiveWordsReplace: literalDraftFromMap({ padded: '  keep  ', remove: '' }),
+    sensitivePatternsReplace: [{ pattern: '(?i)other', replacement: '' }, { pattern: '(?P<name>text)', replacement: ' ${name} ' }],
+  };
+  await providers.providersApi.updateClaudeConfig(current.apiKey, current.baseUrl, { ...current, cloak: buildCloakConfig(input, current.cloak) });
+  current = (await readConfig()).claudeApiKeys[0];
+  assert.deepEqual(current.cloak.sensitiveWordsReplace, { padded: '  keep  ', remove: '' });
+  assert.deepEqual(current.cloak.sensitivePatternsReplace, input.sensitivePatternsReplace);
+  assert.equal(core.writes[0].data[0].keys[0]['future-key'], 'keep');
+  assert.equal(core.writes[0].data[0].keys[0].cloak['future-cloak'], true);
+  await providers.providersApi.updateClaudeConfig(current.apiKey, current.baseUrl, { ...current, cloak: buildCloakConfig({ ...input, sensitiveWordsReplace: [], sensitivePatternsReplace: [] }, current.cloak) });
+  current = (await readConfig()).claudeApiKeys[0];
+  assert.deepEqual(current.cloak.sensitiveWordsReplace ?? {}, {});
+  assert.deepEqual(current.cloak.sensitivePatternsReplace ?? [], []);
+});
