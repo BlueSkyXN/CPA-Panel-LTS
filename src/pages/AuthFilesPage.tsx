@@ -67,6 +67,7 @@ import {
 import { useAuthFilesData } from '@/features/authFiles/hooks/useAuthFilesData';
 import { useAuthFilesModels } from '@/features/authFiles/hooks/useAuthFilesModels';
 import { useAuthFilesOauth } from '@/features/authFiles/hooks/useAuthFilesOauth';
+import { useModelCatalogSync } from '@/features/authFiles/hooks/useModelCatalogSync';
 import { useAuthFilesPrefixProxyEditor } from '@/features/authFiles/hooks/useAuthFilesPrefixProxyEditor';
 import { useAuthFilesStatusBarCache } from '@/features/authFiles/hooks/useAuthFilesStatusBarCache';
 import {
@@ -180,6 +181,18 @@ export function AuthFilesPage() {
 
   const statusBarCache = useAuthFilesStatusBarCache(files);
 
+  // Port of upstream 99a95c4a: global catalog sync lives next to per-file
+  // model views; on success it invalidates caches, bumps the diagram
+  // dependency and reopens the current models modal against fresh data.
+  const [modelCatalogVersion, setModelCatalogVersion] = useState(0);
+  const { syncingModelCatalog, syncModelCatalog } = useModelCatalogSync(() => {
+    invalidateAuthFileDerivedCaches(invalidateModels);
+    setModelCatalogVersion((version) => version + 1);
+    if (modelsModalOpen) {
+      void showModels({ name: modelsFileName, type: modelsFileType });
+    }
+  });
+
   const {
     excluded,
     excludedError,
@@ -198,7 +211,7 @@ export function AuthFilesPage() {
     handleToggleFork,
     handleRenameAlias,
     handleDeleteAlias,
-  } = useAuthFilesOauth({ viewMode, files });
+  } = useAuthFilesOauth({ viewMode, files, modelCatalogVersion });
 
   const {
     prefixProxyEditor,
@@ -747,6 +760,11 @@ export function AuthFilesPage() {
               label={t('auth_files.more_actions')}
               actions={[
                 { label: t('credential_actions.refresh-all'), disabled: disableControls || loading, onClick: () => setRuntimeAction({ action: 'refresh-all', files: [], revision: apiClient.getConnectionRevision() }) },
+                {
+                  label: t('auth_files.sync_catalog_button'),
+                  disabled: disableControls || syncingModelCatalog,
+                  onClick: () => void syncModelCatalog(),
+                },
                 {
                   label: deleteAllButtonLabel,
                   danger: true,
