@@ -19,6 +19,7 @@ import {
   getTypeLabel,
   normalizeProviderKey,
 } from '@/features/authFiles/constants';
+import { needsSwitchConfirmation } from '@/features/authFiles/editor/providerSwitchContract';
 import { getStringSetSignature, isOAuthEditorDirty } from '@/features/authFiles/oauthEditorState';
 import {
   getCustomOAuthExcludedRules,
@@ -57,6 +58,10 @@ export function AuthFilesOAuthExcludedEditPage() {
   const [initialProviderKey] = useState(() => normalizeProviderKey(providerFromParams));
 
   const [provider, setProvider] = useState(providerFromParams);
+  // The autocomplete text is decoupled from the provider being edited: typing
+  // only filters and must never reset selected models/custom rule or the URL.
+  // `provider` changes exclusively through the commit path, after the guard.
+  const [providerInput, setProviderInput] = useState(providerFromParams);
   const [files, setFiles] = useState<AuthFileItem[]>([]);
   const [excluded, setExcluded] = useState<Record<string, string[]>>({});
   const [modelAlias, setModelAlias] = useState<Record<string, OAuthModelAliasEntry[]>>({});
@@ -79,6 +84,7 @@ export function AuthFilesOAuthExcludedEditPage() {
 
   useEffect(() => {
     setProvider(providerFromParams);
+    setProviderInput(providerFromParams);
   }, [providerFromParams]);
 
   const providerOptions = useMemo(() => {
@@ -370,19 +376,24 @@ export function AuthFilesOAuthExcludedEditPage() {
     };
   }, [excludedUnsupported, files, resolvedProviderKey, showNotification, t]);
 
-  // Typing only updates local state; the provider param is mirrored into the
-  // URL on commit (selection/Enter/blur). Writing it per keystroke remounts the
-  // page through the router and destroys the input mid-typing.
+  // Typing only updates the autocomplete text; the provider being edited and
+  // the URL param change on commit (selection/Enter/blur/quick button), after
+  // the unsaved-changes guard.
   const applyProviderChange = useCallback((value: string) => {
-    setProvider(value);
+    setProviderInput(value);
   }, []);
 
   const commitProviderChange = useCallback(
     (value: string) => {
+      const trimmed = value.trim();
+      const unchanged =
+        normalizeProviderKey(trimmed) === normalizeProviderKey(provider) &&
+        providerFromParams === provider;
       const apply = () => {
-        setProvider(value);
+        setProvider(trimmed);
+        setProviderInput(trimmed);
+        if (unchanged) return; // same target and URL: no navigation, no remount
         const next = new URLSearchParams(searchParams);
-        const trimmed = value.trim();
         if (trimmed) {
           next.set('provider', trimmed);
         } else {
@@ -394,7 +405,8 @@ export function AuthFilesOAuthExcludedEditPage() {
         );
         setSearchParams(next, { replace: true });
       };
-      if (!contentDirty || normalizeProviderKey(value) === resolvedProviderKey) {
+      const stay = () => setProviderInput(provider);
+      if (!needsSwitchConfirmation(value, provider, contentDirty)) {
         apply();
         return;
       }
@@ -402,9 +414,10 @@ export function AuthFilesOAuthExcludedEditPage() {
         ...unsavedChangesDialog,
         variant: 'danger',
         onConfirm: apply,
+        onCancel: stay,
       });
     },
-    [allowNavigationTo, contentDirty, location.hash, location.pathname, resolvedProviderKey, searchParams, setSearchParams, showConfirmation, unsavedChangesDialog]
+    [allowNavigationTo, contentDirty, location.hash, location.pathname, provider, providerFromParams, searchParams, setSearchParams, showConfirmation, unsavedChangesDialog]
   );
 
   const toggleModel = useCallback(
@@ -578,7 +591,7 @@ export function AuthFilesOAuthExcludedEditPage() {
                   <AutocompleteInput
                     id="oauth-excluded-provider"
                     placeholder={t('oauth_excluded.provider_placeholder')}
-                    value={provider}
+                    value={providerInput}
                     onChange={applyProviderChange}
                     onCommit={commitProviderChange}
                     options={providerOptions}

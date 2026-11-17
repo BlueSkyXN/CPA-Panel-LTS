@@ -126,11 +126,17 @@ export function AutocompleteInput({
   };
 
   const handleSelect = (selectedValue: string) => {
+    // suppress only the blur that immediately follows this selection's
+    // pointer interaction; reset it on the next animation frame so a later,
+    // legitimate blur commit is never swallowed
     commitScheduledRef.current = true;
     onChange(selectedValue);
     onCommit?.(selectedValue);
     setIsTyping(false);
     setIsOpen(false);
+    requestAnimationFrame(() => {
+      commitScheduledRef.current = false;
+    });
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
