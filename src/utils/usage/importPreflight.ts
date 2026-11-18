@@ -1,3 +1,4 @@
+import { readCacheObservation } from './cacheDiagnostics';
 import { normalizeTokenAccounting, tokenAccountingMatches } from './tokenAccounting';
 import { normalizeOutputTiming } from './performance';
 export type UsageImportPreflightIssue =
@@ -95,6 +96,9 @@ const DETAIL_STRING_FIELDS = [
   'failure_reason',
   // Request size fields (Core size_version 1); Core decodes them into strings.
   'trace_id',
+  'request_id',
+  'diagnostics_id',
+  'diagnostics_instance_id',
   'client_request_encoding',
   'upstream_transport',
   'upstream_request_encoding',
@@ -456,6 +460,10 @@ const collectUsageDetailEntries = (
       for (const detailValue of modelValue.details) {
         if (!isRecord(detailValue) || !validateDetailMetadata(detailValue)) {
           return { entries: [], issue: 'usage_shape_invalid' };
+        }
+
+        if (version === 3 && detailValue.cache_observation != null && !readCacheObservation(detailValue.cache_observation)) {
+          return { entries: [], issue: 'usage_v3_token_contract_invalid' };
         }
 
         const timingIssue = validateTimingMetadata(detailValue, version);

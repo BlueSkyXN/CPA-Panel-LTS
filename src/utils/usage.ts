@@ -4,6 +4,7 @@
  */
 
 import type { ScriptableContext } from 'chart.js';
+import { extractCacheDiagnosticFields } from './usage/cacheDiagnostics';
 import type { LatencyAccumulator, LatencyStats } from './usage/latency';
 import type { UsageOutputTiming } from './usage/performance';
 import { normalizeTokenAccounting, type UsageTokenAccounting } from './usage/tokenAccounting';
@@ -182,6 +183,10 @@ export interface UsageTokenStats extends UsageTokenFields {
 }
 
 export interface UsageDetail extends RequestSizeFields {
+  request_id?: string;
+  diagnostics_id?: string;
+  diagnostics_instance_id?: string;
+  cache_observation?: unknown;
   __queryId?: string;
   timestamp: string;
   source: string;
@@ -863,6 +868,7 @@ export function collectUsageDetails(usageData: unknown): UsageDetail[] {
           failure_status: extractFailureStatus(detailRaw),
           failure_reason: extractFailureReason(detailRaw),
           ...extractRequestSize(detailRaw),
+          ...extractCacheDiagnosticFields(detailRaw),
           __apiBucket: apiBucket,
           __modelName: modelName,
           __timestampMs: Number.isNaN(timestampMs) ? 0 : timestampMs,
@@ -961,6 +967,7 @@ export function collectUsageDetailsWithEndpoint(usageData: unknown): UsageDetail
           failure_status: extractFailureStatus(detailRaw),
           failure_reason: extractFailureReason(detailRaw),
           ...extractRequestSize(detailRaw),
+          ...extractCacheDiagnosticFields(detailRaw),
           __apiBucket: endpoint,
           __modelName: modelName,
           __endpoint: endpoint,

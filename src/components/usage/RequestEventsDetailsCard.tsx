@@ -10,6 +10,8 @@ import {
   type ThHTMLAttributes,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { CacheDiagnosticsDetails } from './CacheDiagnosticsDetails';
+import { readCacheObservation } from '@/utils/usage/cacheDiagnostics';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -357,6 +359,10 @@ type RequestEventRow = {
   failureStatus: number | null;
   failureReason: string | null;
   traceId: string | null;
+  requestId?: string;
+  diagnosticsId?: string;
+  diagnosticsInstanceId?: string;
+  cacheObservation?: unknown;
   upstreamTransport: string | null;
   upstreamRequestBytes: number | null;
   upstreamRequestWireBytes: number | null;
@@ -1385,7 +1391,9 @@ export function RequestEventsDetailsCard({
       const performanceOutputTokens = performanceTokens.outputTokens;
       const performanceReasoningTokens = performanceTokens.reasoningTokens;
       const displayedOutputTokens = performanceTokens.nonReasoningTokens;
-      const cacheRate = resolveCacheRate(inputTokens, cacheReadTokens);
+      const cacheEvidence = readCacheObservation(detail.cache_observation);
+      const cacheRate = cacheEvidence && cacheEvidence.read.state !== 'present'
+        ? null : resolveCacheRate(inputTokens, cacheReadTokens);
       const totalTokens = Math.max(
         toNumber(detail.tokens?.total_tokens),
         extractTotalTokens(detail)
@@ -1443,6 +1451,10 @@ export function RequestEventsDetailsCard({
         failureStatus: detail.failed === true ? extractFailureStatus(detail) : null,
         failureReason: detail.failed === true ? extractFailureReason(detail) : null,
         traceId: detail.trace_id ?? null,
+        requestId: detail.request_id,
+        diagnosticsId: detail.diagnostics_id,
+        diagnosticsInstanceId: detail.diagnostics_instance_id,
+        cacheObservation: detail.cache_observation,
         upstreamTransport: detail.upstream_transport ?? null,
         upstreamRequestBytes: upstreamPayloadBytes(detail),
         upstreamRequestWireBytes: detail.upstream_request_wire_bytes ?? null,
@@ -2398,6 +2410,10 @@ export function RequestEventsDetailsCard({
       estimated_cost_usd: row.costAmount,
       pricing_status: row.costStatus,
       trace_id: row.traceId,
+      request_id: row.requestId,
+      diagnostics_id: row.diagnosticsId,
+      diagnostics_instance_id: row.diagnosticsInstanceId,
+      cache_observation: row.cacheObservation,
     }));
 
     return `${first ? '[\n' : ',\n'}${JSON.stringify(payload, null, 2).slice(2, -2)}`;
@@ -3146,7 +3162,9 @@ export function RequestEventsDetailsCard({
               <tbody>
                 {renderedRows.map((row) => {
                   const cacheRateToneClassName = getCacheRateToneClassName(row.cacheRateTone);
-                  const cacheReadTokensLabel = row.cacheReadTokens.toLocaleString();
+                  const cacheObservation = readCacheObservation(row.cacheObservation);
+                  const cacheReadTokensLabel = cacheObservation && cacheObservation.read.state !== 'present'
+                    ? '—' : row.cacheReadTokens.toLocaleString();
                   const inputTokensLabel = row.inputTokens.toLocaleString();
                   const cacheRateLabel =
                     row.cacheRate === null
@@ -3554,7 +3572,8 @@ export function RequestEventsDetailsCard({
                       {columnVisibility.cacheWriteTokens && (
                         <td className={styles.requestEventsTokenCell}>
                           <span className={styles.requestEventsTokenValue}>
-                            {row.cacheWriteTokens.toLocaleString()}
+                            {cacheObservation && cacheObservation.write.state !== 'present'
+                              ? '—' : row.cacheWriteTokens.toLocaleString()}
                           </span>
                         </td>
                       )}
@@ -3667,11 +3686,11 @@ export function RequestEventsDetailsCard({
                                   ['usage_stats.request_events_total_input_tokens', row.inputTokens],
                                   [
                                     'usage_stats.cache_read_tokens',
-                                    row.cacheReadTokens,
+                                    cacheObservation && cacheObservation.read.state !== 'present' ? null : row.cacheReadTokens,
                                   ],
                                   [
                                     'usage_stats.cache_write_tokens',
-                                    row.cacheWriteTokens,
+                                    cacheObservation && cacheObservation.write.state !== 'present' ? null : row.cacheWriteTokens,
                                   ],
                                   ['usage_stats.request_events_total_output_tokens', row.outputTokens],
                                   [
@@ -3709,6 +3728,12 @@ export function RequestEventsDetailsCard({
                                     )}
                                   </span>
                                 )}
+                              </dd>
+                            </div>
+                            <div className={styles.requestEventsCacheDiagnostics}>
+                              <dt>{t('cache_diagnostics.title')}</dt>
+                              <dd>
+                                <CacheDiagnosticsDetails instanceId={row.diagnosticsInstanceId} diagnosticId={row.diagnosticsId} requestId={row.requestId} observation={row.cacheObservation} />
                               </dd>
                             </div>
                           </dl>

@@ -12,7 +12,7 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,scss}\"",
     "type-check": "tsc --noEmit",
-    "test:usage-cache": "node --test src/utils/usage/cacheTokens.test.mjs",
+    "test:usage-cache": "node --test src/utils/usage/cacheTokens.test.mjs src/utils/usage/cacheDiagnostics.test.mjs src/services/api/cacheDiagnostics.test.mjs",
     "test:usage-prices": "node --test src/utils/usage/modelPrices.test.mjs",
     "test:usage-import": "node --test src/utils/usage/importPreflight.test.mjs src/utils/usage/requestSize.test.mjs",
     "test:usage-effort": "node --test src/utils/usage/reasoningEffort.test.mjs",
