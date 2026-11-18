@@ -1,6 +1,7 @@
 import type { TFunction } from 'i18next';
 import iconAntigravity from '@/assets/icons/antigravity.svg';
 import iconClaude from '@/assets/icons/claude.svg';
+import iconCodebuddy from '@/assets/icons/codebuddy.svg';
 import iconCodex from '@/assets/icons/codex.svg';
 import iconCopilot from '@/assets/icons/copilot.svg';
 import iconGemini from '@/assets/icons/gemini.svg';
@@ -9,7 +10,9 @@ import iconIflow from '@/assets/icons/iflow.svg';
 import iconDevin from '@/assets/icons/devin.svg';
 import iconMeta from '@/assets/icons/meta.svg';
 import iconKimiLight from '@/assets/icons/kimi-light.svg';
+import iconQoder from '@/assets/icons/qoder.svg';
 import iconQwen from '@/assets/icons/qwen.svg';
+import iconZai from '@/assets/icons/zai.svg';
 import iconVertex from '@/assets/icons/vertex.svg';
 import type { AuthFileItem } from '@/types';
 import { normalizeOAuthProviderKey } from '@/utils/providerKeys';
@@ -82,6 +85,9 @@ export const TYPE_COLORS: Record<string, ThemeColors> = {
   iflow: { bg: '#f5e3fc', text: '#9025c8' },
   vertex: { bg: '#e4edfd', text: '#2b5fbc' },
   'zcode-coding-plan': { bg: '#e3f4ea', text: '#137a4d' },
+  codebuddy: { bg: '#efeafd', text: '#5b3df0' },
+  qoder: { bg: '#e5f9ec', text: '#14964b' },
+  copilot: { bg: '#eaeef2', text: '#24292f' },
   empty: { bg: '#f5f5f5', text: '#616161' },
   unknown: { bg: '#f0f0f0', text: '#666666', border: '1px dashed #999999' },
 };
@@ -90,6 +96,7 @@ export const AUTH_FILE_ICONS: Record<string, AuthFileIconAsset> = {
   antigravity: iconAntigravity,
   aistudio: iconGemini,
   claude: iconClaude,
+  codebuddy: iconCodebuddy,
   codex: iconCodex,
   copilot: iconCopilot,
   gemini: iconGemini,
@@ -99,7 +106,9 @@ export const AUTH_FILE_ICONS: Record<string, AuthFileIconAsset> = {
   kimi: iconKimiLight,
   devin: iconDevin,
   meta: iconMeta,
+  qoder: iconQoder,
   qwen: iconQwen,
+  'zcode-coding-plan': iconZai,
   vertex: iconVertex,
 };
 
