@@ -6,6 +6,15 @@ maintenance_model:
   release_asset: management.html
 
 protected_deltas:
+  - id: cache-request-diagnostics
+    reason: Cache evidence must keep field presence, instance ownership and attempt identity across updates.
+    must_keep:
+      - existing request details and legacy numeric totals
+      - distinct reported-zero, absent, invalid and unknown field states
+      - diagnostics_instance_id check before linking imported records
+      - connection-generation fencing for read-only queries
+      - actual events separated from posthoc JSON comparison and current memory snapshots
+      - official unavailable and comparison_response_not_found remain uncertain
   - id: codex-cache-affinity-config
     reason: Core-owned cache optimization controls must explain user choices without changing private sessions or promising cache hits.
     must_keep:

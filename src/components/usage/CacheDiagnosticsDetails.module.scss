@@ -1,0 +1,66 @@
+.root {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  width: 100%;
+}
+.facts {
+  display: grid;
+  grid-template-columns: minmax(110px, auto) minmax(0, 1fr);
+  gap: 6px 12px;
+  margin: 0;
+}
+.facts dt {
+  font-weight: 600;
+}
+.facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.attempt {
+  min-width: 0;
+  padding-block: 8px;
+}
+.attempt summary {
+  cursor: pointer;
+  padding-block: 4px;
+}
+.events {
+  padding-inline-start: 20px;
+  margin-block: 0;
+}
+.events li {
+  overflow-wrap: anywhere;
+  margin-block: 6px;
+}
+.actions {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.actions > label {
+  display: grid;
+  gap: 4px;
+  flex: 1 1 240px;
+}
+.actions input {
+  min-width: 0;
+  max-width: 100%;
+}
+.muted {
+  opacity: 0.75;
+}
+@media (max-width: 520px) {
+  .facts {
+    grid-template-columns: 1fr;
+  }
+}
+
+.field {
+  display: contents;
+}
+.root summary:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
