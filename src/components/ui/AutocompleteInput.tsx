@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { filterAutocompleteOptions, normalizeAutocompleteOptions } from './autocompleteOptions';
 import { IconChevronDown } from './icons';
 
 interface AutocompleteInputProps {
@@ -25,6 +26,14 @@ interface AutocompleteInputProps {
   wrapperStyle?: React.CSSProperties;
   id?: string;
   rightElement?: ReactNode;
+  /**
+   * Fires when a value settles: an option was selected, Enter closed the
+   * dropdown, or the input lost focus. Pages that mirror the value into the
+   * URL (or another heavy side effect) should run it here, not in onChange —
+   * a router location change remounts the page and would destroy the input
+   * mid-typing otherwise.
+   */
+  onCommit?: (value: string) => void;
 }
 
 export function AutocompleteInput({
@@ -41,27 +50,37 @@ export function AutocompleteInput({
   wrapperStyle,
   id,
   rightElement,
+  onCommit,
 }: AutocompleteInputProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  // Only narrow the list while the user is typing; reopening shows every option again.
+  const [isTyping, setIsTyping] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputWrapRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  // a click on an option blurs the input first; suppress the blur commit so
+  // the selection commit is the only one that fires
+  const commitScheduledRef = useRef(false);
   const [dropdownStyle, setDropdownStyle] = useState<CSSProperties | null>(null);
 
-  const normalizedOptions = options.map((opt) =>
-    typeof opt === 'string'
-      ? { value: opt, label: opt }
-      : { value: opt.value, label: opt.label || opt.value }
-  );
-
-  const filteredOptions = normalizedOptions.filter((opt) => {
-    const v = value.toLowerCase();
-    return (
-      opt.value.toLowerCase().includes(v) || (opt.label && opt.label.toLowerCase().includes(v))
-    );
-  });
+  const normalizedOptions = normalizeAutocompleteOptions(options);
+  const filteredOptions = filterAutocompleteOptions(normalizedOptions, value, isTyping);
   const showDropdown = isOpen && filteredOptions.length > 0 && !disabled;
+  const dropdownReady = showDropdown && dropdownStyle !== null;
+
+  const openDropdown = () => {
+    setIsTyping(false);
+    setHighlightedIndex(normalizedOptions.findIndex((opt) => opt.value === value));
+    setIsOpen(true);
+  };
+
+  useEffect(() => {
+    if (!dropdownReady) return;
+    dropdownRef.current
+      ?.querySelector('[aria-selected="true"]')
+      ?.scrollIntoView({ block: 'nearest' });
+  }, [dropdownReady]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -101,13 +120,23 @@ export function AutocompleteInput({
 
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     onChange(e.target.value);
+    setIsTyping(true);
     setIsOpen(true);
     setHighlightedIndex(-1);
   };
 
   const handleSelect = (selectedValue: string) => {
+    // suppress only the blur that immediately follows this selection's
+    // pointer interaction; reset it on the next animation frame so a later,
+    // legitimate blur commit is never swallowed
+    commitScheduledRef.current = true;
     onChange(selectedValue);
+    onCommit?.(selectedValue);
+    setIsTyping(false);
     setIsOpen(false);
+    requestAnimationFrame(() => {
+      commitScheduledRef.current = false;
+    });
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -116,7 +145,7 @@ export function AutocompleteInput({
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       if (!isOpen) {
-        setIsOpen(true);
+        openDropdown();
         return;
       }
       setHighlightedIndex((prev) => (prev < filteredOptions.length - 1 ? prev + 1 : prev));
@@ -130,6 +159,7 @@ export function AutocompleteInput({
       } else if (isOpen) {
         e.preventDefault();
         setIsOpen(false);
+        onCommit?.(value);
       }
     } else if (e.key === 'Escape') {
       setIsOpen(false);
@@ -147,8 +177,17 @@ export function AutocompleteInput({
           className={`input ${className}`.trim()}
           value={value}
           onChange={handleInputChange}
-          onFocus={() => setIsOpen(true)}
+          onFocus={openDropdown}
+          onClick={() => !isOpen && openDropdown()}
           onKeyDown={handleKeyDown}
+          onBlur={() => {
+            setIsOpen(false);
+            if (commitScheduledRef.current) {
+              commitScheduledRef.current = false;
+              return;
+            }
+            onCommit?.(value);
+          }}
           placeholder={placeholder}
           disabled={disabled}
           autoComplete="off"
@@ -166,7 +205,11 @@ export function AutocompleteInput({
             cursor: 'pointer',
             height: '100%',
           }}
-          onClick={() => !disabled && setIsOpen(!isOpen)}
+          onClick={() => {
+            if (disabled) return;
+            if (isOpen) setIsOpen(false);
+            else openDropdown();
+          }}
         >
           {rightElement}
           <IconChevronDown size={16} style={{ opacity: 0.5, marginLeft: 4 }} />
@@ -179,6 +222,7 @@ export function AutocompleteInput({
             <div
               ref={dropdownRef}
               className="autocomplete-dropdown"
+              role="listbox"
               style={{
                 backgroundColor: 'var(--bg-secondary)',
                 border: '1px solid var(--border-color)',
@@ -191,7 +235,13 @@ export function AutocompleteInput({
               {filteredOptions.map((opt, index) => (
                 <div
                   key={`${opt.value}-${index}`}
-                  onClick={() => handleSelect(opt.value)}
+                  role="option"
+                  aria-selected={opt.value === value}
+                  onMouseDown={(e) => {
+                    // keep input focus so the click completes before any blur
+                    e.preventDefault();
+                    handleSelect(opt.value);
+                  }}
                   style={{
                     padding: '8px 12px',
                     cursor: 'pointer',
@@ -204,7 +254,7 @@ export function AutocompleteInput({
                   }}
                   onMouseEnter={() => setHighlightedIndex(index)}
                 >
-                  <span style={{ fontWeight: 500 }}>{opt.value}</span>
+                  <span style={{ fontWeight: opt.value === value ? 600 : 500 }}>{opt.value}</span>
                   {opt.label && opt.label !== opt.value && (
                     <span style={{ fontSize: '0.85em', color: 'var(--text-secondary)' }}>
                       {opt.label}

@@ -49,6 +49,25 @@ const pickModel = (testModel: string | undefined, models: ModelEntryInput[]): st
   return '';
 };
 
+// Match the backend compatibility helper (upstream 7b754b23): trim, strip the
+// last parenthesized suffix, and compare names before aliases without
+// changing the model sent by pickModel.
+const resolveModelConfig = (model: string, models: ModelEntryInput[]) => {
+  const normalize = (value: string): string => {
+    const trimmed = value.trim();
+    const lastOpen = trimmed.lastIndexOf('(');
+    return (lastOpen !== -1 && trimmed.endsWith(')') ? trimmed.slice(0, lastOpen) : trimmed)
+      .trim()
+      .toLowerCase();
+  };
+  const normalized = normalize(model);
+  if (!normalized) return undefined;
+  return (
+    models.find((entry) => normalize(entry.name) === normalized) ??
+    models.find((entry) => normalize(entry.alias ?? '') === normalized)
+  );
+};
+
 const resolveBearerToken = (headers: Record<string, string>): string => {
   const auth = Object.entries(headers).find(([k]) => k.toLowerCase() === 'authorization')?.[1];
   if (!auth) return '';
@@ -154,7 +173,9 @@ export function useConnectivityTest(
 
   const signature = useMemo(() => {
     const h = formHeaders.map((it) => `${it.key}:${it.value}`).join('|');
-    const m = models.map((it) => `${it.name}:${it.alias ?? ''}`).join('|');
+    const m = models
+      .map((it) => `${it.name}:${it.alias ?? ''}:${it.useMaxCompletionTokens === true}`)
+      .join('|');
     return [
       baseUrl,
       proxyUrl ?? '',
@@ -264,7 +285,9 @@ export function useConnectivityTest(
               model,
               messages: [{ role: 'user', content: 'Hi' }],
               stream: false,
-              max_tokens: 5,
+              ...(resolveModelConfig(model, models)?.useMaxCompletionTokens === true
+                ? { max_completion_tokens: 5 }
+                : { max_tokens: 5 }),
             }),
           },
           { timeout: DEFAULT_TIMEOUT_MS }

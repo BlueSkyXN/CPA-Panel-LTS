@@ -112,6 +112,23 @@
   gap: $spacing-md;
 }
 
+.proxyNote {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: var(--text-secondary, #888);
+  display: flex;
+  gap: 6px;
+  align-items: center;
+
+  .proxyValue {
+    font-family: var(--font-mono, monospace);
+    font-size: 12px;
+    background: var(--bg-secondary, rgba(127, 127, 127, 0.15));
+    border-radius: 4px;
+    padding: 1px 5px;
+  }
+}
+
 .authUrlBox {
   background: var(--bg-secondary);
   border: 1px dashed var(--border-color);

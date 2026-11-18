@@ -660,6 +660,10 @@
     "title_section": "驗證檔案",
     "description": "這裡集中管理 CLI Proxy 支援的所有 JSON 驗證檔案（如 Qwen、Gemini、Vertex 等），上傳後即可在執行時啟用對應的 AI 服務。",
     "upload_button": "上傳檔案",
+    "sync_catalog_button": "同步模型目錄",
+    "sync_catalog_success": "模型目錄已更新：{{providers}}",
+    "sync_catalog_unchanged": "模型目錄已是最新",
+    "sync_catalog_failed": "模型目錄同步失敗",
     "delete_all_button": "刪除全部",
     "empty_title": "暫無驗證檔案",
     "empty_desc": "點擊上方按鈕上傳第一個檔案",
@@ -1325,7 +1329,16 @@
     "meta_oauth_polling_error": "檢查驗證狀態失敗:",
     "meta_providers": "{{count}} 個提供商",
     "meta_waiting": "{{count}} 個等待授權",
-    "meta_added": "本次新增 {{count}} 個憑證"
+    "meta_added": "本次新增 {{count}} 個憑證",
+    "login_proxy_toggle": "登入代理",
+    "login_proxy_optional": "選填",
+    "login_proxy_status_invalid": "無效",
+    "login_proxy_label": "新登入使用的代理",
+    "login_proxy_hint": "此代理用於本次登入，並在登入成功後保存到新憑證，供後續請求繼續使用。頁面輸入不會保留到下次開啟，也不會修改全域代理。",
+    "login_proxy_placeholder": "socks5://user:pass@host:port",
+    "login_proxy_clear": "清除",
+    "login_proxy_invalid": "代理 URL 無效。請使用 http、https、socks5 或 socks5h 並填寫主機（socks5 需要連接埠），不能包含路徑或查詢參數。",
+    "login_proxy_in_use": "本次登入透過代理"
   },
   "stats": {
     "success": "成功",
@@ -2432,7 +2445,9 @@
         "value_raw_json": "原始 JSON 片段，如 true、123、\"high\" 或 {\"type\":\"object\"}",
         "value_default": "值",
         "boolean_true": "true",
-        "boolean_false": "false"
+        "boolean_false": "false",
+        "auth_kind": "憑證類型",
+        "request_paths": "請求路徑（每行一個）"
       },
       "validation": {
         "validation_blocked": "請先修復表單驗證錯誤再儲存",
@@ -2443,7 +2458,12 @@
         "payload_invalid_number": "請輸入有效數字",
         "payload_invalid_boolean": "請選擇 true 或 false",
         "payload_invalid_json": "請輸入有效的 JSON",
-        "reasoning_effort_rules": "請填寫模型範圍、選擇有效策略，並為預設或強制策略選擇強度。"
+        "reasoning_effort_rules": "請填寫模型範圍、選擇有效策略，並為預設或強制策略選擇強度。",
+        "payload_replace_invalid_target": "僅支援使用者訊息：target.role 必須為 user。",
+        "payload_replace_invalid_positions": "請選擇所有使用者訊息，或提供非空的正整數位置清單，兩者不能同時指定。",
+        "payload_replace_invalid_models": "請至少新增一個模型，模型名稱不可為空，且條件必須有效。",
+        "payload_replace_invalid_replacements": "請至少新增一項替換。每項必須且只能包含一個字串對字串的對應，來源文字不可為空；替換文字為空時會刪除來源文字。",
+        "sensitive_replacements_invalid": "請檢查替換規則：比對文字不能為空，字面比對不能重複。"
       },
       "common": {
         "edit": "編輯",
@@ -2468,6 +2488,22 @@
         "move_up": "上移",
         "move_down": "下移",
         "add": "新增強度規則"
+      },
+      "payload_replace": {
+        "title": "使用者文字替換",
+        "description": "在覆寫規則之後、篩選規則之前套用。依清單順序對現有使用者文字進行字面替換。",
+        "target": "作用範圍",
+        "replacements": "替換項",
+        "target_all": "所有使用者訊息",
+        "target_positions": "使用者訊息位置",
+        "target_hint": "位置從 1 開始，依最終上游請求本文中的使用者訊息計數，包括沒有可編輯文字的使用者訊息。請選擇所有訊息，或輸入以逗號分隔的位置。",
+        "from": "來源文字",
+        "to": "替換文字（留空則刪除）",
+        "add_replacement": "新增替換",
+        "move_up": "上移",
+        "move_down": "下移",
+        "reset_invalid": "重設無效規則",
+        "invalid_hint": "此規則包含不支援或格式錯誤的值。請先在 YAML 中修正或重設規則，再進行編輯。"
       }
     },
     "meta_fields": "{{count}} 項設定",
@@ -3579,6 +3615,31 @@
     "clears": "重設視窗",
     "cancel_failed": "取消失敗，請重新查看授權狀態。",
     "device_code": "裝置代碼"
+  },
+  "sensitive_replacements": {
+    "literal_title": "字面文字取代",
+    "pattern_title": "正規表示式取代",
+    "group_title": "敏感內容取代",
+    "literal_hint": "填寫不重複的比對文字。替換內容留空表示刪除比對文字。",
+    "pattern_hint": "規則依序執行，使用 Go RE2 語法，不支援環視和模式內的反向參照。後端會捨棄無效或空白模式。",
+    "literal_key": "字面文字",
+    "replacement": "取代內容",
+    "replacement_placeholder": "留空則刪除符合的內容",
+    "pattern": "正規模式",
+    "duplicate_key": "鍵重複。解決重複鍵之前，字面取代的修改不會生效。",
+    "add_literal": "新增字面取代",
+    "add_pattern": "新增正規規則",
+    "empty_literal": "尚未新增字面取代。",
+    "empty_pattern": "尚未新增正規規則。",
+    "literal_key_row": "第 {{row}} 列字面文字",
+    "literal_value_row": "第 {{row}} 列字面取代內容",
+    "pattern_row": "第 {{row}} 列正規模式",
+    "pattern_value_row": "第 {{row}} 列正規取代內容",
+    "remove_literal": "刪除第 {{row}} 列字面取代",
+    "remove_pattern": "刪除第 {{row}} 列正規規則",
+    "move_up": "上移第 {{row}} 列正規規則",
+    "move_down": "下移第 {{row}} 列正規規則",
+    "invalid_literal": "比對文字不能為空，且不能重複。"
   },
   "cache_diagnostics": {
     "title": "快取診斷",

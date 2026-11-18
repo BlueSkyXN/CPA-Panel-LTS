@@ -840,6 +840,9 @@ features:
       - src/components/config/
       - src/hooks/useConfigDraftSave.ts
       - src/hooks/useVisualConfig.ts
+      - src/components/providers/SensitiveReplacementEditor.tsx
+      - src/components/providers/sensitiveReplacementDraft.ts
+      - scripts/guard-config-replacements.py
       - src/services/api/config.ts
       - src/services/api/configFile.ts
       - src/utils/v8VisualProjection.ts
@@ -866,6 +869,11 @@ features:
       - normalizeYamlForVisualDiff
       - applyVisualChangesToYaml
       - hasPayloadDirtyFields
+      - payloadReplaceRules
+      - getPayloadReplaceValidationError
+      - sensitive-words-replace
+      - sensitive-patterns-replace
+      - serializeLiteralDraft
       - payloadRuleRawParamRow
       - payloadJsonInput
       - pluginStoreSources

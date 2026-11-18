@@ -660,6 +660,10 @@
     "title_section": "Auth Files",
     "description": "Manage all CLI Proxy JSON auth files here (e.g. Qwen, Gemini, Vertex). Uploading a credential immediately enables the corresponding AI integration.",
     "upload_button": "Upload File",
+    "sync_catalog_button": "Sync Model Catalog",
+    "sync_catalog_success": "Model catalog updated for: {{providers}}",
+    "sync_catalog_unchanged": "Model catalog already up to date",
+    "sync_catalog_failed": "Model catalog sync failed",
     "delete_all_button": "Delete All",
     "empty_title": "No Auth Files",
     "empty_desc": "Click the button above to upload the first file",
@@ -1301,7 +1305,16 @@
     "meta_oauth_polling_error": "Failed to check authentication status:",
     "meta_providers": "{{count}} providers",
     "meta_waiting": "{{count}} awaiting authorization",
-    "meta_added": "{{count}} added this session"
+    "meta_added": "{{count}} added this session",
+    "login_proxy_toggle": "Login proxy",
+    "login_proxy_optional": "Optional",
+    "login_proxy_status_invalid": "Invalid",
+    "login_proxy_label": "Proxy for new logins",
+    "login_proxy_hint": "This proxy is used for this login and, once the login succeeds, is saved to the new credential for later requests. The field is not kept across page loads and never changes the global proxy.",
+    "login_proxy_placeholder": "socks5://user:pass@host:port",
+    "login_proxy_clear": "Clear",
+    "login_proxy_invalid": "Invalid proxy URL. Use http, https, socks5 or socks5h with a host (socks5 needs a port), and no path or query.",
+    "login_proxy_in_use": "Signing in through proxy"
   },
   "stats": {
     "success": "Success",
@@ -2408,7 +2421,9 @@
         "value_raw_json": "Raw JSON fragment, e.g. true, 123, \"high\", or {\"type\":\"object\"}",
         "value_default": "Value",
         "boolean_true": "true",
-        "boolean_false": "false"
+        "boolean_false": "false",
+        "auth_kind": "Credential type",
+        "request_paths": "Request paths (one per line)"
       },
       "validation": {
         "validation_blocked": "Fix validation errors before saving",
@@ -2419,7 +2434,12 @@
         "payload_invalid_number": "Enter a valid number",
         "payload_invalid_boolean": "Choose true or false",
         "payload_invalid_json": "Enter valid JSON",
-        "reasoning_effort_rules": "Enter model names, choose a policy, and select an effort for default or force rules."
+        "reasoning_effort_rules": "Enter model names, choose a policy, and select an effort for default or force rules.",
+        "payload_replace_invalid_target": "Only user messages are supported: target.role must be user.",
+        "payload_replace_invalid_positions": "Choose all user messages or a non-empty list of positive integer positions, not both.",
+        "payload_replace_invalid_models": "Add at least one model with a non-empty name and valid conditions.",
+        "payload_replace_invalid_replacements": "Add at least one replacement. Each entry must contain exactly one string-to-string mapping with a non-empty source; an empty replacement deletes the source text.",
+        "sensitive_replacements_invalid": "Check replacement rules: match text must be non-empty and literal matches unique."
       },
       "common": {
         "edit": "Edit",
@@ -2444,6 +2464,22 @@
         "move_up": "Move up",
         "move_down": "Move down",
         "add": "Add effort rule"
+      },
+      "payload_replace": {
+        "title": "User text replacements",
+        "description": "Applied after overrides and before filters. Literal replacements run in listed order on existing user text.",
+        "target": "Scope",
+        "replacements": "Replacements",
+        "target_all": "All user messages",
+        "target_positions": "User message positions",
+        "target_hint": "One-based positions in the final upstream body, including user messages without editable text. Choose all messages or comma-separated positions.",
+        "from": "Source text",
+        "to": "Replacement text (empty deletes)",
+        "add_replacement": "Add replacement",
+        "move_up": "Move up",
+        "move_down": "Move down",
+        "reset_invalid": "Reset invalid rule",
+        "invalid_hint": "This rule contains unsupported or malformed values. Fix it in YAML or reset it before editing."
       }
     },
     "meta_fields": "{{count}} settings",
@@ -3555,6 +3591,31 @@
     "clears": "Resets these windows",
     "cancel_failed": "Cancellation failed. Check the authorization status again.",
     "device_code": "Device code"
+  },
+  "sensitive_replacements": {
+    "literal_title": "Literal replacements",
+    "pattern_title": "Regular expression replacements",
+    "group_title": "Sensitive text replacement",
+    "literal_hint": "Enter unique literal matches. An empty replacement deletes the matching text.",
+    "pattern_hint": "Rules run in order using Go RE2 syntax; lookaround and backreferences in patterns are not supported. The backend discards invalid or blank patterns.",
+    "literal_key": "Literal text",
+    "replacement": "Replacement",
+    "replacement_placeholder": "Leave empty to delete the match",
+    "pattern": "Pattern",
+    "duplicate_key": "Duplicate key. Literal changes are not applied until duplicate keys are resolved.",
+    "add_literal": "Add literal replacement",
+    "add_pattern": "Add regex rule",
+    "empty_literal": "No literal replacements yet.",
+    "empty_pattern": "No regex rules yet.",
+    "literal_key_row": "Literal text, row {{row}}",
+    "literal_value_row": "Literal replacement, row {{row}}",
+    "pattern_row": "Regex pattern, row {{row}}",
+    "pattern_value_row": "Regex replacement, row {{row}}",
+    "remove_literal": "Remove literal row {{row}}",
+    "remove_pattern": "Remove regex row {{row}}",
+    "move_up": "Move regex row {{row}} up",
+    "move_down": "Move regex row {{row}} down",
+    "invalid_literal": "Enter a non-empty, unique match."
   },
   "cache_diagnostics": {
     "title": "Cache diagnostics",

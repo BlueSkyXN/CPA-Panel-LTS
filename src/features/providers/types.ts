@@ -1,3 +1,4 @@
+import type { LiteralReplacementDraft } from '@/components/providers/sensitiveReplacementDraft';
 /**
  * AI 提供商 Workbench 视图模型(归一化各 brand 的异构 config)
  */
@@ -185,6 +186,8 @@ export interface CloakInput {
   mode: string;
   strictMode: boolean;
   sensitiveWordsText: string;
+  sensitiveWordsReplace: LiteralReplacementDraft[];
+  sensitivePatternsReplace: { pattern: string; replacement: string }[];
   cacheUserId: boolean;
 }
 

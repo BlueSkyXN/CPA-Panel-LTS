@@ -1,3 +1,5 @@
+import { LiteralReplacementEditor, PatternReplacementEditor } from '@/components/providers/SensitiveReplacementEditor';
+import { literalDraftFromMap, serializeLiteralDraft } from '@/components/providers/sensitiveReplacementDraft';
 import { mergeDiscoveredModels } from '../../modelEntries';
 import { useEffect, useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -96,7 +98,7 @@ function buildInitialForm(
       excludedModelsText: '',
       websockets: brand === 'codex' || brand === 'xai' ? false : undefined,
       cloak: isClaudeLikeBrand(brand)
-        ? { mode: '', strictMode: false, sensitiveWordsText: '', cacheUserId: false }
+        ? { mode: '', strictMode: false, sensitiveWordsText: '', sensitiveWordsReplace: [], sensitivePatternsReplace: [], cacheUserId: false }
         : undefined,
       fingerprintProfile: isClaudeLikeBrand(brand) ? '' : undefined,
       testModel:
@@ -202,6 +204,8 @@ function buildInitialForm(
           mode: (cfg as ProviderKeyConfig).cloak?.mode ?? '',
           strictMode: (cfg as ProviderKeyConfig).cloak?.strictMode === true,
           sensitiveWordsText: (cfg as ProviderKeyConfig).cloak?.sensitiveWords?.join('\n') ?? '',
+          sensitiveWordsReplace: literalDraftFromMap(cfg.cloak?.sensitiveWordsReplace ?? {}),
+          sensitivePatternsReplace: cfg.cloak?.sensitivePatternsReplace ?? [],
           cacheUserId: (cfg as ProviderKeyConfig).cloak?.cacheUserId === true,
         }
       : undefined,
@@ -368,6 +372,8 @@ export function BaseProviderForm({
           mode: '',
           strictMode: false,
           sensitiveWordsText: '',
+          sensitiveWordsReplace: [],
+          sensitivePatternsReplace: [],
           cacheUserId: false,
         }),
         [key]: value,
@@ -421,7 +427,8 @@ export function BaseProviderForm({
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const v = validate();
+    const v = form.cloak && (serializeLiteralDraft(form.cloak.sensitiveWordsReplace) === null || form.cloak.sensitivePatternsReplace.some((rule) => !rule.pattern))
+      ? t('config_management.visual.validation.sensitive_replacements_invalid') : validate();
     if (v) {
       setError(v);
       return;
@@ -976,6 +983,20 @@ export function BaseProviderForm({
                 onChange={(e) => updateCloak('sensitiveWordsText', e.target.value)}
                 disabled={mutating}
               />
+            </div>
+            <div className={styles.field} role="group" aria-label={t('sensitive_replacements.literal_title')}>
+              <label className={styles.label}>{t('sensitive_replacements.literal_title')}</label>
+              <LiteralReplacementEditor value={form.cloak.sensitiveWordsReplace}
+                onChange={(value) => updateCloak('sensitiveWordsReplace', value)} disabled={mutating}
+                inputClassName={styles.input} addButtonClassName={styles.addBtn} />
+              <small>{t('sensitive_replacements.literal_hint')}</small>
+            </div>
+            <div className={styles.field} role="group" aria-label={t('sensitive_replacements.pattern_title')}>
+              <label className={styles.label}>{t('sensitive_replacements.pattern_title')}</label>
+              <PatternReplacementEditor value={form.cloak.sensitivePatternsReplace}
+                onChange={(value) => updateCloak('sensitivePatternsReplace', value)} disabled={mutating}
+                inputClassName={styles.input} addButtonClassName={styles.addBtn} />
+              <small>{t('sensitive_replacements.pattern_hint')}</small>
             </div>
           </div>
         </Collapsible>

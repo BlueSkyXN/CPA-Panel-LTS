@@ -1,3 +1,5 @@
+import { LiteralReplacementEditor, PatternReplacementEditor } from '@/components/providers/SensitiveReplacementEditor';
+import { PayloadReplaceRulesEditor } from './PayloadReplaceRulesEditor';
 import { useCodexPolicyControls } from '@/lts/codexPolicy/useCodexPolicyControls';
 import { useCallback, useId, useMemo, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -357,6 +359,42 @@ export function useConfigFieldControls({
           onChange({ antigravitySignatureBypassStrict })
         }
       />
+    ),
+    antigravitySensitiveWordsReplace: (
+      <div className={styles.fieldShell} role="group" aria-label={t('sensitive_replacements.literal_title')}>
+        <label className={styles.fieldLabel}>{t('sensitive_replacements.literal_title')}</label>
+        <LiteralReplacementEditor value={values.antigravitySensitiveWordsReplace} disabled={disabled}
+          onChange={(antigravitySensitiveWordsReplace) => onChange({ antigravitySensitiveWordsReplace })}
+          describedBy="antigravitySensitiveWordsReplace-hint" />
+        <p className={styles.fieldHint} id="antigravitySensitiveWordsReplace-hint">{t('sensitive_replacements.literal_hint')}</p>
+      </div>
+    ),
+    antigravitySensitivePatternsReplace: (
+      <div className={styles.fieldShell} role="group" aria-label={t('sensitive_replacements.pattern_title')}>
+        <label className={styles.fieldLabel}>{t('sensitive_replacements.pattern_title')}</label>
+        <PatternReplacementEditor value={values.antigravitySensitivePatternsReplace} disabled={disabled}
+          onChange={(antigravitySensitivePatternsReplace) => onChange({ antigravitySensitivePatternsReplace })}
+          describedBy="antigravitySensitivePatternsReplace-hint" />
+        <p className={styles.fieldHint} id="antigravitySensitivePatternsReplace-hint">{t('sensitive_replacements.pattern_hint')}</p>
+      </div>
+    ),
+    devinSensitiveWordsReplace: (
+      <div className={styles.fieldShell} role="group" aria-label={t('sensitive_replacements.literal_title')}>
+        <label className={styles.fieldLabel}>{t('sensitive_replacements.literal_title')}</label>
+        <LiteralReplacementEditor value={values.devinSensitiveWordsReplace} disabled={disabled}
+          onChange={(devinSensitiveWordsReplace) => onChange({ devinSensitiveWordsReplace })}
+          describedBy="devinSensitiveWordsReplace-hint" />
+        <p className={styles.fieldHint} id="devinSensitiveWordsReplace-hint">{t('sensitive_replacements.literal_hint')}</p>
+      </div>
+    ),
+    devinSensitivePatternsReplace: (
+      <div className={styles.fieldShell} role="group" aria-label={t('sensitive_replacements.pattern_title')}>
+        <label className={styles.fieldLabel}>{t('sensitive_replacements.pattern_title')}</label>
+        <PatternReplacementEditor value={values.devinSensitivePatternsReplace} disabled={disabled}
+          onChange={(devinSensitivePatternsReplace) => onChange({ devinSensitivePatternsReplace })}
+          describedBy="devinSensitivePatternsReplace-hint" />
+        <p className={styles.fieldHint} id="devinSensitivePatternsReplace-hint">{t('sensitive_replacements.pattern_hint')}</p>
+      </div>
     ),
     antigravitySensitiveWords: (
       <div className={styles.fieldShell} data-testid="antigravity-sensitive-words">
@@ -855,6 +893,10 @@ export function useConfigFieldControls({
     ),
     reasoningEffortRules: (
       <ReasoningEffortRulesEditor rules={values.reasoningEffortRules} disabled={disabled} onChange={(reasoningEffortRules) => onChange({ reasoningEffortRules })} />
+    ),
+    payloadReplaceRules: (
+      <PayloadReplaceRulesEditor value={values.payloadReplaceRules} disabled={disabled}
+        onChange={(payloadReplaceRules) => onChange({ payloadReplaceRules })} />
     ),
     payloadDefaultRules: (
       <PayloadRulesEditor

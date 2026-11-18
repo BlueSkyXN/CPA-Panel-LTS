@@ -113,3 +113,21 @@ for (const scope of ['file', 'all']) {
     assert.equal(reads, 2);
   });
 }
+
+// Port of upstream 99a95c4a: caches belong to the connection that filled
+// them. Switching connections must drop cached models instead of serving
+// another connection's list.
+test('switching connections invalidates cached model lists', async (t) => {
+  const { apiClient } = await vite.ssrLoadModule('/src/services/api/client.ts');
+  let revision = 1;
+  t.mock.method(apiClient, 'getConnectionRevision', () => revision);
+  const read = t.mock.method(authFilesApi, 'getModelsForAuthFile', async () => [{ id: 'model-a' }]);
+  const hook = controls();
+  await hook.showModels(item);
+  await hook.showModels(item);
+  assert.equal(read.mock.callCount(), 1);
+
+  revision = 2;
+  await hook.showModels(item);
+  assert.equal(read.mock.callCount(), 2);
+});

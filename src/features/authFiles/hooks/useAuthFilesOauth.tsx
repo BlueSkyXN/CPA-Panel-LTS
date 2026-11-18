@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
-import { authFilesApi } from '@/services/api';
+import { apiClient, authFilesApi } from '@/services/api';
 import { useNotificationStore } from '@/stores';
 import type { AuthFileItem, OAuthModelAliasEntry, OAuthModelPolicy } from '@/types';
 import type { AuthFileModelItem, OAuthConfigLoadError } from '@/features/authFiles/constants';
@@ -37,10 +37,12 @@ export type UseAuthFilesOauthResult = {
 export type UseAuthFilesOauthOptions = {
   viewMode: ViewMode;
   files: AuthFileItem[];
+  /** Bumped after a global catalog sync so diagram views reload provider models. */
+  modelCatalogVersion?: number;
 };
 
 export function useAuthFilesOauth(options: UseAuthFilesOauthOptions): UseAuthFilesOauthResult {
-  const { viewMode, files } = options;
+  const { viewMode, files, modelCatalogVersion = 0 } = options;
   const { t } = useTranslation();
   const { showNotification, showConfirmation } = useNotificationStore();
 
@@ -98,6 +100,9 @@ export function useAuthFilesOauth(options: UseAuthFilesOauthOptions): UseAuthFil
     if (viewMode !== 'diagram') return;
 
     let cancelled = false;
+    // Port of upstream 99a95c4a: a late diagram-models response must not
+    // repopulate the view after the connection (or catalog) moved on.
+    const revision = apiClient.getConnectionRevision();
 
     const loadAllModels = async () => {
       if (providerList.length === 0) {
@@ -116,7 +121,7 @@ export function useAuthFilesOauth(options: UseAuthFilesOauthOptions): UseAuthFil
         })
       );
 
-      if (cancelled) return;
+      if (cancelled || revision !== apiClient.getConnectionRevision()) return;
 
       const nextModels: Record<string, AuthFileModelItem[]> = {};
       results.forEach(({ provider, models }) => {
@@ -133,7 +138,7 @@ export function useAuthFilesOauth(options: UseAuthFilesOauthOptions): UseAuthFil
     return () => {
       cancelled = true;
     };
-  }, [providerList, viewMode]);
+  }, [providerList, viewMode, modelCatalogVersion]);
 
   const loadExcluded = useCallback(async () => {
     const requestId = ++excludedLoadRequestRef.current;

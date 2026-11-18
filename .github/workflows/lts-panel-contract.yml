@@ -56,5 +56,22 @@ jobs:
       - name: Build single-file panel
         run: npm run build
 
+      - name: Setup Python for the real-page provider-switch gate
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install Playwright for the real-page gate
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install playwright
+          python3 -m playwright install --with-deps chromium
+
+      - name: Real-page provider-switch gate (draft-safe switching)
+        run: python3 scripts/guard-provider-switch.py
+
+      - name: Real-page replacement configuration gate
+        run: python3 scripts/guard-config-replacements.py
+
       - name: Lint
         run: npm run lint

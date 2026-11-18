@@ -660,6 +660,10 @@
     "title_section": "认证文件",
     "description": "这里集中管理 CLI Proxy 支持的所有 JSON 认证文件（如 Qwen、Gemini、Vertex 等），上传后即可在运行时启用相应的 AI 服务。",
     "upload_button": "上传文件",
+    "sync_catalog_button": "同步模型目录",
+    "sync_catalog_success": "模型目录已更新：{{providers}}",
+    "sync_catalog_unchanged": "模型目录已是最新",
+    "sync_catalog_failed": "模型目录同步失败",
     "delete_all_button": "删除全部",
     "empty_title": "暂无认证文件",
     "empty_desc": "点击上方按钮上传第一个文件",
@@ -1299,7 +1303,16 @@
     "meta_oauth_polling_error": "检查认证状态失败:",
     "meta_providers": "{{count}} 个提供商",
     "meta_waiting": "{{count}} 个等待授权",
-    "meta_added": "本次新增 {{count}} 个凭证"
+    "meta_added": "本次新增 {{count}} 个凭证",
+    "login_proxy_toggle": "登录代理",
+    "login_proxy_optional": "可选",
+    "login_proxy_status_invalid": "无效",
+    "login_proxy_label": "新登录使用的代理",
+    "login_proxy_hint": "此代理用于本次登录，并在登录成功后保存到新凭据，供后续请求继续使用。页面输入不会保留到下次打开，也不会修改全局代理。",
+    "login_proxy_placeholder": "socks5://user:pass@host:port",
+    "login_proxy_clear": "清除",
+    "login_proxy_invalid": "代理 URL 无效。请使用 http、https、socks5 或 socks5h 并填写主机（socks5 需要端口），不能包含路径或查询参数。",
+    "login_proxy_in_use": "本次登录通过代理"
   },
   "stats": {
     "success": "成功",
@@ -2406,7 +2419,9 @@
         "value_raw_json": "原始 JSON 片段，如 true、123、\"high\" 或 {\"type\":\"object\"}",
         "value_default": "值",
         "boolean_true": "true",
-        "boolean_false": "false"
+        "boolean_false": "false",
+        "auth_kind": "凭据类型",
+        "request_paths": "请求路径（每行一个）"
       },
       "validation": {
         "validation_blocked": "请先修复表单校验错误再保存",
@@ -2417,7 +2432,12 @@
         "payload_invalid_number": "请输入有效数字",
         "payload_invalid_boolean": "请选择 true 或 false",
         "payload_invalid_json": "请输入有效的 JSON",
-        "reasoning_effort_rules": "请填写模型范围、选择有效策略，并为缺省或强制策略选择强度。"
+        "reasoning_effort_rules": "请填写模型范围、选择有效策略，并为缺省或强制策略选择强度。",
+        "payload_replace_invalid_target": "仅支持用户消息：target.role 必须为 user。",
+        "payload_replace_invalid_positions": "请选择所有用户消息，或提供非空的正整数位置列表，两者不能同时指定。",
+        "payload_replace_invalid_models": "请至少添加一个模型，模型名称不能为空，且条件必须有效。",
+        "payload_replace_invalid_replacements": "请至少添加一项替换。每项必须且只能包含一个字符串到字符串的映射，源文本不能为空；替换文本为空时会删除源文本。",
+        "sensitive_replacements_invalid": "请检查替换规则：匹配文字不能为空，字面匹配不能重复。"
       },
       "common": {
         "edit": "编辑",
@@ -2442,6 +2462,22 @@
         "move_up": "上移",
         "move_down": "下移",
         "add": "添加强度规则"
+      },
+      "payload_replace": {
+        "title": "用户文本替换",
+        "description": "在覆盖规则之后、过滤规则之前应用。按列表顺序对现有用户文本进行字面替换。",
+        "target": "作用范围",
+        "replacements": "替换项",
+        "target_all": "所有用户消息",
+        "target_positions": "用户消息位置",
+        "target_hint": "位置从 1 开始，按最终上游请求体中的用户消息计数，包括没有可编辑文本的用户消息。请选择所有消息，或输入以逗号分隔的位置。",
+        "from": "源文本",
+        "to": "替换文本（留空则删除）",
+        "add_replacement": "添加替换",
+        "move_up": "上移",
+        "move_down": "下移",
+        "reset_invalid": "重置无效规则",
+        "invalid_hint": "此规则包含不支持或格式错误的值。请先在 YAML 中修复或重置规则，再进行编辑。"
       }
     },
     "meta_fields": "{{count}} 项配置",
@@ -3553,6 +3589,31 @@
     "clears": "重置窗口",
     "cancel_failed": "取消失败，请重新查看授权状态。",
     "device_code": "设备代码"
+  },
+  "sensitive_replacements": {
+    "literal_title": "字面文本替换",
+    "pattern_title": "正则表达式替换",
+    "group_title": "敏感内容替换",
+    "literal_hint": "填写不重复的匹配文字。替换内容留空表示删除匹配文字。",
+    "pattern_hint": "规则按顺序执行，使用 Go RE2 语法，不支持环视和模式内的反向引用。后端会丢弃无效或空白模式。",
+    "literal_key": "字面文本",
+    "replacement": "替换内容",
+    "replacement_placeholder": "留空则删除匹配内容",
+    "pattern": "正则模式",
+    "duplicate_key": "键重复。解决重复键之前，字面替换的修改不会生效。",
+    "add_literal": "添加字面替换",
+    "add_pattern": "添加正则规则",
+    "empty_literal": "尚未添加字面替换。",
+    "empty_pattern": "尚未添加正则规则。",
+    "literal_key_row": "第 {{row}} 行字面文本",
+    "literal_value_row": "第 {{row}} 行字面替换内容",
+    "pattern_row": "第 {{row}} 行正则模式",
+    "pattern_value_row": "第 {{row}} 行正则替换内容",
+    "remove_literal": "删除第 {{row}} 行字面替换",
+    "remove_pattern": "删除第 {{row}} 行正则规则",
+    "move_up": "上移第 {{row}} 行正则规则",
+    "move_down": "下移第 {{row}} 行正则规则",
+    "invalid_literal": "匹配文字不能为空，且不能重复。"
   },
   "cache_diagnostics": {
     "title": "缓存诊断",
