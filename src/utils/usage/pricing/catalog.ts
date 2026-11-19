@@ -7,7 +7,8 @@ export const KIMI_CATALOG_AS_OF = '2026-07-28';
 export const XAI_CATALOG_AS_OF = '2026-07-23';
 export const CODEX_SPARK_CATALOG_AS_OF = '2026-07-25';
 export const ANTHROPIC_CATALOG_AS_OF = '2026-07-26';
-export const PRICE_CATALOG_AS_OF = OPENAI_CATALOG_AS_OF;
+const NOVEMBER_2026_CATALOG_AS_OF = '2026-11-19';
+export const PRICE_CATALOG_AS_OF = NOVEMBER_2026_CATALOG_AS_OF;
 export const PRICE_CATALOG_VERSION = `api-${PRICE_CATALOG_AS_OF}`;
 export const OPENAI_PRICING_SOURCE_URL = 'https://developers.openai.com/api/docs/pricing';
 export const ZAI_PRICING_SOURCE_URL = 'https://docs.z.ai/guides/overview/pricing';
@@ -25,11 +26,15 @@ export const XAI_GROK_47_FAST_CATALOG_AS_OF = '2026-10-13';
 export const DOUBAO_PRICING_SOURCE_URL = 'https://www.volcengine.com/docs/82379/1099320';
 export const DOUBAO_CATALOG_AS_OF = '2026-10-10';
 export const GEMINI_PRICING_SOURCE_URL = 'https://aistudio.google.com/docs/pricing';
-export const GEMINI_CATALOG_AS_OF = '2026-11-07';
+export const GEMINI_CATALOG_AS_OF = NOVEMBER_2026_CATALOG_AS_OF;
 export const ANTHROPIC_PRICING_SOURCE_URL =
   'https://platform.claude.com/docs/en/about-claude/pricing';
 export const ANTHROPIC_MODEL_IDS_SOURCE_URL =
   'https://platform.claude.com/docs/en/about-claude/models/model-ids-and-versions';
+const COPILOT_PRICING_SOURCE_URL =
+  'https://docs.github.com/zh/copilot/reference/copilot-billing/models-and-pricing';
+const OPENAI_FAST_PRICING_SOURCE_URL = 'https://developers.openai.com/api/docs/guides/fast-mode';
+const DEEPSEEK_PRICING_SOURCE_URL = 'https://api-docs.deepseek.com/quick_start/pricing';
 export const LONG_CONTEXT_INPUT_TOKEN_THRESHOLD = 272_000;
 export const XAI_LONG_CONTEXT_INPUT_TOKEN_THRESHOLD = 200_000;
 
@@ -108,6 +113,41 @@ const kimiModelNotesUrl = (model: 'k3' | 'k2-7-code'): string =>
  * OpenAI model notes define the 272K long-context uplift when their aggregate table omits it.
  */
 export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
+  // GPT-6.2 缓存写入采用 OpenAI 的 30 分钟价格。
+  {
+    canonicalModel: 'gpt-6.2-astra',
+    aliases: ['gpt-6.2-astra[1m]'],
+    currency: 'USD',
+    standard: {
+      short: rateCard(8, 0.4, 10, 40),
+      long: longCard(rateCard(16, 0.8, 20, 60)),
+    },
+    fast: {
+      short: rateCard(16, 0.8, 20, 80),
+      long: rateCard(32, 1.6, 40, 120),
+      longSupported: true,
+    },
+    sourceUrl: OPENAI_PRICING_SOURCE_URL,
+    pricingNotesUrl: OPENAI_FAST_PRICING_SOURCE_URL,
+    asOf: NOVEMBER_2026_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'gpt-6.2-sol',
+    aliases: ['gpt-6.2-sol[1m]'],
+    currency: 'USD',
+    standard: {
+      short: rateCard(2, 0.1, 2.5, 10),
+      long: longCard(rateCard(4, 0.2, 5, 15)),
+    },
+    fast: {
+      short: rateCard(4, 0.2, 5, 20),
+      long: rateCard(8, 0.4, 10, 30),
+      longSupported: true,
+    },
+    sourceUrl: OPENAI_PRICING_SOURCE_URL,
+    pricingNotesUrl: OPENAI_FAST_PRICING_SOURCE_URL,
+    asOf: NOVEMBER_2026_CATALOG_AS_OF,
+  },
   {
     canonicalModel: 'gpt-6-astra',
     aliases: [],
@@ -279,6 +319,14 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
     asOf: OPENAI_CATALOG_AS_OF,
   },
   {
+    canonicalModel: 'gpt-5.3-codex',
+    aliases: [],
+    currency: 'USD',
+    standard: { short: rateCard(1.75, 0.175, undefined, 14) },
+    sourceUrl: COPILOT_PRICING_SOURCE_URL,
+    asOf: NOVEMBER_2026_CATALOG_AS_OF,
+  },
+  {
     canonicalModel: 'gpt-5.3-codex-spark',
     aliases: [],
     currency: 'USD',
@@ -297,6 +345,18 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
     sourceUrl: ANTHROPIC_PRICING_SOURCE_URL,
     pricingNotesUrl: ANTHROPIC_MODEL_IDS_SOURCE_URL,
     asOf: ANTHROPIC_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'claude-haiku-5-5',
+    aliases: ['claude-haiku-5.5', 'anthropic/claude-haiku-5-5', 'anthropic/claude-haiku-5.5'],
+    currency: 'USD',
+    standard: {
+      short: rateCard(0.1, 0.01, 0.125, 0.5),
+      long: longCard(rateCard(0.5, 0.05, 0.625, 2.5), 100_001),
+    },
+    sourceUrl: ANTHROPIC_PRICING_SOURCE_URL,
+    pricingNotesUrl: ANTHROPIC_MODEL_IDS_SOURCE_URL,
+    asOf: NOVEMBER_2026_CATALOG_AS_OF,
   },
   {
     canonicalModel: 'claude-sonnet-4-5-20250929',
@@ -320,11 +380,19 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
     canonicalModel: 'claude-sonnet-5',
     aliases: [],
     currency: 'USD',
-    // Keep the post-promotion standard rate instead of a time-dependent introductory price.
-    standard: { short: rateCard(3, 0.3, 3.75, 15) },
+    standard: { short: rateCard(2, 0.2, 2.5, 10) },
     sourceUrl: ANTHROPIC_PRICING_SOURCE_URL,
     pricingNotesUrl: ANTHROPIC_MODEL_IDS_SOURCE_URL,
-    asOf: ANTHROPIC_CATALOG_AS_OF,
+    asOf: NOVEMBER_2026_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'claude-sonnet-5-5',
+    aliases: ['claude-sonnet-5.5', 'anthropic/claude-sonnet-5-5', 'anthropic/claude-sonnet-5.5'],
+    currency: 'USD',
+    standard: { short: rateCard(2, 0.1, 2.5, 10) },
+    sourceUrl: ANTHROPIC_PRICING_SOURCE_URL,
+    pricingNotesUrl: ANTHROPIC_MODEL_IDS_SOURCE_URL,
+    asOf: NOVEMBER_2026_CATALOG_AS_OF,
   },
   {
     canonicalModel: 'claude-opus-4-5-20251101',
@@ -372,6 +440,24 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
     asOf: ANTHROPIC_CATALOG_AS_OF,
   },
   {
+    canonicalModel: 'claude-opus-5-5',
+    aliases: ['claude-opus-5.5', 'anthropic/claude-opus-5-5', 'anthropic/claude-opus-5.5'],
+    currency: 'USD',
+    standard: { short: rateCard(4, 0.2, 5, 20) },
+    sourceUrl: ANTHROPIC_PRICING_SOURCE_URL,
+    pricingNotesUrl: ANTHROPIC_MODEL_IDS_SOURCE_URL,
+    asOf: NOVEMBER_2026_CATALOG_AS_OF,
+  },
+  {
+    // AgentLedger 日志用独立的 -fast 型号名记录 Anthropic speed=fast。
+    canonicalModel: 'claude-opus-5-5-fast',
+    aliases: ['claude-opus-5.5-fast'],
+    currency: 'USD',
+    standard: { short: rateCard(8, 0.4, 10, 40) },
+    sourceUrl: `${ANTHROPIC_PRICING_SOURCE_URL}#fast-mode-pricing`,
+    asOf: NOVEMBER_2026_CATALOG_AS_OF,
+  },
+  {
     canonicalModel: 'claude-fable-5',
     aliases: [],
     currency: 'USD',
@@ -379,6 +465,24 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
     sourceUrl: ANTHROPIC_PRICING_SOURCE_URL,
     pricingNotesUrl: ANTHROPIC_MODEL_IDS_SOURCE_URL,
     asOf: ANTHROPIC_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'claude-fable-5-1',
+    aliases: ['claude-fable-5.1'],
+    currency: 'USD',
+    standard: { short: rateCard(10, 0.25, 12.5, 50) },
+    sourceUrl: ANTHROPIC_PRICING_SOURCE_URL,
+    pricingNotesUrl: ANTHROPIC_MODEL_IDS_SOURCE_URL,
+    asOf: NOVEMBER_2026_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'claude-fable-5-2',
+    aliases: [],
+    currency: 'USD',
+    standard: { short: rateCard(8, 0.2, 10, 40) },
+    sourceUrl: ANTHROPIC_PRICING_SOURCE_URL,
+    pricingNotesUrl: ANTHROPIC_MODEL_IDS_SOURCE_URL,
+    asOf: NOVEMBER_2026_CATALOG_AS_OF,
   },
   {
     canonicalModel: 'glm-5.2',
@@ -421,6 +525,15 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
   },
   // Kimi keeps one flat rate per model id. Do not add long-context bands for the
   // same Kimi model; reduced-context SKUs such as kimi-k3-256k are separate models.
+  {
+    canonicalModel: 'kimi-k3.1-pro',
+    aliases: [],
+    currency: 'USD',
+    standard: { short: rateCard(2, 0.2, 2, 10) },
+    sourceUrl: KIMI_PRICING_SOURCE_URL,
+    pricingNotesUrl: 'https://platform.kimi.ai/docs/guide/kimi-k3.1-pro-quickstart',
+    asOf: '2026-11-12',
+  },
   {
     canonicalModel: 'kimi-k3',
     aliases: ['k3'],
@@ -515,20 +628,115 @@ export const PRICE_CATALOG: readonly PriceCatalogEntry[] = [
     sourceUrl: XAI_GROK_47_FAST_PRICING_SOURCE_URL,
     asOf: XAI_GROK_47_FAST_CATALOG_AS_OF,
   },
+  // Gemini 4 Carbon 和 Argon 按 Google 公布的常规标准价估算。
   {
-    // Volcano Ark quotes CNY list prices; these USD rates are the confirmed
-    // CNY 6 / 1.2 / 30 per 1M tokens converted at 6.8, standard
-    // online-inference tier (the cheaper low-priority tier is not applied).
-    canonicalModel: 'gemini-4-argon',
+    canonicalModel: 'gemini-4-carbon',
     aliases: [],
     currency: 'USD',
-    // 官方现价有效至 2026-11-30；2026-12-01 起翻倍，不在此推测到期后的价格。
-    // 仅有隐式缓存，无长上下文分档。
-    standard: { short: rateCard(2, 0.1, undefined, 10) },
-    sourceUrl: GEMINI_PRICING_SOURCE_URL,
+    standard: { short: rateCard(4, 0.2, undefined, 20) },
+    sourceUrl: `${GEMINI_PRICING_SOURCE_URL}#gemini-4-carbon`,
     asOf: GEMINI_CATALOG_AS_OF,
   },
   {
+    canonicalModel: 'gemini-4-argon',
+    aliases: [],
+    currency: 'USD',
+    standard: { short: rateCard(4, 0.2, undefined, 20) },
+    sourceUrl: `${GEMINI_PRICING_SOURCE_URL}#gemini-4-argon`,
+    asOf: GEMINI_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'gemini-4-hydrogen',
+    aliases: [],
+    currency: 'USD',
+    standard: { short: rateCard(1.5, 0.075, undefined, 7.5) },
+    sourceUrl: `${GEMINI_PRICING_SOURCE_URL}#gemini-4-hydrogen`,
+    asOf: NOVEMBER_2026_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'gemini-4-neon',
+    aliases: [],
+    currency: 'USD',
+    standard: { short: rateCard(3, 0.15, undefined, 15) },
+    sourceUrl: `${GEMINI_PRICING_SOURCE_URL}#gemini-4-neon`,
+    asOf: NOVEMBER_2026_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'gemini-3.8-flash',
+    aliases: [],
+    currency: 'USD',
+    // 现价有效至 2026-12-31。Google 公布自 2027-01-01 起为 $1.50 / $0.15 / $7.50。
+    standard: { short: rateCard(0.75, 0.075, undefined, 3.75) },
+    sourceUrl: `${GEMINI_PRICING_SOURCE_URL}#gemini-3.8-flash`,
+    asOf: NOVEMBER_2026_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'gemini-3.1-pro-preview',
+    aliases: ['gemini-3.1-pro', 'gemini-3.1-pro-preview-customtools'],
+    currency: 'USD',
+    standard: {
+      short: rateCard(2, 0.2, undefined, 12),
+      long: longCard(rateCard(4, 0.4, undefined, 18), 200_001),
+    },
+    sourceUrl: `${GEMINI_PRICING_SOURCE_URL}#gemini-3.1-pro-preview`,
+    asOf: NOVEMBER_2026_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'gemini-3-flash-preview',
+    aliases: ['gemini-3-flash'],
+    currency: 'USD',
+    // 采用文本费率，音频输入和缓存存储按供应商单独计价。
+    standard: { short: rateCard(0.5, 0.05, undefined, 3) },
+    sourceUrl: `${GEMINI_PRICING_SOURCE_URL}#gemini-3-flash-preview`,
+    asOf: NOVEMBER_2026_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'gemini-2.5-pro',
+    aliases: [],
+    currency: 'USD',
+    standard: {
+      short: rateCard(1.25, 0.125, undefined, 10),
+      long: longCard(rateCard(2.5, 0.25, undefined, 15), 200_001),
+    },
+    sourceUrl: `${GEMINI_PRICING_SOURCE_URL}#gemini-2.5-pro`,
+    asOf: NOVEMBER_2026_CATALOG_AS_OF,
+  },
+  // DeepSeek 用服务商的峰时费率估算。
+  {
+    canonicalModel: 'deepseek-flash',
+    aliases: ['deepseek-v4.1-flash', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp'],
+    currency: 'USD',
+    standard: { short: rateCard(0.3, 0.006, undefined, 1.2) },
+    sourceUrl: DEEPSEEK_PRICING_SOURCE_URL,
+    asOf: NOVEMBER_2026_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'deepseek-v4-pro',
+    aliases: [],
+    currency: 'USD',
+    standard: { short: rateCard(1.32, 0.044, undefined, 3.96) },
+    sourceUrl: DEEPSEEK_PRICING_SOURCE_URL,
+    asOf: NOVEMBER_2026_CATALOG_AS_OF,
+  },
+  {
+    canonicalModel: 'hy4-preview',
+    aliases: ['tencent/hy4-preview'],
+    currency: 'USD',
+    // AgentLedger 记录的 OpenRouter Tencent Cloud 渠道报价。
+    standard: { short: rateCard(0.834, 0.042, undefined, 2.501) },
+    sourceUrl: 'https://openrouter.ai/tencent/hy4-preview',
+    asOf: '2026-10-09',
+  },
+  {
+    canonicalModel: 'longcat-2.0',
+    aliases: [],
+    currency: 'USD',
+    standard: { short: rateCard(0.3, 0.006, undefined, 1.2) },
+    sourceUrl: 'https://longcat.chat/platform/docs/zh/pricing/longcat-2.0',
+    asOf: '2026-10-09',
+  },
+  {
+    // 火山方舟在线推理标准档每百万 token 为 ¥6 / ¥1.2 / ¥30，按 6.8 换算为美元。
     canonicalModel: 'doubao-seed-2.1-pro',
     aliases: [],
     currency: 'USD',
