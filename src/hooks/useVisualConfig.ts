@@ -42,7 +42,7 @@ import type {
   VisualConfigValidationErrors,
   PayloadParamValidationErrorCode,
 } from '@/types/visualConfig';
-import { DEFAULT_VISUAL_VALUES } from '@/types/visualConfig';
+import { DEFAULT_VISUAL_VALUES, isPayloadReplaceRole } from '@/types/visualConfig';
 import { useAuthStore } from '@/stores/useAuthStore';
 import {
   parseReasoningEffortRules,
@@ -915,23 +915,28 @@ function parsePayloadModelEntries(raw: unknown, idPrefix: string): PayloadRule['
 
 /** Returns translation leaf codes. Literal operands are deliberately never trimmed. */
 export function getPayloadReplaceValidationError(rule: PayloadReplaceRule): string | undefined {
-  if (rule.target.role !== 'user') return 'payload_replace_invalid_target';
+  const { role, all, paths } = rule.target;
   const positions = rule.target.positions.trim();
-  if (rule.target.all ? Boolean(positions) : !positions) {
-    return 'payload_replace_invalid_positions';
+  if (paths !== undefined) {
+    if (role || all || positions || !paths.length || paths.some((path) => !path.trim())) {
+      return 'payload_replace_invalid_paths';
+    }
+  } else {
+    if (!isPayloadReplaceRole(role)) return 'payload_replace_invalid_target';
+    if (
+      all
+        ? Boolean(positions)
+        : positions
+            .split(',')
+            .some(
+              (position) =>
+                !/^\d+$/.test(position.trim()) ||
+                !Number.isSafeInteger(Number(position)) ||
+                Number(position) < 1
+            )
+    )
+      return 'payload_replace_invalid_positions';
   }
-  if (
-    positions &&
-    positions
-      .split(',')
-      .some(
-        (position) =>
-          !/^\d+$/.test(position.trim()) ||
-          !Number.isSafeInteger(Number(position)) ||
-          Number(position) < 1
-      )
-  )
-    return 'payload_replace_invalid_positions';
   if (
     !rule.models.length ||
     rule.models.some(
@@ -943,7 +948,11 @@ export function getPayloadReplaceValidationError(rule: PayloadReplaceRule): stri
     )
   )
     return 'payload_replace_invalid_models';
-  if (rule.invalid || !rule.replacements.length || rule.replacements.some((entry) => !entry.from)) {
+  if (
+    rule.invalid ||
+    !rule.replacements.length ||
+    rule.replacements.some((entry) => !entry.regex && !entry.from)
+  ) {
     return 'payload_replace_invalid_replacements';
   }
   return undefined;
@@ -1023,11 +1032,14 @@ function parsePayloadReplaceRules(raw: unknown, document: YamlDocument): Payload
       !isSeq(replacementNodes) ||
       replacementNodes.items.some((node) => {
         const entry = resolve(node);
-        return (
+        if (
           !isMap(entry) ||
-          entry.items.length !== 1 ||
-          !isStringOperand(entry.items[0].key) ||
-          !isStringOperand(entry.items[0].value)
+          entry.items.some(({ key, value }) => !isStringOperand(key) || !isStringOperand(value))
+        )
+          return true;
+        return (
+          entry.items.length !== 1 &&
+          !(entry.items.length === 2 && mapPair(entry, 'pattern') && mapPair(entry, 'replacement'))
         );
       })
     )
@@ -1039,6 +1051,23 @@ function parsePayloadReplaceRules(raw: unknown, document: YamlDocument): Payload
     ) {
       invalid = true;
     }
+    const pathsNode = get(get(ruleNode, 'target'), 'paths');
+    const rawPaths = target?.paths;
+    const paths = Array.isArray(rawPaths)
+      ? rawPaths.map((path) => (typeof path === 'string' ? path : ''))
+      : rawPaths === undefined
+        ? undefined
+        : [];
+    if (
+      paths !== undefined &&
+      (!isSeq(pathsNode) ||
+        pathsNode.items.some((node) => !isStringOperand(resolve(node))) ||
+        (target?.role !== undefined && typeof target.role !== 'string') ||
+        Boolean(target?.role) ||
+        target?.all === true ||
+        (Array.isArray(target?.positions) && target.positions.length > 0))
+    )
+      invalid = true;
     const replacements = record?.replacements;
     if (!Array.isArray(replacements)) invalid = true;
     return {
@@ -1052,12 +1081,22 @@ function parsePayloadReplaceRules(raw: unknown, document: YamlDocument): Payload
           : target?.positions === undefined
             ? ''
             : String(target.positions),
+        ...(paths !== undefined && { paths }),
       },
       replacements: (Array.isArray(replacements) ? replacements : []).map((entry, entryIndex) => {
-        const pairs = Object.entries(asRecord(entry) ?? {});
+        const id = `replace-${index}-${entryIndex}`;
+        const replacement = asRecord(entry);
+        const pairs = Object.entries(replacement ?? {});
+        if (
+          pairs.length === 2 &&
+          typeof replacement?.pattern === 'string' &&
+          typeof replacement.replacement === 'string'
+        ) {
+          return { id, from: replacement.pattern, to: replacement.replacement, regex: true };
+        }
         if (pairs.length !== 1 || typeof pairs[0]?.[1] !== 'string') invalid = true;
         return {
-          id: `replace-${index}-${entryIndex}`,
+          id,
           from: pairs[0]?.[0] ?? '',
           to: typeof pairs[0]?.[1] === 'string' ? pairs[0][1] : '',
         };
@@ -1266,16 +1305,17 @@ function syncStringSequence(
   map: YAMLMap,
   key: string,
   baseline: string[] | undefined,
-  desired: string[] | undefined
+  desired: string[] | undefined,
+  normalize = (value: string) => value.trim()
 ): void {
-  const values = serializeStringListForYaml(desired);
+  const values = (desired ?? []).map(normalize).filter(Boolean);
   if (values.length === 0) {
     deleteMapValue(map, key);
     return;
   }
 
   const seq = ensureSeqValue(doc, map, key);
-  const available = (baseline ?? []).map((value, index) => ({ value: value.trim(), index }));
+  const available = (baseline ?? []).map((value, index) => ({ value: normalize(value), index }));
   const used = new Set<number>();
   const items = values.map((value) => {
     const match = available.find((item) => item.value === value && !used.has(item.index));
@@ -1285,6 +1325,7 @@ function syncStringSequence(
       existing.value = value;
       return existing;
     }
+    if (isAlias(existing)) return existing;
     return doc.createNode(value);
   });
   replaceSequenceItems(seq, items);
@@ -1524,11 +1565,23 @@ function syncPayloadReplaceSequence(
       const prior = baseline.find((entry) => entry.id === rule.id);
       syncPayloadModels(doc, node, prior?.models ?? [], rule.models);
       const target = ensureMapValue(doc, node, 'target');
-      setMapValue(doc, target, 'role', rule.target.role);
-      setMapValue(doc, target, 'all', rule.target.all);
-      if (rule.target.all) deleteMapValue(target, 'positions');
-      else if (prior?.target.positions !== rule.target.positions || !mapPair(target, 'positions')) {
-        setMapValue(doc, target, 'positions', rule.target.positions.split(',').map(Number));
+      const { paths, role, all, positions } = rule.target;
+      if (paths !== undefined) {
+        for (const key of ['role', 'all', 'positions']) deleteMapValue(target, key);
+        if (
+          !mapPair(target, 'paths') ||
+          JSON.stringify(prior?.target.paths) !== JSON.stringify(paths)
+        ) {
+          syncStringSequence(doc, target, 'paths', prior?.target.paths, paths, (path) => path);
+        }
+      } else {
+        deleteMapValue(target, 'paths');
+        setMapValue(doc, target, 'role', role);
+        setMapValue(doc, target, 'all', all);
+        if (all) deleteMapValue(target, 'positions');
+        else if (prior?.target.positions !== positions || !mapPair(target, 'positions')) {
+          setMapValue(doc, target, 'positions', positions.split(',').map(Number));
+        }
       }
       const replacements = ensureSeqValue(doc, node, 'replacements');
       const entryNodes = new Map(
@@ -1540,6 +1593,12 @@ function syncPayloadReplaceSequence(
           const existing = entryNodes.get(entry.id);
           if (isAlias(existing)) throw new VisualConfigApplyError('visual_apply_failed');
           const map = isMap(existing) ? existing : (doc.createNode({}) as YAMLMap);
+          if (entry.regex) {
+            if (map.items.length !== 2) map.items = [];
+            setMapValue(doc, map, 'pattern', entry.from);
+            setMapValue(doc, map, 'replacement', entry.to);
+            return map;
+          }
           const pair = map.items[0];
           if (pair) {
             if (isScalar(pair.key)) pair.key.value = entry.from;

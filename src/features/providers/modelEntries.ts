@@ -21,7 +21,12 @@ export function mergeDiscoveredModels(
     const name = model.name.trim();
     if (!name || seen.has(name)) continue;
     seen.add(name);
-    next.push({ sourceIndex: null, name, alias: model.alias?.trim() ?? '' });
+    next.push({
+      sourceIndex: null,
+      name,
+      alias: model.alias?.trim() ?? '',
+      ...(model.displayName?.trim() && { displayName: model.displayName.trim() }),
+    });
   }
   return next.length ? next : [{ sourceIndex: null, name: '', alias: '' }];
 }
