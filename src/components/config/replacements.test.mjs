@@ -193,3 +193,38 @@ test('replace aliases cannot be overwritten through a visual edit', () => {
   const saved = run(yaml, ({ payloadReplaceRules: [rule] }) => ({ payloadReplaceRules: [{ ...rule, replacements: [{ ...rule.replacements[0], to: 'edited' }] }] }));
   assert.ok(saved.error);
 });
+
+test('advanced targets and regex survive an unrelated edit and switching back to literal', () => {
+  const yaml = source.replace('role: user\n          positions: [1, 2]', 'paths: [metadata.description]')
+    .replace(" - ' a ': ' b '", " - {pattern: '(?i)old', replacement: '$1'}");
+  const saved = run(yaml, () => ({ port: '8318' }));
+  assert.equal(saved.error, undefined);
+  assert.deepEqual(parse(saved.output).requests, parse(yaml).requests);
+  assert.match(saved.output, /first-entry/);
+  for (const role of ['developer', 'system']) {
+    const changed = run(saved.output, ({ payloadReplaceRules: [rule] }) => ({
+      payloadReplaceRules: [{ ...rule, target: { role, all: true, positions: '' },
+        replacements: [{ ...rule.replacements[0], regex: false, from: 'literal', to: '' }] }],
+    }));
+    assert.equal(changed.error, undefined);
+    const result = parse(changed.output).requests.payload.replace[0];
+    assert.deepEqual(result.target, { role, all: true, 'future-target': 'keep' });
+    assert.deepEqual(result.replacements, [{ literal: '' }]);
+  }
+});
+
+test('editing paths preserves aliases, comments and LTS model restrictions', () => {
+  const yaml = "path: &field metadata.description\n" + source.replace(
+    'role: user\n          positions: [1, 2]',
+    'paths:\n            # keep-path\n            - *field'
+  );
+  const result = run(yaml, ({ payloadReplaceRules: [rule] }) => ({
+    payloadReplaceRules: [{ ...rule, target: { ...rule.target, paths: [...rule.target.paths, 'metadata.title'] } }],
+  }));
+  assert.equal(result.error, undefined);
+  const rule = parse(result.output).requests.payload.replace[0];
+  assert.deepEqual(rule.target.paths, ['metadata.description', 'metadata.title']);
+  assert.deepEqual(rule.models, parse(yaml).requests.payload.replace[0].models);
+  assert.match(result.output, /keep-path/);
+  assert.match(result.output, /- \*field/);
+});

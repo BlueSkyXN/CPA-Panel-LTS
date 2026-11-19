@@ -89,3 +89,17 @@ test('keeps existing families working alongside the new matches', () => {
   assert.deepEqual(namesIn(groups, 'other'), ['muse-spark-1.3']);
   assert.deepEqual(namesIn(groups, 'minimax'), ['minimax-m2', 'abab6.5s']);
 });
+
+test('discovered display names remain labels when adding models to a provider', async () => {
+  const { normalizeModelList } = await vite.ssrLoadModule('/src/utils/models.ts');
+  const { mergeDiscoveredModels } = await vite.ssrLoadModule('/src/features/providers/modelEntries.ts');
+  const models = normalizeModelList([
+    { id: 'opaque', display_name: 'Gemini Flash' },
+    { id: 'explicit', alias: 'route', displayName: 'Display label' },
+  ]);
+  assert.deepEqual(namesIn(classifyModels(models), 'gemini'), ['opaque']);
+  const rows = mergeDiscoveredModels([], models);
+  assert.deepEqual(rows.map(({ name, alias, displayName }) => [name, alias, displayName]), [
+    ['opaque', '', 'Gemini Flash'], ['explicit', 'route', 'Display label'],
+  ]);
+});

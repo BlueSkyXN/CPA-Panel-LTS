@@ -35,7 +35,9 @@ export function ModelDiscoveryPanel({
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return models;
-    return models.filter((m) => `${m.name} ${m.alias ?? ''}`.toLowerCase().includes(q));
+    return models.filter((m) =>
+      `${m.name} ${m.alias ?? ''} ${m.displayName ?? ''}`.toLowerCase().includes(q)
+    );
   }, [models, search]);
 
   const selectable = useMemo(
@@ -70,12 +72,15 @@ export function ModelDiscoveryPanel({
     setSelected(new Set());
   };
 
-  const renderModelLabel = (model: ModelInfo) => (
-    <span className={styles.discoveryNameGroup}>
-      <span className={styles.discoveryName}>{model.name}</span>
-      {model.alias ? <span className={styles.discoveryAlias}>{model.alias}</span> : null}
-    </span>
-  );
+  const renderModelLabel = (model: ModelInfo) => {
+    const label = model.alias || model.displayName;
+    return (
+      <span className={styles.discoveryNameGroup}>
+        <span className={styles.discoveryName}>{model.name}</span>
+        {label ? <span className={styles.discoveryAlias}>{label}</span> : null}
+      </span>
+    );
+  };
 
   return (
     <div className={styles.discoveryPanel}>

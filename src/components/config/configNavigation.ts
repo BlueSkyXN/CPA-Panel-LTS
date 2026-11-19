@@ -494,6 +494,7 @@ export const CONFIG_FIELDS = {
   payloadReplaceRules: {
     labelKey: 'config_management.visual.payload_replace.title',
     yamlKey: 'requests.payload.replace', fullWidth: true, heading: true,
+    aliases: ['user', 'system', 'developer', 'paths', 'positions', 'literal', 'regex', 'RE2'],
   },
   payloadDefaultRules: {
     labelKey: 'config_management.visual.sections.payload.default_rules',
