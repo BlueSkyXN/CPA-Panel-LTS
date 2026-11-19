@@ -18,7 +18,7 @@ const approx = (actual, expected) =>
 
 test('catalog is versioned, self-describing, exact, and keeps provider rate boundaries explicit', () => {
   const sol = pricing.findCatalogEntry('gpt-5.6-sol');
-  assert.equal(pricing.PRICE_CATALOG_AS_OF, '2026-10-03');
+  assert.equal(pricing.PRICE_CATALOG_AS_OF, '2026-11-19');
   assert.equal(sol.currency, 'USD');
   assert.deepEqual(sol.aliases, ['gpt-5.6', 'gpt-daybreak-blue-latest']);
   assert.equal(sol.sourceUrl, 'https://developers.openai.com/api/docs/pricing');
@@ -297,7 +297,7 @@ test('Claude 4.5+ presets use official standard rates, exact aliases, and 5-minu
     ['claude-haiku-4-5-20251001', ['claude-haiku-4-5'], [1, 0.1, 1.25, 5]],
     ['claude-sonnet-4-5-20250929', ['claude-sonnet-4-5'], [3, 0.3, 3.75, 15]],
     ['claude-sonnet-4-6', [], [3, 0.3, 3.75, 15]],
-    ['claude-sonnet-5', [], [3, 0.3, 3.75, 15]],
+    ['claude-sonnet-5', [], [2, 0.2, 2.5, 10], '2026-11-19'],
     ['claude-opus-4-5-20251101', ['claude-opus-4-5'], [5, 0.5, 6.25, 25]],
     ['claude-opus-4-6', [], [5, 0.5, 6.25, 25]],
     ['claude-opus-4-7', [], [5, 0.5, 6.25, 25]],
@@ -306,7 +306,7 @@ test('Claude 4.5+ presets use official standard rates, exact aliases, and 5-minu
     ['claude-fable-5', [], [10, 1, 12.5, 50]],
   ];
 
-  for (const [modelName, aliases, [input, cachedInput, cacheWrite, output]] of models) {
+  for (const [modelName, aliases, [input, cachedInput, cacheWrite, output], asOf = '2026-07-26'] of models) {
     const entry = pricing.findCatalogEntry(modelName);
     assert.equal(entry.canonicalModel, modelName);
     assert.deepEqual(entry.aliases, aliases);
@@ -315,7 +315,7 @@ test('Claude 4.5+ presets use official standard rates, exact aliases, and 5-minu
     assert.equal(entry.fast, undefined);
     assert.equal(entry.sourceUrl, sourceUrl);
     assert.equal(entry.pricingNotesUrl, notesUrl);
-    assert.equal(entry.asOf, '2026-07-26');
+    assert.equal(entry.asOf, asOf);
 
     for (const alias of aliases) {
       assert.equal(pricing.findCatalogEntry(alias).canonicalModel, modelName);
@@ -328,7 +328,7 @@ test('Claude 4.5+ presets use official standard rates, exact aliases, and 5-minu
 test('Claude 4.6+ keeps one standard rate card across the full 1M context window', () => {
   for (const [modelName, inputRate] of [
     ['claude-sonnet-4-6', 3],
-    ['claude-sonnet-5', 3],
+    ['claude-sonnet-5', 2],
     ['claude-opus-4-6', 5],
     ['claude-opus-4-7', 5],
     ['claude-opus-4-8', 5],
@@ -1456,15 +1456,15 @@ test('November 2026 catalog additions price the previously unmatched models', ()
   );
 
   const gemini = pricing.findCatalogEntry('gemini-4-argon');
-  assert.deepEqual(gemini.standard.short, { input: 2, cachedInput: 0.1, output: 10 });
+  assert.deepEqual(gemini.standard.short, { input: 4, cachedInput: 0.2, output: 20 });
   assert.equal(gemini.standard.long, undefined);
-  assert.equal(gemini.asOf, '2026-11-07');
-  assert.equal(gemini.sourceUrl, 'https://aistudio.google.com/docs/pricing');
+  assert.equal(gemini.asOf, '2026-11-19');
+  assert.equal(gemini.sourceUrl, 'https://aistudio.google.com/docs/pricing#gemini-4-argon');
   const argon = pricing.estimateUsageCost('gemini-4-argon', {
     input_tokens: 300_000, cache_read_tokens: 50_000, output_tokens: 100_000,
   }, undefined, tier());
   assert.equal(argon.contextBand, 'short');
-  approx(argon.amount, 250_000 * 2 / 1_000_000 + 50_000 * 0.1 / 1_000_000 + 100_000 * 10 / 1_000_000);
+  approx(argon.amount, 3.01);
 
   const buildFast = pricing.findCatalogEntry('grok-4.7-build-fast');
   assert.equal(buildFast.canonicalModel, 'grok-4.7-fast');
@@ -1485,4 +1485,91 @@ test('November 2026 catalog additions price the previously unmatched models', ()
   }, undefined, tier());
   assert.equal(above.contextBand, 'long');
   assert.deepEqual(above.rates, { input: 6, cachedInput: 1.5, output: 18 });
+});
+
+test('GPT-6.2 prices both Standard and Fast bands above the full-input 272K boundary', () => {
+  for (const [model, tierName, shortRates, longRates] of [
+    ['gpt-6.2-astra', 'std', [8, 0.4, 10, 40], [16, 0.8, 20, 60]],
+    ['gpt-6.2-astra', 'fast', [16, 0.8, 20, 80], [32, 1.6, 40, 120]],
+    ['gpt-6.2-sol', 'std', [2, 0.1, 2.5, 10], [4, 0.2, 5, 15]],
+    ['gpt-6.2-sol', 'fast', [4, 0.2, 5, 20], [8, 0.4, 10, 30]],
+  ]) {
+    for (const [inputTokens, contextBand, expected] of [
+      [272_000, 'short', shortRates],
+      [272_001, 'long', longRates],
+    ]) {
+      const estimate = pricing.estimateUsageCost(
+        `${model}[1m]`,
+        { input_tokens: inputTokens, cache_read_tokens: 60_000, cache_creation_tokens: 12_000, output_tokens: 100 },
+        undefined,
+        tier(tierName)
+      );
+      const [input, cachedInput, cacheWrite, output] = expected;
+      assert.equal(estimate.status, 'priced');
+      assert.equal(estimate.resolvedModel, model);
+      assert.equal(estimate.contextBand, contextBand);
+      assert.deepEqual(estimate.rates, { input, cachedInput, cacheWrite, output });
+      approx(estimate.amount, ((inputTokens - 72_000) * input + 60_000 * cachedInput +
+        12_000 * cacheWrite + 100 * output) / 1_000_000);
+    }
+  }
+});
+
+test('Claude 5.5 uses the current cache read and five-minute write prices', () => {
+  for (const [model, inputTokens, band, canonical, rates] of [
+    ['claude-haiku-5-5', 100_000, 'short', 'claude-haiku-5-5', [0.1, 0.01, 0.125, 0.5]],
+    ['anthropic/claude-haiku-5.5', 100_001, 'long', 'claude-haiku-5-5', [0.5, 0.05, 0.625, 2.5]],
+    ['claude-sonnet-5.5', 200_001, 'short', 'claude-sonnet-5-5', [2, 0.1, 2.5, 10]],
+    ['claude-opus-5-5', 200_001, 'short', 'claude-opus-5-5', [4, 0.2, 5, 20]],
+    ['claude-opus-5.5-fast', 200_001, 'short', 'claude-opus-5-5-fast', [8, 0.4, 10, 40]],
+  ]) {
+    const result = pricing.estimateUsageCost(model, { input_tokens: inputTokens });
+    const [input, cachedInput, cacheWrite, output] = rates;
+    assert.equal(result.status, 'priced', model);
+    assert.equal(result.resolvedModel, canonical);
+    assert.equal(result.contextBand, band);
+    assert.deepEqual(result.rates, { input, cachedInput, cacheWrite, output }, model);
+  }
+});
+
+test('Gemini uses paid text rates and switches Pro long context above 200K', () => {
+  for (const [model, shortRates, longRates] of [
+    ['gemini-4-carbon', [4, 0.2, 20]],
+    ['gemini-4-hydrogen', [1.5, 0.075, 7.5]],
+    ['gemini-4-neon', [3, 0.15, 15]],
+    ['gemini-3.8-flash', [0.75, 0.075, 3.75]],
+    ['gemini-3.1-pro', [2, 0.2, 12], [4, 0.4, 18]],
+    ['gemini-3.1-pro-preview-customtools', [2, 0.2, 12], [4, 0.4, 18]],
+    ['gemini-3-flash', [0.5, 0.05, 3]],
+    ['gemini-2.5-pro', [1.25, 0.125, 10], [2.5, 0.25, 15]],
+  ]) {
+    for (const [inputTokens, expectedBand, expectedRates] of [
+      [200_000, 'short', shortRates],
+      [200_001, longRates ? 'long' : 'short', longRates ?? shortRates],
+    ]) {
+      const result = pricing.estimateUsageCost(model, { input_tokens: inputTokens });
+      const [input, cachedInput, output] = expectedRates;
+      assert.equal(result.status, 'priced', model);
+      assert.equal(result.contextBand, expectedBand, model);
+      assert.deepEqual(result.rates, { input, cachedInput, output }, model);
+    }
+  }
+});
+
+test('DeepSeek Flash aliases use the published peak rate without matching gateway variants', () => {
+  for (const model of ['deepseek-flash', 'deepseek-v4.1-flash', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp']) {
+    const result = pricing.estimateUsageCost(model, {
+      input_tokens: 1_000_000,
+      cache_read_tokens: 250_000,
+      output_tokens: 100_000,
+    });
+    assert.equal(result.status, 'priced', model);
+    assert.equal(result.resolvedModel, 'deepseek-flash');
+    assert.deepEqual(result.rates, { input: 0.3, cachedInput: 0.006, output: 1.2 });
+    approx(result.amount, 0.3465);
+  }
+  assert.equal(pricing.findCatalogEntry('origin-deepseek-v4-1-flash'), null);
+  assert.deepEqual(pricing.findCatalogEntry('deepseek-v4-pro').standard.short, {
+    input: 1.32, cachedInput: 0.044, output: 3.96,
+  });
 });

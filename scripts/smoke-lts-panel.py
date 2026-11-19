@@ -3333,6 +3333,16 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
                 if alias not in model_text:
                     raise AssertionError(f"{model_name} catalog row is missing alias {alias}")
 
+        for model_name in ["gemini-4-argon", "gemini-4-carbon"]:
+            row = catalog.locator(
+                f'[data-testid="preset-pricing-model"][data-model="{model_name}"] '
+                'tr[data-context-band="short"]'
+            )
+            for label, expected_rate in [("Input", "$4"), ("Cached input", "$0.2"), ("Output", "$20")]:
+                actual_rate = row.locator(f'td[data-label="{label}"] strong').inner_text()
+                if actual_rate != expected_rate:
+                    raise AssertionError(f"{model_name} {label}: {actual_rate!r}, expected {expected_rate!r}")
+
         anthropic_source = "https://platform.claude.com/docs/en/about-claude/pricing"
         anthropic_notes = (
             "https://platform.claude.com/docs/en/about-claude/models/"
@@ -3357,7 +3367,7 @@ def run_usage_pricing_empty_catalog_smoke(context: Any, app_url: str) -> None:
             (
                 "claude-sonnet-5",
                 [],
-                {"Input": "$3", "Cached input": "$0.3", "Cache write": "$3.75", "Output": "$15"},
+                {"Input": "$2", "Cached input": "$0.2", "Cache write": "$2.5", "Output": "$10"},
             ),
             (
                 "claude-opus-4-5-20251101",

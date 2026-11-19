@@ -101,6 +101,8 @@ Panel pricing 是 **browser-local estimate**，不是 Core billing API 或服务
 - `cacheWrite` 缺失表示 Auto/继承 input，显式 `0` 才表示免费。
 - Fast 可以使用独立费率或 `Standard × multiplier`；没有已验证 Fast policy 时不得默认为 Standard 价格。
 - long-context threshold 按具体 catalog entry 决定，不是全局统一能力。
+- GPT-6.2 的 Standard 和 Fast 均在总输入超过 272,000 token 时切到长档，缓存写入采用 30 分钟价。Claude 预设采用 5 分钟写入价，Haiku 5.5 在总输入超过 100,000 token 时切到长档。Gemini 3.1 Pro Preview 和 2.5 Pro 的长档从 200,001 个输入 token 开始。
+- Gemini 预设采用供应商公开的文本 token 费率。Gemini 4 Argon 和 Carbon 采用常规标准价，3.8 Flash 采用有效至 2026-12-31 的促销价。促销价格切换随预设目录更新。DeepSeek 预设按峰时价估算。
 - Fast long-context 支持同样来自每个 catalog entry，但 profile 的 `fastLongContext` policy 决定是否执行该限制：默认 `allow`（默认不限制，Fast 请求按长上下文费率估算），`official` 时对 preset 与 custom override 一律按各自 `longSupported` 判定；per-model“允许 Fast 与长上下文组合”开关只在 `official` policy 下生效，`allow` 时禁用。
 - unmatched、unsupported 或 coverage 不完整返回明确状态和 `amount: null`，不能显示成 `$0`。
 - request events 使用当前 browser-local `priceProfile` 和同一套 `calculateCostEstimate` 逻辑；表格、图表和 coverage 不得形成第二套计价口径。
