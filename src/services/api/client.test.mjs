@@ -42,6 +42,23 @@ test('reasoning effort capability is read from the current Core and cleared by a
   }
 });
 
+test('auto selection controls use the current Core capability', async () => {
+  const observed = [];
+  const listener = (event) => observed.push(event.detail.supported);
+  window.addEventListener('server-auto-model-update', listener);
+  try {
+    apiClient.setConfig({ apiBase: 'https://policy.example.test', managementKey: 'synthetic' });
+    for (const headers of [{ 'x-cpa-auto-model': '1' }, {}]) {
+      await apiClient.get('/config.yaml', { adapter: async (config) => ({
+        data: 'config-version: 8', status: 200, statusText: 'OK', headers, config,
+      }) });
+    }
+    assert.deepEqual(observed, [true, false]);
+  } finally {
+    window.removeEventListener('server-auto-model-update', listener);
+  }
+});
+
 test('switch preparation blocks new writes and tracks in-flight mutations until completion', async () => {
   const lifecycle = await vite.ssrLoadModule('/src/services/connectionSession.ts');
   apiClient.setConfig({ apiBase: 'https://test.example.test', managementKey: 'synthetic' });

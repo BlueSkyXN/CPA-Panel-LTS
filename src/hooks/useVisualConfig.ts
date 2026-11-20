@@ -1779,6 +1779,8 @@ function getNextDirtyFields(
       'quotaSwitchPreviewModel',
       'quotaAntigravityCredits',
       'routingStrategy',
+      'autoModelEnabled',
+      'autoModelCandidates',
       'routingSessionAffinity',
       'routingSessionAffinityTTL',
     ] as Array<keyof VisualConfigValues>
@@ -2014,6 +2016,7 @@ export function useVisualConfig() {
       const remoteManagement = asRecord(parsed['remote-management']);
       const quotaExceeded = asRecord(parsed['quota-exceeded']);
       const routing = asRecord(parsed.routing);
+      const autoModel = asRecord(routing?.['auto-model']);
       const payload = asRecord(parsed.payload);
       const streaming = asRecord(parsed.streaming);
       const plugins = asRecord(parsed.plugins);
@@ -2216,6 +2219,8 @@ export function useVisualConfig() {
         quotaAntigravityCredits: readConfigBoolean(quotaExceeded?.['antigravity-credits'] ?? false),
 
         routingStrategy: parseRoutingStrategy(routing?.strategy),
+        autoModelEnabled: readConfigBoolean(autoModel?.enabled),
+        autoModelCandidates: parseStringList(autoModel?.candidates).join('\n'),
         routingSessionAffinity: readConfigBoolean(
           routing?.['session-affinity'] ?? routing?.sessionAffinity ?? routing?.['sessionAffinity']
         ),
@@ -2822,10 +2827,30 @@ export function useVisualConfig() {
 
         const routingDirty =
           dirtyFields.has('routingStrategy') ||
+          dirtyFields.has('autoModelEnabled') ||
+          dirtyFields.has('autoModelCandidates') ||
           dirtyFields.has('routingSessionAffinity') ||
           dirtyFields.has('routingSessionAffinityTTL');
         if (routingDirty) {
+          const autoDirty = dirtyFields.has('autoModelEnabled') || dirtyFields.has('autoModelCandidates');
+          if (autoDirty && (isAlias(doc.getIn(['routing'], true)) || isAlias(doc.getIn(['routing', 'auto-model'], true)))) {
+            throw new VisualConfigApplyError('visual_apply_failed');
+          }
           ensureMapInDoc(doc, ['routing']);
+          if (autoDirty) {
+            if (!useAuthStore.getState().supportsAutoModel) {
+              throw new Error('This Core does not support configurable auto model selection');
+            }
+            const path = ['routing', 'auto-model'];
+            ensureMapInDoc(doc, path);
+            if (dirtyFields.has('autoModelEnabled')) {
+              doc.setIn([...path, 'enabled'], values.autoModelEnabled);
+            }
+            if (dirtyFields.has('autoModelCandidates')) {
+              const names = values.autoModelCandidates.split('\n').map((name) => name.trim()).filter(Boolean);
+              doc.setIn([...path, 'candidates'], names);
+            }
+          }
           if (dirtyFields.has('routingStrategy')) {
             doc.setIn(['routing', 'strategy'], values.routingStrategy);
           }

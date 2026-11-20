@@ -1473,6 +1473,10 @@ for lockfile in bun.lock yarn.lock pnpm-lock.yaml; do
 done
 
 # ChatGPT OAuth cache optimization uses the existing configuration document API.
+require_file_contains src/components/config/configNavigation.ts 'routing.auto-model.enabled'
+require_file_contains src/components/config/configNavigation.ts 'routing.auto-model.candidates'
+require_file_contains src/services/api/client.ts 'x-cpa-auto-model'
+
 require_path src/lts/codexPolicy/cacheAffinity.ts
 require_path src/lts/codexPolicy/cacheAffinity.test.mjs
 require_path docs/lts/codex-cache-affinity.md

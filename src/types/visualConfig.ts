@@ -187,6 +187,8 @@ export type VisualConfigValues = FlowControlValues & {
   quotaSwitchPreviewModel: boolean;
   quotaAntigravityCredits: boolean;
   routingStrategy: RoutingStrategy;
+  autoModelEnabled: boolean;
+  autoModelCandidates: string;
   routingSessionAffinity: boolean;
   routingSessionAffinityTTL: string;
   wsAuth: boolean;
@@ -291,6 +293,8 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   quotaSwitchPreviewModel: false,
   quotaAntigravityCredits: false,
   routingStrategy: 'round-robin',
+  autoModelEnabled: false,
+  autoModelCandidates: '',
   routingSessionAffinity: false,
   routingSessionAffinityTTL: '',
   wsAuth: true,

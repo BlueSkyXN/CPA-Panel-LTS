@@ -10,6 +10,29 @@ status_definitions:
   experimental: Optional surface that may be gated or hidden when backend support is missing.
 
 features:
+  - id: standalone-auto-model-config
+    status: lts-maintained
+    reason: Global auto selection is opt-in and the administrator's candidate order must survive a configuration edit.
+    routes:
+      - /config
+    panel_files:
+      - src/components/config/ConfigFieldControls.tsx
+      - src/components/config/configNavigation.ts
+      - src/components/config/autoModel.test.mjs
+      - src/services/api/configFile.ts
+      - docs/lts/v8-config-compatibility.md
+      - src/hooks/useVisualConfig.ts
+      - src/services/api/client.ts
+    core_endpoints:
+      - /v8/management/config.yaml
+    required_markers:
+      - routing.auto-model.enabled
+      - routing.auto-model.candidates
+      - x-cpa-auto-model
+    validation:
+      - npm run test:config
+      - npm run smoke:lts:core
+
   - id: reasoning-effort-policy-config
     status: lts-maintained
     reason: Core-owned semantic effort policy needs capability-gated editing and lossless YAML persistence across protocol-specific payload rules.

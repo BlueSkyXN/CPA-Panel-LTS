@@ -411,6 +411,16 @@ export const CONFIG_FIELDS = {
     yamlKey: 'auth-auto-refresh-workers',
     fullWidth: false,
   },
+  autoModelEnabled: {
+    labelKey: 'config_management.visual.sections.network.auto_model',
+    yamlKey: 'routing.auto-model.enabled',
+    fullWidth: false,
+  },
+  autoModelCandidates: {
+    labelKey: 'config_management.visual.sections.network.auto_model_candidates',
+    yamlKey: 'routing.auto-model.candidates',
+    fullWidth: true,
+  },
   routingStrategy: {
     labelKey: 'config_management.visual.sections.network.routing_strategy',
     yamlKey: 'routing.strategy',
@@ -597,6 +607,8 @@ export const CONFIG_DOMAINS = [
         id: 'selection',
         fields: [
           'routingStrategy',
+          'autoModelEnabled',
+          'autoModelCandidates',
           'forceModelPrefix',
           'routingSessionAffinity',
           'routingSessionAffinityTTL',
