@@ -1636,6 +1636,11 @@ def run_browser_config_save_smoke(page: Any, api_url: str, config_path: Path) ->
     routing_strategy_select.scroll_into_view_if_needed()
     routing_strategy_select.click()
     page.get_by_role("option", name="Weighted Round Robin", exact=True).click()
+    auto_toggle = page.get_by_label("Global auto model selection", exact=True)
+    if auto_toggle.is_checked() or auto_toggle.is_disabled():
+        raise AssertionError("Fresh Core must report support and default global auto selection to off")
+    auto_toggle.evaluate("(element) => element.click()")
+    page.get_by_label("Auto model candidates", exact=True).fill("free\nbackup")
     locate_config_field(page, "disableImageGeneration", "disable-image-generation")
     disable_image_generation_select = page.get_by_label("Disable Image Generation")
     disable_image_generation_select.scroll_into_view_if_needed()
@@ -1811,6 +1816,12 @@ def run_browser_config_save_smoke(page: Any, api_url: str, config_path: Path) ->
     if page.get_by_label("Routing Strategy").inner_text().strip() != "Weighted Round Robin":
         raise AssertionError("Browser visual editor did not reload weighted-round-robin")
     seen.append("BROWSER visual save and reload weighted-round-robin")
+    if not page.get_by_label("Global auto model selection", exact=True).is_checked() or page.get_by_label("Auto model candidates", exact=True).input_value() != "free\nbackup":
+        raise AssertionError("Auto selection or candidate order was lost on reload")
+    expected_auto = {"enabled": True, "candidates": ["free", "backup"]}
+    if config_at(disk_config(config_path), "routing.auto-model") != expected_auto or config_at(read_config(api_url)[0], "routing.auto-model") != expected_auto:
+        raise AssertionError("Core config and disk disagree on the ordered auto candidates")
+    seen.append("BROWSER global auto selection and candidate order saved, reloaded and read back from Core")
     locate_config_field(page, "disableImageGeneration", "disable-image-generation")
     if page.get_by_label("Disable Image Generation").inner_text().strip() != (
         "passthrough (preserve client tools)"

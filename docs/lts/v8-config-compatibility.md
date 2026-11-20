@@ -36,7 +36,9 @@ Core 对 `/v8/management/config*` 的每个 PUT/PATCH/DELETE 都要求恰好一�
 
 新增 Codex 出站策略和 ZCode 上下文计数分别映射到 `upstream.codex.outbound`、`upstream.codex.zcode-context-usage`，与 Core 共享作用域保持一致。可视化编辑保留未知字段，并拒绝改写 alias 或不支持的父节点。
 
-渠道模型策略位于 `oauth.model-policy`。编辑器读取 `/config.yaml` 返回的 YAML 和版本，只修改指定渠道的策略节点，再以原始 ETag 单次条件 PUT 保存；Panel 保留收到的其他字段、注释、anchor 和插件 opaque 节点。Core 既有的 canonical 化会展开普通 OAuth anchor；插件内部 anchor 在没有引用外部 anchor 时保留。缺失或显式 null 的策略 map 可初始化，alias 或不支持的目标节点会拒绝写入。将旧排除规则并入 denylist 时，新策略和旧规则删除在同一次保存中完成。`/v0/management/oauth-model-policy` 仅用于能力探测，预览仍走 LTS 只读路由。
+渠道模型策略位于 `oauth.model-policy`。编辑器读取 `/config.yaml` 返回的 YAML 和版本，只修改指定渠道的策略节点，再以原始 ETag 单次条件 PUT 保存；Panel 保留收到的其他字段、注释、anchor 和插件 opaque 节点。Core 既有的 canonical 化会展开普通 OAuth anchor；插件内部 anchor 在没有引用外部 anchor 时保留。缺失或显式 null 的策略 map 可初始化，alias 或不支持的目标节点会拒绝写入。非空的账号旧排除表覆盖渠道旧排除表。将渠道旧规则并入 denylist 时，启用的渠道黑名单也会约束原先使用独立旧排除表的账号。新策略和旧规则删除在同一次保存中完成。`/v0/management/oauth-model-policy` 仅用于能力探测，预览仍走 LTS 只读路由。
+
+Core 在 Management 响应中以 `X-CPA-AUTO-MODEL: 1` 声明支持全局代选。Panel 在「网络与路由 → 账号选择」提供 `routing.auto-model.enabled` 和有序的 `routing.auto-model.candidates`。缺少能力声明时这两项只读。
 
 ## LTS 能力保留
 

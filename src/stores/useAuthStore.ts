@@ -150,6 +150,7 @@ export const useAuthStore = create<AuthStoreState>()(
       serverRuntimeKind: 'unknown',
       supportsPlugin: false,
       supportsReasoningEffortPolicy: false,
+      supportsAutoModel: false,
       pluginSupportKnown: false,
       pluginSupportSource: 'unknown',
       supportsFlowControl: false,
@@ -212,6 +213,7 @@ export const useAuthStore = create<AuthStoreState>()(
             serverRuntimeKind: 'unknown',
             supportsPlugin: false,
             supportsReasoningEffortPolicy: false,
+            supportsAutoModel: false,
             pluginSupportKnown: false,
             pluginSupportSource: 'unknown',
             supportsFlowControl: false,
@@ -334,6 +336,7 @@ export const useAuthStore = create<AuthStoreState>()(
           serverRuntimeKind: 'unknown',
           supportsPlugin: false,
           supportsReasoningEffortPolicy: false,
+          supportsAutoModel: false,
           pluginSupportKnown: false,
           pluginSupportSource: 'unknown',
           supportsFlowControl: false,
@@ -360,6 +363,7 @@ export const useAuthStore = create<AuthStoreState>()(
           set({
             supportsPlugin: false,
             supportsReasoningEffortPolicy: false,
+            supportsAutoModel: false,
             pluginSupportKnown: false,
             pluginSupportSource: 'unknown',
             supportsFlowControl: false,
@@ -416,6 +420,7 @@ export const useAuthStore = create<AuthStoreState>()(
             connectionStatus: 'error',
             supportsPlugin: false,
             supportsReasoningEffortPolicy: false,
+            supportsAutoModel: false,
             pluginSupportKnown: false,
             pluginSupportSource: 'unknown',
             supportsFlowControl: false,
@@ -472,6 +477,7 @@ export const useAuthStore = create<AuthStoreState>()(
         const nextState = { ...(persistedState as Record<string, unknown>) };
         delete nextState.supportsPlugin;
         delete nextState.supportsReasoningEffortPolicy;
+        delete nextState.supportsAutoModel;
         delete nextState.pluginSupportKnown;
         delete nextState.pluginSupportSource;
         delete nextState.supportsFlowControl;
@@ -484,6 +490,9 @@ export const useAuthStore = create<AuthStoreState>()(
 
 // 监听全局未授权事件
 if (typeof window !== 'undefined') {
+  window.addEventListener('server-auto-model-update', ((event: CustomEvent) => {
+    useAuthStore.setState({ supportsAutoModel: event.detail?.supported === true });
+  }) as EventListener);
   window.addEventListener('server-reasoning-effort-policy-update', ((event: CustomEvent) => {
     useAuthStore.getState().updateServerReasoningEffortPolicy(event.detail?.supported === true);
   }) as EventListener);

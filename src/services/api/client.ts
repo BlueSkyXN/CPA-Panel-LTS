@@ -228,8 +228,15 @@ class ManagementTransport {
         const buildDate =
           homeBuildDate || cpaBuildDate || this.readHeader(headers, BUILD_DATE_HEADER_KEYS);
         const supportsPlugin = this.readBooleanHeader(headers, CPA_SUPPORT_PLUGIN_HEADER_KEYS);
+        const isConfigRead = /\/config(?:\.yaml)?(?:\?|$)/.test(response.config?.url ?? '');
+        const autoModel = this.readBooleanHeader(headers, ['x-cpa-auto-model']);
+        if (autoModel !== null || isConfigRead) {
+          window.dispatchEvent(new CustomEvent('server-auto-model-update', {
+            detail: { supported: autoModel === true },
+          }));
+        }
         const reasoningPolicy = this.readBooleanHeader(headers, ['x-cpa-reasoning-effort-policy']);
-        if (reasoningPolicy !== null || /\/config(?:\.yaml)?(?:\?|$)/.test(response.config?.url ?? '')) {
+        if (reasoningPolicy !== null || isConfigRead) {
           window.dispatchEvent(new CustomEvent('server-reasoning-effort-policy-update', {
             detail: { supported: reasoningPolicy === true },
           }));

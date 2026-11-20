@@ -4,6 +4,7 @@ import { useCodexPolicyControls } from '@/lts/codexPolicy/useCodexPolicyControls
 import { useCallback, useId, useMemo, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ProxyUrlField } from '@/components/common/ProxyUrlField';
+import { useAuthStore } from '@/stores/useAuthStore';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { ToggleRow, FieldShell } from './ConfigFieldShells';
@@ -48,6 +49,9 @@ export function useConfigFieldControls({
 }: ConfigFieldsProps): Record<ConfigFieldId, ReactNode> {
   const { t } = useTranslation();
   const codexControls = useCodexPolicyControls({ values, validationErrors, disabled, onChange });
+  const supportsAutoModel = useAuthStore((state) => state.supportsAutoModel);
+  const autoCandidatesId = useId();
+  const autoCandidatesHintId = useId();
   const routingStrategyLabelId = useId();
   const routingStrategyHintId = `${routingStrategyLabelId}-hint`;
   const disableImageGenerationLabelId = useId();
@@ -648,6 +652,36 @@ export function useConfigFieldControls({
         hint={t('config_management.visual.sections.network.auth_auto_refresh_workers_hint')}
         error={authAutoRefreshWorkersError}
       />
+    ),
+    autoModelEnabled: (
+      <ToggleRow
+        title={t('config_management.visual.sections.network.auto_model')}
+        description={t(supportsAutoModel
+          ? 'config_management.visual.sections.network.auto_model_hint'
+          : 'config_management.visual.sections.network.auto_model_unsupported')}
+        checked={values.autoModelEnabled}
+        disabled={disabled || !supportsAutoModel}
+        onChange={(autoModelEnabled) => onChange({ autoModelEnabled })}
+      />
+    ),
+    autoModelCandidates: (
+      <FieldShell
+        label={t('config_management.visual.sections.network.auto_model_candidates')}
+        htmlFor={autoCandidatesId}
+        hint={t('config_management.visual.sections.network.auto_model_candidates_hint')}
+        hintId={autoCandidatesHintId}
+      >
+        <textarea
+          id={autoCandidatesId}
+          aria-describedby={autoCandidatesHintId}
+          className="input"
+          rows={3}
+          spellCheck={false}
+          value={values.autoModelCandidates}
+          disabled={disabled || !supportsAutoModel}
+          onChange={(event) => onChange({ autoModelCandidates: event.target.value })}
+        />
+      </FieldShell>
     ),
     routingStrategy: (
       <FieldShell

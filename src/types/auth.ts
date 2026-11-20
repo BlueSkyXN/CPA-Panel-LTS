@@ -21,6 +21,7 @@ export interface AuthState {
   serverRuntimeKind: ServerRuntimeKind;
   supportsPlugin: boolean;
   supportsReasoningEffortPolicy: boolean;
+  supportsAutoModel: boolean;
   pluginSupportKnown: boolean;
   pluginSupportSource: PluginSupportSource;
   supportsFlowControl: boolean;
