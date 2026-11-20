@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import fsSync from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 const REGIONS = Object.freeze({
@@ -94,6 +95,61 @@ async function readJson(file) {
   }
 }
 
+const KEYCHAIN_SERVICE = 'ZCode Credential Encryption';
+const V2_VALUE_PATTERN =
+  /^enc:v2:(os|env):([a-f0-9]{24}):([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/;
+
+function v2KeyFingerprint(key) {
+  return crypto.createHash('sha256').update(key).digest('hex').slice(0, 24);
+}
+
+function osKeychainKey(credentialsPath, env = process.env) {
+  // 官方 v2 凭据密钥按 credentials.json 绝对路径寻址：account = sha256(路径) hex。
+  // 测试可经 ZCODE_TEST_OS_KEY 注入，避免触碰真实钥匙串。
+  const testKey = env.ZCODE_TEST_OS_KEY;
+  if (testKey !== undefined) {
+    if (!testKey) return { status: 'missing' };
+    const key = decodeBase64(testKey, true);
+    if (key.length !== 32) return { status: 'invalid' };
+    return { status: 'ok', key };
+  }
+  if (process.platform !== 'darwin') return { status: 'missing' };
+  const account = crypto.createHash('sha256').update(credentialsPath).digest('hex');
+  const result = spawnSync(
+    '/usr/bin/security',
+    ['find-generic-password', '-s', KEYCHAIN_SERVICE, '-a', account, '-w'],
+    { encoding: 'utf8', timeout: 5000, maxBuffer: 8192 }
+  );
+  const value = text(result.stdout);
+  if (result.status !== 0 || !value) return { status: 'missing' };
+  const key = decodeBase64(value, true);
+  if (key.length !== 32) return { status: 'invalid' };
+  return { status: 'ok', key };
+}
+
+// 官方无头兜底（v3.18 设计）：ZCODE_CREDENTIAL_SECRET / ZCODE_CREDENTIAL_SECRET_FILE /
+// 数据目录旁 credential-secret 文件（32–4096 字节），密钥 = sha256(secret)。
+function managedSecretKey(directory, env = process.env) {
+  if (env.ZCODE_CREDENTIAL_SECRET && env.ZCODE_CREDENTIAL_SECRET_FILE) return { status: 'conflict' };
+  if (env.ZCODE_CREDENTIAL_SECRET) {
+    const secret = env.ZCODE_CREDENTIAL_SECRET;
+    return secret.length >= 32 && secret.length <= 4096
+      ? { status: 'ok', key: crypto.createHash('sha256').update(secret).digest() }
+      : { status: 'invalid' };
+  }
+  const file = env.ZCODE_CREDENTIAL_SECRET_FILE || path.join(directory, 'credential-secret');
+  try {
+    const stat = fsSync.statSync(file);
+    if (!stat.isFile()) return { status: 'missing' };
+    const secret = fsSync.readFileSync(file, 'utf8');
+    const bytes = Buffer.byteLength(secret, 'utf8');
+    if (bytes < 32 || bytes > 4096) return { status: 'invalid' };
+    return { status: 'ok', key: crypto.createHash('sha256').update(secret).digest() };
+  } catch (error) {
+    return error.code === 'ENOENT' ? { status: 'missing' } : { status: 'invalid' };
+  }
+}
+
 function localCipherKey(env = process.env, origin = {}) {
   let username = 'unknown';
   try {
@@ -160,10 +216,21 @@ function openGcm(key, iv, tag, ciphertext, aad) {
 
 function decryptValue(value, key) {
   if (typeof value !== 'string' || !value.startsWith('enc:')) return value;
+  const v2Match = V2_VALUE_PATTERN.exec(value);
+  if (v2Match) {
+    // enc:v2:{os|env}:<keyFingerprint>:<iv>.<tag>.<ct>；os 密钥在系统钥匙串，
+    // env 密钥来自 managed secret（env/文件），指纹不符即密钥源不对。
+    const [, source, fingerprint, iv, tag, ciphertext] = v2Match;
+    const keyBytes = source === 'os' ? key?.os : key?.env;
+    if (!keyBytes) throw failure(source === 'os' ? 'os_keychain_unavailable' : 'managed_secret_unavailable');
+    if (v2KeyFingerprint(keyBytes) !== fingerprint)
+      throw failure(source === 'os' ? 'os_keychain_fingerprint_mismatch' : 'managed_secret_fingerprint_mismatch');
+    return openGcm(keyBytes, decodeBase64(iv, true), decodeBase64(tag, true), decodeBase64(ciphertext, true));
+  }
   const match = /^enc:v1:([^.]*)\.([^.]*)\.([^.]*)$/.exec(value);
   if (!match) throw failure('unsupported_encryption_format');
   const [iv, tag, ciphertext] = match.slice(1).map((part) => decodeBase64(part, true));
-  return openGcm(key, iv, tag, ciphertext);
+  return openGcm(key?.legacy, iv, tag, ciphertext);
 }
 
 function decryptTree(value, key, errors, pointer = '', depth = 0) {
@@ -320,7 +387,9 @@ async function collectLocal(options, report) {
     for (const directory of directories) {
       const credentialErrors = [];
       const raw = await readSource(directory, 'credentials.json', report);
-      const credentials = decryptTree(raw, key, credentialErrors);
+      const keyring = osKeychainKey(path.join(directory, 'credentials.json'));
+      const managed = managedSecretKey(directory);
+      const credentials = decryptTree(raw, { legacy: key, os: keyring.key, env: managed.key }, credentialErrors);
       report.errors.push(
         ...credentialErrors.map((error) => ({
           source: path.join(directory, 'credentials.json'),
@@ -335,7 +404,12 @@ async function collectLocal(options, report) {
           ? report.desktop_settings || {}
           : {};
       const deviceErrors = [];
-      const device = decryptTree(telemetry.deviceMid ?? null, key, deviceErrors, '/deviceMid');
+      const device = decryptTree(
+        telemetry.deviceMid ?? null,
+        { legacy: key },
+        deviceErrors,
+        '/deviceMid'
+      );
       report.errors.push(
         ...deviceErrors.map((error) => ({
           source: path.join(directory, 'telemetry-state.json'),
@@ -374,7 +448,11 @@ async function collectLocal(options, report) {
       }
       for (const name of ['config.json', 'provider_config.json']) {
         const errors = [];
-        const config = decryptTree(await readSource(directory, name, report), key, errors);
+        const config = decryptTree(
+          await readSource(directory, name, report),
+          { legacy: key, os: keyring.key, env: managed.key },
+          errors
+        );
         report.errors.push(
           ...errors.map((error) => ({ source: path.join(directory, name), ...error }))
         );
@@ -994,9 +1072,9 @@ async function selfTest() {
     await test('authenticated decryption and nested failure isolation', () => {
       const errors = [],
         invalid = encrypted('wrong-key');
-      const other = crypto.randomBytes(32);
+      const other = { legacy: crypto.randomBytes(32) };
       assert.throws(() => decryptValue(invalid, other));
-      other.fill(0);
+      other.legacy.fill(0);
       const decoded = decryptTree(
         {
           good: encrypted('synthetic.secret'),
@@ -1004,7 +1082,7 @@ async function selfTest() {
           bad: 'enc:v9:unknown',
           number: 2,
         },
-        key,
+        { legacy: key },
         errors
       );
       assert.equal(decoded.good, 'synthetic.secret');
@@ -1443,6 +1521,109 @@ async function selfTest() {
         delete process.env.ZCODE_CREDENTIAL_SECRET;
       }
     });
+    await test('os keychain v2 decryption with fingerprint binding', async () => {
+      const osKey = crypto.randomBytes(32);
+      const fingerprint = crypto.createHash('sha256').update(osKey).digest('hex').slice(0, 24);
+      const sealV2 = (value, fp = fingerprint) => {
+        const sealed = seal(value, osKey);
+        return `enc:v2:os:${fp}:${[sealed.iv, sealed.tag, sealed.ciphertext]
+          .map((part) => part.toString('base64url'))
+          .join('.')}`;
+      };
+      // ZCODE_TEST_OS_KEY 注入钥匙串 key，绕开真实系统钥匙串。
+      process.env.ZCODE_TEST_OS_KEY = osKey.toString('base64url');
+      const osDir = path.join(directory, 'os-keychain');
+      await fs.mkdir(osDir);
+      await fs.writeFile(
+        path.join(osDir, 'credentials.json'),
+        JSON.stringify({
+          'account-provider:coding-plan:account:bigmodel-team-coding-plan:account:synthetic:api-key':
+            sealV2('os-team.secret'),
+          'oauth:bigmodel:access_token': sealV2('os-oauth'),
+          legacy: encrypted('fallback.secret'),
+        }),
+        { mode: 0o600 }
+      );
+      try {
+        const report = await collect({ ...options, directories: [osDir] });
+        assert.equal(report.errors.length, 0);
+        const source = report.local_sources[0];
+        assert.equal(
+          source.credentials[
+            'account-provider:coding-plan:account:bigmodel-team-coding-plan:account:synthetic:api-key'
+          ],
+          'os-team.secret'
+        );
+        assert.equal(source.credentials['oauth:bigmodel:access_token'], 'os-oauth');
+        assert.equal(source.credentials.legacy, 'fallback.secret');
+        assert.ok(report.api_keys.some((item) => item.api_key === 'os-team.secret'));
+        // 指纹不符（另一把钥匙串 key）必须整体失败，不回落 legacy。
+        process.env.ZCODE_TEST_OS_KEY = crypto.randomBytes(32).toString('base64url');
+        const mismatch = await collect({ ...options, directories: [osDir] });
+        assert.ok(
+          mismatch.errors.some((item) => item.error === 'os_keychain_fingerprint_mismatch')
+        );
+        assert.ok(!mismatch.api_keys.some((item) => item.api_key === 'os-team.secret'));
+        // 无钥匙串 key 时报不可用，legacy 字段仍可解。
+        process.env.ZCODE_TEST_OS_KEY = '';
+        const unavailable = await collect({ ...options, directories: [osDir] });
+        assert.ok(unavailable.errors.some((item) => item.error === 'os_keychain_unavailable'));
+        const unavailableSource = unavailable.local_sources[0];
+        assert.equal(unavailableSource.credentials.legacy, 'fallback.secret');
+      } finally {
+        delete process.env.ZCODE_TEST_OS_KEY;
+      }
+    });
+    await test('managed secret v2:env decryption with env and file sources', async () => {
+      const envDir = path.join(directory, 'env-secret');
+      await fs.mkdir(envDir);
+      const sealV2Env = (value, k) => {
+        const fp = crypto.createHash('sha256').update(k).digest('hex').slice(0, 24);
+        const sealed = seal(value, k);
+        return `enc:v2:env:${fp}:${[sealed.iv, sealed.tag, sealed.ciphertext]
+          .map((part) => part.toString('base64url'))
+          .join('.')}`;
+      };
+      const secretText = 'x'.repeat(40);
+      const envKey = crypto.createHash('sha256').update(secretText).digest();
+      await fs.writeFile(
+        path.join(envDir, 'credentials.json'),
+        JSON.stringify({
+          'account-provider:coding-plan:account:bigmodel-team-coding-plan:account:synthetic:api-key':
+            sealV2Env('env-team.secret', envKey),
+        }),
+        { mode: 0o600 }
+      );
+      // sibling credential-secret 文件路径：managedSecretKey 读 directory 下的文件。
+      const previousEnvFile = process.env.ZCODE_CREDENTIAL_SECRET_FILE;
+      const secretFile = path.join(directory, 'managed-secret-file');
+      await fs.writeFile(secretFile, secretText, { mode: 0o600 });
+      try {
+        process.env.ZCODE_CREDENTIAL_SECRET_FILE = secretFile;
+        const viaFile = await collect({ ...options, directories: [envDir] });
+        assert.equal(viaFile.errors.length, 0, JSON.stringify(viaFile.errors));
+        assert.ok(viaFile.api_keys.some((item) => item.api_key === 'env-team.secret'));
+        // ZCODE_CREDENTIAL_SECRET 环境变量路径
+        delete process.env.ZCODE_CREDENTIAL_SECRET_FILE;
+        process.env.ZCODE_CREDENTIAL_SECRET = secretText;
+        const viaEnv = await collect({ ...options, directories: [envDir] });
+        assert.equal(viaEnv.errors.length, 0);
+        assert.ok(viaEnv.api_keys.some((item) => item.api_key === 'env-team.secret'));
+        // 错误 secret → 指纹不匹配，整体失败不误读
+        process.env.ZCODE_CREDENTIAL_SECRET = 'y'.repeat(40);
+        const mismatch = await collect({ ...options, directories: [envDir] });
+        assert.ok(mismatch.errors.some((item) => item.error === 'managed_secret_fingerprint_mismatch'));
+        // 长度不足 32 → invalid → 不可用
+        process.env.ZCODE_CREDENTIAL_SECRET = 'short';
+        const invalid = await collect({ ...options, directories: [envDir] });
+        assert.ok(invalid.errors.some((item) => item.error === 'managed_secret_unavailable'));
+      } finally {
+        if (previousEnvFile === undefined) delete process.env.ZCODE_CREDENTIAL_SECRET_FILE;
+        else process.env.ZCODE_CREDENTIAL_SECRET_FILE = previousEnvFile;
+        delete process.env.ZCODE_CREDENTIAL_SECRET;
+        await fs.rm(secretFile, { force: true });
+      }
+    });
     await test('versioned provider config and custom local cipher secret', async () => {
       const prior = await fs.readFile(path.join(directory, 'provider_config.json'), 'utf8');
       await write('provider_config.json', { schemaVersion: 1, config: JSON.parse(prior) });
@@ -1451,7 +1632,7 @@ async function selfTest() {
       const customKey = localCipherKey({ ZCODE_CREDENTIAL_SECRET: 'synthetic-custom-secret' });
       const sealed = seal('custom-plaintext', customKey);
       const value = `enc:v1:${[sealed.iv, sealed.tag, sealed.ciphertext].map((part) => part.toString('base64url')).join('.')}`;
-      assert.equal(decryptValue(value, customKey), 'custom-plaintext');
+      assert.equal(decryptValue(value, { legacy: customKey }), 'custom-plaintext');
       customKey.fill(0);
       await fs.writeFile(path.join(directory, 'provider_config.json'), prior);
     });
