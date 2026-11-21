@@ -19,6 +19,9 @@ export interface AnalyticsReturnContext {
 const focusIds = new Set([
   'analytics-open-details',
   'analytics-summary-failures',
+  ...['read', 'write'].flatMap((field) =>
+    ['positive', 'zero', 'unknown'].map((state) => `analytics-cache-${field}-${state}`)
+  ),
   ...['latency', 'throughput', 'cache', 'errors'].flatMap((name) => [
     `analytics-${name}-bucket`,
     `analytics-${name}-bucket-open`,

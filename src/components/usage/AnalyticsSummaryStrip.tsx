@@ -81,10 +81,15 @@ export function AnalyticsSummaryStrip({
     },
     {
       key: 'cache',
-      label: t('analytics.summary_cache'),
-      value: percentText(cache.cacheReadRate),
+      label: t(cache.observed ? 'analytics.summary_cache' : 'cache_analysis.legacy_rate'),
+      value: percentText(cache.observed ? cache.observed.rate : cache.cacheReadRate),
       meta:
-        cache.inputTokens > 0
+        cache.observed
+          ? t('cache_analysis.coverage', {
+              observed: cache.observed.read.positive + cache.observed.read.zero,
+              total: totalRecords,
+            })
+          : cache.inputTokens > 0
           ? t('analytics.summary_cache_meta', {
               read: formatCompactNumber(cache.cacheReadTokens),
               input: formatCompactNumber(cache.inputTokens),

@@ -21,7 +21,10 @@ test('shared fixtures preserve all chart values and decode successfully', () => 
   try {
     for (const f of fixtures) {
       process.env.TZ = f.timezone;
-      assert.deepEqual(buildUsageAnalytics(f.rows, f.from_ms === undefined ? null : { startMs: f.from_ms, endMs: f.to_ms }), f.expected, f.name);
+      const result = buildUsageAnalytics(f.rows, f.from_ms === undefined ? null : { startMs: f.from_ms, endMs: f.to_ms });
+      delete result.cache.observed;
+      for (const p of [...result.hour.cache, ...result.day.cache]) delete p.observed;
+      assert.deepEqual(result, f.expected, f.name);
       assert.doesNotThrow(() => decodeUsageAnalytics({ ...response(), data: f.expected, total: f.rows.length, analyzed: f.expected.cache.requests }));
     }
   } finally { if (old === undefined) delete process.env.TZ; else process.env.TZ = old; }
@@ -100,4 +103,41 @@ test('analytics requests use the LTS scope on a V8 connection', async () => {
     apiClient.instance.defaults.adapter = adapter;
     apiClient.clearConfig();
   }
+});
+
+test('observed cache ratio retains explicit zero, excludes unknown and agrees across grains', () => {
+  const rows = [7680, 7680, 6656, 4096, 0, null].map((value, index) => ({
+    timestamp: new Date(Date.UTC(2026, 10, 20, 7 + index, 15)).toISOString(),
+    latency_ms: 120, failed: false,
+    tokens: { input_tokens: 8192, cache_read_tokens: value ?? 0 },
+    cache_observation: {
+      version: 1,
+      read: value === null ? { state: 'absent' } : { state: 'present', value },
+      write: { state: 'present', value: 0 },
+    },
+  }));
+  const data = buildUsageAnalytics(rows, null);
+  assert.equal(data.cache.cacheReadRate, .53125);
+  assert.deepEqual(data.cache.observed, {
+    read: { positive: 4, zero: 1, unknown: 1 },
+    write: { positive: 0, zero: 6, unknown: 0 },
+    readTokens: 26112, inputTokens: 40960, rate: .6375,
+  });
+  assert.equal(data.hour.cache[4].observed.rate, 0);
+  assert.equal(data.hour.cache[5].observed.rate, null);
+  assert.equal(data.hour.cache[5].observed.read.unknown, 1);
+  assert.doesNotThrow(() => decodeUsageAnalytics({ ...response(), data, total: 6, analyzed: 6 }));
+  data.cache.observed.read.unknown = 0;
+  assert.throws(() => decodeUsageAnalytics({ ...response(), data, total: 6, analyzed: 6 }));
+});
+
+test('all-time observed totals retain undated requests outside the series', () => {
+  const data = buildUsageAnalytics([
+    {timestamp: '2026-11-20T07:15:00Z', latency_ms: 1, failed: false, tokens: {input_tokens: 39}},
+    {timestamp: 'invalid', latency_ms: 1, failed: false, tokens: {input_tokens: 10}},
+  ], null);
+  assert.equal(data.cache.requests, 1);
+  assert.equal(data.cache.observed.read.unknown, 2);
+  assert.equal(data.hour.cache[0].observed.read.unknown, 1);
+  assert.doesNotThrow(() => decodeUsageAnalytics({ ...response(), data, total: 2, analyzed: 1 }));
 });

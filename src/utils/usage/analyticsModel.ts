@@ -25,7 +25,7 @@ export function buildUsageAnalytics(
 ): UsageAnalyticsData {
   const all = Array.from(details);
   const latency = collectLatencyAnalysisRows(all);
-  const cache = collectCacheAnalysisRows(all);
+  const cache = collectCacheAnalysisRows(all, { includeUndated: true });
   const errors = collectErrorAnalysisRows(all);
   const grain = (period: AnalyticsGrain) => ({
     latency: buildLatencyPercentileSeries(latency, period, window),

@@ -25,3 +25,20 @@ test('session query sends explicit scope and record and performs no mutation cal
  await captureCacheDiagnosticsClient().session('codex','model','b'.repeat(64),'a'.repeat(64));
  assert.deepEqual(call,{path:'/cache-diagnostics/session',body:{provider:'codex',model:'model',session_hash:'b'.repeat(64),diagnostics_id:'a'.repeat(64)}});
 });
+
+test('trace lookup sends scoped parameters and drops results after connection ABA', async () => {
+  let finish;
+  let request;
+  client.captureConnection = () => ({ get: (path, config) => {
+    request = { path, params: config.params };
+    return new Promise(resolve => { finish = resolve; });
+  } });
+  const query = { instance_id: 'instance-one', kind: 'pck', digest: 'a'.repeat(64), scope: 'b'.repeat(64) };
+  client.setConfig({ apiBase: 'https://one.invalid', managementKey: 'synthetic' });
+  const pending = captureCacheDiagnosticsClient().traces(query);
+  assert.deepEqual(request, { path: '/cache-diagnostics/traces', params: query });
+  client.setConfig({ apiBase: 'https://two.invalid', managementKey: 'synthetic' });
+  client.setConfig({ apiBase: 'https://one.invalid', managementKey: 'synthetic' });
+  finish({ version: 1, current_instance_id: 'instance-one', items: [], history_included: true });
+  assert.equal(await pending, null);
+});
