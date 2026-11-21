@@ -115,6 +115,13 @@ def main():
                 CacheHandler.mode = mode
                 row.click()
                 page.locator(f'[data-cache-diagnostics="{result}"]').wait_for()
+            CacheHandler.mode = "ready"
+            page.goto(app_url + "?route=legacy-cache-analysis#/analytics/cache", wait_until="domcontentloaded")
+            page.get_by_text("This Core can open a single diagnostic ID.", exact=True).wait_for()
+            field = page.get_by_role("searchbox", name="Diagnostic record ID")
+            field.fill(TRACE)
+            field.press("Enter")
+            page.get_by_text("Outbound attempt 2 · WebSocket", exact=False).wait_for()
             if errors: raise AssertionError(errors)
             print("Cache diagnostics browser smoke passed: attempts, field presence, query, comparison, instance mismatch, old Core, desktop and mobile.")
         except Exception:

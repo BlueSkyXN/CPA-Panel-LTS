@@ -14,6 +14,7 @@ import { UsagePricingPage } from '@/pages/UsagePricingPage';
 import { ConfigPage } from '@/pages/ConfigPage';
 import { FlowControlPage } from '@/pages/FlowControlPage';
 import { FlowDashboardPage } from '@/pages/FlowDashboardPage';
+import { CacheAnalysisPage } from '@/pages/CacheAnalysisPage';
 import { ObservabilityPage } from '@/pages/ObservabilityPage';
 import { LogsPage } from '@/pages/LogsPage';
 import { SystemPage } from '@/pages/SystemPage';
@@ -99,6 +100,7 @@ const mainRoutes = [
   { path: '/usage', element: <UsagePage /> },
   { path: '/analytics', element: <Navigate to="/analytics/observability" replace /> },
   { path: '/analytics/observability', element: <ObservabilityPage /> },
+  { path: '/analytics/cache', element: <CacheAnalysisPage /> },
   { path: '/analytics/flow', element: <RequireFlowSupport><FlowDashboardPage /></RequireFlowSupport> },
   { path: '/analytics/flow/config', element: <RequireFlowSupport><FlowControlPage /></RequireFlowSupport> },
   { path: '/flow-control', element: <Navigate to="/analytics/flow/config" replace /> },

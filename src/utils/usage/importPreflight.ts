@@ -1,3 +1,4 @@
+import { readCacheRoute } from './cacheRoute';
 import { readCacheObservation } from './cacheDiagnostics';
 import { normalizeTokenAccounting, tokenAccountingMatches } from './tokenAccounting';
 import { normalizeOutputTiming } from './performance';
@@ -462,7 +463,10 @@ const collectUsageDetailEntries = (
           return { entries: [], issue: 'usage_shape_invalid' };
         }
 
-        if (version === 3 && detailValue.cache_observation != null && !readCacheObservation(detailValue.cache_observation)) {
+        if (version === 3 && (
+          detailValue.cache_observation != null && !readCacheObservation(detailValue.cache_observation) ||
+          detailValue.cache_route != null && !readCacheRoute(detailValue.cache_route)
+        )) {
           return { entries: [], issue: 'usage_v3_token_contract_invalid' };
         }
 

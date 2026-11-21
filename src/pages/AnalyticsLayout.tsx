@@ -8,11 +8,12 @@ export function AnalyticsLayout({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
   const supported = useAuthStore((state) => state.flowSupportKnown && state.supportsFlowControl);
   const pages = [
-    { path: '/analytics/observability', label: 'observability' },
+    { path: '/analytics/observability', label: 'analytics.observability' },
+    { path: '/analytics/cache', label: 'cache_analysis.title' },
     ...(supported
       ? [
-          { path: '/analytics/flow', label: 'flow_dashboard' },
-          { path: '/analytics/flow/config', label: 'flow_config' },
+          { path: '/analytics/flow', label: 'analytics.flow_dashboard' },
+          { path: '/analytics/flow/config', label: 'analytics.flow_config' },
         ]
       : []),
   ];
@@ -28,7 +29,7 @@ export function AnalyticsLayout({ children }: { children: ReactNode }) {
               end
               className={({ isActive }) => `${styles.tab} ${isActive ? styles.active : ''}`}
             >
-              {t(`analytics.${label}`)}
+              {t(label)}
             </NavLink>
           ))}
         </nav>

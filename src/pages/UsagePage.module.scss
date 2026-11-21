@@ -2605,3 +2605,122 @@
   border-top: 1px solid var(--border-color);
   padding-top: 12px;
 }
+
+.cacheRouteLinks,
+.cacheExecutionSummary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.6rem;
+}
+
+.cacheRouteLinks {
+  min-inline-size: 10rem;
+  font-size: 0.78rem;
+  align-items: flex-start;
+}
+
+.cacheRouteLink {
+  display: inline-block;
+  min-block-size: 24px;
+  padding: 0.15rem 0.4rem;
+  border: 1px solid var(--border-color);
+  border-radius: 0.4rem;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+  }
+}
+
+.cacheRouteMore {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  list-style: none;
+
+  &::-webkit-details-marker { display: none; }
+
+  &::before {
+    content: '';
+    inline-size: 0.55rem;
+    block-size: 0.55rem;
+    background:
+      linear-gradient(currentColor, currentColor) center / 100% 1px no-repeat,
+      linear-gradient(currentColor, currentColor) center / 1px 100% no-repeat;
+  }
+
+  details[open] > &::before {
+    background-size: 100% 1px, 0 0;
+  }
+
+  @media (forced-colors: active) {
+    &::before {
+      color: ButtonText;
+      forced-color-adjust: none;
+    }
+  }
+}
+
+.cacheRouteList {
+  display: grid;
+  gap: 0.25rem;
+  list-style: none;
+  padding: 0;
+  margin-block: 0.3rem 0;
+}
+
+.cacheExecutionSummary {
+  margin-block-end: 0.65rem;
+}
+
+.requestEventsTimeButton {
+  background: none;
+  color: inherit;
+  border: 0;
+  padding: 0;
+  min-block-size: 24px;
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.cacheObservedRate {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.7rem;
+
+  strong {
+    font-size: 1.45rem;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.cacheRouteFacts,
+.cacheStateGroups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.7rem;
+}
+
+.cacheRouteFacts {
+  margin-block: 0.25rem;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+.cacheRouteFacts > span {
+  padding-inline: 0.35rem;
+  border: 1px solid var(--border-color);
+  border-radius: 0.35rem;
+}
+
+.cacheStateGroups > div {
+  flex: 1 1 100%;
+}

@@ -73,3 +73,24 @@ test('import preflight rejects contradictory cache evidence without inventing ol
  assert.equal(analyzeUsageImport(envelope(obs({state:'absent',value:0}))).valid,false);
  assert.equal(analyzeUsageImport(envelope(obs({state:'present',value:0,source:'x'.repeat(97)}))).valid,false);
 });
+
+test('same credential transport failure still describes the retry and transport change', async () => {
+ const {cacheExecutionPath}=await vite.ssrLoadModule('/src/utils/usage/cacheDiagnostics.ts');
+ const a={execution_id:'execution',auth_index:'A',transport:'http',outcome:'transport_error'};
+ const b={execution_id:'execution',auth_index:'A',transport:'websocket',outcome:'completed'};
+ assert.deepEqual(cacheExecutionPath([a,b]), {from:a,final:b,failedBeforeFinal:true,changedCredential:false});
+ assert.equal(cacheExecutionPath([{...a,outcome:'completed'},b]).failedBeforeFinal,false);
+ assert.equal(cacheExecutionPath([a,{...b,auth_index:'B'}]).changedCredential,true);
+ assert.equal(cacheExecutionPath([b]),null);
+});
+
+test('historical rows use distinct keys even when their other identifiers coincide', async () => {
+ const {decodeTracePage}=await vite.ssrLoadModule('/src/utils/usage/cacheDiagnostics.ts');
+ const {cacheTraceRowKey}=await vite.ssrLoadModule('/src/utils/usage/cacheNavigation.ts');
+ const base={at:'2026-11-20T08:00:00Z',model:'legacy',available:false,trace_id:'shared-log'};
+ const result=decodeTracePage({
+  version:1,current_instance_id:'now',history_included:true,
+  items:[{...base,history_key:'a'.repeat(64)},{...base,history_key:'b'.repeat(64)}],
+ });
+ assert.notEqual(cacheTraceRowKey(result.items[0]),cacheTraceRowKey(result.items[1]));
+});

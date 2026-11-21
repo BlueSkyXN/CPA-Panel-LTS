@@ -45,6 +45,10 @@ export interface CacheAttempt {
   status?: number;
   outcome: string;
   input?: CachePayload;
+  input_tokens?: number;
+  cache_references: CacheRouteReference[];
+  cache_write_by_ttl?: Record<string, number>;
+  cache_control?: { breakpoints: number; five_minutes?: number; one_hour?: number };
   request: CachePayload;
   response_id?: string;
   response_model?: string;
@@ -67,6 +71,8 @@ export interface CacheTrace {
   instance_id: string;
   logical_request_id: string;
   session_hash?: string;
+  trace_id?: string;
+  input_session?: CacheRouteReference;
   model: string;
   source_format: string;
   created_at: string;
@@ -106,4 +112,95 @@ export interface CacheSessionSnapshot {
     expires_at: string;
     expired: boolean;
   }>;
+}
+
+export type CacheRouteKind =
+  'input_session' | 'outbound_session' | 'cache_group' | 'pck' | 'named_cache';
+
+export interface CacheRouteKey {
+  kind: CacheRouteKind;
+  digest: string;
+  scope?: string;
+}
+
+export interface CacheRouteReference extends CacheRouteKey {
+  method: 'inbound' | 'client' | 'outbound' | 'strict_prefix' | 'retained_group';
+  source?: string;
+}
+
+export interface CacheRouteSelection {
+  method: string;
+  result: string;
+  prefix_length?: number;
+  prefix_unit?: string;
+}
+
+export interface CacheRouteSummary {
+  version: 1;
+  references: CacheRouteReference[];
+  selection?: CacheRouteSelection;
+  attempt_count: number;
+  no_parsed_response?: boolean;
+  truncated?: boolean;
+  logical_digest?: string;
+  previous_response_digest?: string;
+  response_digests?: string[];
+  official_loss?: boolean;
+}
+
+export interface CacheTraceLocation {
+  instance_id?: string;
+  diagnostics_id?: string;
+  request_id?: string;
+  attempt?: number;
+  trace_id?: string;
+}
+
+export type CachePreviousSource = 'previous_response_id' | 'thread.previous_message_id' | 'diagnostics.previous_message_id';
+
+export interface CacheTraceRow extends CacheTraceLocation {
+  at: string;
+  history_key?: string;
+  model: string;
+  auth_index?: string;
+  trace_id?: string;
+  logical_request_id?: string;
+  response_id?: string;
+  available: boolean;
+  attempt_count?: number;
+  status?: number;
+  outcome?: string;
+  matched: string[];
+  input_tokens?: number;
+  cache_observation?: CacheObservation;
+  cache_route?: CacheRouteSummary;
+  previous?: CacheTraceLocation;
+  previous_source?: CachePreviousSource;
+}
+
+export type CacheTraceFocus = '' | 'zero_read' | 'retry' | 'official_loss';
+
+export interface CacheTraceQuery {
+  q?: string;
+  instance_id?: string;
+  focus?: CacheTraceFocus;
+  kind?: CacheRouteKind;
+  digest?: string;
+  scope?: string;
+  cursor?: string;
+}
+
+export interface CacheTracePage {
+  version: 1;
+  current_instance_id: string;
+  items: CacheTraceRow[];
+  history_included: boolean;
+  next_cursor?: string;
+}
+
+export interface CacheDiagnosticsCapabilities {
+  version?: number;
+  recording_enabled?: boolean;
+  trace_search_version?: number;
+  store?: { instance_id?: string };
 }

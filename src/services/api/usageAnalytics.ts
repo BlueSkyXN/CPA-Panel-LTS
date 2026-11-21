@@ -25,6 +25,20 @@ const cacheCounts = [
   'cacheReadTokens',
   'cacheWriteTokens',
 ];
+function observedCache(value: unknown, requests: unknown): boolean {
+  if (value === undefined) return true;
+  if (!isRecord(value) || !number(value.inputTokens) || !number(value.readTokens) ||
+      value.readTokens > value.inputTokens) return false;
+  const { inputTokens, readTokens, rate } = value;
+  if (inputTokens === 0 ? rate !== null
+    : !number(rate) || rate > 1 || Math.abs(rate - readTokens / inputTokens) > 2 * Number.EPSILON) {
+    return false;
+  }
+  return [value.read, value.write].every((group) =>
+    isRecord(group) && integer(group.positive) && integer(group.zero) && integer(group.unknown) &&
+    group.positive + group.zero + group.unknown === requests
+  );
+}
 const grain = (v: unknown) => {
   if (!isRecord(v) || !isRecord(v.latency)) return false;
   const l = v.latency;
@@ -45,7 +59,7 @@ const grain = (v: unknown) => {
     !list(
       v.cache,
       (p) =>
-        isRecord(p) && timestamp(p.timestampMs) && counts(p, cacheCounts) && nullable(p.cacheRate)
+        isRecord(p) && timestamp(p.timestampMs) && counts(p, cacheCounts) && nullable(p.cacheRate) && observedCache(p.observed, p.requests)
     ) ||
     !list(
       v.errors,
@@ -148,6 +162,7 @@ export function decodeUsageAnalytics(v: unknown): UsageAnalyticsResult {
     !isRecord(d.cache) ||
     !counts(d.cache, cacheCounts) ||
     !nullable(d.cache.cacheReadRate) ||
+    !observedCache(d.cache.observed, v.total) ||
     !nullable(d.cache.cacheHitRequestRatio) ||
     !isRecord(d.errors) ||
     !counts(d.errors, ['totalRequests', 'failedRequests']) ||

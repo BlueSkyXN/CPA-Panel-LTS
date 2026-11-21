@@ -1,6 +1,10 @@
 import { decodeUsageQuerySession } from '@/services/api/usageQuery';
+import type { CacheTraceRow } from '@/types/cacheDiagnostics';
+import { ltsExtensionClient } from '@/services/api/client';
+import { cacheEventsView, cacheLocationSearch, readCacheReturnContext, rememberCacheEvents, type CacheEventsView } from '@/utils/usage/cacheNavigation';
+import { isCacheValueState } from '@/utils/usage/cacheAnalytics';
 import { isRecord } from '@/utils/helpers';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { readAnalyticsNavigationState } from '@/utils/usage/analyticsFilters';
@@ -60,7 +64,7 @@ export function UsageEventsPage() {
     exporting,
     importing,
   } = useUsageData();
-  const pinnedSession = useMemo(() => {
+  const incomingSession = useMemo(() => {
     if (!isRecord(location.state) || !location.state.analyticsSession) return null;
     try {
       return decodeUsageQuerySession(location.state.analyticsSession);
@@ -71,6 +75,10 @@ export function UsageEventsPage() {
   // 可观测看板摘要带的失败下钻用 failed=1 表达"只看失败记录"，
   // 复用事件页已有的结果筛选语义，不引入并行的一套参数。
   const initialResultFailed = searchParams.get('failed') === '1';
+  const cacheReadParam = searchParams.get('cache_read_state');
+  const initialCacheReadState = isCacheValueState(cacheReadParam) ? cacheReadParam : undefined;
+  const cacheWriteParam = searchParams.get('cache_write_state');
+  const initialCacheWriteState = isCacheValueState(cacheWriteParam) ? cacheWriteParam : undefined;
   const connection = useAuthStore((state) => JSON.stringify([state.profileId, state.apiBase]));
   const returnContext = useMemo(
     () =>
@@ -80,18 +88,34 @@ export function UsageEventsPage() {
       ),
     [location.state, connection]
   );
+  const cacheConnection = JSON.stringify([connection, ltsExtensionClient.getConnectionGeneration()]);
+  const restoreContext = readCacheReturnContext(
+    isRecord(location.state) ? location.state.cacheRestoreContext : null, cacheConnection
+  );
+  const restoreCacheView = cacheEventsView(restoreContext);
+  const pinnedSession = restoreCacheView?.session ?? (returnContext ? incomingSession : null);
+  const openCacheAnalysis = (row: CacheTraceRow, view: CacheEventsView) => {
+    const token = rememberCacheEvents(cacheConnection, view);
+    const context = { pathname: '/usage/events', search: location.search, connection: cacheConnection, token };
+    const source = { ...(isRecord(location.state) ? location.state : {}), cacheRestoreContext: context };
+    navigate(`/usage/events${location.search}`, { replace: true, state: source });
+    navigate(`/analytics/cache${cacheLocationSearch(row)}`, {
+      state: { cacheReturnContext: context, cacheSourceState: source, cacheUsageRow: row },
+    });
+  };
   const [releasedSnapshot, setReleasedSnapshot] = useState<string | null>(null);
   const selectedSession =
     pinnedSession && releasedSnapshot !== pinnedSession.bound ? pinnedSession : querySession;
-  const refresh = useCallback(async () => {
+  const pinnedBound = pinnedSession?.bound;
+  const refresh = async () => {
     await loadUsage();
-    setReleasedSnapshot(pinnedSession?.bound ?? null);
-    if (pinnedSession)
+    setReleasedSnapshot(pinnedBound ?? null);
+    if (pinnedBound)
       navigate(`${location.pathname}${location.search}`, {
         replace: true,
         state: { ...(isRecord(location.state) ? location.state : {}), analyticsSession: null },
       });
-  }, [loadUsage, pinnedSession, navigate, location.pathname, location.search, location.state]);
+  };
   useHeaderRefresh(refresh);
 
   useEffect(() => {
@@ -128,9 +152,14 @@ export function UsageEventsPage() {
             value={scope.range}
             options={ranges.map((value) => ({ value, label: t(`usage_stats.range_${value}`) }))}
             onChange={(value) =>
-              setSearchParams(buildUsageEventsSearch(value as UsageTimeRange, scope.customRange), {
-                state: location.state,
-              })
+              {
+                const next = new URLSearchParams(buildUsageEventsSearch(value as UsageTimeRange, scope.customRange));
+                for (const field of ['failed', 'cache_read_state', 'cache_write_state']) {
+                  const current = searchParams.get(field);
+                  if (current) next.set(field, current);
+                }
+                setSearchParams(next, { state: location.state });
+              }
             }
             ariaLabel={t('usage_stats.range_filter')}
             fullWidth={false}
@@ -193,9 +222,13 @@ export function UsageEventsPage() {
         <div className={styles.errorBox}>{t('usage_stats.request_events_invalid_scope')}</div>
       )}
       <RequestEventsDetailsCard
-        key={JSON.stringify([initialAnalyticsFilters, initialResultFailed])}
+        key={JSON.stringify([connection, initialAnalyticsFilters, initialResultFailed, initialCacheReadState, initialCacheWriteState, restoreContext?.token])}
         initialAnalyticsFilters={initialAnalyticsFilters}
         initialResultFailed={initialResultFailed}
+        initialCacheReadState={initialCacheReadState}
+        initialCacheWriteState={initialCacheWriteState}
+        onAnalyze={openCacheAnalysis}
+        restoreCacheView={restoreCacheView}
         querySession={scope.valid ? selectedSession : null}
         usage={scope.valid ? usage : null}
         loading={loading}

@@ -10,6 +10,7 @@ import type {
   UsageQueryRequest,
   UsageQuerySession,
 } from '@/types/usageQuery';
+import type { EventQueryNavigation } from '@/utils/usage/cacheNavigation';
 import { normalizeUsageSourceId, type UsageDetail } from '@/utils/usage';
 import {
   UsageDetailsExport,
@@ -43,7 +44,8 @@ export function useUsageQueryDetails(
   session: UsageQuerySession | null,
   range: UsageQueryRequest,
   // null only probes metadata; its unfiltered rows must never reach the table or export.
-  filter: (options: UsageQueryOptions | null) => UsageQueryFilter | null
+  filter: (options: UsageQueryOptions | null) => UsageQueryFilter | null,
+  initialNavigation: EventQueryNavigation | null = null
 ) {
   const scope = useAuthStore((s) => JSON.stringify([s.apiBase, s.managementKey]));
   const baseKey = JSON.stringify([scope, session?.bound, range]);
@@ -54,11 +56,7 @@ export function useUsageQueryDetails(
   const options = metadata?.key === baseKey ? metadata.options : null;
   const appliedFilter = filter(options);
   const key = JSON.stringify([baseKey, appliedFilter]);
-  const [navigation, setNavigation] = useState<{
-    key: string;
-    page: number;
-    cursors: string[];
-  } | null>(null);
+  const [navigation, setNavigation] = useState(initialNavigation);
   const requestedPage = navigation?.key === key ? navigation.page : 0;
   const cursor = navigation?.key === key ? (navigation.cursors[requestedPage] ?? '') : '';
   const [retryVersion, setRetryVersion] = useState(0);
@@ -236,6 +234,7 @@ export function useUsageQueryDetails(
     loading,
     page,
     requestedPage,
+    navigationSnapshot: navigation?.key === key ? navigation : null,
     pageSize,
     setPage,
     retry,

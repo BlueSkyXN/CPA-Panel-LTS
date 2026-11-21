@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useState } from 'react';
 import { AnalyticsSection } from '@/components/common/AnalyticsSection';
+import type { CacheValueState } from '@/utils/usage/cacheAnalytics';
 import type { UsageAnalyticsData } from '@/types/usageAnalytics';
 import type { AnalyticsBucketRange } from './analyticsBucketDrill';
 import type { AnalyticsGrain, AnalyticsTimeWindow } from '@/utils/usage/analyticsBuckets';
@@ -20,6 +21,7 @@ export function UsageAnalyticsCharts({
   grain: controlledGrain,
   onGrainChange,
   onBucketClick,
+  onCacheState,
 }: {
   data: UsageAnalyticsData;
   loading: boolean;
@@ -30,6 +32,7 @@ export function UsageAnalyticsCharts({
   onGrainChange?: (grain: AnalyticsGrain) => void;
   /** 点击趋势图时间桶时触发；null 表示该卡不支持下钻。 */
   onBucketClick?: ((bucket: AnalyticsBucketRange) => void) | null;
+  onCacheState?: (field: 'read' | 'write', state: CacheValueState) => void;
 }) {
   const { t } = useTranslation();
   const [localGrain, setLocalGrain] = useState<AnalyticsGrain>('hour');
@@ -75,6 +78,7 @@ export function UsageAnalyticsCharts({
             grain={grain}
             onGrainChange={setGrain}
             onBucketClick={onBucketClick}
+            onCacheState={onCacheState}
           />
           <ErrorAnalysisCard
             data={data}
