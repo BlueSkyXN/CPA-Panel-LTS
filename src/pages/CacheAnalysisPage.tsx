@@ -178,8 +178,11 @@ function CacheAnalysisWorkspace({ connection, connected }: { connection: string;
   const [formError, setFormError] = useState(false);
   const q = submitted ?? (picked || focus ? '' : initialID);
   const linkedLookup = submitted === null && !picked && Boolean(initialID);
-  const linkMatchesInstance = !instance || !link.instance_id || link.instance_id === instance;
   const linkedUsage = linkedLookup ? usageRow : null;
+  // A usage row needs its recorded instance. A bare log ID is only a search term.
+  const linkMatchesInstance = link.instance_id
+    ? !instance || link.instance_id === instance
+    : !linkedUsage && Boolean(link.request_id || link.diagnostics_id);
   const records = useTracePages(supported && active && (!linkedLookup || linkMatchesInstance) ? {
     q: q || undefined, instance_id: linkedLookup ? link.instance_id : undefined,
     focus,
@@ -406,6 +409,7 @@ function CacheAnalysisWorkspace({ connection, connected }: { connection: string;
   );
 
   const showTimeline = supported && (!selected || selected.available);
+  const lookupInDetail = linkedLookup && !showTimeline;
   const mobileRows = showTimeline && narrow && (
     <details ref={relatedDisclosure} className={styles.timeline} open={!selected} key={selected ? cacheTraceRowKey(selected) : 'recent'}>
       <summary><span>{t(selected ? 'cache_analysis.related_requests' : q ? 'cache_analysis.matches' : 'cache_analysis.recent')}</span></summary>
@@ -511,7 +515,8 @@ function CacheAnalysisWorkspace({ connection, connected }: { connection: string;
               ? 'cache_diagnostics.unavailable' : 'cache_analysis.choose_request')}</p>}
           </div>
           {selected && mobileRows}
-          {detail.loading && <p role="status">{t('common.loading')}</p>}
+          {(detail.loading || (lookupInDetail && records.loading)) && <p role="status">{t('common.loading')}</p>}
+          {lookupInDetail && records.error && <p role="alert">{t(`cache_analysis.${records.error}`)}</p>}
           {detail.error && (!linkedUsage || detail.error !== 'unavailable') && (
             <p role="status">{t(`cache_diagnostics.${detail.error}`)}</p>
           )}
