@@ -6536,6 +6536,31 @@ def locate_config_field(page: Any, field: str, key: str) -> None:
     page.wait_for_function("field => document.activeElement?.closest('[data-config-field]')?.dataset.configField === field", arg=field)
 
 
+def run_login_scroll_smoke(browser: Any, app_url: str) -> None:
+    from playwright.sync_api import expect
+
+    page = browser.new_page(locale="en-US", viewport={"width": 1440, "height": 480})
+    try:
+        for login_url in (app_url, INDEX_HTML.as_uri()):
+            page.goto(f"{login_url}#/login", wait_until="domcontentloaded")
+            if login_url == app_url:
+                base = app_url.removesuffix("/management.html")
+                expect(page.get_by_text(base, exact=True)).to_be_visible()
+            else:
+                address = page.get_by_role("textbox", name="Connection Address", exact=True)
+                expect(address).to_have_value("")
+                expect(address).to_have_attribute("required", "")
+
+            # A click can scroll a clipped button into view even when wheel scrolling is broken.
+            page.mouse.move(1080, 240)
+            page.mouse.wheel(0, -900)
+            expect(page.get_by_alt_text("Logo", exact=True)).to_be_in_viewport(ratio=1)
+            page.mouse.wheel(0, 900)
+            expect(page.get_by_role("button", name="Login", exact=True)).to_be_in_viewport(ratio=1)
+    finally:
+        page.close()
+
+
 def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: bool) -> None:
     try:
         from playwright.sync_api import Error as PlaywrightError
@@ -6548,6 +6573,7 @@ def run_browser_smoke(app_url: str, api_url: str, state: MockCoreState, headed: 
 
     with sync_playwright() as playwright:
         browser = launch_chromium(playwright, headless=not headed)
+        run_login_scroll_smoke(browser, app_url)
         context = browser.new_context(locale="en-US", accept_downloads=True)
         context.add_init_script(
             """

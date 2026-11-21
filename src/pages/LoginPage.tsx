@@ -104,7 +104,7 @@ export function LoginPage() {
   const [autoLoginSuccess, setAutoLoginSuccess] = useState(false);
   const [error, setError] = useState('');
 
-  // file:// 打开（或 srcdoc 实例帧）无法从地址推断实例；只有宿主 file 文档需要手工填写提示。
+  // 本地文件的 URL 只有文件路径，需要显式填写实例地址。
   const isFileDocument = useMemo(() => window.location.protocol === 'file:', []);
   const detectedBase = useMemo(() => detectApiBaseFromLocation(), []);
   const languageOptions = useMemo(
@@ -140,7 +140,6 @@ export function LoginPage() {
           // 持久化水合可能晚于首帧渲染；恢复流程结束后读取最新 store 状态回填表单。
           const auth = useAuthStore.getState();
           setApiBase(auth.apiBase || (isFileDocument ? '' : detectedBase));
-          setShowCustomBase(isFileDocument && !auth.apiBase);
           setManagementKey(auth.managementKey || '');
           setRememberPassword(auth.rememberPassword || Boolean(auth.managementKey));
           // 常驻/迁移自动连接失败时，登录页要给出可行动的失败反馈，而不是静默重置。
@@ -258,40 +257,40 @@ export function LoginPage() {
                 <div className={styles.subtitle}>{t('login.subtitle')}</div>
               </div>
 
-              {isFileDocument && !apiBase ? (
-                <div className={styles.connectionBox}>
-                  <div className={styles.hint}>{t('login.file_mode_hint')}</div>
-                </div>
-              ) : (
-                <div className={styles.connectionBox}>
-                  <div className={styles.label}>{t('login.connection_current')}</div>
-                  <div className={styles.value}>{apiBase || detectedBase}</div>
-                  <div className={styles.hint}>{t('login.connection_auto_hint')}</div>
-                </div>
+              {!isFileDocument && (
+                <>
+                  <div className={styles.connectionBox}>
+                    <div className={styles.label}>{t('login.connection_current')}</div>
+                    <div className={styles.value}>{apiBase || detectedBase}</div>
+                    <div className={styles.hint}>{t('login.connection_auto_hint')}</div>
+                  </div>
+                  <div className={styles.toggleAdvanced}>
+                    <SelectionCheckbox
+                      checked={showCustomBase}
+                      onChange={setShowCustomBase}
+                      ariaLabel={t('login.custom_connection_label')}
+                      label={t('login.custom_connection_label')}
+                      labelClassName={styles.toggleLabel}
+                    />
+                  </div>
+                </>
               )}
 
-              <div className={styles.toggleAdvanced}>
-                <SelectionCheckbox
-                  checked={showCustomBase}
-                  onChange={setShowCustomBase}
-                  ariaLabel={t('login.custom_connection_label')}
-                  label={t('login.custom_connection_label')}
-                  labelClassName={styles.toggleLabel}
-                />
-              </div>
-
-              {showCustomBase && (
+              {(isFileDocument || showCustomBase) && (
                 <Input
-                  label={t('login.custom_connection_label')}
+                  autoFocus={isFileDocument && !apiBase}
+                  required={isFileDocument}
+                  inputMode="url"
+                  label={t(isFileDocument ? 'login.connection_title' : 'login.custom_connection_label')}
                   placeholder={t('login.custom_connection_placeholder')}
                   value={apiBase}
                   onChange={(e) => setApiBase(e.target.value)}
-                  hint={t('login.custom_connection_hint')}
+                  hint={t(isFileDocument ? 'login.file_mode_hint' : 'login.custom_connection_hint')}
                 />
               )}
 
               <Input
-                autoFocus
+                autoFocus={!isFileDocument || Boolean(apiBase)}
                 label={t('login.management_key_label')}
                 placeholder={t('login.management_key_placeholder')}
                 type={showKey ? 'text' : 'password'}
