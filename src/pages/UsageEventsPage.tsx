@@ -1,7 +1,6 @@
 import { decodeUsageQuerySession } from '@/services/api/usageQuery';
-import type { CacheTraceRow } from '@/types/cacheDiagnostics';
 import { ltsExtensionClient } from '@/services/api/client';
-import { cacheEventsView, cacheLocationSearch, readCacheReturnContext, rememberCacheEvents, type CacheEventsView } from '@/utils/usage/cacheNavigation';
+import { cacheEventsView, cacheLocationSearch, readCacheReturnContext, rememberCacheEvents, type CacheEventsView, type CacheUsageRow } from '@/utils/usage/cacheNavigation';
 import { isCacheValueState } from '@/utils/usage/cacheAnalytics';
 import { isRecord } from '@/utils/helpers';
 import { useEffect, useMemo, useState } from 'react';
@@ -94,7 +93,7 @@ export function UsageEventsPage() {
   );
   const restoreCacheView = cacheEventsView(restoreContext);
   const pinnedSession = restoreCacheView?.session ?? (returnContext ? incomingSession : null);
-  const openCacheAnalysis = (row: CacheTraceRow, view: CacheEventsView) => {
+  const openCacheAnalysis = (row: CacheUsageRow, view: CacheEventsView) => {
     const token = rememberCacheEvents(cacheConnection, view);
     const context = { pathname: '/usage/events', search: location.search, connection: cacheConnection, token };
     const source = { ...(isRecord(location.state) ? location.state : {}), cacheRestoreContext: context };

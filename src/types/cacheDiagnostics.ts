@@ -142,9 +142,6 @@ export interface CacheRouteSummary {
   attempt_count: number;
   no_parsed_response?: boolean;
   truncated?: boolean;
-  logical_digest?: string;
-  previous_response_digest?: string;
-  response_digests?: string[];
   official_loss?: boolean;
 }
 
@@ -160,7 +157,6 @@ export type CachePreviousSource = 'previous_response_id' | 'thread.previous_mess
 
 export interface CacheTraceRow extends CacheTraceLocation {
   at: string;
-  history_key?: string;
   model: string;
   auth_index?: string;
   trace_id?: string;
@@ -194,7 +190,6 @@ export interface CacheTracePage {
   version: 1;
   current_instance_id: string;
   items: CacheTraceRow[];
-  history_included: boolean;
   next_cursor?: string;
 }
 

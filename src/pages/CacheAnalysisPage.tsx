@@ -2,7 +2,6 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
-import { CacheRouteLinks } from '@/components/usage/CacheRouteLinks';
 import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer';
 import { CacheDisclosure, CacheExecutionFlow, CacheInbound } from '@/components/usage/CacheExecutionFlow';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
@@ -10,10 +9,10 @@ import { useAuthStore } from '@/stores/useAuthStore';
 import { ltsExtensionClient } from '@/services/api/client';
 import { captureCacheDiagnosticsClient } from '@/services/api/cacheDiagnostics';
 import { isRecord } from '@/utils/helpers';
-import { cacheAttemptFailed, cacheAttemptTransport, cacheFieldSummary, cacheExecutionPath, compareCachePayloads, decodeTraceRow, isCacheLookupId, readRate } from '@/utils/usage/cacheDiagnostics';
+import { cacheAttemptFailed, cacheAttemptTransport, cacheFieldSummary, cacheExecutionPath, compareCachePayloads, isCacheLookupId, readRate } from '@/utils/usage/cacheDiagnostics';
 import { cacheRouteKey, isCacheDigest } from '@/utils/usage/cacheRoute';
 import {
-  cacheLocationSearch, cacheTraceRowKey, readCacheLocation, readCacheReturnContext,
+  cacheLocationSearch, cacheTraceRowKey, readCacheLocation, readCacheReturnContext, readCacheUsageRow,
 } from '@/utils/usage/cacheNavigation';
 import type {
   CacheDiagnosticsCapabilities, CacheRouteKey, CacheTrace, CacheTraceFocus,
@@ -109,7 +108,7 @@ function matchesLocation(row: CacheTraceRow, location: CacheTraceLocation): bool
 }
 
 function shortTraceID(row: CacheTraceRow) {
-  return (row.request_id || row.diagnostics_id || row.history_key || row.trace_id)?.slice(-6);
+  return (row.request_id || row.diagnostics_id || row.trace_id)?.slice(-6);
 }
 
 export function CacheAnalysisPage() {
@@ -130,7 +129,7 @@ function CacheAnalysisWorkspace({ connection, connected }: { connection: string;
   const link = readCacheLocation(params);
   const source = isRecord(location.state) ? location.state : null;
   const returnContext = readCacheReturnContext(source?.cacheReturnContext, connection);
-  const usageRow = returnContext ? decodeTraceRow(source?.cacheUsageRow) : null;
+  const usageRow = returnContext ? readCacheUsageRow(source?.cacheUsageRow) : null;
   const active = usePageTransitionLayer()?.isCurrentLayer ?? true;
   const narrow = useMediaQuery('(max-width: 720px)');
   const [revision, setRevision] = useState(0);
@@ -159,6 +158,14 @@ function CacheAnalysisWorkspace({ connection, connected }: { connection: string;
   const [picked, setPicked] = useState<CacheTraceRow | null>(null);
   const [focus, setFocus] = useState<CacheTraceFocus>('');
   const [relatedKey, setRelatedKey] = useState<CacheRouteKey | null>(null);
+  const relatedDisclosure = useRef<HTMLDetailsElement>(null);
+  const filterRelated = (key: CacheRouteKey) => {
+    setRelatedKey(key);
+    if (relatedDisclosure.current) {
+      relatedDisclosure.current.open = true;
+      relatedDisclosure.current.querySelector('summary')?.focus();
+    }
+  };
   const [manualBaseline, setManualBaseline] = useState<{
     row: CacheTraceRow; source: 'manual' | 'nearby';
   } | null>(null);
@@ -170,23 +177,27 @@ function CacheAnalysisWorkspace({ connection, connected }: { connection: string;
   };
   const [formError, setFormError] = useState(false);
   const q = submitted ?? (picked || focus ? '' : initialID);
-  const records = useTracePages(supported && active ? {
-    q: q || undefined, instance_id: submitted === null && q ? link.instance_id : undefined,
+  const linkedLookup = submitted === null && !picked && Boolean(initialID);
+  const linkMatchesInstance = !instance || !link.instance_id || link.instance_id === instance;
+  const linkedUsage = linkedLookup ? usageRow : null;
+  const records = useTracePages(supported && active && (!linkedLookup || linkMatchesInstance) ? {
+    q: q || undefined, instance_id: linkedLookup ? link.instance_id : undefined,
     focus,
   } : null, instance, revision);
   const matches = records.page?.items ?? [];
-  const linkedRows = submitted === null && initialID
+  const linkedRows = linkedLookup
     ? matches.filter((row) => matchesLocation(row, link))
     : [];
   const pinned = linkedRows.length === 1 && !records.page?.next_cursor ? linkedRows[0] : undefined;
-  const unique = q && matches.length === 1 && !records.page?.next_cursor ? matches[0] : null;
-  const selected = picked ?? pinned ?? unique ?? (submitted === null && initialID ? usageRow : null);
-  const legacyID = oldCore ? (submitted ?? link.diagnostics_id ?? '') : '';
-  const target = oldCore && isCacheDigest(legacyID)
-    ? { diagnostics_id: legacyID, instance_id: link.instance_id ?? (instance || undefined) }
-    : selected;
-  const detail = useTraceDetail(target, active && (oldCore && isCacheDigest(legacyID) ||
-    !!selected?.available && selected.instance_id === instance), revision);
+  const unique = !linkedLookup && q && matches.length === 1 && !records.page?.next_cursor ? matches[0] : null;
+  const selected = picked ?? pinned ?? unique ?? linkedUsage;
+  const legacyID = oldCore && (!linkedLookup || linkMatchesInstance) ? (submitted ?? link.diagnostics_id ?? '') : '';
+  const directLink = supported && linkedLookup && linkMatchesInstance && !records.loading && !records.error &&
+    !records.page?.next_cursor && matches.length === 0 && link.diagnostics_id ? link : null;
+  const target = isCacheDigest(legacyID)
+    ? { diagnostics_id: legacyID, instance_id: (linkedLookup ? link.instance_id : undefined) ?? (instance || undefined) }
+    : selected?.available && selected.instance_id === instance ? selected : directLink;
+  const detail = useTraceDetail(target, active && Boolean(target), revision);
   const detailHeading = useRef<HTMLHeadingElement>(null);
   const returnToken = returnContext?.token;
   useEffect(() => {
@@ -207,7 +218,7 @@ function CacheAnalysisWorkspace({ connection, connected }: { connection: string;
   const timeline = currentRelation && selected ? related : records;
   // A selected request is kept in the list even while the new related page loads.
   const candidates = timeline.page?.items ?? [];
-  const rows = selected && !candidates.some((item) => cacheTraceRowKey(item) === cacheTraceRowKey(selected))
+  const rows = selected?.available && !candidates.some((item) => cacheTraceRowKey(item) === cacheTraceRowKey(selected))
     ? [selected, ...candidates].sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
     : candidates;
   const canCompareRow = (row: CacheTraceRow) => !!selected?.available && row.available &&
@@ -231,7 +242,9 @@ function CacheAnalysisWorkspace({ connection, connected }: { connection: string;
     : 'explicit_previous';
   const reference = useTraceDetail(baseline, active && !!usableBaseline &&
     baseline?.instance_id === instance, revision);
-  const trace = detail.trace;
+  const directExecutionMismatch = directLink?.request_id && detail.trace?.attempts.length &&
+    !detail.trace.attempts.some((attempt) => attempt.execution_id === directLink.request_id);
+  const trace = directExecutionMismatch ? undefined : detail.trace;
   const fieldChanges = reference.trace && trace ? compareCachePayloads(reference.trace.input, trace.input) : null;
   const attempts = trace?.attempts ?? [];
   const first = attempts[0], final = attempts[attempts.length - 1];
@@ -244,14 +257,22 @@ function CacheAnalysisWorkspace({ connection, connected }: { connection: string;
   });
   const chosenAttempt = selected?.attempt
     ? attempts.find((attempt) => attempt.number === selected.attempt)
-    : undefined;
+    : selected?.request_id
+      ? [...attempts].reverse().find((attempt) => attempt.execution_id === selected.request_id)
+      : undefined;
   const visibleObs = chosenAttempt ? chosenAttempt.cache_observation
     : selected?.cache_observation ?? final?.cache_observation;
   const noParsed = !visibleObs && (chosenAttempt?.observation_state === 'not_observed' ||
     chosenAttempt?.observation_state === 'encoded_response' || selected?.cache_route?.no_parsed_response);
+  const summaryValue = (field: 'read' | 'write') => {
+    const historical = field === 'read' ? linkedUsage?.cache_read_tokens : linkedUsage?.cache_write_tokens;
+    if (!trace && !visibleObs && historical !== undefined && historical > 0)
+      return t('cache_analysis.historical_value', { value: historical.toLocaleString(i18n.language) });
+    return cacheFieldSummary(t, visibleObs?.[field]);
+  };
   const measurements = noParsed ? t('cache_analysis.summary_not_observed') : t('cache_analysis.execution_summary', {
-    read: cacheFieldSummary(t, visibleObs?.read),
-    write: cacheFieldSummary(t, visibleObs?.write),
+    read: summaryValue('read'),
+    write: summaryValue('write'),
   });
   const path = cacheExecutionPath(attempts);
   let executionSummary = '';
@@ -381,12 +402,12 @@ function CacheAnalysisWorkspace({ connection, connected }: { connection: string;
           {t('cache_analysis.more_requests')}
         </Button>
       )}
-      {timeline.page?.history_included && <small>{t('cache_analysis.includes_history')}</small>}
     </div>
   );
 
-  const mobileRows = supported && narrow && (
-    <details className={styles.timeline} open={!selected} key={selected ? cacheTraceRowKey(selected) : 'recent'}>
+  const showTimeline = supported && (!selected || selected.available);
+  const mobileRows = showTimeline && narrow && (
+    <details ref={relatedDisclosure} className={styles.timeline} open={!selected} key={selected ? cacheTraceRowKey(selected) : 'recent'}>
       <summary><span>{t(selected ? 'cache_analysis.related_requests' : q ? 'cache_analysis.matches' : 'cache_analysis.recent')}</span></summary>
       {renderRows()}
     </details>
@@ -455,7 +476,7 @@ function CacheAnalysisWorkspace({ connection, connected }: { connection: string;
       {oldCore && <p role="status">{t('cache_analysis.legacy_search')}</p>}
       {cap?.data?.recording_enabled === false && <p role="status">{t('cache_analysis.recording_disabled')}</p>}
       <div className={styles.workspace}>
-        {supported && !narrow && (
+        {showTimeline && !narrow && (
           <aside className={styles.timeline} aria-labelledby="cache-timeline-heading">
             <h2 id="cache-timeline-heading">{t(selected ? 'cache_analysis.related_requests' : q ? 'cache_analysis.matches' : 'cache_analysis.recent')}</h2>
             {renderRows()}
@@ -474,21 +495,29 @@ function CacheAnalysisWorkspace({ connection, connected }: { connection: string;
                   {executionSummary && <p>{executionSummary}</p>}
                   <p>{measurements}</p>
                 </div>
+                {!trace && linkedUsage?.input_tokens !== undefined && (
+                  <p>{t('usage_stats.request_events_total_input_tokens')} · {linkedUsage.input_tokens.toLocaleString(i18n.language)}</p>
+                )}
                 {firstPCK && finalPCK && first !== final && (
                   <p>{t(firstPCK.digest === finalPCK.digest
                     ? 'cache_analysis.pck_retained' : 'cache_analysis.pck_changed')}</p>
                 )}
-                {selected?.cache_route && !trace && <CacheRouteLinks refs={selected.cache_route.references} showAll />}
-                {!detail.loading && !trace && !detail.error && <p role="status">{t('cache_analysis.history_only')}</p>}
+                {linkedUsage && cap && !records.loading && !records.error && !detail.loading && !trace &&
+                  (!detail.error || detail.error === 'unavailable') && (
+                  <p role="status">{t('cache_analysis.history_only')}</p>
+                )}
               </>
-            ) : <p>{t('cache_analysis.choose_request')}</p>}
+            ) : <p>{t(linkedLookup && cap && (!linkMatchesInstance || directExecutionMismatch)
+              ? 'cache_diagnostics.unavailable' : 'cache_analysis.choose_request')}</p>}
           </div>
           {selected && mobileRows}
           {detail.loading && <p role="status">{t('common.loading')}</p>}
-          {detail.error && <p role="status">{t(`cache_diagnostics.${detail.error}`)}</p>}
+          {detail.error && (!linkedUsage || detail.error !== 'unavailable') && (
+            <p role="status">{t(`cache_diagnostics.${detail.error}`)}</p>
+          )}
           {trace && (
             <>
-              <CacheInbound trace={trace} onFilter={setRelatedKey} />
+              <CacheInbound trace={trace} onFilter={filterRelated} />
               <div className={styles.compare}>
                 <h3 ref={compareHeading} tabIndex={-1}>{t('cache_analysis.input_comparison')}</h3>
                 {usableBaseline ? (
@@ -515,7 +544,7 @@ function CacheAnalysisWorkspace({ connection, connected }: { connection: string;
                   </Button>
                 ) : <p>{t('cache_analysis.choose_reference')}</p>}
               </div>
-              <CacheExecutionFlow trace={trace} selected={selected ?? link} onFilter={setRelatedKey} />
+              <CacheExecutionFlow trace={trace} selected={selected ?? link} onFilter={filterRelated} />
               <CacheDisclosure className={styles.ids} label={t('cache_analysis.identifiers')}>
                 <p>{t('cache_diagnostics.logical_request')} · <code>{trace.logical_request_id}</code></p>
                 <p>{t('cache_diagnostics.record_id')} · <code>{trace.id}</code></p>

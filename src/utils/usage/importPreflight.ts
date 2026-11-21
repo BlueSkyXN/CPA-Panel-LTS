@@ -1,4 +1,3 @@
-import { readCacheRoute } from './cacheRoute';
 import { readCacheObservation } from './cacheDiagnostics';
 import { normalizeTokenAccounting, tokenAccountingMatches } from './tokenAccounting';
 import { normalizeOutputTiming } from './performance';
@@ -463,10 +462,7 @@ const collectUsageDetailEntries = (
           return { entries: [], issue: 'usage_shape_invalid' };
         }
 
-        if (version === 3 && (
-          detailValue.cache_observation != null && !readCacheObservation(detailValue.cache_observation) ||
-          detailValue.cache_route != null && !readCacheRoute(detailValue.cache_route)
-        )) {
+        if (version === 3 && detailValue.cache_observation != null && !readCacheObservation(detailValue.cache_observation)) {
           return { entries: [], issue: 'usage_v3_token_contract_invalid' };
         }
 
@@ -546,6 +542,22 @@ const resolveCurrentSnapshot = (value: unknown): UnknownRecord | null => {
   if (isRecord(value.usage)) return value.usage;
   return value;
 };
+
+// The caller owns this parsed backup. Discard the draft-only diagnostic field
+// before building a download or sending the import to Core.
+export function discardDraftCacheRoutes(payload: unknown) {
+  if (!isRecord(payload) || payload.version !== 3 || !isRecord(payload.usage) ||
+      !isRecord(payload.usage.apis)) return;
+  for (const api of Object.values(payload.usage.apis)) {
+    if (!isRecord(api) || !isRecord(api.models)) continue;
+    for (const model of Object.values(api.models)) {
+      if (!isRecord(model) || !Array.isArray(model.details)) continue;
+      for (const row of model.details) {
+        if (isRecord(row)) delete row.cache_route;
+      }
+    }
+  }
+}
 
 const invalidResult = (
   issue: UsageImportPreflightIssue,

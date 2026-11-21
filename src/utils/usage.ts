@@ -187,7 +187,6 @@ export interface UsageDetail extends RequestSizeFields {
   diagnostics_id?: string;
   diagnostics_instance_id?: string;
   cache_observation?: unknown;
-  cache_route?: unknown;
   __queryId?: string;
   timestamp: string;
   source: string;

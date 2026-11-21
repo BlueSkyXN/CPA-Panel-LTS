@@ -49,6 +49,8 @@
 
 .inspection {
   container-type: inline-size;
+
+  &:only-child { grid-column: 1 / -1; }
 }
 
 .timeline h2,
@@ -329,16 +331,6 @@
   small {
     display: inline-block;
     max-inline-size: 100%;
-  }
-
-  > details {
-    justify-self: stretch;
-    min-inline-size: 0;
-
-    > ul {
-      padding-inline-start: 0;
-      list-style: none;
-    }
   }
 }
 

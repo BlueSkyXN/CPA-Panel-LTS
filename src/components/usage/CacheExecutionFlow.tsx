@@ -94,7 +94,7 @@ function AttemptStages({ attempt, trace, onFilter }: {
       <section className={styles.stage}>
         <h5>{t('cache_analysis.stage_outbound')}</h5>
         <p>{attempt.provider} · {attempt.model}</p>
-        <CacheRouteLinks refs={attempt.cache_references} onFilter={onFilter} showAll className={styles.flowRoute} />
+        <CacheRouteLinks refs={attempt.cache_references} onFilter={onFilter} className={styles.flowRoute} />
         {attempt.cache_control && (
           <p>{t('cache_analysis.breakpoints', { count: attempt.cache_control.breakpoints })}
             {attempt.cache_control.five_minutes ? ` · 5m × ${attempt.cache_control.five_minutes}` : ''}

@@ -11,10 +11,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { CacheDiagnosticsDetails } from './CacheDiagnosticsDetails';
-import type { CacheEventsView } from '@/utils/usage/cacheNavigation';
-import type { CacheRouteKey, CacheRouteSummary, CacheTraceRow } from '@/types/cacheDiagnostics';
-import { cacheRouteMatches, readCacheRoute } from '@/utils/usage/cacheRoute';
-import { CacheRouteFacts, CacheRouteLinks } from './CacheRouteLinks';
+import type { CacheEventsView, CacheUsageRow } from '@/utils/usage/cacheNavigation';
 import { CACHE_STATES, cacheValueState, isCacheValueState, type CacheValueState } from '@/utils/usage/cacheAnalytics';
 import { cacheFieldSummary, readCacheObservation } from '@/utils/usage/cacheDiagnostics';
 import { useTranslation } from 'react-i18next';
@@ -173,7 +170,6 @@ const REQUEST_EVENT_COLUMN_IDS = [
   'requestKey',
   'source',
   'authIndex',
-  'cacheRoute',
   'tier',
   'result',
   'transport',
@@ -285,7 +281,6 @@ const DEFAULT_COLUMN_VISIBILITY: RequestEventColumnVisibility = {
   requestKey: true,
   source: false,
   authIndex: false,
-  cacheRoute: false,
   tier: true,
   result: true,
   transport: true,
@@ -330,7 +325,7 @@ const COMPACT_COLUMN_VISIBILITY: RequestEventColumnVisibility = {
 };
 
 const CACHE_PRESET_COLUMNS = new Set<RequestEventColumnId>([
-  'timestamp', 'model', 'authIndex', 'cacheRoute', 'totalInputTokens', 'cacheReadTokens', 'cacheWriteTokens',
+  'timestamp', 'model', 'authIndex', 'totalInputTokens', 'cacheReadTokens', 'cacheWriteTokens',
 ]);
 const CACHE_COLUMN_VISIBILITY = Object.fromEntries(
   REQUEST_EVENT_COLUMN_IDS.map((id) => [id, CACHE_PRESET_COLUMNS.has(id)])
@@ -377,7 +372,6 @@ type RequestEventRow = {
   diagnosticsId?: string;
   diagnosticsInstanceId?: string;
   cacheObservation?: unknown;
-  cacheRoute?: CacheRouteSummary;
   upstreamTransport: string | null;
   upstreamRequestBytes: number | null;
   upstreamRequestWireBytes: number | null;
@@ -490,7 +484,7 @@ export interface RequestEventsDetailsCardProps {
   initialResultFailed?: boolean;
   initialCacheReadState?: CacheValueState;
   initialCacheWriteState?: CacheValueState;
-  onAnalyze?: (row: CacheTraceRow, view: CacheEventsView) => void;
+  onAnalyze?: (row: CacheUsageRow, view: CacheEventsView) => void;
   restoreCacheView?: CacheEventsView;
   querySession?: UsageQuerySession | null;
   usage: unknown;
@@ -807,8 +801,6 @@ export function RequestEventsDetailsCard({
     persistFilter('timeRange', value);
   };
   const [timeRangeClockMs, setTimeRangeClockMs] = useState(0);
-  const [cacheRouteFilter, setCacheRouteFilter] = useState<CacheRouteKey | null>(restoreCacheView?.cacheRoute ?? null);
-  const supportsCacheRoute = !querySession || querySession.cache_route_version === 1;
   const [cacheFilter, setCacheFilter] = useState(persisted.cache ?? ALL_FILTER);
   const supportsCacheStates = !querySession || querySession.cache_observation_version === 1;
   const [cacheReadState, setCacheReadState] = useState((restoreCacheView ? persisted.cacheReadState : initialCacheReadState) ?? persisted.cacheReadState);
@@ -1234,7 +1226,6 @@ export function RequestEventsDetailsCard({
     }
     if (resultFilter !== ALL_FILTER) filter.failed = resultFilter === RESULT_FAILED_FILTER;
     if (cacheFilter !== ALL_FILTER) filter.cached = cacheFilter === CACHE_PRESENT_FILTER;
-    if (supportsCacheRoute && cacheRouteFilter) filter.cache_route = cacheRouteFilter;
     if (supportsCacheStates) {
       if (isCacheValueState(cacheReadState)) filter.cache_read_state = cacheReadState;
       if (isCacheValueState(cacheWriteState)) filter.cache_write_state = cacheWriteState;
@@ -1500,7 +1491,6 @@ export function RequestEventsDetailsCard({
         diagnosticsId: detail.diagnostics_id,
         diagnosticsInstanceId: detail.diagnostics_instance_id,
         cacheObservation: cacheEvidence,
-        cacheRoute: readCacheRoute(detail.cache_route),
         upstreamTransport: detail.upstream_transport ?? null,
         upstreamRequestBytes: upstreamPayloadBytes(detail),
         upstreamRequestWireBytes: detail.upstream_request_wire_bytes ?? null,
@@ -1844,7 +1834,6 @@ export function RequestEventsDetailsCard({
       { id: 'requestKey' as const, label: t('usage_stats.request_events_request_key') },
       { id: 'source' as const, label: t('usage_stats.request_events_source') },
       { id: 'authIndex' as const, label: t('usage_stats.request_events_auth_index') },
-      { id: 'cacheRoute' as const, label: t('cache_analysis.association') },
       { id: 'tier' as const, label: t('usage_stats.request_events_tier') },
       { id: 'result' as const, label: t('usage_stats.request_events_result') },
       { id: 'transport' as const, label: t('usage_stats.request_events_transport') },
@@ -2090,7 +2079,6 @@ export function RequestEventsDetailsCard({
           resultMatched &&
           cacheMatched &&
           cacheStateMatched &&
-          (!cacheRouteFilter || cacheRouteMatches(row.cacheRoute, cacheRouteFilter)) &&
           numericMatched
         );
       }),
@@ -2098,7 +2086,6 @@ export function RequestEventsDetailsCard({
       cacheFilter,
       cacheReadState,
       cacheWriteState,
-      cacheRouteFilter,
       initialAnalyticsFilters,
       effectiveAuthIndexFilter,
       effectiveModelFilter,
@@ -2145,12 +2132,13 @@ export function RequestEventsDetailsCard({
     return () => cancelAnimationFrame(frame);
   }, [restoreCacheView, renderedRows, loading]);
   const openCacheAnalysis = (row: RequestEventRow) => {
-    const target: CacheTraceRow = {
+    const target: CacheUsageRow = {
       instance_id: row.diagnosticsInstanceId, diagnostics_id: row.diagnosticsId,
       request_id: row.requestId,
       at: row.timestamp, model: row.model, auth_index: row.authIndex,
       trace_id: row.traceId ?? undefined, input_tokens: row.inputTokens,
-      cache_observation: readCacheObservation(row.cacheObservation), cache_route: row.cacheRoute,
+      cache_observation: readCacheObservation(row.cacheObservation),
+      cache_read_tokens: row.cacheReadTokens, cache_write_tokens: row.cacheWriteTokens,
       available: false, matched: [],
     };
     onAnalyze?.(target, {
@@ -2158,7 +2146,7 @@ export function RequestEventsDetailsCard({
         cacheWriteState: cacheWriteState ?? ALL_FILTER, numericMinimum: numericMinimumFilter,
         numericMaximum: numericMaximumFilter },
       session: querySession, navigation: remote.navigationSnapshot,
-      page: currentPage, cachePreset, cacheRoute: cacheRouteFilter, selectedRowId: row.id,
+      page: currentPage, cachePreset, selectedRowId: row.id,
       scrollTop: tableScrollRef.current?.closest('.content')?.scrollTop ?? 0,
     });
   };
@@ -2197,7 +2185,6 @@ export function RequestEventsDetailsCard({
     resultFilter !== ALL_FILTER ||
     effectiveTimeRangeFilter !== 'page' ||
     cacheFilter !== ALL_FILTER ||
-    (supportsCacheRoute && cacheRouteFilter !== null) ||
     (supportsCacheStates && (isCacheValueState(cacheReadState) || isCacheValueState(cacheWriteState))) ||
     hasAppliedNumericFilter;
 
@@ -2263,7 +2250,6 @@ export function RequestEventsDetailsCard({
     setCacheFilter(ALL_FILTER);
     setCacheReadState(ALL_FILTER);
     setCacheWriteState(ALL_FILTER);
-    setCacheRouteFilter(null);
     setNumericMetricFilter(ALL_FILTER);
     setNumericMinimumFilter('');
     setNumericMaximumFilter('');
@@ -2510,7 +2496,6 @@ export function RequestEventsDetailsCard({
       diagnostics_id: row.diagnosticsId,
       diagnostics_instance_id: row.diagnosticsInstanceId,
       cache_observation: row.cacheObservation,
-      cache_route: row.cacheRoute,
     }));
 
     return `${first ? '[\n' : ',\n'}${JSON.stringify(payload, null, 2).slice(2, -2)}`;
@@ -2989,13 +2974,6 @@ export function RequestEventsDetailsCard({
             />
           </div>
         ))}
-        {supportsCacheRoute && cacheRouteFilter && (
-          <Button variant="secondary" size="sm" onClick={() => setCacheRouteFilter(null)}
-            data-testid="request-events-cache-route-filter"
-            aria-label={t('cache_analysis.clear_filter', { label: t(`cache_analysis.kind_${cacheRouteFilter.kind}`), digest: cacheRouteFilter.digest.slice(0, 8) })}>
-            {t(`cache_analysis.kind_${cacheRouteFilter.kind}`)} {cacheRouteFilter.digest.slice(0, 8)} ×
-          </Button>
-        )}
         {!supportsCacheStates && (
           <span className={styles.hint}>{t('cache_analysis.filter_unavailable')}</span>
         )}
@@ -3179,7 +3157,6 @@ export function RequestEventsDetailsCard({
                   {columnVisibility.authIndex && (
                     <th>{t('usage_stats.request_events_auth_index')}</th>
                   )}
-                  {columnVisibility.cacheRoute && <th scope="col">{t('cache_analysis.association')}</th>}
                   {columnVisibility.tier && <th>{t('usage_stats.request_events_tier')}</th>}
                   {columnVisibility.result && <th>{t('usage_stats.request_events_result')}</th>}
                   {columnVisibility.transport && (
@@ -3305,7 +3282,6 @@ export function RequestEventsDetailsCard({
                     if (evidence?.state === 'invalid') return t('cache_analysis.invalid_value');
                     if (evidence?.state === 'absent') return t('cache_analysis.absent_value');
                     if (!cachePreset) return legacy.toLocaleString(i18n.language);
-                    if (row.cacheRoute?.no_parsed_response) return t('cache_diagnostics.not_observed');
                     return legacy > 0 ? t('cache_analysis.historical_value', { value: legacy.toLocaleString(i18n.language) })
                       : t('cache_analysis.unknown_value');
                   };
@@ -3438,13 +3414,6 @@ export function RequestEventsDetailsCard({
                             onClick={(event) => { event.stopPropagation(); setAuthIndexFilterPersisted(row.authIndex); }}>
                             {row.authIndex}
                           </button>
-                        </td>
-                      )}
-                      {columnVisibility.cacheRoute && (
-                        <td>
-                          <CacheRouteLinks refs={row.cacheRoute?.references ?? []}
-                            onFilter={supportsCacheRoute ? setCacheRouteFilter : undefined} />
-                          <CacheRouteFacts route={row.cacheRoute} />
                         </td>
                       )}
                       {columnVisibility.tier && (
@@ -3792,9 +3761,7 @@ export function RequestEventsDetailsCard({
                       <tr className={styles.requestEventsDetailRow}>
                         <td colSpan={visibleColumnCount}>
                           <div className={styles.cacheExecutionSummary} data-testid="request-cache-summary">
-                            <strong>{!cacheObservation && row.cacheRoute?.no_parsed_response
-                              ? t('cache_analysis.summary_not_observed')
-                              : t('cache_analysis.execution_summary', {
+                            <strong>{t('cache_analysis.execution_summary', {
                                 read: cacheFieldSummary(t, cacheObservation?.read),
                                 write: cacheFieldSummary(t, cacheObservation?.write),
                               })}</strong>
@@ -3805,7 +3772,6 @@ export function RequestEventsDetailsCard({
                                 {t('cache_analysis.analyze_request')}
                               </Button>
                             )}
-                            {!columnVisibility.cacheRoute && <CacheRouteFacts route={row.cacheRoute} />}
                           </div>
                           <dl className={styles.requestEventsDetailGrid} data-testid="request-event-detail">
                             <div>
@@ -3899,19 +3865,12 @@ export function RequestEventsDetailsCard({
                                 )}
                               </dd>
                             </div>
-                            {querySession?.cache_route_version !== 1 && <div className={styles.requestEventsCacheDiagnostics}>
+                            {!onAnalyze && <div className={styles.requestEventsCacheDiagnostics}>
                               <dt>{t('cache_diagnostics.title')}</dt>
                               <dd>
                                 <CacheDiagnosticsDetails instanceId={row.diagnosticsInstanceId} diagnosticId={row.diagnosticsId} requestId={row.requestId} observation={row.cacheObservation} />
                               </dd>
                             </div>}
-                            {row.cacheRoute && (
-                              <div className={styles.requestEventsCacheDiagnostics}>
-                                <dt>{t('cache_analysis.association')}</dt>
-                                <dd><CacheRouteLinks refs={row.cacheRoute.references} showSources showAll
-                                  onFilter={supportsCacheRoute ? setCacheRouteFilter : undefined} /></dd>
-                              </div>
-                            )}
                           </dl>
                         </td>
                       </tr>

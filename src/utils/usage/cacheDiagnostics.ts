@@ -242,7 +242,6 @@ export function extractCacheDiagnosticFields(detail: Record<string, unknown>) {
     diagnostics_id: identifier(detail.diagnostics_id),
     diagnostics_instance_id: identifier(detail.diagnostics_instance_id),
     cache_observation: readCacheObservation(detail.cache_observation),
-    cache_route: readCacheRoute(detail.cache_route),
   };
 }
 
@@ -269,7 +268,7 @@ export function decodeTraceRow(value: unknown): CacheTraceRow | null {
   const previous = decodeTraceLocation(v.previous);
   const previousSource = v.previous_source;
   return {
-    ...location, at: v.at, history_key: text(v.history_key), model: text(v.model), auth_index: text(v.auth_index),
+    ...location, at: v.at, model: text(v.model), auth_index: text(v.auth_index),
     trace_id: text(v.trace_id), logical_request_id: text(v.logical_request_id), response_id: text(v.response_id),
     available: v.available, matched: list(v.matched, 5).filter(isCacheLookupId),
     input_tokens: count(v.input_tokens), cache_observation: readCacheObservation(v.cache_observation),
@@ -295,9 +294,9 @@ export function decodeTracePage(value: unknown): CacheTracePage {
     throw new Error('Invalid cache trace row');
   }
   return {
-    version: 1, current_instance_id: v.current_instance_id, history_included: v.history_included,
+    version: 1, current_instance_id: v.current_instance_id,
     next_cursor: typeof v.next_cursor === 'string' ? v.next_cursor : undefined,
-    items: items.filter((item): item is CacheTraceRow => item !== null),
+    items: items.filter((item): item is CacheTraceRow => item?.available === true),
   };
 }
 

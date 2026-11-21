@@ -36,12 +36,6 @@ export function cacheRouteKey(ref: CacheRouteReference): CacheRouteKey | undefin
   return ref.scope ? { kind: ref.kind, digest: ref.digest, scope: ref.scope } : undefined;
 }
 
-export function cacheRouteMatches(route: CacheRouteSummary | undefined, key: CacheRouteKey) {
-  return route?.references.some((ref) =>
-    ref.kind === key.kind && ref.digest === key.digest && ref.scope === key.scope
-  ) ?? false;
-}
-
 export function readCacheRoute(value: unknown): CacheRouteSummary | undefined {
   if (!isRecord(value) || value.version !== 1 ||
       typeof value.attempt_count !== 'number' || !Number.isInteger(value.attempt_count) ||
@@ -65,22 +59,13 @@ export function readCacheRoute(value: unknown): CacheRouteSummary | undefined {
       prefix_unit: typeof s.prefix_unit === 'string' ? s.prefix_unit : undefined,
     };
   }
-  const logical = value.logical_digest;
-  const previous = value.previous_response_digest;
-  const responses = value.response_digests;
-  if ((logical !== undefined && logical !== '' && !isCacheDigest(logical)) ||
-      (previous !== undefined && previous !== '' && !isCacheDigest(previous)) ||
-      (responses !== undefined && (!Array.isArray(responses) || responses.length > 32 || !responses.every(isCacheDigest))) ||
-      ['no_parsed_response', 'truncated', 'official_loss'].some((key) =>
-        value[key] !== undefined && typeof value[key] !== 'boolean')) return undefined;
+  if (['no_parsed_response', 'truncated', 'official_loss'].some((key) =>
+    value[key] !== undefined && typeof value[key] !== 'boolean')) return undefined;
   return {
     version: 1, references: references.filter((ref): ref is CacheRouteReference => ref !== undefined),
     selection, attempt_count: value.attempt_count,
     no_parsed_response: value.no_parsed_response === true || undefined,
     truncated: value.truncated === true || undefined,
-    logical_digest: typeof logical === 'string' ? logical : undefined,
-    previous_response_digest: typeof previous === 'string' ? previous : undefined,
-    response_digests: responses,
     official_loss: value.official_loss === true || undefined,
   };
 }

@@ -1,8 +1,7 @@
 import type { CacheTraceLocation, CacheTraceRow } from '@/types/cacheDiagnostics';
 import type { UsageQuerySession } from '@/types/usageQuery';
-import type { CacheRouteKey } from '@/types/cacheDiagnostics';
 import { isRecord } from '@/utils/helpers';
-import { decodeTraceLocation } from './cacheDiagnostics';
+import { decodeTraceLocation, decodeTraceRow } from './cacheDiagnostics';
 
 export interface EventQueryNavigation {
   key: string;
@@ -16,9 +15,23 @@ export interface CacheEventsView {
   navigation: EventQueryNavigation | null;
   page: number;
   cachePreset: boolean;
-  cacheRoute: CacheRouteKey | null;
   selectedRowId: string;
   scrollTop: number;
+}
+
+export type CacheUsageRow = CacheTraceRow & {
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+};
+
+export function readCacheUsageRow(value: unknown): CacheUsageRow | null {
+  if (!isRecord(value)) return null;
+  const row = decodeTraceRow({ ...value, available: false, cache_route: undefined });
+  const { cache_read_tokens, cache_write_tokens } = value;
+  if (!row || typeof cache_read_tokens !== 'number' || !Number.isSafeInteger(cache_read_tokens) ||
+      cache_read_tokens < 0 || typeof cache_write_tokens !== 'number' ||
+      !Number.isSafeInteger(cache_write_tokens) || cache_write_tokens < 0) return null;
+  return { ...row, cache_read_tokens, cache_write_tokens };
 }
 
 interface ReturnContext {
@@ -79,6 +92,6 @@ export function cacheLocationSearch(row: CacheTraceRow): string {
   return params.size ? `?${params}` : '';
 }
 
-export function cacheTraceRowKey(row: CacheTraceLocation & { history_key?: string }): string {
-  return JSON.stringify([row.instance_id, row.diagnostics_id, row.request_id, row.attempt, row.history_key]);
+export function cacheTraceRowKey(row: CacheTraceLocation): string {
+  return JSON.stringify([row.instance_id, row.diagnostics_id, row.request_id, row.attempt]);
 }

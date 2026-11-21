@@ -53,7 +53,7 @@ test('current OAuth snapshot stays separate from historical decision evidence', 
 
 test('both usage collectors retain field provenance and diagnostic correlation', async () => {
  const {collectUsageDetails,collectUsageDetailsWithEndpoint}=await vite.ssrLoadModule('/src/utils/usage.ts');
- const detail={timestamp:'2026-01-01T00:00:00Z',source:'synthetic',auth_index:'A',tokens:{input_tokens:100,total_tokens:100},request_id:'execution-A',diagnostics_id:'a'.repeat(64),diagnostics_instance_id:'instance-A',cache_observation:obs(absent)};
+ const detail={timestamp:'2026-01-01T00:00:00Z',source:'synthetic',auth_index:'A',tokens:{input_tokens:100,total_tokens:100},request_id:'execution-A',diagnostics_id:'a'.repeat(64),diagnostics_instance_id:'instance-A',cache_observation:obs(absent),cache_route:{version:1,attempt_count:1}};
  const snapshot={apis:{endpoint:{models:{model:{details:[detail]}}}}};
  for(const collect of [collectUsageDetails,collectUsageDetailsWithEndpoint]){
   const [row]=collect(snapshot);
@@ -61,17 +61,25 @@ test('both usage collectors retain field provenance and diagnostic correlation',
   assert.equal(row.diagnostics_instance_id,'instance-A');
   assert.equal(row.request_id,'execution-A');
   assert.equal(row.cache_observation.read.state,'absent');
+  assert.equal(row.cache_route, undefined);
  }
 });
 
 test('import preflight rejects contradictory cache evidence without inventing old provenance', async () => {
- const {analyzeUsageImport}=await vite.ssrLoadModule('/src/utils/usage/importPreflight.ts');
+ const {analyzeUsageImport,discardDraftCacheRoutes}=await vite.ssrLoadModule('/src/utils/usage/importPreflight.ts');
  const detail={timestamp:'2026-01-01T00:00:00Z',source:'synthetic',auth_index:'A',tokens:{input_tokens:100,output_tokens:1,reasoning_tokens:0,cached_tokens:0,cache_read_tokens:0,cache_creation_tokens:0,total_tokens:101},failed:false};
  const envelope=(observation)=>({version:3,usage:{apis:{endpoint:{models:{model:{details:[{...detail,...(observation ? {cache_observation:observation}: {})}]}}}}}});
  assert.equal(analyzeUsageImport(envelope(obs(absent))).valid,true);
  assert.equal(analyzeUsageImport(envelope()).valid,true);
  assert.equal(analyzeUsageImport(envelope(obs({state:'absent',value:0}))).valid,false);
  assert.equal(analyzeUsageImport(envelope(obs({state:'present',value:0,source:'x'.repeat(97)}))).valid,false);
+ const backup = envelope(obs({state:'present',value:0}));
+ const row = backup.usage.apis.endpoint.models.model.details[0];
+ row.cache_route = {references:[{kind:'pck',digest:'draft-only'}]};
+ assert.equal(analyzeUsageImport(backup).valid,true);
+ discardDraftCacheRoutes(backup);
+ assert.equal(Object.hasOwn(row,'cache_route'),false);
+ assert.equal(row.cache_observation.read.value,0);
 });
 
 test('same credential transport failure still describes the retry and transport change', async () => {
@@ -84,13 +92,19 @@ test('same credential transport failure still describes the retry and transport 
  assert.equal(cacheExecutionPath([b]),null);
 });
 
-test('historical rows use distinct keys even when their other identifiers coincide', async () => {
+test('the diagnostics list excludes historical usage rows from an older draft Core', async () => {
  const {decodeTracePage}=await vite.ssrLoadModule('/src/utils/usage/cacheDiagnostics.ts');
- const {cacheTraceRowKey}=await vite.ssrLoadModule('/src/utils/usage/cacheNavigation.ts');
+ const {readCacheUsageRow}=await vite.ssrLoadModule('/src/utils/usage/cacheNavigation.ts');
  const base={at:'2026-11-20T08:00:00Z',model:'legacy',available:false,trace_id:'shared-log'};
  const result=decodeTracePage({
   version:1,current_instance_id:'now',history_included:true,
-  items:[{...base,history_key:'a'.repeat(64)},{...base,history_key:'b'.repeat(64)}],
+  items:[base,{...base,available:true,instance_id:'now',diagnostics_id:'b'.repeat(64)}],
  });
- assert.notEqual(cacheTraceRowKey(result.items[0]),cacheTraceRowKey(result.items[1]));
+ assert.equal(result.items.length,1);
+ assert.equal(result.items[0].diagnostics_id,'b'.repeat(64));
+ const usage=readCacheUsageRow({...base,available:true,cache_read_tokens:7,cache_write_tokens:0,
+  cache_route:{version:1,attempt_count:1}});
+ assert.equal(usage.available,false);
+ assert.equal(usage.cache_read_tokens,7);
+ assert.equal(usage.cache_route,undefined);
 });
