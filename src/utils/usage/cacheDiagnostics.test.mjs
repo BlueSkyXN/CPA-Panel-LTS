@@ -2,7 +2,14 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createServer } from 'vite';
 const vite = await createServer({ appType: 'custom', logLevel: 'silent', server: {middlewareMode:true} });
-const { readCacheObservation, decodeCacheTrace, decodeCacheSession, compareCachePayloads } = await vite.ssrLoadModule('/src/utils/usage/cacheDiagnostics.ts');
+const {
+  readCacheObservation,
+  decodeCacheTrace,
+  decodeCacheSession,
+  compareCachePayloads,
+  diffCachePayloads,
+  shortCredentialLabel,
+} = await vite.ssrLoadModule('/src/utils/usage/cacheDiagnostics.ts');
 test.after(() => vite.close());
 const absent = {state:'absent'};
 const obs = (read) => ({version:1,read,write:absent});
@@ -107,4 +114,33 @@ test('the diagnostics list excludes historical usage rows from an older draft Co
  assert.equal(usage.available,false);
  assert.equal(usage.cache_read_tokens,7);
  assert.equal(usage.cache_route,undefined);
+});
+
+test('diffCachePayloads prioritizes prefix-risk fields and preserves scalar values', () => {
+ const prev = body({
+  input: { digest: 'a'.repeat(64) },
+  previous_response_id: { digest: 'b'.repeat(64) },
+  'reasoning.effort': { digest: 'c'.repeat(64), value: 'low' },
+  tools: { digest: 'd'.repeat(64) },
+ });
+ const next = body({
+  input: { digest: 'e'.repeat(64) },
+  'reasoning.effort': { digest: 'f'.repeat(64), value: 'high' },
+  store: { digest: '1'.repeat(64), value: 'false' },
+ });
+ assert.deepEqual(diffCachePayloads(prev, next), [
+  { field: 'reasoning.effort', kind: 'changed', beforeValue: 'low', afterValue: 'high', turnExpected: false },
+  { field: 'store', kind: 'added', beforeValue: undefined, afterValue: 'false', turnExpected: false },
+  { field: 'tools', kind: 'removed', beforeValue: undefined, afterValue: undefined, turnExpected: false },
+  { field: 'input', kind: 'changed', beforeValue: undefined, afterValue: undefined, turnExpected: true },
+  { field: 'previous_response_id', kind: 'removed', beforeValue: undefined, afterValue: undefined, turnExpected: true },
+ ]);
+ assert.equal(diffCachePayloads({ ...prev, known: false }, next), null);
+});
+
+test('shortCredentialLabel keeps short names, hex prefixes and named suffixes distinct', () => {
+ assert.equal(shortCredentialLabel('auth-a'), 'auth-a');
+ assert.equal(shortCredentialLabel('a706d87d64251877'), 'a706d8…');
+ assert.notEqual(shortCredentialLabel('codex-oauth-1'), shortCredentialLabel('codex-oauth-2'));
+ assert.equal(shortCredentialLabel('codex-oauth-1'), 'codex-…th-1');
 });

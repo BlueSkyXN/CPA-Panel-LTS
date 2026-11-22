@@ -3,6 +3,7 @@ import { isCacheDigest, readCacheRoute, readCacheRouteReference } from './cacheR
 import type {
   CacheObservation,
   CacheAttempt,
+  CacheFieldDiff,
   CachePayload,
   CacheTrace,
   CacheTraceLocation,
@@ -226,11 +227,45 @@ export function decodeCacheSession(value: unknown): CacheSessionSnapshot | null 
   };
 }
 
+const TURN_EXPECTED_FIELDS = new Set([
+  'input',
+  'messages',
+  'contents',
+  'previous_response_id',
+  'prompt_cache_options.comparison_response_id',
+  'diagnostics.previous_message_id',
+  'thread.previous_message_id',
+]);
+
 export function compareCachePayloads(a: CachePayload, b: CachePayload): string[] | null {
   if (!a.known || !b.known) return null;
   return [...new Set([...Object.keys(a.fields), ...Object.keys(b.fields)])]
     .filter((key) => a.fields[key]?.digest !== b.fields[key]?.digest)
     .sort();
+}
+
+export function diffCachePayloads(before: CachePayload, after: CachePayload): CacheFieldDiff[] | null {
+  if (!before.known || !after.known) return null;
+  const diffs: CacheFieldDiff[] = [];
+  for (const field of [...new Set([...Object.keys(before.fields), ...Object.keys(after.fields)])].sort()) {
+    const prev = before.fields[field];
+    const next = after.fields[field];
+    if (prev?.digest === next?.digest) continue;
+    diffs.push({
+      field,
+      kind: !prev ? 'added' : !next ? 'removed' : 'changed',
+      beforeValue: prev?.value || undefined,
+      afterValue: next?.value || undefined,
+      turnExpected: TURN_EXPECTED_FIELDS.has(field),
+    });
+  }
+  return diffs.sort((a, b) => Number(a.turnExpected) - Number(b.turnExpected) || a.field.localeCompare(b.field));
+}
+
+export function shortCredentialLabel(value: string): string {
+  if (value.length <= 12) return value;
+  if (/^[a-f0-9]+$/i.test(value)) return `${value.slice(0, 6)}…`;
+  return `${value.slice(0, 6)}…${value.slice(-4)}`;
 }
 
 // Legacy snapshots and paged query views both pass through the usage collectors.

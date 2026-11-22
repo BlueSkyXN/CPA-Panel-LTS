@@ -15,6 +15,13 @@ export interface CachePayload {
   bytes: number;
   fields: Record<string, { digest: string; value?: string }>;
 }
+export interface CacheFieldDiff {
+  field: string;
+  kind: 'added' | 'removed' | 'changed';
+  beforeValue?: string;
+  afterValue?: string;
+  turnExpected: boolean;
+}
 export interface CacheDecision {
   sequence: number;
   decision_id?: string;

@@ -535,9 +535,14 @@ export function UsagePage() {
           <ModelShareCard modelStats={modelStats} loading={loading} showPricing={showPricing} isMobile={isMobile} />
           <Card title={t('usage_stats.analytics_section_title')}>
             <p className={styles.hint}>{t('analytics.overview_entry_hint')}</p>
-            <Button variant="secondary" onClick={() => navigate(
-              `/analytics/observability${buildUsageEventsSearch(timeRange, customWindow)}`
-            )}>{t('analytics.open_observability')}</Button>
+            <div className={styles.requestEventsActions}>
+              <Button variant="secondary" onClick={() => navigate(
+                `/analytics/observability${buildUsageEventsSearch(timeRange, customWindow)}`
+              )}>{t('analytics.open_observability')}</Button>
+              <Button variant="ghost" onClick={() => navigate('/analytics/cache')}>
+                {t('cache_analysis.title')}
+              </Button>
+            </div>
           </Card>
 
           {/* Details Grid */}

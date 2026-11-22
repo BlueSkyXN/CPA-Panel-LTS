@@ -325,7 +325,7 @@ const COMPACT_COLUMN_VISIBILITY: RequestEventColumnVisibility = {
 };
 
 const CACHE_PRESET_COLUMNS = new Set<RequestEventColumnId>([
-  'timestamp', 'model', 'authIndex', 'totalInputTokens', 'cacheReadTokens', 'cacheWriteTokens',
+  'timestamp', 'model', 'authIndex', 'result', 'transport', 'totalInputTokens', 'cacheReadTokens', 'cacheWriteTokens',
 ]);
 const CACHE_COLUMN_VISIBILITY = Object.fromEntries(
   REQUEST_EVENT_COLUMN_IDS.map((id) => [id, CACHE_PRESET_COLUMNS.has(id)])
@@ -903,6 +903,7 @@ export function RequestEventsDetailsCard({
         : customColumnVisibility[columnId] === COMPACT_COLUMN_VISIBILITY[columnId]
     );
   const applyCompactView = (compact: boolean) => {
+    setCachePreset(false);
     if (compact) {
       // 备份当前自定义配置，切回完整视图时恢复。
       window.localStorage.setItem(
@@ -2281,6 +2282,7 @@ export function RequestEventsDetailsCard({
   ).length;
 
   const handleToggleColumn = (columnId: RequestEventColumnId) => {
+    setCachePreset(false);
     setStoredColumnVisibility({
       ...columnVisibility,
       [columnId]: !columnVisibility[columnId],
@@ -2288,6 +2290,7 @@ export function RequestEventsDetailsCard({
   };
 
   const handleRestoreDefaultColumns = () => {
+    setCachePreset(false);
     setStoredColumnVisibility(DEFAULT_COLUMN_VISIBILITY);
   };
 
@@ -2721,15 +2724,15 @@ export function RequestEventsDetailsCard({
           </Button>
           <Button type="button" variant={cachePreset ? 'primary' : 'secondary'} size="sm"
             data-testid="request-events-cache-preset" aria-pressed={cachePreset}
+            title={cachePreset ? t('cache_analysis.restore_columns') : undefined}
             onClick={() => setCachePreset(!cachePreset)}>
-            {t(cachePreset ? 'cache_analysis.restore_columns' : 'cache_analysis.preset')}
+            {t('cache_analysis.preset')}
           </Button>
           <Button
             type="button"
             variant="secondary"
             size="sm"
             aria-pressed={compactView && !cachePreset}
-            disabled={cachePreset}
             title={
               compactView
                 ? t('usage_stats.request_events_full_view_hint')
@@ -2760,8 +2763,7 @@ export function RequestEventsDetailsCard({
               className={styles.requestEventsColumnSettingsTrigger}
               data-column-settings-trigger
               aria-haspopup="dialog"
-              aria-expanded={columnSettingsOpen && !cachePreset}
-              disabled={cachePreset}
+              aria-expanded={columnSettingsOpen}
               aria-controls={columnSettingsId}
               aria-label={t('usage_stats.request_events_column_settings')}
               onClick={() => setColumnSettingsOpen((open) => !open)}
@@ -2771,7 +2773,7 @@ export function RequestEventsDetailsCard({
                 {t('usage_stats.request_events_column_settings')}
               </span>
             </Button>
-            {columnSettingsOpen && !cachePreset && (
+            {columnSettingsOpen && (
               <div
                 ref={columnSettingsPanelRef}
                 id={columnSettingsId}

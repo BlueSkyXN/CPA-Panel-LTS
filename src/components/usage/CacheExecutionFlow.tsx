@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { captureCacheDiagnosticsClient } from '@/services/api/cacheDiagnostics';
 import type { CacheAttempt, CacheRouteKey, CacheSessionSnapshot, CacheTrace, CacheTraceLocation } from '@/types/cacheDiagnostics';
-import { cacheAttemptFailed, cacheAttemptTransport, cacheFieldText, compareCachePayloads } from '@/utils/usage/cacheDiagnostics';
+import { cacheAttemptFailed, cacheAttemptTransport, cacheFieldText, diffCachePayloads } from '@/utils/usage/cacheDiagnostics';
 import { CacheRouteLinks } from './CacheRouteLinks';
 import styles from '@/pages/CacheAnalysisPage.module.scss';
 
@@ -20,9 +20,10 @@ export function CacheDisclosure({ label, children, className }: {
   );
 }
 
-export function CacheInbound({ trace, onFilter }: {
+export function CacheInbound({ trace, onFilter, activeKey }: {
   trace: CacheTrace;
   onFilter: (key: CacheRouteKey) => void;
+  activeKey?: CacheRouteKey;
 }) {
   const { t } = useTranslation();
   return (
@@ -30,7 +31,7 @@ export function CacheInbound({ trace, onFilter }: {
       <h3>{t('cache_analysis.shared_input')}</h3>
       <div className={styles.sharedInputFacts}>
         <code>{trace.source_format || '—'}</code>
-        {trace.input_session && <CacheRouteLinks refs={[trace.input_session]} onFilter={onFilter} />}
+        {trace.input_session && <CacheRouteLinks refs={[trace.input_session]} onFilter={onFilter} activeKey={activeKey} />}
       </div>
       {trace.input.known ? (
         <CacheDisclosure label={t('cache_analysis.input_fields')}>
@@ -43,15 +44,16 @@ export function CacheInbound({ trace, onFilter }: {
   );
 }
 
-function AttemptStages({ attempt, trace, onFilter }: {
+function AttemptStages({ attempt, trace, onFilter, activeKey }: {
   attempt: CacheAttempt;
   trace: CacheTrace;
   onFilter: (key: CacheRouteKey) => void;
+  activeKey?: CacheRouteKey;
 }) {
   const { t } = useTranslation();
   const input = attempt.input ?? trace.input;
-  const changed = compareCachePayloads(input, attempt.request);
-  const inputChanges = attempt.input ? compareCachePayloads(trace.input, attempt.input) : null;
+  const changed = diffCachePayloads(input, attempt.request);
+  const inputChanges = attempt.input ? diffCachePayloads(trace.input, attempt.input) : null;
   const decisions = trace.events.filter((event) =>
     (event.execution_id === attempt.execution_id && Boolean(event.execution_id) ||
      !event.execution_id && Boolean(attempt.decision_id) && event.decision_id === attempt.decision_id) &&
@@ -94,7 +96,7 @@ function AttemptStages({ attempt, trace, onFilter }: {
       <section className={styles.stage}>
         <h5>{t('cache_analysis.stage_outbound')}</h5>
         <p>{attempt.provider} · {attempt.model}</p>
-        <CacheRouteLinks refs={attempt.cache_references} onFilter={onFilter} className={styles.flowRoute} />
+        <CacheRouteLinks refs={attempt.cache_references} onFilter={onFilter} activeKey={activeKey} className={styles.flowRoute} />
         {attempt.cache_control && (
           <p>{t('cache_analysis.breakpoints', { count: attempt.cache_control.breakpoints })}
             {attempt.cache_control.five_minutes ? ` · 5m × ${attempt.cache_control.five_minutes}` : ''}
@@ -102,20 +104,38 @@ function AttemptStages({ attempt, trace, onFilter }: {
           </p>
         )}
         {attempt.input && inputChanges && inputChanges.length > 0 && (
-          <p className={styles.note}>{t('cache_analysis.attempt_input_changed')} · <code>{inputChanges.join(', ')}</code></p>
+          <p className={styles.note}>{t('cache_analysis.attempt_input_changed')} · <code>{inputChanges.map((item) => item.field).join(', ')}</code></p>
         )}
         <CacheDisclosure label={t('cache_diagnostics.wire_difference')}>
           {changed === null ? <p>{t('cache_diagnostics.unavailable')}</p> : changed.length
-            ? <p><code>{changed.join(', ')}</code></p>
+            ? <ul className={styles.changedFields} role="list">
+                {changed.map((item) => {
+                  const valueText = item.beforeValue && item.afterValue && item.beforeValue !== item.afterValue
+                    ? `${item.beforeValue} → ${item.afterValue}`
+                    : item.afterValue ?? item.beforeValue;
+                  return (
+                    <li key={item.field} data-kind={item.kind} data-prefix-risk={!item.turnExpected || undefined}>
+                      <span aria-hidden="true" className={styles.diffKind}>
+                        {item.kind === 'added' ? '+' : item.kind === 'removed' ? '−' : '~'}
+                      </span>
+                      <code>{item.field}</code>
+                      {valueText && <small className={styles.diffValue}>{valueText}</small>}
+                    </li>
+                  );
+                })}
+              </ul>
             : <p>{t('cache_diagnostics.no_difference')}</p>}
           {transforms.map((event) => (
-            <p key={event.sequence}><code>{event.method} · {event.changes.join(', ')}</code></p>
+            <p key={event.sequence} className={styles.note}><code>{event.method}</code> · {event.changes.join(', ')}</p>
           ))}
         </CacheDisclosure>
         {attempt.request.known && <CacheDisclosure label={t('cache_diagnostics.outbound_fields')}>
-          <dl className={styles.measurements}>
+          <dl className={styles.fieldDigestList}>
             {Object.entries(attempt.request.fields).map(([path, field]) => <div key={path}>
-              <dt><code>{path}</code></dt><dd><code>{field.value || field.digest}</code></dd>
+              <dt><code>{path}</code></dt>
+              <dd>{field.value
+                ? <code>{field.value}</code>
+                : <code className={styles.digestBadge} title={field.digest}>#{field.digest.slice(0, 8)}…{field.digest.slice(-4)}</code>}</dd>
             </div>)}
           </dl>
         </CacheDisclosure>}
@@ -210,10 +230,11 @@ function CurrentBinding({ trace }: { trace: CacheTrace }) {
   );
 }
 
-export function CacheExecutionFlow({ trace, selected, onFilter }: {
+export function CacheExecutionFlow({ trace, selected, onFilter, activeKey }: {
   trace: CacheTrace;
   selected: CacheTraceLocation;
   onFilter: (key: CacheRouteKey) => void;
+  activeKey?: CacheRouteKey;
 }) {
   const { t } = useTranslation();
   const detached = trace.events.filter((event) => event.layer === 'transport' && event.result === 'no_client_dispatch');
@@ -232,8 +253,8 @@ export function CacheExecutionFlow({ trace, selected, onFilter }: {
                 {t('cache_diagnostics.attempt', { number: attempt.number })} · {cacheAttemptTransport(attempt.transport)}
                 {current && <span className={styles.currentTag}>{t('cache_analysis.current_attempt')}</span>}
               </h4>
-              <AttemptStages attempt={attempt} trace={trace} onFilter={onFilter} />
-              <CacheDisclosure className={styles.ids} label={t('cache_analysis.identifiers')}>
+              <AttemptStages attempt={attempt} trace={trace} onFilter={onFilter} activeKey={activeKey} />
+              <CacheDisclosure className={styles.ids} label={t('cache_analysis.attempt_identifiers')}>
                 <dl className={styles.measurements}>
                   <div><dt>{t('cache_diagnostics.execution')}</dt><dd><code>{attempt.execution_id}</code></dd></div>
                   <div><dt>{t('cache_diagnostics.decision')}</dt><dd><code>{attempt.decision_id || '—'}</code></dd></div>

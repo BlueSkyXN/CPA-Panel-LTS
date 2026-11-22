@@ -9,7 +9,7 @@ import { useAuthStore } from '@/stores/useAuthStore';
 import { ltsExtensionClient } from '@/services/api/client';
 import { captureCacheDiagnosticsClient } from '@/services/api/cacheDiagnostics';
 import { isRecord } from '@/utils/helpers';
-import { cacheAttemptFailed, cacheAttemptTransport, cacheFieldSummary, cacheExecutionPath, compareCachePayloads, isCacheLookupId, readRate } from '@/utils/usage/cacheDiagnostics';
+import { cacheAttemptFailed, cacheAttemptTransport, cacheFieldSummary, cacheExecutionPath, diffCachePayloads, isCacheLookupId, readRate, shortCredentialLabel } from '@/utils/usage/cacheDiagnostics';
 import { cacheRouteKey, isCacheDigest } from '@/utils/usage/cacheRoute';
 import {
   cacheLocationSearch, cacheTraceRowKey, readCacheLocation, readCacheReturnContext, readCacheUsageRow,
@@ -248,7 +248,7 @@ function CacheAnalysisWorkspace({ connection, connected }: { connection: string;
   const directExecutionMismatch = directLink?.request_id && detail.trace?.attempts.length &&
     !detail.trace.attempts.some((attempt) => attempt.execution_id === directLink.request_id);
   const trace = directExecutionMismatch ? undefined : detail.trace;
-  const fieldChanges = reference.trace && trace ? compareCachePayloads(reference.trace.input, trace.input) : null;
+  const fieldChanges = reference.trace && trace ? diffCachePayloads(reference.trace.input, trace.input) : null;
   const attempts = trace?.attempts ?? [];
   const first = attempts[0], final = attempts[attempts.length - 1];
   const firstPCK = first?.cache_references.find((item) => item.kind === 'pck');
@@ -333,7 +333,7 @@ function CacheAnalysisWorkspace({ connection, connected }: { connection: string;
         </label>
       )}
       {timeline.loading && <p role="status">{t('common.loading')}</p>}
-      {timeline.error && <p role="alert">{t(`cache_analysis.${timeline.error}`)}</p>}
+      {timeline.error && <p role="alert" className={styles.alert}>{t(`cache_analysis.${timeline.error}`)}</p>}
       {!rows.length && !timeline.loading && !timeline.error && (
         <p role="status">{t(q ? 'cache_analysis.no_matches' : 'cache_analysis.no_recent')}</p>
       )}
@@ -346,7 +346,7 @@ function CacheAnalysisWorkspace({ connection, connected }: { connection: string;
             const rowDescription = `${timelineID}-${index}`;
             const rate = readRate(row.input_tokens, row.cache_observation?.read);
             const currentRate = readRate(selected?.input_tokens, selected?.cache_observation?.read);
-            const delta = rate !== null && currentRate !== null && !current ? rate - currentRate : null;
+            const delta = rate !== null && currentRate !== null && !current ? currentRate - rate : null;
             const rateLabel = rate === null
               ? cacheFieldSummary(t, row.cache_observation?.read)
               : asPercent.format(rate);
@@ -378,7 +378,7 @@ function CacheAnalysisWorkspace({ connection, connected }: { connection: string;
                   <div className={styles.timelineIdentity}>
                     {shortID && <code title={row.request_id || row.diagnostics_id || row.trace_id}>#{shortID}</code>}
                     <span title={row.model}>{row.model}</span>
-                    {row.auth_index && <code title={row.auth_index}>{row.auth_index.slice(0, 6)}</code>}
+                    {row.auth_index && <code title={row.auth_index}>{shortCredentialLabel(row.auth_index)}</code>}
                   </div>
                   <div className={styles.timelineSignals}>
                     {sends > 1 && <small>{t('cache_analysis.attempt_count', { count: sends })}</small>}
@@ -439,7 +439,7 @@ function CacheAnalysisWorkspace({ connection, connected }: { connection: string;
         </label>
         <Button type="submit" disabled={!supported && !oldCore}>{t('cache_analysis.search')}</Button>
       </form>
-      {formError && <p role="alert">{t('cache_analysis.invalid_id')}</p>}
+      {formError && <p role="alert" className={styles.alert}>{t('cache_analysis.invalid_id')}</p>}
       {supported && (
         <div className={styles.focusFilters}>
           {focusFilters.map((value) => (
@@ -476,7 +476,7 @@ function CacheAnalysisWorkspace({ connection, connected }: { connection: string;
         </details>
       ) : searchControls}
       {!cap && <p role="status">{t('common.loading')}</p>}
-      {cap?.error && <p role="alert">{t(`cache_diagnostics.${cap.error}`)}</p>}
+      {cap?.error && <p role="alert" className={styles.alert}>{t(`cache_diagnostics.${cap.error}`)}</p>}
       {oldCore && <p role="status">{t('cache_analysis.legacy_search')}</p>}
       {cap?.data?.recording_enabled === false && <p role="status">{t('cache_analysis.recording_disabled')}</p>}
       <div className={styles.workspace}>
@@ -511,18 +511,29 @@ function CacheAnalysisWorkspace({ connection, connected }: { connection: string;
                   <p role="status">{t('cache_analysis.history_only')}</p>
                 )}
               </>
-            ) : <p>{t(linkedLookup && cap && (!linkMatchesInstance || directExecutionMismatch)
-              ? 'cache_diagnostics.unavailable' : 'cache_analysis.choose_request')}</p>}
+            ) : (
+              <>
+                <p>{t(linkedLookup && cap && (!linkMatchesInstance || directExecutionMismatch)
+                  ? 'cache_diagnostics.unavailable' : 'cache_analysis.choose_request')}</p>
+                {!linkedLookup && rows.length > 0 && (
+                  <p className={styles.note}>{t('cache_analysis.recent_overview', {
+                    count: rows.length,
+                    retried: rows.filter((row) => (row.attempt_count ?? row.cache_route?.attempt_count ?? 0) > 1).length,
+                    zeroRead: rows.filter((row) => row.cache_observation?.read.state === 'present' && row.cache_observation.read.value === 0).length,
+                  })}</p>
+                )}
+              </>
+            )}
           </div>
           {selected && mobileRows}
           {(detail.loading || (lookupInDetail && records.loading)) && <p role="status">{t('common.loading')}</p>}
-          {lookupInDetail && records.error && <p role="alert">{t(`cache_analysis.${records.error}`)}</p>}
+          {lookupInDetail && records.error && <p role="alert" className={styles.alert}>{t(`cache_analysis.${records.error}`)}</p>}
           {detail.error && (!linkedUsage || detail.error !== 'unavailable') && (
             <p role="status">{t(`cache_diagnostics.${detail.error}`)}</p>
           )}
           {trace && (
             <>
-              <CacheInbound trace={trace} onFilter={filterRelated} />
+              <CacheInbound trace={trace} onFilter={filterRelated} activeKey={currentRelation} />
               <div className={styles.compare}>
                 <h3 ref={compareHeading} tabIndex={-1}>{t('cache_analysis.input_comparison')}</h3>
                 {usableBaseline ? (
@@ -535,7 +546,20 @@ function CacheAnalysisWorkspace({ connection, connected }: { connection: string;
                       ? <p>{t('cache_diagnostics.unavailable')}</p>
                       : fieldChanges.length > 0
                         ? <ul className={styles.changedFields} role="list">
-                            {fieldChanges.map((field) => <li key={field}><code>{field}</code></li>)}
+                            {fieldChanges.map((item) => {
+                              const valueText = item.beforeValue && item.afterValue && item.beforeValue !== item.afterValue
+                                ? `${item.beforeValue} → ${item.afterValue}`
+                                : item.afterValue ?? item.beforeValue;
+                              return (
+                                <li key={item.field} data-kind={item.kind} data-prefix-risk={!item.turnExpected || undefined}>
+                                  <span aria-hidden="true" className={styles.diffKind}>
+                                    {item.kind === 'added' ? '+' : item.kind === 'removed' ? '−' : '~'}
+                                  </span>
+                                  <code>{item.field}</code>
+                                  {valueText && <small className={styles.diffValue}>{valueText}</small>}
+                                </li>
+                              );
+                            })}
                           </ul>
                         : <p>{t('cache_diagnostics.no_difference')}</p>}
                     {manualReference && <Button type="button" variant="secondary" size="sm" onClick={() => changeReference(null)}>
@@ -549,7 +573,7 @@ function CacheAnalysisWorkspace({ connection, connected }: { connection: string;
                   </Button>
                 ) : <p>{t('cache_analysis.choose_reference')}</p>}
               </div>
-              <CacheExecutionFlow trace={trace} selected={selected ?? link} onFilter={filterRelated} />
+              <CacheExecutionFlow trace={trace} selected={selected ?? link} onFilter={filterRelated} activeKey={currentRelation} />
               <CacheDisclosure className={styles.ids} label={t('cache_analysis.identifiers')}>
                 <p>{t('cache_diagnostics.logical_request')} · <code>{trace.logical_request_id}</code></p>
                 <p>{t('cache_diagnostics.record_id')} · <code>{trace.id}</code></p>
