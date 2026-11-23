@@ -204,5 +204,5 @@ export interface CacheDiagnosticsCapabilities {
   version?: number;
   recording_enabled?: boolean;
   trace_search_version?: number;
-  store?: { instance_id?: string };
+  store?: { instance_id?: string; active?: number };
 }

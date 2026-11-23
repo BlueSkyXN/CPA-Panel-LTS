@@ -516,11 +516,18 @@ function CacheAnalysisWorkspace({ connection, connected }: { connection: string;
                 <p>{t(linkedLookup && cap && (!linkMatchesInstance || directExecutionMismatch)
                   ? 'cache_diagnostics.unavailable' : 'cache_analysis.choose_request')}</p>
                 {!linkedLookup && rows.length > 0 && (
-                  <p className={styles.note}>{t('cache_analysis.recent_overview', {
-                    count: rows.length,
-                    retried: rows.filter((row) => (row.attempt_count ?? row.cache_route?.attempt_count ?? 0) > 1).length,
-                    zeroRead: rows.filter((row) => row.cache_observation?.read.state === 'present' && row.cache_observation.read.value === 0).length,
-                  })}</p>
+                  <p className={styles.note}>
+                    {typeof cap?.data?.store?.active === 'number' && focus === '' && (
+                      <>{t('cache_analysis.recent_overview_instance', { total: cap.data.store.active })} </>
+                    )}
+                    {t(focus ? 'cache_analysis.recent_overview_filtered' : 'cache_analysis.recent_overview_loaded', {
+                      ...(focus ? { focus: t(`cache_analysis.focus_${focus}`) } : {}),
+                      count: rows.length,
+                      retried: rows.filter((row) => (row.attempt_count ?? row.cache_route?.attempt_count ?? 0) > 1).length,
+                      zeroRead: rows.filter((row) => row.cache_observation?.read.state === 'present' && row.cache_observation.read.value === 0).length,
+                    })}
+                    {timeline.page?.next_cursor && <> {t('cache_analysis.recent_overview_more')}</>}
+                  </p>
                 )}
               </>
             )}

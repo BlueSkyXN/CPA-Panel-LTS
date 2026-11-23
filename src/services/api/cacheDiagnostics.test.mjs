@@ -42,3 +42,26 @@ test('trace lookup sends scoped parameters and drops results after connection AB
   finish({ version: 1, current_instance_id: 'instance-one', items: [], history_included: true });
   assert.equal(await pending, null);
 });
+
+test('capabilities preserves valid store active count and ignores invalid values', async () => {
+  client.setConfig({ apiBase: 'https://one.invalid', managementKey: 'synthetic' });
+  client.captureConnection = () => ({
+    get: async () => ({
+      version: 1,
+      trace_search_version: 1,
+      store: { instance_id: 'instance-one', active: 7 },
+    }),
+  });
+  const valid = await captureCacheDiagnosticsClient().capabilities();
+  assert.deepEqual(valid.store, { instance_id: 'instance-one', active: 7 });
+
+  client.captureConnection = () => ({
+    get: async () => ({
+      version: 1,
+      trace_search_version: 1,
+      store: { instance_id: 'instance-one', active: -1 },
+    }),
+  });
+  const invalid = await captureCacheDiagnosticsClient().capabilities();
+  assert.deepEqual(invalid.store, { instance_id: 'instance-one' });
+});

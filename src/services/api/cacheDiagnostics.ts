@@ -26,7 +26,13 @@ export function captureCacheDiagnosticsClient() {
         recording_enabled: typeof raw.recording_enabled === 'boolean' ? raw.recording_enabled : undefined,
         trace_search_version: typeof raw.trace_search_version === 'number' ? raw.trace_search_version : undefined,
         store: isRecord(raw.store) && isCacheLookupId(raw.store.instance_id)
-          ? { instance_id: raw.store.instance_id } : undefined,
+          ? {
+              instance_id: raw.store.instance_id,
+              ...(typeof raw.store.active === 'number' && Number.isFinite(raw.store.active) && raw.store.active >= 0
+                ? { active: raw.store.active }
+                : {}),
+            }
+          : undefined,
       };
     },
     async traces(query: CacheTraceQuery, signal?: AbortSignal) {
