@@ -893,7 +893,11 @@ export function RequestEventsDetailsCard({
     [storedColumnVisibility]
   );
   const [cachePreset, setCachePreset] = useState(restoreCacheView?.cachePreset ?? Boolean(initialCacheReadState || initialCacheWriteState));
-  const columnVisibility = cachePreset ? CACHE_COLUMN_VISIBILITY : customColumnVisibility;
+  const [cachePresetOverrides, setCachePresetOverrides] = useState<Partial<RequestEventColumnVisibility>>({});
+  const columnVisibility = useMemo(
+    () => (cachePreset ? { ...CACHE_COLUMN_VISIBILITY, ...cachePresetOverrides } : customColumnVisibility),
+    [cachePreset, cachePresetOverrides, customColumnVisibility]
+  );
   // 视图模式从当前列配置推导：与紧凑预设完全一致即视为紧凑视图，
   // 其余（默认或自定义）都是完整视图，避免第二份可能漂移的状态。
   const compactView =
@@ -904,6 +908,7 @@ export function RequestEventsDetailsCard({
     );
   const applyCompactView = (compact: boolean) => {
     setCachePreset(false);
+    setCachePresetOverrides({});
     if (compact) {
       // 备份当前自定义配置，切回完整视图时恢复。
       window.localStorage.setItem(
@@ -2282,7 +2287,13 @@ export function RequestEventsDetailsCard({
   ).length;
 
   const handleToggleColumn = (columnId: RequestEventColumnId) => {
-    setCachePreset(false);
+    if (cachePreset) {
+      setCachePresetOverrides((prev) => ({
+        ...prev,
+        [columnId]: !columnVisibility[columnId],
+      }));
+      return;
+    }
     setStoredColumnVisibility({
       ...columnVisibility,
       [columnId]: !columnVisibility[columnId],
@@ -2291,6 +2302,7 @@ export function RequestEventsDetailsCard({
 
   const handleRestoreDefaultColumns = () => {
     setCachePreset(false);
+    setCachePresetOverrides({});
     setStoredColumnVisibility(DEFAULT_COLUMN_VISIBILITY);
   };
 
@@ -2725,7 +2737,10 @@ export function RequestEventsDetailsCard({
           <Button type="button" variant={cachePreset ? 'primary' : 'secondary'} size="sm"
             data-testid="request-events-cache-preset" aria-pressed={cachePreset}
             title={cachePreset ? t('cache_analysis.restore_columns') : undefined}
-            onClick={() => setCachePreset(!cachePreset)}>
+            onClick={() => {
+              setCachePreset(!cachePreset);
+              setCachePresetOverrides({});
+            }}>
             {t('cache_analysis.preset')}
           </Button>
           <Button
