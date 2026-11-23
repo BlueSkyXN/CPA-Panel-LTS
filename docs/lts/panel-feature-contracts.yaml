@@ -1481,19 +1481,27 @@ features:
     status: lts-maintained
     reason: Existing request details distinguish upstream cache reporting from compatibility defaults and expose actual attempts plus bounded current session snapshots.
     panel_files:
+      - src/pages/CacheAnalysisPage.tsx
+      - src/components/usage/CacheExecutionFlow.tsx
+      - src/components/usage/CacheRouteLinks.tsx
       - src/components/usage/CacheDiagnosticsDetails.tsx
       - src/components/usage/RequestEventsDetailsCard.tsx
       - src/services/api/cacheDiagnostics.ts
       - src/utils/usage/cacheDiagnostics.ts
       - src/types/cacheDiagnostics.ts
       - docs/lts/cache-diagnostics.md
+    routes:
+      - /analytics/cache
     core_endpoints:
+      - /v0/management/cache-diagnostics/traces
       - /v0/management/cache-diagnostics/capabilities
       - /v0/management/cache-diagnostics/requests/:id
       - /v0/management/cache-diagnostics/session
     required_markers:
       - diagnostics_instance_id
       - cache_observation
+      - cache_route
+      - trace_search_version
       - captureCacheDiagnosticsClient
     validation:
       - npm run test:usage-cache

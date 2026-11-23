@@ -643,6 +643,8 @@ export function MainLayout() {
     children: [
       { kind: 'link', path: '/analytics/observability', label: t('analytics.observability'),
         icon: <span className="nav-sub-dot" aria-hidden="true" />, end: true },
+      { kind: 'link', path: '/analytics/cache', label: t('cache_analysis.title'),
+        icon: <span className="nav-sub-dot" aria-hidden="true" />, end: true },
       ...(flowSupportKnown && supportsFlowControl ? [
         { kind: 'link' as const, path: '/analytics/flow', label: t('analytics.flow_dashboard'),
           icon: <span className="nav-sub-dot" aria-hidden="true" />, end: true },

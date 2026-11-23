@@ -11,6 +11,7 @@ interface AnalyticsBucketDrillControlProps {
   grain: AnalyticsGrain;
   window?: AnalyticsTimeWindow | null;
   onOpen: (bucket: AnalyticsBucketRange) => void;
+  describeBucket?: (index: number) => string;
 }
 
 export function AnalyticsBucketDrillControl({
@@ -19,6 +20,7 @@ export function AnalyticsBucketDrillControl({
   grain,
   window,
   onOpen,
+  describeBucket,
 }: AnalyticsBucketDrillControlProps) {
   const { t, i18n } = useTranslation();
   const [selection, setSelection] = useState<{ grain: AnalyticsGrain; time: number } | null>(null);
@@ -51,7 +53,7 @@ export function AnalyticsBucketDrillControl({
             (time, bucketIndex) =>
               bucketRangeAt(times, bucketIndex, grain, window) && (
                 <option key={time} value={time}>
-                  {formatter.format(new Date(time))}
+                  {[formatter.format(new Date(time)), describeBucket?.(bucketIndex)].filter(Boolean).join(' · ')}
                 </option>
               )
           )}

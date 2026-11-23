@@ -1,3 +1,4 @@
+import type { CacheValueState } from '@/utils/usage/cacheAnalytics';
 import type { UsageDetail } from '@/utils/usage';
 import type { ServiceTierFlow } from '@/utils/usage/serviceTier';
 
@@ -10,6 +11,7 @@ export interface UsageQuerySession {
   export_version?: number;
   max_export_page_size?: number;
   analytics_version?: number;
+  cache_observation_version?: number;
   max_analytics_rows?: number;
 }
 export interface UsageQueryIdentity {
@@ -26,6 +28,8 @@ export interface UsageQueryFilter {
   effort?: string;
   failed?: boolean;
   cached?: boolean;
+  cache_read_state?: CacheValueState;
+  cache_write_state?: CacheValueState;
   metric?: string;
   minimum?: number;
   maximum?: number;

@@ -543,6 +543,22 @@ const resolveCurrentSnapshot = (value: unknown): UnknownRecord | null => {
   return value;
 };
 
+// The caller owns this parsed backup. Discard the draft-only diagnostic field
+// before building a download or sending the import to Core.
+export function discardDraftCacheRoutes(payload: unknown) {
+  if (!isRecord(payload) || payload.version !== 3 || !isRecord(payload.usage) ||
+      !isRecord(payload.usage.apis)) return;
+  for (const api of Object.values(payload.usage.apis)) {
+    if (!isRecord(api) || !isRecord(api.models)) continue;
+    for (const model of Object.values(api.models)) {
+      if (!isRecord(model) || !Array.isArray(model.details)) continue;
+      for (const row of model.details) {
+        if (isRecord(row)) delete row.cache_route;
+      }
+    }
+  }
+}
+
 const invalidResult = (
   issue: UsageImportPreflightIssue,
   version: number | null,

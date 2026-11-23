@@ -47,6 +47,7 @@ export function safeSessionPath(path: string): string {
     '/flow-control',
     '/analytics',
     '/analytics/observability',
+    '/analytics/cache',
     '/analytics/flow',
     '/analytics/flow/config',
     '/logs',

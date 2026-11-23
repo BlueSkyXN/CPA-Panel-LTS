@@ -965,14 +965,19 @@
   gap: 6px;
   padding: 4px 10px;
   border-radius: $radius-full;
-  border: 1px solid var(--border-color);
-  background: var(--bg-primary);
+  border: 1px solid var(--primary-30);
+  background: var(--primary-8);
+  color: var(--text-primary);
   font-size: 12px;
   font-family: inherit;
   cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease;
 
-  &:hover { border-color: var(--text-secondary); }
-  &:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
+  &:hover {
+    background: var(--primary-10);
+    border-color: var(--primary-color);
+  }
+  &:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; }
 }
 
 .errorStatusGrid {
@@ -2604,4 +2609,89 @@
   grid-column: 1 / -1;
   border-top: 1px solid var(--border-color);
   padding-top: 12px;
+}
+
+.cacheRouteLinks,
+.cacheExecutionSummary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.6rem;
+}
+
+.cacheRouteLinks {
+  min-inline-size: 10rem;
+  font-size: 0.78rem;
+  align-items: flex-start;
+}
+
+.cacheRouteLink {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  min-block-size: 24px;
+  padding: 0.18rem 0.55rem;
+  border: 1px solid var(--primary-30);
+  border-radius: $radius-full;
+  color: var(--text-primary);
+  background: var(--primary-8);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease;
+
+  &:hover {
+    background: var(--primary-10);
+    border-color: var(--primary-color);
+  }
+
+  &[data-active='true'] {
+    background: var(--primary-10);
+    border-color: var(--primary-color);
+    box-shadow: inset 0 0 0 1px var(--primary-color);
+    font-weight: 600;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+  }
+}
+
+.cacheExecutionSummary {
+  margin-block-end: 0.65rem;
+}
+
+.requestEventsTimeButton {
+  background: none;
+  color: inherit;
+  border: 0;
+  padding: 0;
+  min-block-size: 24px;
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.cacheObservedRate {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.7rem;
+
+  strong {
+    font-size: 1.45rem;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.cacheStateGroups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.7rem;
+}
+
+.cacheStateGroups > div {
+  flex: 1 1 100%;
 }

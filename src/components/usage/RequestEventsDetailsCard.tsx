@@ -11,7 +11,9 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { CacheDiagnosticsDetails } from './CacheDiagnosticsDetails';
-import { readCacheObservation } from '@/utils/usage/cacheDiagnostics';
+import type { CacheEventsView, CacheUsageRow } from '@/utils/usage/cacheNavigation';
+import { CACHE_STATES, cacheValueState, isCacheValueState, type CacheValueState } from '@/utils/usage/cacheAnalytics';
+import { cacheFieldSummary, readCacheObservation } from '@/utils/usage/cacheDiagnostics';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -322,6 +324,13 @@ const COMPACT_COLUMN_VISIBILITY: RequestEventColumnVisibility = {
   cacheWriteTokens: false,
 };
 
+const CACHE_PRESET_COLUMNS = new Set<RequestEventColumnId>([
+  'timestamp', 'model', 'authIndex', 'result', 'transport', 'totalInputTokens', 'cacheReadTokens', 'cacheWriteTokens',
+]);
+const CACHE_COLUMN_VISIBILITY = Object.fromEntries(
+  REQUEST_EVENT_COLUMN_IDS.map((id) => [id, CACHE_PRESET_COLUMNS.has(id)])
+) as RequestEventColumnVisibility;
+
 type RequestEventRow = {
   id: string;
   timestamp: string;
@@ -473,6 +482,10 @@ export interface RequestEventsDetailsCardProps {
   initialAnalyticsFilters?: AnalyticsFilters | null;
   /** 下钻携带的初始结果筛选：只显示失败记录。 */
   initialResultFailed?: boolean;
+  initialCacheReadState?: CacheValueState;
+  initialCacheWriteState?: CacheValueState;
+  onAnalyze?: (row: CacheUsageRow, view: CacheEventsView) => void;
+  restoreCacheView?: CacheEventsView;
   querySession?: UsageQuerySession | null;
   usage: unknown;
   loading: boolean;
@@ -670,6 +683,10 @@ export function RequestEventsDetailsCard({
   querySession = null,
   initialAnalyticsFilters = null,
   initialResultFailed = false,
+  initialCacheReadState,
+  initialCacheWriteState,
+  onAnalyze,
+  restoreCacheView,
   pageTimeRange,
   pageTimeRangeCustom = null,
   referenceNowMs,
@@ -721,6 +738,7 @@ export function RequestEventsDetailsCard({
   // 静默清空、"筛选只剩当前页数据"的假象；与页面级 range 的 draft 保留策略一致。
   const REQUEST_EVENT_FILTERS_STORAGE_KEY = 'cpa-request-event-filters-v1';
   const loadPersistedFilters = (): Record<string, string> => {
+    if (restoreCacheView) return { ...restoreCacheView.filters };
     if (initialAnalyticsFilters) return {
       model: initialAnalyticsFilters.model ?? ALL_FILTER,
       source: initialAnalyticsFilters.source?.value ?? ALL_FILTER,
@@ -784,11 +802,19 @@ export function RequestEventsDetailsCard({
   };
   const [timeRangeClockMs, setTimeRangeClockMs] = useState(0);
   const [cacheFilter, setCacheFilter] = useState(persisted.cache ?? ALL_FILTER);
+  const supportsCacheStates = !querySession || querySession.cache_observation_version === 1;
+  const [cacheReadState, setCacheReadState] = useState((restoreCacheView ? persisted.cacheReadState : initialCacheReadState) ?? persisted.cacheReadState);
+  const [cacheWriteState, setCacheWriteState] = useState((restoreCacheView ? persisted.cacheWriteState : initialCacheWriteState) ?? persisted.cacheWriteState);
+  const applyCacheState = (field: 'read' | 'write', state: string) => {
+    const update = field === 'read' ? setCacheReadState : setCacheWriteState;
+    update(state);
+    persistFilter(field === 'read' ? 'cacheReadState' : 'cacheWriteState', state);
+  };
   const [numericMetricFilter, setNumericMetricFilter] = useState(
     isRequestEventNumericMetricId(persisted.numericMetric) ? persisted.numericMetric : ALL_FILTER
   );
-  const [numericMinimumFilter, setNumericMinimumFilter] = useState('');
-  const [numericMaximumFilter, setNumericMaximumFilter] = useState('');
+  const [numericMinimumFilter, setNumericMinimumFilter] = useState(persisted.numericMinimum ?? '');
+  const [numericMaximumFilter, setNumericMaximumFilter] = useState(persisted.numericMaximum ?? '');
   // 各筛选 setter 统一持久化；载荷是枚举值或原始值，不含任何敏感数据。
   const setModelFilterPersisted = (value: string) => {
     setModelFilter(value);
@@ -847,7 +873,7 @@ export function RequestEventsDetailsCard({
     () => new Set()
   );
   const [columnSettingsOpen, setColumnSettingsOpen] = useState(false);
-  const [expandedRows, setExpandedRows] = useState<ReadonlySet<string>>(() => new Set());
+  const [expandedRows, setExpandedRows] = useState<ReadonlySet<string>>(() => new Set(restoreCacheView ? [restoreCacheView.selectedRowId] : []));
   const toggleExpandedRow = (rowId: string) => {
     setExpandedRows((current) => {
       const next = new Set(current);
@@ -862,24 +888,32 @@ export function RequestEventsDetailsCard({
     COLUMN_VISIBILITY_STORAGE_KEY,
     DEFAULT_COLUMN_VISIBILITY
   );
-  const columnVisibility = useMemo(
+  const customColumnVisibility = useMemo(
     () => normalizeColumnVisibility(storedColumnVisibility),
     [storedColumnVisibility]
+  );
+  const [cachePreset, setCachePreset] = useState(restoreCacheView?.cachePreset ?? Boolean(initialCacheReadState || initialCacheWriteState));
+  const [cachePresetOverrides, setCachePresetOverrides] = useState<Partial<RequestEventColumnVisibility>>({});
+  const columnVisibility = useMemo(
+    () => (cachePreset ? { ...CACHE_COLUMN_VISIBILITY, ...cachePresetOverrides } : customColumnVisibility),
+    [cachePreset, cachePresetOverrides, customColumnVisibility]
   );
   // 视图模式从当前列配置推导：与紧凑预设完全一致即视为紧凑视图，
   // 其余（默认或自定义）都是完整视图，避免第二份可能漂移的状态。
   const compactView =
     REQUEST_EVENT_COLUMN_IDS.every((columnId) =>
       columnId === 'requestLog'
-        ? !columnVisibility[columnId]
-        : columnVisibility[columnId] === COMPACT_COLUMN_VISIBILITY[columnId]
+        ? !customColumnVisibility[columnId]
+        : customColumnVisibility[columnId] === COMPACT_COLUMN_VISIBILITY[columnId]
     );
   const applyCompactView = (compact: boolean) => {
+    setCachePreset(false);
+    setCachePresetOverrides({});
     if (compact) {
       // 备份当前自定义配置，切回完整视图时恢复。
       window.localStorage.setItem(
         COLUMN_VISIBILITY_CUSTOM_BACKUP_KEY,
-        JSON.stringify(columnVisibility)
+        JSON.stringify(customColumnVisibility)
       );
       setStoredColumnVisibility(COMPACT_COLUMN_VISIBILITY);
     } else {
@@ -957,7 +991,7 @@ export function RequestEventsDetailsCard({
           const parsedCurrent = JSON.parse(currentValue) as unknown;
           shouldPersistCurrent = needsColumnVisibilityNormalization(
             parsedCurrent,
-            columnVisibility
+            customColumnVisibility
           );
         } catch {
           shouldPersistCurrent = true;
@@ -965,15 +999,15 @@ export function RequestEventsDetailsCard({
       }
       const shouldNormalizeState = needsColumnVisibilityNormalization(
         storedColumnVisibility,
-        columnVisibility
+        customColumnVisibility
       );
       if (shouldPersistCurrent || shouldNormalizeState) {
-        const canonicalValue = JSON.stringify(columnVisibility);
+        const canonicalValue = JSON.stringify(customColumnVisibility);
         window.localStorage.setItem(COLUMN_VISIBILITY_STORAGE_KEY, canonicalValue);
         if (window.localStorage.getItem(COLUMN_VISIBILITY_STORAGE_KEY) !== canonicalValue) {
           return;
         }
-        setStoredColumnVisibility(columnVisibility);
+        setStoredColumnVisibility(customColumnVisibility);
       }
 
       // v1/v2 were development-era defaults. v3 starts from the formal
@@ -984,7 +1018,7 @@ export function RequestEventsDetailsCard({
     } catch {
       // Preserve legacy keys when the canonical v3 value cannot be written and verified.
     }
-  }, [columnVisibility, setStoredColumnVisibility, storedColumnVisibility]);
+  }, [customColumnVisibility, setStoredColumnVisibility, storedColumnVisibility]);
 
   useEffect(() => {
     if (!columnSettingsOpen) return;
@@ -1198,6 +1232,10 @@ export function RequestEventsDetailsCard({
     }
     if (resultFilter !== ALL_FILTER) filter.failed = resultFilter === RESULT_FAILED_FILTER;
     if (cacheFilter !== ALL_FILTER) filter.cached = cacheFilter === CACHE_PRESENT_FILTER;
+    if (supportsCacheStates) {
+      if (isCacheValueState(cacheReadState)) filter.cache_read_state = cacheReadState;
+      if (isCacheValueState(cacheWriteState)) filter.cache_write_state = cacheWriteState;
+    }
     if (isRequestEventNumericMetricId(numericMetricFilter)) {
       filter.metric = numericMetricFilter;
       const min = parseNumericFilterBound(numericMinimumFilter), max = parseNumericFilterBound(numericMaximumFilter);
@@ -1205,7 +1243,7 @@ export function RequestEventsDetailsCard({
       if (max !== null) filter.maximum = max;
     }
     return filter;
-  });
+  }, restoreCacheView?.navigation);
   const loading = parentLoading || remote.loading;
   const remoteSources = useMemo(() => {
     const entries = (remote.options?.identities ?? []).map((id) => {
@@ -1392,8 +1430,12 @@ export function RequestEventsDetailsCard({
       const performanceReasoningTokens = performanceTokens.reasoningTokens;
       const displayedOutputTokens = performanceTokens.nonReasoningTokens;
       const cacheEvidence = readCacheObservation(detail.cache_observation);
-      const cacheRate = cacheEvidence && cacheEvidence.read.state !== 'present'
-        ? null : resolveCacheRate(inputTokens, cacheReadTokens);
+      const observedRead = cacheEvidence?.read.value;
+      const cacheRate = !cacheEvidence
+        ? resolveCacheRate(inputTokens, cacheReadTokens)
+        : observedRead !== undefined && observedRead <= inputTokens
+          ? resolveCacheRate(inputTokens, observedRead)
+          : null;
       const totalTokens = Math.max(
         toNumber(detail.tokens?.total_tokens),
         extractTotalTokens(detail)
@@ -1454,7 +1496,7 @@ export function RequestEventsDetailsCard({
         requestId: detail.request_id,
         diagnosticsId: detail.diagnostics_id,
         diagnosticsInstanceId: detail.diagnostics_instance_id,
-        cacheObservation: detail.cache_observation,
+        cacheObservation: cacheEvidence,
         upstreamTransport: detail.upstream_transport ?? null,
         upstreamRequestBytes: upstreamPayloadBytes(detail),
         upstreamRequestWireBytes: detail.upstream_request_wire_bytes ?? null,
@@ -1483,7 +1525,7 @@ export function RequestEventsDetailsCard({
         cacheReadTokens,
         cacheWriteTokens,
         cacheRate,
-        cacheRateTone: getCacheRateTone(cacheRate, inputTokens, cacheReadTokens),
+        cacheRateTone: getCacheRateTone(cacheRate, inputTokens, observedRead ?? (!cacheEvidence ? cacheReadTokens : 0)),
         longContext,
         totalTokens,
         costAmount,
@@ -2021,6 +2063,10 @@ export function RequestEventsDetailsCard({
         const cacheMatched =
           cacheFilter === ALL_FILTER ||
           (cacheFilter === CACHE_PRESENT_FILTER ? hasCacheTokens : !hasCacheTokens);
+        const obs = readCacheObservation(row.cacheObservation);
+        const cacheStateMatched =
+          (!isCacheValueState(cacheReadState) || cacheReadState === cacheValueState(obs?.read)) &&
+          (!isCacheValueState(cacheWriteState) || cacheWriteState === cacheValueState(obs?.write));
         const numericMetric = isRequestEventNumericMetricId(effectiveNumericMetricFilter)
           ? effectiveNumericMetricFilter
           : null;
@@ -2038,11 +2084,14 @@ export function RequestEventsDetailsCard({
           reasoningEffortMatched &&
           resultMatched &&
           cacheMatched &&
+          cacheStateMatched &&
           numericMatched
         );
       }),
     [
       cacheFilter,
+      cacheReadState,
+      cacheWriteState,
       initialAnalyticsFilters,
       effectiveAuthIndexFilter,
       effectiveModelFilter,
@@ -2065,12 +2114,48 @@ export function RequestEventsDetailsCard({
   const filteredCount = querySession ? remote.data?.total ?? 0 : filteredRows.length;
   const pageSize = querySession ? remote.pageSize : REQUEST_EVENTS_PAGE_SIZE;
   const pageCount = Math.max(1, Math.ceil(filteredCount / pageSize));
-  const currentPage = querySession ? remote.page : pagination && pagination.rows === filteredRows ? Math.min(pagination.page, pageCount - 1) : 0;
+  const currentPage = querySession ? remote.page : pagination && pagination.rows === filteredRows
+    ? Math.min(pagination.page, pageCount - 1)
+    : Math.min(restoreCacheView?.page ?? 0, pageCount - 1);
   const renderedRows = useMemo(
     () => querySession ? filteredRows : filteredRows.slice(currentPage * REQUEST_EVENTS_PAGE_SIZE, (currentPage + 1) * REQUEST_EVENTS_PAGE_SIZE),
     [currentPage, filteredRows, querySession]
   );
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
+  const restoredFocus = useRef(false);
+  useEffect(() => {
+    if (!restoreCacheView || restoredFocus.current || loading) return;
+    const table = tableScrollRef.current;
+    const target = [...(table?.querySelectorAll<HTMLButtonElement>('[data-cache-analysis-trigger]') ?? [])]
+      .find((button) => button.dataset.cacheAnalysisTrigger === restoreCacheView.selectedRowId);
+    if (!target) return;
+    const frame = requestAnimationFrame(() => {
+      table?.closest('.content')?.scrollTo({ top: restoreCacheView.scrollTop, behavior: 'instant' });
+      target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      target.focus({ preventScroll: true });
+      restoredFocus.current = true;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [restoreCacheView, renderedRows, loading]);
+  const openCacheAnalysis = (row: RequestEventRow) => {
+    const target: CacheUsageRow = {
+      instance_id: row.diagnosticsInstanceId, diagnostics_id: row.diagnosticsId,
+      request_id: row.requestId,
+      at: row.timestamp, model: row.model, auth_index: row.authIndex,
+      trace_id: row.traceId ?? undefined, input_tokens: row.inputTokens,
+      cache_observation: readCacheObservation(row.cacheObservation),
+      cache_read_tokens: row.cacheReadTokens, cache_write_tokens: row.cacheWriteTokens,
+      available: false, matched: [],
+    };
+    onAnalyze?.(target, {
+      filters: { ...persistedFilters.current, cacheReadState: cacheReadState ?? ALL_FILTER,
+        cacheWriteState: cacheWriteState ?? ALL_FILTER, numericMinimum: numericMinimumFilter,
+        numericMaximum: numericMaximumFilter },
+      session: querySession, navigation: remote.navigationSnapshot,
+      page: currentPage, cachePreset, selectedRowId: row.id,
+      scrollTop: tableScrollRef.current?.closest('.content')?.scrollTop ?? 0,
+    });
+  };
   const changePage = (page: number) => {
     if (querySession) remote.setPage(page); else setPagination({ rows: filteredRows, page });
     tableScrollRef.current?.scrollTo({ top: 0 });
@@ -2106,6 +2191,7 @@ export function RequestEventsDetailsCard({
     resultFilter !== ALL_FILTER ||
     effectiveTimeRangeFilter !== 'page' ||
     cacheFilter !== ALL_FILTER ||
+    (supportsCacheStates && (isCacheValueState(cacheReadState) || isCacheValueState(cacheWriteState))) ||
     hasAppliedNumericFilter;
 
   const openNumericFilter = () => {
@@ -2168,6 +2254,8 @@ export function RequestEventsDetailsCard({
     setResultFilter(ALL_FILTER);
     setTimeRangeFilter('page');
     setCacheFilter(ALL_FILTER);
+    setCacheReadState(ALL_FILTER);
+    setCacheWriteState(ALL_FILTER);
     setNumericMetricFilter(ALL_FILTER);
     setNumericMinimumFilter('');
     setNumericMaximumFilter('');
@@ -2199,6 +2287,13 @@ export function RequestEventsDetailsCard({
   ).length;
 
   const handleToggleColumn = (columnId: RequestEventColumnId) => {
+    if (cachePreset) {
+      setCachePresetOverrides((prev) => ({
+        ...prev,
+        [columnId]: !columnVisibility[columnId],
+      }));
+      return;
+    }
     setStoredColumnVisibility({
       ...columnVisibility,
       [columnId]: !columnVisibility[columnId],
@@ -2206,6 +2301,8 @@ export function RequestEventsDetailsCard({
   };
 
   const handleRestoreDefaultColumns = () => {
+    setCachePreset(false);
+    setCachePresetOverrides({});
     setStoredColumnVisibility(DEFAULT_COLUMN_VISIBILITY);
   };
 
@@ -2637,11 +2734,20 @@ export function RequestEventsDetailsCard({
           >
             {t('usage_stats.export_filtered_json')}
           </Button>
+          <Button type="button" variant={cachePreset ? 'primary' : 'secondary'} size="sm"
+            data-testid="request-events-cache-preset" aria-pressed={cachePreset}
+            title={cachePreset ? t('cache_analysis.restore_columns') : undefined}
+            onClick={() => {
+              setCachePreset(!cachePreset);
+              setCachePresetOverrides({});
+            }}>
+            {t('cache_analysis.preset')}
+          </Button>
           <Button
             type="button"
             variant="secondary"
             size="sm"
-            aria-pressed={compactView}
+            aria-pressed={compactView && !cachePreset}
             title={
               compactView
                 ? t('usage_stats.request_events_full_view_hint')
@@ -2854,6 +2960,7 @@ export function RequestEventsDetailsCard({
             fullWidth={false}
           />
         </div>
+        {(!supportsCacheStates || cacheFilter !== ALL_FILTER) && (
         <div className={styles.requestEventsFilterItem}>
           <span className={styles.requestEventsFilterLabel}>
             {t('usage_stats.request_events_filter_cache')}
@@ -2867,6 +2974,26 @@ export function RequestEventsDetailsCard({
             fullWidth={false}
           />
         </div>
+        )}
+        {supportsCacheStates && (['read', 'write'] as const).map((field) => (
+          <div key={field} className={styles.requestEventsFilterItem}>
+            <span className={styles.requestEventsFilterLabel}>{t(`cache_analysis.${field}_filter`)}</span>
+            <Select
+              value={(field === 'read' ? cacheReadState : cacheWriteState) || ALL_FILTER}
+              options={[
+                { value: ALL_FILTER, label: t('usage_stats.filter_all') },
+                ...CACHE_STATES.map((value) => ({ value, label: t(`cache_analysis.${field}_${value}`) })),
+              ]}
+              onChange={(value) => applyCacheState(field, value)}
+              className={styles.requestEventsSelect}
+              ariaLabel={t(`cache_analysis.${field}_filter`)}
+              fullWidth={false}
+            />
+          </div>
+        ))}
+        {!supportsCacheStates && (
+          <span className={styles.hint}>{t('cache_analysis.filter_unavailable')}</span>
+        )}
         <div
           ref={numericFilterRef}
           className={`${styles.requestEventsFilterItem} ${styles.requestEventsNumericFilterItem}`}
@@ -3129,7 +3256,8 @@ export function RequestEventsDetailsCard({
                       className={`${styles.requestEventsTokenHeader} ${styles.requestEventsTokenHeaderHint} ${styles.requestEventsTokenCacheRead}`}
                       {...getHeaderTooltipProps(
                         'cache-read-rate',
-                        t('usage_stats.request_events_cache_rate_hint')
+                        t(cachePreset || querySession?.cache_observation_version === 1
+                          ? 'cache_analysis.rate_hint' : 'usage_stats.request_events_cache_rate_hint')
                       )}
                     >
                       {t('usage_stats.cache_read_tokens')}
@@ -3161,15 +3289,27 @@ export function RequestEventsDetailsCard({
               </thead>
               <tbody>
                 {renderedRows.map((row) => {
-                  const cacheRateToneClassName = getCacheRateToneClassName(row.cacheRateTone);
                   const cacheObservation = readCacheObservation(row.cacheObservation);
-                  const cacheReadTokensLabel = cacheObservation && cacheObservation.read.state !== 'present'
-                    ? '—' : row.cacheReadTokens.toLocaleString();
+                  const useLegacyTone = !cachePreset && !cacheObservation;
+                  const cacheRateToneClassName = useLegacyTone || row.cacheRateTone === 'anomaly'
+                    ? getCacheRateToneClassName(row.cacheRateTone) : '';
+                  const cacheTokensLabel = (field: 'read' | 'write', legacy: number) => {
+                    const evidence = cacheObservation?.[field];
+                    if (evidence?.value !== undefined) return evidence.value.toLocaleString(i18n.language);
+                    if (evidence?.state === 'invalid') return t('cache_analysis.invalid_value');
+                    if (evidence?.state === 'absent') return t('cache_analysis.absent_value');
+                    if (!cachePreset) return legacy.toLocaleString(i18n.language);
+                    return legacy > 0 ? t('cache_analysis.historical_value', { value: legacy.toLocaleString(i18n.language) })
+                      : t('cache_analysis.unknown_value');
+                  };
+                  const cacheReadTokensLabel = cacheTokensLabel('read', row.cacheReadTokens);
+                  const cacheWriteTokensLabel = cacheTokensLabel('write', row.cacheWriteTokens);
                   const inputTokensLabel = row.inputTokens.toLocaleString();
+                  const displayRate = cachePreset && cacheObservation?.read.state !== 'present' ? null : row.cacheRate;
                   const cacheRateLabel =
-                    row.cacheRate === null
+                    displayRate === null
                       ? t('common.not_set')
-                      : cacheRateFormatter.format(row.cacheRate);
+                      : cacheRateFormatter.format(displayRate);
                   const cacheRateToneLabel =
                     row.cacheRateTone === 'anomaly'
                       ? t('usage_stats.request_events_cache_rate_anomaly')
@@ -3188,7 +3328,9 @@ export function RequestEventsDetailsCard({
                     rate: cacheRateLabel,
                     tone: cacheRateToneLabel,
                   });
-                  const cacheRateCellDescription = cacheAnomalyLabel
+                  const cacheRateCellDescription = !useLegacyTone && !cacheAnomalyLabel
+                    ? [cacheReadTokensLabel, displayRate !== null ? cacheRateLabel : null].filter(Boolean).join(' · ')
+                    : cacheAnomalyLabel
                     ? `${cacheRateCellLabel} ${cacheAnomalyLabel}`
                     : cacheRateCellLabel;
                   const longContextLabel = t('usage_stats.pricing_long_context');
@@ -3201,6 +3343,7 @@ export function RequestEventsDetailsCard({
                     <Fragment key={row.id}>
                     <tr
                       data-request-row-expanded={rowExpanded}
+                      data-request-execution={row.requestId}
                       className={rowExpanded ? styles.requestEventsRowExpanded : undefined}
                       onClick={() => {
                         // 选中文本时点击视为复制操作，不触发展开。
@@ -3210,7 +3353,11 @@ export function RequestEventsDetailsCard({
                     >
                       {columnVisibility.timestamp && (
                         <td title={row.timestamp} className={styles.requestEventsTimestamp}>
-                          {row.timestampLabel}
+                          <button type="button" className={styles.requestEventsTimeButton}
+                            aria-expanded={rowExpanded}
+                            onClick={(event) => { event.stopPropagation(); toggleExpandedRow(row.id); }}>
+                            {row.timestampLabel}
+                          </button>
                         </td>
                       )}
                       {columnVisibility.model && (
@@ -3279,7 +3426,11 @@ export function RequestEventsDetailsCard({
                       )}
                       {columnVisibility.authIndex && (
                         <td className={styles.requestEventsAuthIndex} title={row.authIndex}>
-                          {row.authIndex}
+                          <button type="button" className={styles.cacheRouteLink}
+                            aria-label={t('cache_analysis.filter_auth', { value: row.authIndex })}
+                            onClick={(event) => { event.stopPropagation(); setAuthIndexFilterPersisted(row.authIndex); }}>
+                            {row.authIndex}
+                          </button>
                         </td>
                       )}
                       {columnVisibility.tier && (
@@ -3557,6 +3708,7 @@ export function RequestEventsDetailsCard({
                         >
                           <span className={styles.requestEventsTokenValue}>
                             {cacheReadTokensLabel}
+                            {displayRate !== null && <small className={styles.analyticsChipMeta}> · {cacheRateLabel}</small>}
                             {cacheAnomalyLabel && (
                               <span
                                 className={styles.requestEventsCacheAnomalyMarker}
@@ -3572,8 +3724,7 @@ export function RequestEventsDetailsCard({
                       {columnVisibility.cacheWriteTokens && (
                         <td className={styles.requestEventsTokenCell}>
                           <span className={styles.requestEventsTokenValue}>
-                            {cacheObservation && cacheObservation.write.state !== 'present'
-                              ? '—' : row.cacheWriteTokens.toLocaleString()}
+                            {cacheWriteTokensLabel}
                           </span>
                         </td>
                       )}
@@ -3626,6 +3777,19 @@ export function RequestEventsDetailsCard({
                     {rowExpanded && (
                       <tr className={styles.requestEventsDetailRow}>
                         <td colSpan={visibleColumnCount}>
+                          <div className={styles.cacheExecutionSummary} data-testid="request-cache-summary">
+                            <strong>{t('cache_analysis.execution_summary', {
+                                read: cacheFieldSummary(t, cacheObservation?.read),
+                                write: cacheFieldSummary(t, cacheObservation?.write),
+                              })}</strong>
+                            {onAnalyze && (row.requestId || row.diagnosticsId || row.traceId) && (
+                              <Button type="button" variant="secondary" size="sm"
+                                data-cache-analysis-trigger={row.id}
+                                onClick={() => openCacheAnalysis(row)}>
+                                {t('cache_analysis.analyze_request')}
+                              </Button>
+                            )}
+                          </div>
                           <dl className={styles.requestEventsDetailGrid} data-testid="request-event-detail">
                             <div>
                               <dt>{t('usage_stats.request_events_detail_result')}</dt>
@@ -3683,26 +3847,14 @@ export function RequestEventsDetailsCard({
                               <dt>{t('usage_stats.request_events_detail_tokens')}</dt>
                               <dd>
                                 {[
-                                  ['usage_stats.request_events_total_input_tokens', row.inputTokens],
-                                  [
-                                    'usage_stats.cache_read_tokens',
-                                    cacheObservation && cacheObservation.read.state !== 'present' ? null : row.cacheReadTokens,
-                                  ],
-                                  [
-                                    'usage_stats.cache_write_tokens',
-                                    cacheObservation && cacheObservation.write.state !== 'present' ? null : row.cacheWriteTokens,
-                                  ],
-                                  ['usage_stats.request_events_total_output_tokens', row.outputTokens],
-                                  [
-                                    'usage_stats.reasoning_tokens',
-                                    row.reasoningTokens,
-                                  ],
+                                  ['usage_stats.request_events_total_input_tokens', inputTokensLabel],
+                                  ['usage_stats.cache_read_tokens', cacheReadTokensLabel],
+                                  ['usage_stats.cache_write_tokens', cacheWriteTokensLabel],
+                                  ['usage_stats.request_events_total_output_tokens', row.outputTokens.toLocaleString()],
+                                  ['usage_stats.reasoning_tokens', row.reasoningTokens.toLocaleString()],
                                 ].map(([label, value]) => (
                                   <span key={String(label)} className={styles.requestEventsDetailItem}>
-                                    {t(String(label))}:{' '}
-                                    {value === null || value === undefined
-                                      ? '—'
-                                      : Number(value).toLocaleString()}
+                                    {t(label)}: {value}
                                   </span>
                                 ))}
                               </dd>
@@ -3730,12 +3882,12 @@ export function RequestEventsDetailsCard({
                                 )}
                               </dd>
                             </div>
-                            <div className={styles.requestEventsCacheDiagnostics}>
+                            {!onAnalyze && <div className={styles.requestEventsCacheDiagnostics}>
                               <dt>{t('cache_diagnostics.title')}</dt>
                               <dd>
                                 <CacheDiagnosticsDetails instanceId={row.diagnosticsInstanceId} diagnosticId={row.diagnosticsId} requestId={row.requestId} observation={row.cacheObservation} />
                               </dd>
-                            </div>
+                            </div>}
                           </dl>
                         </td>
                       </tr>

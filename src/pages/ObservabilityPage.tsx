@@ -445,6 +445,14 @@ export function ObservabilityPage() {
                   window={visibleWindow}
                   grain={grain}
                   onGrainChange={setGrain}
+                  onCacheState={
+                    !analytics.stale && selectedSession?.cache_observation_version === 1
+                      ? (field, state) => openEvents(
+                          `/usage/events${drillDownSearch({ [`cache_${field}_state`]: state })}`,
+                          `analytics-cache-${field}-${state}`
+                        )
+                      : undefined
+                  }
                   onBucketClick={
                     analytics.stale
                       ? undefined

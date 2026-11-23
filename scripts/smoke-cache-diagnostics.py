@@ -79,7 +79,8 @@ def main():
             page.get_by_label("Remember password").check(force=True)
             page.get_by_role("button", name=re.compile(r"^(Login|Connect)$", re.I)).click()
             page.wait_for_url(re.compile(r".*#/$"), timeout=20000)
-            page.goto(app_url + "?route=cache-smoke#/usage/events?range=all", wait_until="domcontentloaded")
+            page.goto(app_url + "?route=cache-smoke#/usage?range=all", wait_until="domcontentloaded")
+            page.get_by_role("button", name="Show details here").click()
             row = page.locator('tr[data-request-row-expanded]').first
             row.click()
             panel = page.locator('[data-cache-diagnostics="ready"]')
@@ -115,6 +116,22 @@ def main():
                 CacheHandler.mode = mode
                 row.click()
                 page.locator(f'[data-cache-diagnostics="{result}"]').wait_for()
+            CacheHandler.mode = "ready"
+            page.set_viewport_size({"width": 1360, "height": 1000})
+            page.goto(app_url + "?route=cache-details#/usage/events?range=all", wait_until="domcontentloaded")
+            event_row = page.locator('tr[data-request-row-expanded]').first
+            event_row.locator("td").first.get_by_role("button").click()
+            page.locator('[data-cache-diagnostics]').wait_for(state="detached")
+            page.get_by_role("button", name="Analyze this request").press("Enter")
+            page.get_by_text("Outbound attempt 2 · WebSocket", exact=False).wait_for()
+            page.get_by_role("button", name="Back to request events").click()
+            page.wait_for_function("() => document.activeElement?.hasAttribute('data-cache-analysis-trigger')")
+            page.goto(app_url + "?route=legacy-cache-analysis#/analytics/cache", wait_until="domcontentloaded")
+            page.get_by_text("This Core can open a single diagnostic ID.", exact=True).wait_for()
+            field = page.get_by_role("searchbox", name="Diagnostic record ID")
+            field.fill(TRACE)
+            field.press("Enter")
+            page.get_by_text("Outbound attempt 2 · WebSocket", exact=False).wait_for()
             if errors: raise AssertionError(errors)
             print("Cache diagnostics browser smoke passed: attempts, field presence, query, comparison, instance mismatch, old Core, desktop and mobile.")
         except Exception:

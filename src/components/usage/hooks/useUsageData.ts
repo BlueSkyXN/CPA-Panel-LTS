@@ -21,7 +21,7 @@ import {
   type PriceProfileLoadSource,
   type PriceProfileV3,
 } from '@/utils/usage';
-import { analyzeUsageImport } from '@/utils/usage/importPreflight';
+import { analyzeUsageImport, discardDraftCacheRoutes } from '@/utils/usage/importPreflight';
 
 export interface UsagePayload {
   total_requests?: number;
@@ -91,6 +91,7 @@ export function useUsageData(): UseUsageDataReturn {
     setExporting(true);
     try {
       const data = await usageApi.exportUsage();
+      discardDraftCacheRoutes(data);
       const exportedAt =
         typeof data?.exported_at === 'string' ? new Date(data.exported_at) : new Date();
       const safeTimestamp = Number.isNaN(exportedAt.getTime())
@@ -129,6 +130,7 @@ export function useUsageData(): UseUsageDataReturn {
       const text = await file.text();
       try {
         payload = JSON.parse(text);
+        discardDraftCacheRoutes(payload);
       } catch {
         showNotification(t('usage_stats.import_invalid'), 'error');
         return;
@@ -149,7 +151,11 @@ export function useUsageData(): UseUsageDataReturn {
     let currentUsage = queryState.mode === 'legacy' ? usageSnapshot : null;
     if (queryState.mode === 'query') {
       setImporting(true);
-      try { currentUsage = (await usageApi.exportUsage()).usage ?? null; }
+      try {
+        const backup = await usageApi.exportUsage();
+        discardDraftCacheRoutes(backup);
+        currentUsage = backup.usage ?? null;
+      }
       catch { currentUsage = null; }
       finally { setImporting(false); }
     }

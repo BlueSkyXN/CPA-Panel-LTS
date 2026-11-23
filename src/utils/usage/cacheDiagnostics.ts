@@ -1,7 +1,15 @@
+import type { TFunction } from 'i18next';
+import { isCacheDigest, readCacheRoute, readCacheRouteReference } from './cacheRoute';
 import type {
   CacheObservation,
+  CacheAttempt,
+  CacheFieldDiff,
   CachePayload,
   CacheTrace,
+  CacheTraceLocation,
+  CacheTraceRow,
+  CacheTracePage,
+  CacheRouteReference,
   CacheSessionSnapshot,
 } from '@/types/cacheDiagnostics';
 
@@ -80,6 +88,8 @@ export function decodeCacheTrace(value: unknown): CacheTrace | null {
     instance_id: text(r.instance_id),
     logical_request_id: text(r.logical_request_id),
     session_hash: text(r.session_hash),
+    trace_id: text(r.trace_id),
+    input_session: readCacheRouteReference(r.input_session),
     model: text(r.model),
     source_format: text(r.source_format),
     created_at: text(r.created_at),
@@ -113,6 +123,8 @@ export function decodeCacheTrace(value: unknown): CacheTrace | null {
       const a = object(v);
       if (!a) return [];
       const d = object(a.diagnostic);
+      const control = object(a.cache_control);
+      const buckets = object(a.cache_write_by_ttl);
       return [
         {
           number: count(a.number) ?? 0,
@@ -127,6 +139,19 @@ export function decodeCacheTrace(value: unknown): CacheTrace | null {
           status: count(a.status),
           outcome: text(a.outcome),
           input: a.input === undefined ? undefined : payload(a.input),
+          input_tokens: count(a.input_tokens),
+          cache_references: list(a.cache_references, 12).map(readCacheRouteReference)
+            .filter((ref): ref is CacheRouteReference => ref !== undefined),
+          cache_write_by_ttl: buckets ? Object.fromEntries(
+            ['5m', '30m', '1h', '12h'].flatMap((ttl) => {
+              const number = count(buckets[ttl]);
+              return number === undefined ? [] : [[ttl, number]];
+            })
+          ) : undefined,
+          cache_control: control && count(control.breakpoints) !== undefined ? {
+            breakpoints: count(control.breakpoints) ?? 0,
+            five_minutes: count(control.five_minutes), one_hour: count(control.one_hour),
+          } : undefined,
           request: payload(a.request),
           response_id: text(a.response_id),
           response_model: text(a.response_model),
@@ -202,11 +227,45 @@ export function decodeCacheSession(value: unknown): CacheSessionSnapshot | null 
   };
 }
 
+const TURN_EXPECTED_FIELDS = new Set([
+  'input',
+  'messages',
+  'contents',
+  'previous_response_id',
+  'prompt_cache_options.comparison_response_id',
+  'diagnostics.previous_message_id',
+  'thread.previous_message_id',
+]);
+
 export function compareCachePayloads(a: CachePayload, b: CachePayload): string[] | null {
   if (!a.known || !b.known) return null;
   return [...new Set([...Object.keys(a.fields), ...Object.keys(b.fields)])]
     .filter((key) => a.fields[key]?.digest !== b.fields[key]?.digest)
     .sort();
+}
+
+export function diffCachePayloads(before: CachePayload, after: CachePayload): CacheFieldDiff[] | null {
+  if (!before.known || !after.known) return null;
+  const diffs: CacheFieldDiff[] = [];
+  for (const field of [...new Set([...Object.keys(before.fields), ...Object.keys(after.fields)])].sort()) {
+    const prev = before.fields[field];
+    const next = after.fields[field];
+    if (prev?.digest === next?.digest) continue;
+    diffs.push({
+      field,
+      kind: !prev ? 'added' : !next ? 'removed' : 'changed',
+      beforeValue: prev?.value || undefined,
+      afterValue: next?.value || undefined,
+      turnExpected: TURN_EXPECTED_FIELDS.has(field),
+    });
+  }
+  return diffs.sort((a, b) => Number(a.turnExpected) - Number(b.turnExpected) || a.field.localeCompare(b.field));
+}
+
+export function shortCredentialLabel(value: string): string {
+  if (value.length <= 12) return value;
+  if (/^[a-f0-9]+$/i.test(value)) return `${value.slice(0, 6)}…`;
+  return `${value.slice(0, 6)}…${value.slice(-4)}`;
 }
 
 // Legacy snapshots and paged query views both pass through the usage collectors.
@@ -219,4 +278,100 @@ export function extractCacheDiagnosticFields(detail: Record<string, unknown>) {
     diagnostics_instance_id: identifier(detail.diagnostics_instance_id),
     cache_observation: readCacheObservation(detail.cache_observation),
   };
+}
+
+export const isCacheLookupId = (value: unknown): value is string =>
+  typeof value === 'string' && /^[a-z0-9_.:/-]{1,192}$/i.test(value);
+
+export function decodeTraceLocation(value: unknown): CacheTraceLocation {
+  const v = object(value);
+  return {
+    instance_id: isCacheLookupId(v?.instance_id) ? v.instance_id : undefined,
+    diagnostics_id: isCacheDigest(v?.diagnostics_id) ? v.diagnostics_id : undefined,
+    trace_id: isCacheLookupId(v?.trace_id) ? v.trace_id : undefined,
+    request_id: isCacheLookupId(v?.request_id) ? v.request_id : undefined,
+    attempt: count(v?.attempt),
+  };
+}
+
+export function decodeTraceRow(value: unknown): CacheTraceRow | null {
+  const v = object(value);
+  if (!v || typeof v.at !== 'string' || !Number.isFinite(Date.parse(v.at)) ||
+      typeof v.model !== 'string' || typeof v.available !== 'boolean') return null;
+  const location = decodeTraceLocation(v);
+  if (v.available && (!location.instance_id || !location.diagnostics_id)) return null;
+  const previous = decodeTraceLocation(v.previous);
+  const previousSource = v.previous_source;
+  return {
+    ...location, at: v.at, model: text(v.model), auth_index: text(v.auth_index),
+    trace_id: text(v.trace_id), logical_request_id: text(v.logical_request_id), response_id: text(v.response_id),
+    available: v.available, matched: list(v.matched, 5).filter(isCacheLookupId),
+    input_tokens: count(v.input_tokens), cache_observation: readCacheObservation(v.cache_observation),
+    cache_route: readCacheRoute(v.cache_route),
+    attempt_count: count(v.attempt_count), status: count(v.status), outcome: text(v.outcome),
+    previous_source: previousSource === 'previous_response_id' || previousSource === 'thread.previous_message_id' ||
+      previousSource === 'diagnostics.previous_message_id' ? previousSource : undefined,
+    previous: previous.instance_id === location.instance_id && previous.diagnostics_id
+      ? previous : undefined,
+  };
+}
+
+export function decodeTracePage(value: unknown): CacheTracePage {
+  const v = object(value);
+  if (v?.version !== 1 || !isCacheLookupId(v.current_instance_id) || !Array.isArray(v.items) ||
+      v.items.length > 100 || typeof v.history_included !== 'boolean' ||
+      (v.next_cursor !== undefined &&
+        (typeof v.next_cursor !== 'string' || !/^[a-z0-9_-]{1,2048}$/i.test(v.next_cursor)))) {
+    throw new Error('Invalid cache trace page');
+  }
+  const items = v.items.map(decodeTraceRow);
+  if (items.some((item) => item === null || item.available && item.instance_id !== v.current_instance_id)) {
+    throw new Error('Invalid cache trace row');
+  }
+  return {
+    version: 1, current_instance_id: v.current_instance_id,
+    next_cursor: typeof v.next_cursor === 'string' ? v.next_cursor : undefined,
+    items: items.filter((item): item is CacheTraceRow => item?.available === true),
+  };
+}
+
+type CacheField = CacheObservation['read'];
+
+export function cacheFieldText(t: TFunction, item?: CacheField, observed = false) {
+  if (item?.state === 'present') return item.value?.toLocaleString() ?? '—';
+  return t(item ? `cache_diagnostics.${item.state}` : observed ? 'cache_diagnostics.not_observed' : 'cache_diagnostics.legacy_unknown');
+}
+
+export function cacheFieldSummary(t: TFunction, item?: CacheField) {
+  if (item?.state === 'present') return item.value?.toLocaleString() ?? '—';
+  if (item?.state === 'absent') return t('cache_analysis.summary_absent');
+  if (item?.state === 'invalid') return t('cache_analysis.summary_invalid');
+  return t('cache_analysis.summary_unknown');
+}
+
+export function cacheAttemptFailed(attempt: { status?: number; outcome?: string; response_status?: string }) {
+  return (attempt.status ?? 0) >= 400 || attempt.response_status === 'failed' ||
+    ['transport_error', 'send_error', 'read_error', 'decode_error', 'upstream_error'].includes(attempt.outcome ?? '');
+}
+
+export function cacheExecutionPath(attempts: readonly CacheAttempt[]) {
+  if (attempts.length < 2) return null;
+  const failure = attempts.slice(0, -1).find(cacheAttemptFailed);
+  const from = failure ?? attempts[0];
+  const final = attempts[attempts.length - 1];
+  return {
+    from,
+    final,
+    failedBeforeFinal: Boolean(failure),
+    changedCredential: Boolean(from.auth_index && final.auth_index && from.auth_index !== final.auth_index),
+  };
+}
+
+export function cacheAttemptTransport(transport: string) {
+  return transport === 'websocket' ? 'WebSocket' : transport === 'http' ? 'HTTP' : transport || '—';
+}
+
+export function readRate(input?: number, read?: CacheField): number | null {
+  return input !== undefined && input > 0 && read?.state === 'present' &&
+    read.value !== undefined && read.value <= input ? read.value / input : null;
 }

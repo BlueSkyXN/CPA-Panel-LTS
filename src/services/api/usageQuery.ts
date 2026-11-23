@@ -95,6 +95,8 @@ export function decodeUsageQuerySession(v: unknown): UsageQuerySession {
     (v.export_version === 1 && v.max_export_page_size === undefined) ||
     (v.analytics_version !== undefined &&
       (!number(v.analytics_version) || !Number.isSafeInteger(v.analytics_version))) ||
+    (v.cache_observation_version !== undefined &&
+      (!Number.isSafeInteger(v.cache_observation_version) || Number(v.cache_observation_version) < 1)) ||
     (v.max_analytics_rows !== undefined && !number(v.max_analytics_rows))
   )
     return invalid();
