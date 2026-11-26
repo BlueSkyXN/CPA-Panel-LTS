@@ -1533,16 +1533,16 @@ require_file_contains docs/lts/panel-protected-deltas.yaml "local-flow-control-c
 require_file_contains src/lts/flowControl/model.ts "resolved-model-options"
 require_file_contains src/lts/flowControl/model.ts "configuration-failure"
 
-if [ "$failures" -ne 0 ]; then
-  printf 'LTS panel contract check failed with %s violation(s).\n' "$failures" >&2
-  exit 1
-fi
-
-printf 'LTS panel contract check passed.\n'
-
 # Navigation ownership and real draft state replace presentation-only strategy markers.
 require_file_contains src/components/config/ConfigEditorWorkspace.tsx "focusConfigField"
 require_file_contains src/components/config/configNavigation.ts "CONFIG_DOMAINS"
 require_file_contains src/components/config/configNavigation.ts "CONFIG_FIELDS"
 require_file_contains src/components/config/configNavigation.ts "resolveConfigLocation"
 require_file_contains src/components/config/ConfigDomainPanels.tsx "codex-draft-summary"
+
+if [ "$failures" -ne 0 ]; then
+  printf 'LTS panel contract check failed with %s violation(s).\n' "$failures" >&2
+  exit 1
+fi
+
+printf 'LTS panel contract check passed.\n'

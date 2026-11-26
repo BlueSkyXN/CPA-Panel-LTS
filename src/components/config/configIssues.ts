@@ -1,4 +1,8 @@
-import { getPayloadParamValidationError, getPayloadReplaceValidationError } from '@/hooks/useVisualConfig';
+import {
+  getPayloadParamValidationError,
+  getPayloadReplaceValidationError,
+  getPayloadRequestPathsValidationError,
+} from '@/hooks/useVisualConfig';
 import type { VisualConfigValidationErrors, VisualConfigValues } from '@/types/visualConfig';
 import type { ConfigFieldId } from './configNavigation';
 
@@ -22,14 +26,23 @@ export function getConfigIssueFields(
           rule.params.some((p) =>
             getPayloadParamValidationError(raw ? { ...p, valueType: 'json' } : p)
           ) ||
-          rule.models.some((model) =>
-            [...(model.match ?? []), ...(model.notMatch ?? [])].some((p) =>
-              getPayloadParamValidationError(p)
-            )
+          rule.models.some(
+            (model) =>
+              Boolean(getPayloadRequestPathsValidationError(model.requestPaths)) ||
+              [...(model.match ?? []), ...(model.notMatch ?? [])].some((p) =>
+                getPayloadParamValidationError(p)
+              )
           )
       )
     )
       fields.add(field);
+  }
+  if (
+    values.payloadFilterRules.some((rule) =>
+      rule.models.some((model) => Boolean(getPayloadRequestPathsValidationError(model.requestPaths)))
+    )
+  ) {
+    fields.add('payloadFilterRules');
   }
   if (values.payloadReplaceRules.some(getPayloadReplaceValidationError)) fields.add('payloadReplaceRules');
   return fields;

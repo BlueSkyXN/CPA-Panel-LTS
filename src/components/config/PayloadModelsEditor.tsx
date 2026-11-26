@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react';
+import { memo, useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
@@ -11,6 +11,7 @@ import type {
 import { makeClientId } from '@/types/visualConfig';
 import {
   getPayloadParamValidationError,
+  getPayloadRequestPathsValidationError,
   VISUAL_CONFIG_PAYLOAD_VALUE_TYPE_OPTIONS,
 } from '@/hooks/useVisualConfig';
 import { ExpandableInput, StringListEditor } from './VisualConfigEditorBlocks';
@@ -91,6 +92,7 @@ export const PayloadModelsEditor = memo(function PayloadModelsEditor({
     [t]
   );
   const [modelAdvancedOverrides, setModelAdvancedOverrides] = useState<Record<string, boolean>>({});
+  const requestPathsBaseId = useId();
 
   const addModel = () => {
     const nextModel: PayloadModelEntry = { id: makeClientId(), name: '', protocol: undefined };
@@ -252,6 +254,12 @@ export const PayloadModelsEditor = memo(function PayloadModelsEditor({
       {(rule.models.length ? rule.models : []).map((model, modelIndex) => {
         const hasAdvancedSettings = hasPayloadModelAdvancedSettings(model);
         const advancedExpanded = modelAdvancedOverrides[model.id] ?? hasAdvancedSettings;
+        const requestPathsError = getValidationMessage(
+          t,
+          getPayloadRequestPathsValidationError(model.requestPaths)
+        );
+        const requestPathsInputId = `${requestPathsBaseId}-${model.id}`;
+        const requestPathsErrorId = `${requestPathsInputId}-error`;
 
         return (
           <div key={model.id} className={styles.payloadModelGroup}>
@@ -360,13 +368,18 @@ export const PayloadModelsEditor = memo(function PayloadModelsEditor({
                       }
                     />
                   </div>
-                  <label className={styles.fieldShell}>
-                    {t('config_management.visual.payload_rules.request_paths')}
+                  <div className={styles.fieldShell}>
+                    <label htmlFor={requestPathsInputId}>
+                      {t('config_management.visual.payload_rules.request_paths')}
+                    </label>
                     <textarea
+                      id={requestPathsInputId}
                       className="input"
                       value={model.requestPaths?.join('\n') ?? ''}
                       disabled={disabled}
                       aria-label={t('config_management.visual.payload_rules.request_paths')}
+                      aria-invalid={requestPathsError ? true : undefined}
+                      aria-describedby={requestPathsError ? requestPathsErrorId : undefined}
                       placeholder="/v1/responses"
                       onChange={(event) =>
                         updateModel(modelIndex, {
@@ -376,7 +389,16 @@ export const PayloadModelsEditor = memo(function PayloadModelsEditor({
                         })
                       }
                     />
-                  </label>
+                    {requestPathsError ? (
+                      <div
+                        id={requestPathsErrorId}
+                        className={`error-box ${styles.payloadParamError}`}
+                        role="alert"
+                      >
+                        {requestPathsError}
+                      </div>
+                    ) : null}
+                  </div>
 
                   <div className={styles.fieldShell}>
                     <label>{t('config_management.visual.payload_rules.from_protocol')}</label>
