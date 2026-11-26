@@ -23,6 +23,7 @@ import { useConfigStore } from './useConfigStore';
 import { useUsageStatsStore } from './useUsageStatsStore';
 import { useModelsStore } from './useModelsStore';
 import { useQuotaStore } from './useQuotaStore';
+import { usePluginMutationStore } from './usePluginMutationStore';
 import { detectApiBaseFromLocation, normalizeApiBase } from '@/utils/connection';
 import { LegacyBackendError, probeLegacyBackend } from '@/services/api/legacyBackendProbe';
 import { generateId } from '@/utils/helpers';
@@ -222,6 +223,7 @@ export const useAuthStore = create<AuthStoreState>()(
           useConfigStore.getState().clearCache();
           useModelsStore.getState().clearCache();
           useQuotaStore.getState().clearQuotaCache();
+          usePluginMutationStore.getState().clearLocks();
 
           // Opaque plugin YAML must not make a valid management session look unauthenticated.
           try {
@@ -317,12 +319,14 @@ export const useAuthStore = create<AuthStoreState>()(
         // 新标签页多一次注定失败的认证请求。
         if (managed && reason !== 'unauthorized') {
           writeResidentLock(true);
+          usePluginMutationStore.getState().clearLocks();
           managed.host.disconnect(managed.id, window);
           return;
         }
         const wasAuthenticated = get().isAuthenticated;
         restoreSessionPromise = null;
         apiClient.clearConfig();
+        usePluginMutationStore.getState().clearLocks();
         useConfigStore.getState().clearCache();
         useUsageStatsStore.getState().clearUsageStats();
         useModelsStore.getState().clearCache();

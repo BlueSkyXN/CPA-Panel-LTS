@@ -17,7 +17,7 @@ import {
   IconTrash2,
 } from '@/components/ui/icons';
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
-import { pluginsApi } from '@/services/api';
+import { apiClient, pluginsApi } from '@/services/api';
 import { isConfigNotJSONCompatible } from '@/services/api/config';
 import { useAuthStore, useConfigStore, useNotificationStore } from '@/stores';
 import {
@@ -68,7 +68,9 @@ export function PluginsPage() {
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
   const apiBase = useAuthStore((state) => state.apiBase);
   const profileId = useAuthStore((state) => state.profileId);
-  const connectionKey = `${profileId}:${apiBase}`;
+  const managementKey = useAuthStore((state) => state.managementKey);
+  const connectionGeneration = apiClient.getConnectionGeneration();
+  const connectionKey = `${connectionGeneration}:${profileId}:${apiBase}`;
   const [readinessPlugin, setReadinessPlugin] = useState<{
     plugin: PluginListEntry;
     connectionKey: string;
@@ -94,10 +96,14 @@ export function PluginsPage() {
     (state) => state.tryBeginInstalledMutation
   );
   const endInstalledMutation = usePluginMutationStore((state) => state.endInstalledMutation);
-  // 锁跟着连接走：切连接后旧登记的锁全部作废，旧连接的迟到结果也不能再锁新连接。
+  // 锁跟着连接走：401 重登或切连接后旧登记的锁全部作废，旧连接的迟到结果也不能再锁新连接。
   useEffect(() => {
     syncPluginMutationConnection(connectionKey);
-  }, [connectionKey, syncPluginMutationConnection]);
+    configRequestSeq.current += 1;
+    setMutatingID('');
+    setDeletingID('');
+    setOpeningConfigID('');
+  }, [connectionKey, managementKey, connectionStatus, syncPluginMutationConnection]);
   // 锁由变更自身持有（begin/end 成对），因此本组件卸载不会误释放、remount 也不会提前解锁。
   // 取得锁与检查是同步一步：同一任务内第二次触发拿不到锁，调用方必须直接返回，
   // 既不设 busy 状态、也不发请求（否则第二个调用方的 finally 会清掉第一个的状态）。
@@ -132,12 +138,24 @@ export function PluginsPage() {
   }, [connected, t]);
 
   const waitForPluginRuntimeState = useCallback(
-    async (id: string, enabled: boolean): Promise<PluginRuntimeWaitStatus> => {
-      const result = await waitForPluginState(id, (item, response) =>
-        enabled
-          ? !response.pluginsEnabled || (item.registered && item.effectiveEnabled)
-          : !item.effectiveEnabled
+    async (
+      id: string,
+      enabled: boolean,
+      expectedGeneration = apiClient.getConnectionGeneration()
+    ): Promise<PluginRuntimeWaitStatus | 'stale'> => {
+      const result = await waitForPluginState(
+        id,
+        (item, response) =>
+          enabled
+            ? !response.pluginsEnabled || (item.registered && item.effectiveEnabled)
+            : !item.effectiveEnabled,
+        undefined,
+        undefined,
+        expectedGeneration
       );
+      if (result.stale || !apiClient.isCurrentConnection(expectedGeneration)) {
+        return 'stale';
+      }
       setData(result.response);
       if (enabled && !result.response.pluginsEnabled) {
         return 'globalDisabled';
@@ -253,11 +271,14 @@ export function PluginsPage() {
     if (!connected || mutatingID || openingConfigID || deletingID || storeBusy) return;
     const token = acquireInstalledMutation();
     if (!token) return;
+    const requestGeneration = apiClient.getConnectionGeneration();
     setMutatingID(plugin.id);
     try {
       await pluginsApi.updateEnabled(plugin.id, enabled);
+      if (!apiClient.isCurrentConnection(requestGeneration)) return;
       clearConfigCache();
-      const status = await waitForPluginRuntimeState(plugin.id, enabled);
+      const status = await waitForPluginRuntimeState(plugin.id, enabled, requestGeneration);
+      if (status === 'stale') return;
       if (status === 'ready') {
         notifyPluginResourcesChanged();
         showNotification(t('plugin_management.toggle_success'), 'success');
@@ -272,6 +293,7 @@ export function PluginsPage() {
         );
       }
     } catch (err: unknown) {
+      if (!apiClient.isCurrentConnection(requestGeneration)) return;
       showNotification(
         `${t('plugin_management.toggle_failed')}: ${getErrorMessage(
           err,
@@ -281,7 +303,9 @@ export function PluginsPage() {
       );
     } finally {
       endInstalledMutation(token);
-      setMutatingID('');
+      if (apiClient.isCurrentConnection(requestGeneration)) {
+        setMutatingID('');
+      }
     }
   };
 
@@ -301,20 +325,24 @@ export function PluginsPage() {
         if (!token) return;
         setDeletingID(plugin.id);
         setMutatingID(plugin.id);
+        const requestGeneration = apiClient.getConnectionGeneration();
         try {
           const result = await pluginsApi.deletePlugin(plugin.id);
+          if (!apiClient.isCurrentConnection(requestGeneration)) return;
           clearConfigCache();
           if (editingPlugin?.id === plugin.id) {
             setEditingPlugin(null);
             setDraft(null);
           }
           await loadPlugins();
+          if (!apiClient.isCurrentConnection(requestGeneration)) return;
           notifyPluginResourcesChanged();
           showNotification(t('plugin_management.delete_success'), 'success');
           if (result.restartRequired) {
             showNotification(t('plugin_management.delete_restart_required'), 'warning');
           }
         } catch (err: unknown) {
+          if (!apiClient.isCurrentConnection(requestGeneration)) return;
           const restartRequired = hasRestartRequiredError(err);
           const fallback = restartRequired
             ? t('plugin_management.delete_restart_required')
@@ -325,8 +353,10 @@ export function PluginsPage() {
           );
         } finally {
           endInstalledMutation(token);
-          setDeletingID('');
-          setMutatingID('');
+          if (apiClient.isCurrentConnection(requestGeneration)) {
+            setDeletingID('');
+            setMutatingID('');
+          }
         }
       },
     });
@@ -358,17 +388,25 @@ export function PluginsPage() {
     const token = acquireInstalledMutation();
     if (!token) return;
     setMutatingID(editingPlugin.id);
+    const requestGeneration = apiClient.getConnectionGeneration();
     try {
       if (hasConfigChanges) {
         await pluginsApi.patchConfig(editingPlugin.id, configPatch);
       }
+      if (!apiClient.isCurrentConnection(requestGeneration)) return;
       if (enabledChanged) {
         await pluginsApi.updateEnabled(editingPlugin.id, patch.enabled === true);
       }
+      if (!apiClient.isCurrentConnection(requestGeneration)) return;
       clearConfigCache();
       const status = enabledChanged
-        ? await waitForPluginRuntimeState(editingPlugin.id, patch.enabled === true)
+        ? await waitForPluginRuntimeState(
+            editingPlugin.id,
+            patch.enabled === true,
+            requestGeneration
+          )
         : await loadPlugins().then((): PluginRuntimeWaitStatus => 'ready');
+      if (status === 'stale' || !apiClient.isCurrentConnection(requestGeneration)) return;
       if (status === 'ready') {
         notifyPluginResourcesChanged();
       }
@@ -387,6 +425,7 @@ export function PluginsPage() {
         );
       }
     } catch (err: unknown) {
+      if (!apiClient.isCurrentConnection(requestGeneration)) return;
       showNotification(
         `${t('plugin_management.save_failed')}: ${getErrorMessage(
           err,
@@ -396,7 +435,9 @@ export function PluginsPage() {
       );
     } finally {
       endInstalledMutation(token);
-      setMutatingID('');
+      if (apiClient.isCurrentConnection(requestGeneration)) {
+        setMutatingID('');
+      }
     }
   };
 

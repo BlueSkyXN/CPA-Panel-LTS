@@ -5,6 +5,8 @@ import { readFileSync } from 'node:fs';
 // Static contract checks for the cross-route plugin mutation lock
 // (port of upstream 1e29f88f adapted to the LTS two-route architecture).
 const storeSrc = readFileSync('src/stores/usePluginMutationStore.ts', 'utf8');
+const authStoreSrc = readFileSync('src/stores/useAuthStore.ts', 'utf8');
+const pollingSrc = readFileSync('src/features/plugins/pluginPolling.ts', 'utf8');
 const pluginsSrc = readFileSync('src/features/plugins/PluginsPage.tsx', 'utf8');
 const storePageSrc = readFileSync('src/features/plugins/PluginStorePage.tsx', 'utf8');
 
@@ -21,14 +23,21 @@ test('shared store keeps token registries for both directions', () => {
   assert.match(storeSrc, /endStoreMutation/, 'store locks must be released by the mutation');
 });
 
-test('connection switch clears both registries instead of leaving stale locks', () => {
-  assert.match(storeSrc, /syncConnection: \(connectionKey\) =>/, 'store must expose connection sync');
-  assert.match(storeSrc, /if \(state\.connectionKey === connectionKey\) return state;/,
-    'sync must be idempotent for the same connection');
+test('connection switch and 401 logout clear both registries instead of leaving stale locks', () => {
+  assert.match(storeSrc, /syncConnection: \(connectionKey = ''\) =>/, 'store must expose connection sync');
+  assert.match(
+    storeSrc,
+    /state\.connectionKey === connectionKey &&\s*state\.connectionGeneration === currentGeneration/,
+    'sync must stay idempotent only when both connectionKey and connectionGeneration match'
+  );
   assert.ok(
     /installedTokens: new Set<string>\(\),\s*storeTokens: new Set<string>\(\),/.test(storeSrc),
     'connection change must drop both token sets'
   );
+  assert.match(authStoreSrc, /usePluginMutationStore\.getState\(\)\.clearLocks\(\);/,
+    'auth logout/login must clear plugin mutation locks so managed-iframe 401 re-login starts clean');
+  assert.match(pollingSrc, /apiClient\.isCurrentConnection\(expectedGeneration\)/,
+    'plugin polling must fence every iteration by connection generation');
 });
 
 test('no page publishes lock state from component state', () => {
@@ -38,6 +47,8 @@ test('no page publishes lock state from component state', () => {
   ]) {
     assert.doesNotMatch(src, /setInstalledBusy|setStoreBusy/,
       `${name} must not mirror component state into the shared lock`);
+    assert.match(src, /const connectionKey = `\$\{connectionGeneration\}:\$\{profileId\}:\$\{apiBase\}`;/,
+      `${name} must bind connectionKey to connectionGeneration`);
     assert.match(src, /syncPluginMutationConnection\(connectionKey\)/,
       `${name} must sync the shared lock to the current connection`);
   }
@@ -60,22 +71,29 @@ test('every installed mutation acquires the lock and bails out when refused', ()
     'delete confirmation must acquire before setting busy state');
 });
 
-test('PluginStorePage blocks installs on both shared locks', () => {
+test('PluginStorePage blocks installs on both shared locks and keeps modals open when refused', () => {
   assert.match(storePageSrc, /const installBlocked = !connected \|\| installedBusy \|\| storeBusy/,
     'install entry must be blocked by installed mutations and by an in-flight store install');
   assert.match(storePageSrc, /const mutationToken = tryBeginStoreMutation\(\);/,
     'the store install must acquire the shared lock and be able to refuse');
-  assert.match(storePageSrc, /if \(!mutationToken\) return;/,
-    'a refused store install must not send the request');
+  assert.match(storePageSrc, /if \(!mutationToken\) return false;/,
+    'a refused store install must return false without sending the request');
   assert.match(storePageSrc, /endStoreMutation\(mutationToken\);/,
     'the token must be released only when the install settles');
   for (const anchor of [
+    'if (installBlocked) return false;',
     'if (installBlocked) return;',
     'if (installBlocked || !installOptionsEntry) return;',
     'if (installBlocked || !gateEntry) return;',
+    'if (!completed) return;',
   ]) {
     assert.ok(storePageSrc.includes(anchor), `missing gate: ${anchor}`);
   }
+  assert.equal(
+    (storePageSrc.match(/if \(!completed\) return;/g) ?? []).length,
+    2,
+    'both install options modal and gate modal must only close when runInstall returns true'
+  );
   assert.match(storePageSrc, /const hasPendingInstall = Boolean\(installingKey\) \|\| storeBusy;/,
     'row actions must treat an in-flight store install as pending even after remount');
 });

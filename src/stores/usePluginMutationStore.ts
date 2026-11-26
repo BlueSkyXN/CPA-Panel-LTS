@@ -17,13 +17,16 @@
  */
 
 import { create } from 'zustand';
+import { apiClient } from '@/services/api/client';
 
 interface PluginMutationState {
-  /** 当前登记的连接标识（`profileId:apiBase`）；变化即清空两侧登记。 */
+  /** 当前登记的连接标识（结合连接世代；变化即清空两侧登记）。 */
   connectionKey: string;
+  connectionGeneration: number;
   installedTokens: ReadonlySet<string>;
   storeTokens: ReadonlySet<string>;
-  syncConnection: (connectionKey: string) => void;
+  syncConnection: (connectionKey?: string) => void;
+  clearLocks: () => void;
   /** 取得已装插件侧锁；已被占用（任一侧）时返回 null，调用方不得发请求。 */
   tryBeginInstalledMutation: () => string | null;
   endInstalledMutation: (token: string) => void;
@@ -33,7 +36,7 @@ interface PluginMutationState {
 }
 
 let tokenSeq = 0;
-const nextToken = (kind: string) => `${kind}:${++tokenSeq}`;
+const nextToken = (kind: string, generation: number) => `${kind}:${generation}:${++tokenSeq}`;
 
 const withToken = (
   tokens: ReadonlySet<string>,
@@ -50,30 +53,66 @@ const withToken = (
 };
 
 export const usePluginMutationStore = create<PluginMutationState>((set, get) => {
+  const ensureCurrentGeneration = (): number => {
+    const currentGeneration = apiClient.getConnectionGeneration();
+    const state = get();
+    if (state.connectionGeneration !== currentGeneration) {
+      set({
+        connectionGeneration: currentGeneration,
+        installedTokens: new Set<string>(),
+        storeTokens: new Set<string>(),
+      });
+    }
+    return currentGeneration;
+  };
+
   // 两个方向共用一把锁：已装插件变更与 store 安装不得并发。
   const busy = () => {
     const state = get();
+    if (!apiClient.isCurrentConnection(state.connectionGeneration)) {
+      return false;
+    }
     return state.installedTokens.size > 0 || state.storeTokens.size > 0;
   };
   return {
     connectionKey: '',
+    connectionGeneration: apiClient.getConnectionGeneration(),
     installedTokens: new Set<string>(),
     storeTokens: new Set<string>(),
-    syncConnection: (connectionKey) =>
+    syncConnection: (connectionKey = '') => {
+      const currentGeneration = apiClient.getConnectionGeneration();
       set((state) => {
-        if (state.connectionKey === connectionKey) return state;
+        if (
+          state.connectionKey === connectionKey &&
+          state.connectionGeneration === currentGeneration
+        ) {
+          return state;
+        }
         return {
           connectionKey,
+          connectionGeneration: currentGeneration,
           installedTokens: new Set<string>(),
           storeTokens: new Set<string>(),
         };
+      });
+    },
+    clearLocks: () =>
+      set({
+        connectionKey: '',
+        connectionGeneration: apiClient.getConnectionGeneration(),
+        installedTokens: new Set<string>(),
+        storeTokens: new Set<string>(),
       }),
     tryBeginInstalledMutation: () => {
       // No await between the check and the set: within one task the second
       // synchronous caller observes the token registered by the first.
+      const generation = ensureCurrentGeneration();
       if (busy()) return null;
-      const token = nextToken('installed');
-      set((state) => ({ installedTokens: withToken(state.installedTokens, token, true) }));
+      const token = nextToken('installed', generation);
+      set((state) => ({
+        connectionGeneration: generation,
+        installedTokens: withToken(state.installedTokens, token, true),
+      }));
       return token;
     },
     endInstalledMutation: (token) =>
@@ -82,9 +121,13 @@ export const usePluginMutationStore = create<PluginMutationState>((set, get) => 
         return { installedTokens: withToken(state.installedTokens, token, false) };
       }),
     tryBeginStoreMutation: () => {
+      const generation = ensureCurrentGeneration();
       if (busy()) return null;
-      const token = nextToken('store');
-      set((state) => ({ storeTokens: withToken(state.storeTokens, token, true) }));
+      const token = nextToken('store', generation);
+      set((state) => ({
+        connectionGeneration: generation,
+        storeTokens: withToken(state.storeTokens, token, true),
+      }));
       return token;
     },
     endStoreMutation: (token) =>
@@ -97,8 +140,14 @@ export const usePluginMutationStore = create<PluginMutationState>((set, get) => 
 
 /** 已装插件页有变更在途（删除/启停/配置打开）。 */
 export const useInstalledPluginBusy = () =>
-  usePluginMutationStore((state) => state.installedTokens.size > 0);
+  usePluginMutationStore(
+    (state) =>
+      state.installedTokens.size > 0 && apiClient.isCurrentConnection(state.connectionGeneration)
+  );
 
 /** Store 页有安装或更新在途。 */
 export const usePluginStoreBusy = () =>
-  usePluginMutationStore((state) => state.storeTokens.size > 0);
+  usePluginMutationStore(
+    (state) =>
+      state.storeTokens.size > 0 && apiClient.isCurrentConnection(state.connectionGeneration)
+  );
