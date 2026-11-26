@@ -185,7 +185,7 @@ export function AuthFilesModelPolicyEditPage() {
     }),
     [t]
   );
-  const { allowNextNavigation } = useUnsavedChangesGuard({
+  const { allowNextNavigation, allowNavigationTo } = useUnsavedChangesGuard({
     shouldBlock: isDirty,
     dialog: unsavedChangesDialog,
   });
@@ -229,7 +229,6 @@ export function AuthFilesModelPolicyEditPage() {
         return;
       }
       const apply = () => {
-        allowNextNavigation();
         setProvider(trimmed);
         setProviderInput(trimmed);
         const next = new URLSearchParams(searchParams);
@@ -238,6 +237,10 @@ export function AuthFilesModelPolicyEditPage() {
         } else {
           next.delete('provider');
         }
+        const nextSearch = next.toString();
+        allowNavigationTo(
+          `${location.pathname}${nextSearch ? `?${nextSearch}` : ''}${location.hash}`
+        );
         setSearchParams(next, { replace: true });
       };
       const stay = () => setProviderInput(provider);
@@ -252,8 +255,10 @@ export function AuthFilesModelPolicyEditPage() {
       apply();
     },
     [
-      allowNextNavigation,
+      allowNavigationTo,
       isDirty,
+      location.hash,
+      location.pathname,
       provider,
       providerFromParams,
       searchParams,
@@ -297,7 +302,13 @@ export function AuthFilesModelPolicyEditPage() {
         policySnapshotRef.current
       );
       showNotification(t('model_policy.save_success'), 'success');
-      allowNextNavigation();
+      setProviderInput(provider);
+      const state = location.state as LocationState;
+      if (state?.fromAuthFiles) {
+        allowNextNavigation();
+      } else {
+        allowNavigationTo('/auth-files');
+      }
       handleBack();
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : '';
@@ -307,11 +318,14 @@ export function AuthFilesModelPolicyEditPage() {
     }
   }, [
     allowDraft,
+    allowNavigationTo,
     allowNextNavigation,
     baselineReady,
     denyDraft,
     handleBack,
     initialLoadError,
+    location.state,
+    provider,
     resolvedProviderKey,
     showNotification,
     t,
@@ -426,7 +440,14 @@ export function AuthFilesModelPolicyEditPage() {
       backAriaLabel={t('common.back')}
       contentClassName={styles.pageContent}
       rightAction={
-        <Button size="sm" onClick={handleSave} loading={saving} disabled={!canSave}>
+        <Button
+          size="sm"
+          onMouseDown={(e) => e.preventDefault()}
+          data-autocomplete-skip-blur="true"
+          onClick={handleSave}
+          loading={saving}
+          disabled={!canSave}
+        >
           {t('common.save')}
         </Button>
       }
@@ -496,6 +517,8 @@ export function AuthFilesModelPolicyEditPage() {
                         type="button"
                         className={`${styles.tag} ${isActive ? styles.tagActive : ''}`}
                         aria-pressed={isActive}
+                        onMouseDown={(e) => e.preventDefault()}
+                        data-autocomplete-skip-blur="true"
                         onClick={() => commitProviderChange(option)}
                         disabled={disableControls || saving}
                       >

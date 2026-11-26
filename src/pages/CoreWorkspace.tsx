@@ -28,6 +28,10 @@ import styles from './CoreWorkspace.module.scss';
 import { useUsageData } from '@/components/usage/hooks/useUsageData';
 import { useUsageQuerySummary } from '@/components/usage/hooks/useUsageQuery';
 import { makeUsageQueryView } from '@/utils/usage/queryView';
+import {
+  getGeminiProviderScopeActions,
+  isGeminiCliOAuthPluginAvailable,
+} from './oauthProviders';
 
 const DASH = '—';
 
@@ -226,6 +230,10 @@ export function CoreWorkspace() {
   const successRate = requestCount > 0 ? (successCount / requestCount) * 100 : null;
   const effectivePlugins = plugins?.filter((plugin) => plugin.effectiveEnabled).length ?? null;
   const configuredPlugins = plugins?.filter((plugin) => plugin.configured).length ?? null;
+  const geminiCliOAuthSupported = isGeminiCliOAuthPluginAvailable(plugins, {
+    connected,
+    supportsPlugin,
+  });
   const runtimeLabel = t(`core_workspace.runtime_${serverRuntimeKind}`);
   const versionLabel = serverVersion ? `v${serverVersion.trim().replace(/^[vV]+/, '')}` : DASH;
   const buildLabel = formatDateValue(serverBuildDate, i18n.language) || DASH;
@@ -273,12 +281,12 @@ export function CoreWorkspace() {
       glyph: 'GM',
       credentialCount: countProviderCredentials(authFiles, ['gemini', 'gemini-cli']),
       keyCount: config?.geminiApiKeys?.length ?? null,
-      actions: [
-        { path: '/oauth?provider=gemini-cli', label: t('core_workspace.action_oauth') },
-        { path: '/auth-files?provider=gemini-cli', label: t('core_workspace.action_credentials') },
-        { path: '/ai-providers?provider=gemini', label: t('core_workspace.action_api_keys') },
-        { path: '/quota?provider=gemini-cli', label: t('core_workspace.action_quota') },
-      ],
+      actions: getGeminiProviderScopeActions(geminiCliOAuthSupported, {
+        oauth: t('core_workspace.action_oauth'),
+        credentials: t('core_workspace.action_credentials'),
+        apiKeys: t('core_workspace.action_api_keys'),
+        quota: t('core_workspace.action_quota'),
+      }),
     },
     {
       id: 'antigravity',

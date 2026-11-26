@@ -8,7 +8,7 @@ import type {
   PluginQuotaState,
 } from '@/types';
 import { apiClient } from '@/services/api/client';
-import { pluginsApi } from '@/services/api/plugins';
+import { getPluginOAuthProviders, pluginsApi } from '@/services/api/plugins';
 import { normalizeAuthIndex } from '@/utils/usage';
 import { buildAntigravityQuotaGroups } from '@/utils/quota';
 import { useAuthStore } from '@/stores/useAuthStore';
@@ -79,7 +79,7 @@ export const resolveQuotaPluginId = (
   const match =
     candidates.find((plugin) => normalizeProviderId(plugin.quotaProvider) === target) ??
     candidates.find((plugin) => normalizeProviderId(plugin.id) === target) ??
-    candidates.find((plugin) => normalizeProviderId(plugin.oauthProvider) === target) ??
+    candidates.find((plugin) => getPluginOAuthProviders(plugin).includes(target)) ??
     (candidates.length === 1 ? candidates[0] : undefined);
   return match?.id ?? null;
 };

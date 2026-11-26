@@ -136,13 +136,16 @@ function parseWindows(value: unknown): AnthropicResetWindow[] | undefined {
   return ANTHROPIC_RESET_WINDOWS.filter((window) => value.includes(window));
 }
 
-function parsePercentUsed(value: unknown): Record<string, number> {
+function parsePercentUsed(value: unknown): Record<string, number> | undefined {
+  if (value === undefined || value === null) return {};
+  if (!isRecord(value)) return undefined;
   const out: Record<string, number> = {};
-  if (!isRecord(value)) return out;
   for (const [window, percent] of Object.entries(value)) {
-    // Preserve model-specific windows. Dropping one could mistake a refill for zero usage.
+    // Inactive windows may arrive as null/undefined; ignore them without discarding active windows.
+    if (percent === null || percent === undefined) continue;
+    // Preserve model-specific windows. Dropping a malformed non-null entry could mistake a refill for zero usage.
     if (typeof percent !== 'number' || !Number.isFinite(percent) || percent < 0 || percent > 100)
-      return {};
+      return undefined;
     Object.defineProperty(out, window, { value: percent, enumerable: true });
   }
   return out;
@@ -162,6 +165,7 @@ function parseGrant(value: unknown): AnthropicResetGrant | null {
   const usableNow = optionalBoolean(value.usable_now, false);
   const useRequiresLimit = optionalBoolean(value.use_requires_limit, true);
   const givesBackWeekly = optionalBoolean(value.gives_back_weekly, false);
+  const percentUsed = parsePercentUsed(value.percent_used);
   if (
     startsAt === undefined ||
     endsAt === undefined ||
@@ -169,7 +173,8 @@ function parseGrant(value: unknown): AnthropicResetGrant | null {
     paused === undefined ||
     usableNow === undefined ||
     useRequiresLimit === undefined ||
-    givesBackWeekly === undefined
+    givesBackWeekly === undefined ||
+    percentUsed === undefined
   )
     return null;
   return {
@@ -183,7 +188,7 @@ function parseGrant(value: unknown): AnthropicResetGrant | null {
     paused,
     usableNow,
     useRequiresLimit,
-    percentUsed: parsePercentUsed(value.percent_used),
+    percentUsed,
     resetType:
       value.type === 'weekly' || value.type === 'session' || value.type === 'full'
         ? value.type

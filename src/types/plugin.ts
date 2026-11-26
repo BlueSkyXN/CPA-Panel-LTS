@@ -31,6 +31,12 @@ export interface PluginMenu {
   description: string;
 }
 
+export interface PluginOAuthProviderEntry {
+  identifier: string;
+  name: string;
+  logo: string;
+}
+
 export interface PluginListEntry {
   id: string;
   path: string;
@@ -43,6 +49,8 @@ export interface PluginListEntry {
   supportsQuota?: boolean;
   quotaProvider?: string;
   oauthProvider?: string;
+  oauthProviders?: string[];
+  oauthProviderEntries?: PluginOAuthProviderEntry[];
   authProvider: string;
   supportsReadiness: boolean;
   executorProvider: string;

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Card } from '@/components/ui/Card';
@@ -8,6 +8,7 @@ import { useAuthStore, useNotificationStore } from '@/stores';
 import { LoginProxyField } from '@/components/providers/LoginProxyField';
 import { isInvalidProxyUrlError, maskProxyUrl, planLoginProxy } from '@/utils/loginProxy';
 import { apiClient } from '@/services/api/client';
+import { hasEnabledPluginOAuthProvider, pluginsApi } from '@/services/api/plugins';
 import { validateDevinCallback } from './devinOAuth';
 import iconDevin from '@/assets/icons/devin.svg';
 import iconMeta from '@/assets/icons/meta.svg';
@@ -16,6 +17,7 @@ import { vertexApi, type VertexImportResponse } from '@/services/api/vertex';
 import { copyToClipboard } from '@/utils/clipboard';
 import { getErrorMessage, isRecord } from '@/utils/helpers';
 import { createOAuthAttempts, type OAuthAttempt } from './oauthAttempts';
+import { getVisibleOAuthProviders } from './oauthProviders';
 import styles from './OAuthPage.module.scss';
 import { registerSessionBusyCheck, registerSessionLeaveCheck } from '@/services/connectionSession';
 import iconCodex from '@/assets/icons/codex.svg';
@@ -65,13 +67,23 @@ function getErrorStatus(error: unknown): number | undefined {
   return typeof error.status === 'number' ? error.status : undefined;
 }
 
-const PROVIDERS: {
+interface OAuthProviderMeta {
   id: OAuthProvider;
   titleKey: string;
   hintKey: string;
   urlLabelKey: string;
   icon: string;
-}[] = [
+}
+
+const GEMINI_CLI_PROVIDER: OAuthProviderMeta = {
+  id: 'gemini-cli',
+  titleKey: 'auth_login.gemini_cli_oauth_title',
+  hintKey: 'auth_login.gemini_cli_oauth_hint',
+  urlLabelKey: 'auth_login.gemini_cli_oauth_url_label',
+  icon: iconGemini,
+};
+
+const BUILTIN_PROVIDERS: OAuthProviderMeta[] = [
   { id: 'devin', titleKey: 'auth_login.devin_oauth_title', hintKey: 'auth_login.devin_oauth_hint', urlLabelKey: 'auth_login.devin_oauth_url_label', icon: iconDevin },
   { id: 'meta', titleKey: 'auth_login.meta_oauth_title', hintKey: 'auth_login.meta_oauth_hint', urlLabelKey: 'auth_login.meta_oauth_url_label', icon: iconMeta },
   {
@@ -94,13 +106,6 @@ const PROVIDERS: {
     hintKey: 'auth_login.antigravity_oauth_hint',
     urlLabelKey: 'auth_login.antigravity_oauth_url_label',
     icon: iconAntigravity,
-  },
-  {
-    id: 'gemini-cli',
-    titleKey: 'auth_login.gemini_cli_oauth_title',
-    hintKey: 'auth_login.gemini_cli_oauth_hint',
-    urlLabelKey: 'auth_login.gemini_cli_oauth_url_label',
-    icon: iconGemini,
   },
   {
     id: 'kimi',
@@ -224,6 +229,14 @@ export function OAuthPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { showNotification } = useNotificationStore();
+  const connectionStatus = useAuthStore((state) => state.connectionStatus);
+  const supportsPlugin = useAuthStore((state) => state.supportsPlugin);
+  const apiBase = useAuthStore((state) => state.apiBase);
+  const managementKey = useAuthStore((state) => state.managementKey);
+  const [pluginOAuthSupport, setPluginOAuthSupport] = useState<{
+    connectionKey: string;
+    geminiCli: boolean;
+  }>({ connectionKey: '', geminiCli: false });
   const [states, setStates] = useState<Record<OAuthProvider, ProviderState>>(
     {} as Record<OAuthProvider, ProviderState>
   );
@@ -273,7 +286,45 @@ export function OAuthPage() {
         ? 'gemini-cli'
         : providerQuery
   ) as OAuthProvider;
-  const hasFocusedProvider = PROVIDERS.some((provider) => provider.id === focusedProvider);
+  const pluginQueryKey =
+    connectionStatus === 'connected' && supportsPlugin
+      ? `${connectionStatus}|${supportsPlugin}|${apiBase}|${managementKey}`
+      : '';
+  const geminiCliPluginSupported =
+    Boolean(pluginQueryKey) &&
+    pluginOAuthSupport.connectionKey === pluginQueryKey &&
+    pluginOAuthSupport.geminiCli;
+  const visibleProviders = useMemo(
+    () =>
+      getVisibleOAuthProviders(BUILTIN_PROVIDERS, GEMINI_CLI_PROVIDER, geminiCliPluginSupported),
+    [geminiCliPluginSupported]
+  );
+  const hasFocusedProvider = visibleProviders.some((provider) => provider.id === focusedProvider);
+
+  useEffect(() => {
+    if (!pluginQueryKey) return;
+    let cancelled = false;
+    const revision = apiClient.getConnectionRevision();
+    void pluginsApi
+      .list()
+      .then((response) => {
+        if (cancelled || !apiClient.isCurrentConnection(revision)) return;
+        setPluginOAuthSupport({
+          connectionKey: pluginQueryKey,
+          geminiCli: hasEnabledPluginOAuthProvider(response.plugins, 'gemini-cli'),
+        });
+      })
+      .catch(() => {
+        if (cancelled || !apiClient.isCurrentConnection(revision)) return;
+        setPluginOAuthSupport({
+          connectionKey: pluginQueryKey,
+          geminiCli: false,
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pluginQueryKey]);
 
   const clearTimers = useCallback(() => {
     attempts.current.invalidateAll();
@@ -626,7 +677,7 @@ export function OAuthPage() {
 
       <div className={styles.content}>
         <LoginProxyField value={loginProxy} rejectedValue={loginProxyRejected} onChange={setLoginProxy} />
-        {PROVIDERS.map((provider) => {
+        {visibleProviders.map((provider) => {
           const state = states[provider.id] || {};
           const canSubmitCallback = CALLBACK_SUPPORTED.includes(provider.id) && Boolean(state.url);
           const loginButtonLabel =

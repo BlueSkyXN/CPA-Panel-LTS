@@ -12,7 +12,12 @@ const { parsePluginReadiness, readinessAccounts } = await vite.ssrLoadModule(
   '/src/features/plugins/pluginReadiness.ts'
 );
 const { apiClient, ltsExtensionClient } = await vite.ssrLoadModule('/src/services/api/client.ts');
-const { pluginsApi } = await vite.ssrLoadModule('/src/services/api/plugins.ts');
+const {
+  getPluginOAuthProviders,
+  hasEnabledPluginOAuthProvider,
+  pluginsApi,
+} = await vite.ssrLoadModule('/src/services/api/plugins.ts');
+const { resolveQuotaPluginId } = await vite.ssrLoadModule('/src/services/api/pluginQuota.ts');
 const { buildPluginConfigDraft, buildPluginConfigPatch } = await vite.ssrLoadModule(
   '/src/features/plugins/pluginConfigDraft.ts'
 );
@@ -105,4 +110,121 @@ test('diagnostic request sends only account index and encodes plugin id', async 
   } finally {
     ltsExtensionClient.get = saved;
   }
+});
+
+test('P1-09: pluginsApi.list normalizes oauth_provider, oauth_providers, and oauth_provider_entries', async () => {
+  const saved = apiClient.get;
+  try {
+    apiClient.get = async () => ({
+      plugins: [
+        {
+          id: 'multi-oauth',
+          effective_enabled: true,
+          supports_oauth: true,
+          oauth_provider: 'primary',
+          oauth_providers: ['primary', 'gemini-cli'],
+          oauth_provider_entries: [
+            { identifier: 'primary', name: 'Primary', logo: 'p.svg' },
+            { identifier: 'gemini-cli', name: 'Gemini CLI', logo: 'g.svg' },
+            { identifier: '   ' },
+            null,
+          ],
+        },
+        {
+          id: 'legacy-single',
+          effective_enabled: true,
+          supports_oauth: true,
+          oauth_provider: 'gemini-cli',
+        },
+        {
+          id: 'entry-only',
+          effective_enabled: true,
+          supports_oauth: true,
+          oauth_provider_entries: [{ identifier: 'gemini-cli', name: 'Gemini', logo: '' }],
+        },
+      ],
+    });
+    const { plugins } = await pluginsApi.list();
+    assert.equal(plugins[0].oauthProvider, 'primary');
+    assert.deepEqual(plugins[0].oauthProviders, ['primary', 'gemini-cli']);
+    assert.deepEqual(plugins[0].oauthProviderEntries, [
+      { identifier: 'primary', name: 'Primary', logo: 'p.svg' },
+      { identifier: 'gemini-cli', name: 'Gemini CLI', logo: 'g.svg' },
+    ]);
+    assert.deepEqual(plugins[1].oauthProviders, ['gemini-cli']);
+    assert.deepEqual(plugins[2].oauthProviders, ['gemini-cli']);
+    assert.equal(plugins[2].oauthProvider, 'gemini-cli');
+  } finally {
+    apiClient.get = saved;
+  }
+});
+
+test('P1-09: hasEnabledPluginOAuthProvider and getPluginOAuthProviders gate by enabled + OAuth capability', () => {
+  assert.deepEqual(
+    getPluginOAuthProviders({
+      oauthProvider: ' Gemini-CLI ',
+      oauthProviders: ['custom', 'gemini-cli'],
+      oauthProviderEntries: [{ identifier: 'Extra', name: 'Extra', logo: '' }],
+    }),
+    ['custom', 'gemini-cli', 'extra']
+  );
+
+  assert.equal(
+    hasEnabledPluginOAuthProvider(
+      [
+        {
+          id: 'multi',
+          effectiveEnabled: true,
+          supportsOAuth: true,
+          oauthProvider: 'other',
+          oauthProviders: ['other', 'gemini-cli'],
+        },
+      ],
+      'gemini-cli'
+    ),
+    true
+  );
+
+  assert.equal(
+    hasEnabledPluginOAuthProvider(
+      [
+        {
+          id: 'disabled',
+          effectiveEnabled: false,
+          supportsOAuth: true,
+          oauthProviders: ['gemini-cli'],
+        },
+        {
+          id: 'no-oauth',
+          effectiveEnabled: true,
+          supportsOAuth: false,
+          oauthProviders: ['gemini-cli'],
+        },
+      ],
+      'gemini-cli'
+    ),
+    false
+  );
+
+  assert.equal(
+    resolveQuotaPluginId(
+      [
+        {
+          id: 'multi-quota',
+          registered: true,
+          supportsQuota: true,
+          oauthProvider: 'other',
+          oauthProviders: ['other', 'gemini-cli'],
+        },
+        {
+          id: 'fallback-quota',
+          registered: true,
+          supportsQuota: true,
+          oauthProvider: 'codex',
+        },
+      ],
+      'gemini-cli'
+    ),
+    'multi-quota'
+  );
 });
