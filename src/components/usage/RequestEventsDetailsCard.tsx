@@ -10,10 +10,14 @@ import {
   type ThHTMLAttributes,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { CacheDiagnosticsDetails } from './CacheDiagnosticsDetails';
-import type { CacheEventsView, CacheUsageRow } from '@/utils/usage/cacheNavigation';
+import {
+  CacheDiagnosticsDetails,
+  cacheFieldSummary,
+  readCacheObservation,
+  type CacheEventsView,
+  type CacheUsageRow,
+} from '@/lts/cacheDiagnostics';
 import { CACHE_STATES, cacheValueState, isCacheValueState, type CacheValueState } from '@/utils/usage/cacheAnalytics';
-import { cacheFieldSummary, readCacheObservation } from '@/utils/usage/cacheDiagnostics';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';

@@ -1540,6 +1540,47 @@ require_file_contains src/components/config/configNavigation.ts "CONFIG_FIELDS"
 require_file_contains src/components/config/configNavigation.ts "resolveConfigLocation"
 require_file_contains src/components/config/ConfigDomainPanels.tsx "codex-draft-summary"
 
+# Cache request diagnostics sidecar and locale overlay isolation.
+for path in \
+  src/lts/cacheDiagnostics \
+  src/lts/cacheDiagnostics/index.ts \
+  src/lts/cacheDiagnostics/CacheAnalysisPage.tsx \
+  src/lts/cacheDiagnostics/CacheAnalysisPage.module.scss \
+  src/lts/cacheDiagnostics/CacheDiagnosticsDetails.tsx \
+  src/lts/cacheDiagnostics/CacheDiagnosticsDetails.module.scss \
+  src/lts/cacheDiagnostics/CacheExecutionFlow.tsx \
+  src/lts/cacheDiagnostics/CacheRouteLinks.tsx \
+  src/lts/cacheDiagnostics/cacheDiagnostics.ts \
+  src/lts/cacheDiagnostics/cacheDiagnostics.test.mjs \
+  src/lts/cacheDiagnostics/cacheNavigation.ts \
+  src/lts/cacheDiagnostics/cacheRoute.ts
+do
+  require_path "$path"
+done
+for legacy_cache_path in \
+  src/pages/CacheAnalysisPage.tsx \
+  src/pages/CacheAnalysisPage.module.scss \
+  src/components/usage/CacheDiagnosticsDetails.tsx \
+  src/components/usage/CacheDiagnosticsDetails.module.scss \
+  src/components/usage/CacheExecutionFlow.tsx \
+  src/components/usage/CacheRouteLinks.tsx \
+  src/utils/usage/cacheDiagnostics.ts \
+  src/utils/usage/cacheDiagnostics.test.mjs \
+  src/utils/usage/cacheNavigation.ts \
+  src/utils/usage/cacheRoute.ts
+do
+  if [ -e "$legacy_cache_path" ]; then
+    fail "cache diagnostics sidecar file must live under src/lts/cacheDiagnostics/: $legacy_cache_path"
+  fi
+done
+require_file_contains package.json "src/lts/cacheDiagnostics/cacheDiagnostics.test.mjs"
+for locale in en zh-CN zh-TW ru; do
+  require_file_contains "src/lts/i18n/$locale.lts.json" '"cache_analysis"'
+  require_file_contains "src/lts/i18n/$locale.lts.json" '"cache_diagnostics"'
+  require_file_not_contains "src/i18n/locales/$locale.json" '"cache_analysis"'
+  require_file_not_contains "src/i18n/locales/$locale.json" '"cache_diagnostics"'
+done
+
 if [ "$failures" -ne 0 ]; then
   printf 'LTS panel contract check failed with %s violation(s).\n' "$failures" >&2
   exit 1

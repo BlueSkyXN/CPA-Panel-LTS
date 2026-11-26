@@ -10,7 +10,7 @@ import type {
   UsageQueryRequest,
   UsageQuerySession,
 } from '@/types/usageQuery';
-import type { EventQueryNavigation } from '@/utils/usage/cacheNavigation';
+import type { EventQueryNavigation } from '@/lts/cacheDiagnostics/cacheNavigation';
 import { normalizeUsageSourceId, type UsageDetail } from '@/utils/usage';
 import {
   UsageDetailsExport,

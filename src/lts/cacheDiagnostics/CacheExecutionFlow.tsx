@@ -3,9 +3,9 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { captureCacheDiagnosticsClient } from '@/services/api/cacheDiagnostics';
 import type { CacheAttempt, CacheRouteKey, CacheSessionSnapshot, CacheTrace, CacheTraceLocation } from '@/types/cacheDiagnostics';
-import { cacheAttemptFailed, cacheAttemptTransport, cacheFieldText, diffCachePayloads } from '@/utils/usage/cacheDiagnostics';
+import { cacheAttemptFailed, cacheAttemptTransport, cacheFieldText, diffCachePayloads } from './cacheDiagnostics';
 import { CacheRouteLinks } from './CacheRouteLinks';
-import styles from '@/pages/CacheAnalysisPage.module.scss';
+import styles from './CacheAnalysisPage.module.scss';
 
 export function CacheDisclosure({ label, children, className }: {
   label: string;

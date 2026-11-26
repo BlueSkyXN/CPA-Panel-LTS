@@ -3,23 +3,23 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer';
-import { CacheDisclosure, CacheExecutionFlow, CacheInbound } from '@/components/usage/CacheExecutionFlow';
+import { CacheDisclosure, CacheExecutionFlow, CacheInbound } from './CacheExecutionFlow';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { ltsExtensionClient } from '@/services/api/client';
 import { captureCacheDiagnosticsClient } from '@/services/api/cacheDiagnostics';
 import { isRecord } from '@/utils/helpers';
-import { cacheAttemptFailed, cacheAttemptTransport, cacheFieldSummary, cacheExecutionPath, diffCachePayloads, isCacheLookupId, normalizeDiagnosticsId, readRate, shortCredentialLabel } from '@/utils/usage/cacheDiagnostics';
-import { cacheRouteKey } from '@/utils/usage/cacheRoute';
+import { cacheAttemptFailed, cacheAttemptTransport, cacheFieldSummary, cacheExecutionPath, diffCachePayloads, isCacheLookupId, normalizeDiagnosticsId, readRate, shortCredentialLabel } from './cacheDiagnostics';
+import { cacheRouteKey } from './cacheRoute';
 import {
   cacheLocationSearch, cacheTraceRowKey, readCacheLocation, readCacheReturnContext, readCacheUsageRow,
-} from '@/utils/usage/cacheNavigation';
+} from './cacheNavigation';
 import type {
   CacheDiagnosticsCapabilities, CacheRouteKey, CacheTrace, CacheTraceFocus,
   CacheTraceLocation, CacheTracePage, CacheTraceQuery, CacheTraceRow,
 } from '@/types/cacheDiagnostics';
-import { AnalyticsLayout, AnalyticsPageHeader } from './AnalyticsLayout';
-import analyticsStyles from './AnalyticsPage.module.scss';
+import { AnalyticsLayout, AnalyticsPageHeader } from '@/pages/AnalyticsLayout';
+import analyticsStyles from '@/pages/AnalyticsPage.module.scss';
 import styles from './CacheAnalysisPage.module.scss';
 
 const errorStatus = (error: unknown) => isRecord(error) ? error.status : undefined;

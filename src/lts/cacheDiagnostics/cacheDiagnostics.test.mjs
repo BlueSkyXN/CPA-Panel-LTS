@@ -9,7 +9,7 @@ const {
   compareCachePayloads,
   diffCachePayloads,
   shortCredentialLabel,
-} = await vite.ssrLoadModule('/src/utils/usage/cacheDiagnostics.ts');
+} = await vite.ssrLoadModule('/src/lts/cacheDiagnostics/cacheDiagnostics.ts');
 test.after(() => vite.close());
 const absent = {state:'absent'};
 const obs = (read) => ({version:1,read,write:absent});
@@ -99,7 +99,7 @@ test('import preflight rejects contradictory cache evidence without inventing ol
 });
 
 test('same credential transport failure still describes the retry and transport change', async () => {
- const {cacheExecutionPath}=await vite.ssrLoadModule('/src/utils/usage/cacheDiagnostics.ts');
+ const {cacheExecutionPath}=await vite.ssrLoadModule('/src/lts/cacheDiagnostics/cacheDiagnostics.ts');
  const a={execution_id:'execution',auth_index:'A',transport:'http',outcome:'transport_error'};
  const b={execution_id:'execution',auth_index:'A',transport:'websocket',outcome:'completed'};
  assert.deepEqual(cacheExecutionPath([a,b]), {from:a,final:b,failedBeforeFinal:true,changedCredential:false});
@@ -109,8 +109,8 @@ test('same credential transport failure still describes the retry and transport 
 });
 
 test('the diagnostics list excludes historical usage rows from an older draft Core', async () => {
- const {decodeTracePage}=await vite.ssrLoadModule('/src/utils/usage/cacheDiagnostics.ts');
- const {readCacheUsageRow}=await vite.ssrLoadModule('/src/utils/usage/cacheNavigation.ts');
+ const {decodeTracePage}=await vite.ssrLoadModule('/src/lts/cacheDiagnostics/cacheDiagnostics.ts');
+ const {readCacheUsageRow}=await vite.ssrLoadModule('/src/lts/cacheDiagnostics/cacheNavigation.ts');
  const base={at:'2026-11-20T08:00:00Z',model:'legacy',available:false,trace_id:'shared-log'};
  const result=decodeTracePage({
   version:1,current_instance_id:'now',history_included:true,
@@ -154,7 +154,7 @@ test('shortCredentialLabel keeps short names, hex prefixes and named suffixes di
  assert.equal(shortCredentialLabel('codex-oauth-1'), 'codex-…th-1');
 });
 test('cache navigation normalizes diagnostic digests and preserves opaque identifiers', async () => {
-  const { readCacheLocation, cacheLocationSearch } = await vite.ssrLoadModule('/src/utils/usage/cacheNavigation.ts');
+  const { readCacheLocation, cacheLocationSearch } = await vite.ssrLoadModule('/src/lts/cacheDiagnostics/cacheNavigation.ts');
   const upper = 'AB'.repeat(32);
   const query = new URLSearchParams({ diagnostics: upper, execution: upper, instance: 'Instance-A' });
   const location = readCacheLocation(query);

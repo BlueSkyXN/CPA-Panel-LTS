@@ -15,6 +15,7 @@ protected_deltas:
       - connection-generation fencing for read-only queries
       - actual events separated from posthoc JSON comparison and current memory snapshots
       - official unavailable and comparison_response_not_found remain uncertain
+      - src/lts/cacheDiagnostics/ sidecar and four matching locale overlays
   - id: codex-cache-affinity-config
     reason: Core-owned cache optimization controls must explain user choices without changing private sessions or promising cache hits.
     must_keep:

@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import type { CacheRouteKey, CacheRouteReference } from '@/types/cacheDiagnostics';
-import { cacheRouteKey, cacheRouteOrder } from '@/utils/usage/cacheRoute';
+import { cacheRouteKey, cacheRouteOrder } from './cacheRoute';
 import styles from '@/pages/UsagePage.module.scss';
 
 export function CacheRouteLinks({ refs, onFilter, activeKey, className }: {

@@ -14,7 +14,7 @@ import { UsagePricingPage } from '@/pages/UsagePricingPage';
 import { ConfigPage } from '@/pages/ConfigPage';
 import { FlowControlPage } from '@/pages/FlowControlPage';
 import { FlowDashboardPage } from '@/pages/FlowDashboardPage';
-import { CacheAnalysisPage } from '@/pages/CacheAnalysisPage';
+import { CacheAnalysisPage } from '@/lts/cacheDiagnostics';
 import { ObservabilityPage } from '@/pages/ObservabilityPage';
 import { LogsPage } from '@/pages/LogsPage';
 import { SystemPage } from '@/pages/SystemPage';
