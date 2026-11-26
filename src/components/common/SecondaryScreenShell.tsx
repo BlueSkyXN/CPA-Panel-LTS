@@ -92,6 +92,8 @@ export const SecondaryScreenShell = forwardRef<HTMLDivElement, SecondaryScreenSh
               <Button
                 variant="ghost"
                 size="sm"
+                onMouseDown={(e) => e.preventDefault()}
+                data-autocomplete-skip-blur="true"
                 onClick={onBack}
                 className={styles.backButton}
                 aria-label={resolvedBackAriaLabel}

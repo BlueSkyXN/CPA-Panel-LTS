@@ -39,9 +39,6 @@ const WEBUI_SUPPORTED: OAuthProvider[] = ['codex', 'anthropic', 'antigravity', '
 const V8_AUTH_PROVIDER_MAP: Partial<Record<OAuthProvider, string>> = {
   anthropic: 'claude',
 };
-const CALLBACK_PROVIDER_MAP: Partial<Record<OAuthProvider, string>> = {
-  'gemini-cli': 'gemini',
-};
 
 export interface SiwcBindResponse {
   status: 'ok'; url: string; state: string; flow: 'siwc_bind'; expires_in: number;
@@ -126,15 +123,13 @@ export const oauthApi = {
       signal,
     }),
 
-  submitCallback: (provider: OAuthProvider, redirectUrl: string, signal?: AbortSignal) => {
-    const callbackProvider = CALLBACK_PROVIDER_MAP[provider] ?? provider;
-    return apiClient.post<OAuthCallbackResponse>(
+  submitCallback: (provider: OAuthProvider, redirectUrl: string, signal?: AbortSignal) =>
+    apiClient.post<OAuthCallbackResponse>(
       '/oauth/callback',
       {
-        provider: callbackProvider,
+        provider,
         redirect_url: redirectUrl,
       },
       { signal }
-    );
-  },
+    ),
 };

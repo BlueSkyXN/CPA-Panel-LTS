@@ -9,6 +9,7 @@ import type {
   PluginListResponse,
   PluginMetadata,
   PluginMenu,
+  PluginOAuthProviderEntry,
   PluginStoreEntry,
   PluginStoreInstallResult,
   PluginStorePlatform,
@@ -84,6 +85,58 @@ const normalizeMenus = (value: unknown): PluginMenu[] =>
     ? (value.map((item) => normalizeMenu(item)).filter(Boolean) as PluginMenu[])
     : [];
 
+const normalizeStringList = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value.map((item) => asString(item).trim()).filter(Boolean)
+    : [];
+
+const normalizeOAuthProviderEntries = (value: unknown): PluginOAuthProviderEntry[] =>
+  Array.isArray(value)
+    ? (value
+        .map((item): PluginOAuthProviderEntry | null => {
+          if (!isRecord(item)) return null;
+          const identifier = asString(item.identifier).trim();
+          if (!identifier) return null;
+          return {
+            identifier,
+            name: asString(item.name).trim(),
+            logo: asString(item.logo).trim(),
+          };
+        })
+        .filter(Boolean) as PluginOAuthProviderEntry[])
+    : [];
+
+export const getPluginOAuthProviders = (
+  plugin: Pick<PluginListEntry, 'oauthProvider' | 'oauthProviders' | 'oauthProviderEntries'>
+): string[] => {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const add = (raw?: string) => {
+    const normalized = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    out.push(normalized);
+  };
+  for (const provider of plugin.oauthProviders ?? []) add(provider);
+  add(plugin.oauthProvider);
+  for (const entry of plugin.oauthProviderEntries ?? []) add(entry.identifier);
+  return out;
+};
+
+export const hasEnabledPluginOAuthProvider = (
+  plugins: readonly PluginListEntry[],
+  provider: string
+): boolean => {
+  const target = provider.trim().toLowerCase();
+  if (!target) return false;
+  return plugins.some(
+    (plugin) =>
+      plugin.effectiveEnabled &&
+      plugin.supportsOAuth &&
+      getPluginOAuthProviders(plugin).includes(target)
+  );
+};
+
 const normalizePluginEntry = (value: unknown): PluginListEntry | null => {
   if (!isRecord(value)) return null;
   const id = asString(value.id).trim();
@@ -91,6 +144,16 @@ const normalizePluginEntry = (value: unknown): PluginListEntry | null => {
 
   const metadata = normalizeMetadata(value.metadata);
   const configFields = normalizeConfigFields(value.config_fields);
+  const oauthProviderRaw = asString(value.oauth_provider).trim();
+  const oauthProvidersRaw = normalizeStringList(value.oauth_providers);
+  const oauthProviderEntries = normalizeOAuthProviderEntries(value.oauth_provider_entries);
+  const oauthProviders =
+    oauthProvidersRaw.length > 0
+      ? oauthProvidersRaw
+      : oauthProviderRaw
+        ? [oauthProviderRaw]
+        : oauthProviderEntries.map((entry) => entry.identifier);
+  const oauthProvider = oauthProviderRaw || oauthProviders[0] || '';
 
   return {
     id,
@@ -103,7 +166,9 @@ const normalizePluginEntry = (value: unknown): PluginListEntry | null => {
     supportsAuth: asBoolean(value.supports_auth),
     supportsQuota: asBoolean(value.supports_quota),
     quotaProvider: asString(value.quota_provider).trim(),
-    oauthProvider: asString(value.oauth_provider).trim(),
+    oauthProvider,
+    oauthProviders,
+    oauthProviderEntries,
     authProvider: asString(value.auth_provider).trim(),
     supportsReadiness: asBoolean(value.supports_readiness),
     executorProvider: asString(value.executor_provider).trim(),

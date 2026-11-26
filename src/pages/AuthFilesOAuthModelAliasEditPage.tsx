@@ -169,6 +169,7 @@ export function AuthFilesOAuthModelAliasEditPage() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
       if (event.key === 'Escape') {
         handleBack();
       }
@@ -411,7 +412,13 @@ export function AuthFilesOAuthModelAliasEditPage() {
         await authFilesApi.deleteOauthModelAlias(channel);
       }
       showNotification(t('oauth_model_alias.save_success'), 'success');
-      allowNextNavigation();
+      setProviderInput(provider);
+      const state = location.state as LocationState;
+      if (state?.fromAuthFiles) {
+        allowNextNavigation();
+      } else {
+        allowNavigationTo('/auth-files');
+      }
       handleBack();
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : '';
@@ -420,11 +427,13 @@ export function AuthFilesOAuthModelAliasEditPage() {
       setSaving(false);
     }
   }, [
+    allowNavigationTo,
     allowNextNavigation,
     baselineReady,
     handleBack,
     initialLoadError,
     isEditing,
+    location.state,
     mappings,
     modelAliasUnsupported,
     provider,
@@ -450,7 +459,14 @@ export function AuthFilesOAuthModelAliasEditPage() {
       backAriaLabel={t('common.back')}
       contentClassName={styles.pageContent}
       rightAction={
-        <Button size="sm" onClick={handleSave} loading={saving} disabled={!canSave}>
+        <Button
+          size="sm"
+          onMouseDown={(e) => e.preventDefault()}
+          data-autocomplete-skip-blur="true"
+          onClick={handleSave}
+          loading={saving}
+          disabled={!canSave}
+        >
           {t('oauth_model_alias.save')}
         </Button>
       }
@@ -520,6 +536,8 @@ export function AuthFilesOAuthModelAliasEditPage() {
                         type="button"
                         className={`${styles.tag} ${isActive ? styles.tagActive : ''}`}
                         aria-pressed={isActive}
+                        onMouseDown={(e) => e.preventDefault()}
+                        data-autocomplete-skip-blur="true"
                         onClick={() => commitProviderChange(option)}
                         disabled={disableControls || saving}
                       >

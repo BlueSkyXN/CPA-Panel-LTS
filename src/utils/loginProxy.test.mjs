@@ -206,6 +206,28 @@ test('a proxied gemini login keeps project_id in the query string', async () => 
   }
 });
 
+test('P1-09: submitCallback sends gemini-cli verbatim without rewriting to gemini', async () => {
+  apiClient.setConfig({ apiBase: 'http://core.test', managementKey: 'k' });
+  const sent = [];
+  const restore = installAdapter((config) =>
+    sent.push({ method: config.method, url: config.url, data: config.data })
+  );
+  try {
+    const redirectUrl = 'http://localhost:8085/oauth2callback?code=abc&state=st-1';
+    await oauthApi.submitCallback('gemini-cli', redirectUrl);
+    await oauthApi.submitCallback('codex', redirectUrl);
+    assert.equal(sent.length, 2);
+    assert.equal(sent[0].method, 'post');
+    assert.equal(sent[0].url, '/oauth/callback');
+    const body0 = typeof sent[0].data === 'string' ? JSON.parse(sent[0].data) : sent[0].data;
+    const body1 = typeof sent[1].data === 'string' ? JSON.parse(sent[1].data) : sent[1].data;
+    assert.deepEqual(body0, { provider: 'gemini-cli', redirect_url: redirectUrl });
+    assert.deepEqual(body1, { provider: 'codex', redirect_url: redirectUrl });
+  } finally {
+    restore();
+  }
+});
+
 // Backend 400 mapping through the real error path: an Axios adapter failure is
 // converted by the shared client's handleError (ApiError with status/apiCode)
 // before isInvalidProxyUrlError sees it. A bare `new Error("invalid

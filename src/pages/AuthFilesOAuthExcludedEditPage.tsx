@@ -186,6 +186,7 @@ export function AuthFilesOAuthExcludedEditPage() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
       if (event.key === 'Escape') {
         handleBack();
       }
@@ -509,7 +510,13 @@ export function AuthFilesOAuthExcludedEditPage() {
         await authFilesApi.deleteOauthExcludedEntry(normalizedProvider);
       }
       showNotification(t('oauth_excluded.save_success'), 'success');
-      allowNextNavigation();
+      setProviderInput(provider);
+      const state = location.state as LocationState;
+      if (state?.fromAuthFiles) {
+        allowNextNavigation();
+      } else {
+        allowNavigationTo('/auth-files');
+      }
       handleBack();
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : '';
@@ -518,6 +525,7 @@ export function AuthFilesOAuthExcludedEditPage() {
       setSaving(false);
     }
   }, [
+    allowNavigationTo,
     allowNextNavigation,
     baselineReady,
     effectiveRules,
@@ -525,6 +533,7 @@ export function AuthFilesOAuthExcludedEditPage() {
     handleBack,
     initialLoadError,
     isEditing,
+    location.state,
     provider,
     showNotification,
     t,
@@ -548,7 +557,14 @@ export function AuthFilesOAuthExcludedEditPage() {
       backAriaLabel={t('common.back')}
       contentClassName={styles.pageContent}
       rightAction={
-        <Button size="sm" onClick={handleSave} loading={saving} disabled={!canSave}>
+        <Button
+          size="sm"
+          onMouseDown={(e) => e.preventDefault()}
+          data-autocomplete-skip-blur="true"
+          onClick={handleSave}
+          loading={saving}
+          disabled={!canSave}
+        >
           {t('oauth_excluded.save')}
         </Button>
       }
@@ -618,6 +634,8 @@ export function AuthFilesOAuthExcludedEditPage() {
                         type="button"
                         className={`${styles.tag} ${isActive ? styles.tagActive : ''}`}
                         aria-pressed={isActive}
+                        onMouseDown={(e) => e.preventDefault()}
+                        data-autocomplete-skip-blur="true"
                         onClick={() => commitProviderChange(option)}
                         disabled={disableControls || saving}
                       >

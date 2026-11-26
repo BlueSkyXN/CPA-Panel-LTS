@@ -5,12 +5,14 @@ import {
   useState,
   type CSSProperties,
   type ChangeEvent,
+  type FocusEvent,
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { filterAutocompleteOptions, normalizeAutocompleteOptions } from './autocompleteOptions';
 import { IconChevronDown } from './icons';
+import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer';
 
 interface AutocompleteInputProps {
   label?: string;
@@ -68,6 +70,8 @@ export function AutocompleteInput({
   const filteredOptions = filterAutocompleteOptions(normalizedOptions, value, isTyping);
   const showDropdown = isOpen && filteredOptions.length > 0 && !disabled;
   const dropdownReady = showDropdown && dropdownStyle !== null;
+  const pageTransitionLayer = usePageTransitionLayer();
+  const isCurrentLayer = pageTransitionLayer ? pageTransitionLayer.isCurrentLayer : true;
 
   const openDropdown = () => {
     setIsTyping(false);
@@ -162,6 +166,10 @@ export function AutocompleteInput({
         onCommit?.(value);
       }
     } else if (e.key === 'Escape') {
+      if (showDropdown) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
       setIsOpen(false);
     } else if (e.key === 'Tab') {
       setIsOpen(false);
@@ -180,10 +188,19 @@ export function AutocompleteInput({
           onFocus={openDropdown}
           onClick={() => !isOpen && openDropdown()}
           onKeyDown={handleKeyDown}
-          onBlur={() => {
+          onBlur={(e: FocusEvent<HTMLInputElement>) => {
             setIsOpen(false);
             if (commitScheduledRef.current) {
               commitScheduledRef.current = false;
+              return;
+            }
+            if (disabled || e.currentTarget.disabled || !isCurrentLayer) {
+              return;
+            }
+            if (
+              e.relatedTarget instanceof Element &&
+              e.relatedTarget.closest('[data-autocomplete-skip-blur="true"]')
+            ) {
               return;
             }
             onCommit?.(value);

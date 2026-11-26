@@ -4,7 +4,11 @@ import { createServer } from 'vite';
 
 const vite = await createServer({ appType: 'custom', logLevel: 'silent', server: { middlewareMode: true } });
 const { canChooseResetGrant, resetGrantKind } = await vite.ssrLoadModule('/src/components/quota/claudeGrants/resetGrantChoice.ts');
-const { parseAnthropicResetGrantStatus } = await vite.ssrLoadModule('/src/services/api/claudeResetGrants.ts');
+const {
+  anthropicResetGrantBlocker,
+  parseAnthropicResetGrantStatus,
+  resetGrantHasNoUsage,
+} = await vite.ssrLoadModule('/src/services/api/claudeResetGrants.ts');
 test.after(() => vite.close());
 
 const NOW = Date.parse('2026-11-14T12:00:00Z');
@@ -77,4 +81,80 @@ test('resetGrantKind classifies fable refills ahead of the raw reset type', () =
   assert.equal(resetGrantKind(fable), 'fable');
   assert.equal(resetGrantKind(weekly), 'weekly');
   assert.equal(resetGrantKind(undefined), 'unknown');
+});
+
+test('P2-02: mixed 0 and null/undefined windows preserve 0% and block wasted gives_back_weekly grants', () => {
+  const status = parseAnthropicResetGrantStatus({
+    ...STATUS_BLOCK,
+    grants: [
+      {
+        ...STATUS_BLOCK.grants[0],
+        percent_used: { seven_day: 0, seven_day_sonnet: null, seven_day_opus: undefined },
+      },
+    ],
+  });
+  assert.ok(status);
+  assert.deepEqual(status.grants[0].percentUsed, { seven_day: 0 });
+  assert.equal(resetGrantHasNoUsage(status.grants[0]), true);
+  assert.equal(anthropicResetGrantBlocker(status, 'grant-fable'), 'no_usage');
+  assert.equal(canChooseResetGrant(status, undefined, 'grant-fable', NOW), false);
+});
+
+test('P2-02: mixed 0, non-zero, and null windows remain redeemable', () => {
+  const status = parseAnthropicResetGrantStatus({
+    ...STATUS_BLOCK,
+    grants: [
+      {
+        ...STATUS_BLOCK.grants[0],
+        percent_used: { seven_day: 0, seven_day_sonnet: 25, seven_day_opus: null },
+      },
+    ],
+  });
+  assert.ok(status);
+  assert.deepEqual(status.grants[0].percentUsed, { seven_day: 0, seven_day_sonnet: 25 });
+  assert.equal(resetGrantHasNoUsage(status.grants[0]), false);
+  assert.equal(anthropicResetGrantBlocker(status, 'grant-fable'), null);
+  assert.equal(canChooseResetGrant(status, undefined, 'grant-fable', NOW), true);
+});
+
+test('P2-02: absent, null, empty, or all-null percent_used resolves to empty unknown usage', () => {
+  for (const percentUsed of [
+    undefined,
+    null,
+    {},
+    { seven_day: null, seven_day_sonnet: undefined },
+  ]) {
+    const grantPayload = { ...STATUS_BLOCK.grants[0] };
+    if (percentUsed === undefined) delete grantPayload.percent_used;
+    else grantPayload.percent_used = percentUsed;
+    const status = parseAnthropicResetGrantStatus({
+      ...STATUS_BLOCK,
+      grants: [grantPayload],
+    });
+    assert.ok(status);
+    assert.deepEqual(status.grants[0].percentUsed, {});
+    assert.equal(resetGrantHasNoUsage(status.grants[0]), false);
+    assert.equal(anthropicResetGrantBlocker(status, 'grant-fable'), null);
+  }
+});
+
+test('P2-02: malformed non-null or non-record percent_used fails closed by rejecting the grant', () => {
+  for (const badPercentUsed of [
+    'bad',
+    [],
+    123,
+    true,
+    { seven_day: 0, seven_day_sonnet: '40' },
+    { seven_day: -1 },
+    { seven_day: 101 },
+    { seven_day: Number.NaN },
+    { seven_day: Number.POSITIVE_INFINITY },
+    { seven_day: {} },
+  ]) {
+    const status = parseAnthropicResetGrantStatus({
+      ...STATUS_BLOCK,
+      grants: [{ ...STATUS_BLOCK.grants[0], percent_used: badPercentUsed }],
+    });
+    assert.equal(status, null);
+  }
 });
