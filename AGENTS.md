@@ -114,8 +114,8 @@ Contract truth 必须保持一致：
 
 ## CPA-Core-LTS contract
 
-- Core owns proxying、auth、Management API 与 usage collection；Panel 只通过浏览器端 `/v0/management` 管理。
-- Core 需继续提供 `/usage`、`/usage/export`、`/usage/import` 等 Management API；Panel types/transforms 必须匹配当前 Core 或 live endpoint。
+- Core owns proxying、auth、Management API 与 usage collection；Panel 通过浏览器端 `apiClient` 调用 `/v8/management` 原生管理协议，仅对尚无 v8 等价路由的 LTS 扩展面通过共享连接代际的 `ltsExtensionClient` 调用 `/v0/management`（见 `docs/lts/v8-endpoint-map.md`）。
+- Core 需继续提供 `/v0/management/usage`、`/usage/export`、`/usage/import`、`/usage/query/*`、`/cache-diagnostics/*`、`/flow-control*` 等 LTS 扩展与 `/v8/management/*` 管理路由；Panel types/transforms 必须匹配当前 Core 或 live endpoint。
 - Panel release asset 必须精确命名为 `management.html`，Core updater 依赖该名称。
 - Core schema 变更时，检查 Panel API client、types、stores、pages、quota/auth-file 与 provider status；Panel schema expectation 变更时反向核对 Core。
 - 构建通过只证明本地编译，不证明 Core compatibility、release、deployment 或 live acceptance。
@@ -134,19 +134,26 @@ Contract truth 必须保持一致：
 | `npm run build` | `tsc && vite build`，生成 single-file `dist/index.html` | repo | UI/TS/release 变更的默认构建检查 |
 | `npm run lint` | ESLint `ts,tsx` | repo | 不覆盖 userscript JavaScript |
 | `npm run format` | Prettier 写入 `src/**/*.{ts,tsx,css,scss}` | `src/` | 会修改文件；仅在明确需要格式化时运行 |
-| `npm run test:usage` | usage cache/prices/import/effort/tier/pricing tests | usage chain | Node test aggregator |
-| `npm run test:providers` | xAI、provider integrity、recent requests tests | provider code | Node test aggregator |
-| `npm run test:plugins` | plugin source/repository trust tests | plugin store | Node/Vite test |
-| `npm run test:auth-files` | OAuth load guard 与 upstream quota-port tests | auth/quota | Node tests |
+| `npm run test:usage` | usage cache/diagnostics/prices/import/effort/tier/performance/pricing/query/analytics tests | usage chain | Node test aggregator（也可单独跑 `test:usage-*` 子命令） |
+| `npm run test:providers` | xAI、provider integrity、recent requests、connectivity tests | provider code | Node test aggregator（聚合 `test:provider-*`） |
+| `npm run test:plugins` | plugin resources、readiness、mutation-lock tests | plugins | Node tests |
+| `npm run test:auth-files` | OAuth guard、PAT/coding-plan credentials、quota、catalog sync、Claude reset grants + `test:zcode-credentials` | auth/quota | Node test aggregator |
+| `npm run test:zcode-credentials` | `scripts/zcode-credentials.mjs --self-test` | local CLI | Node self-test |
 | `npm run test:dashboard` | dashboard metric tests | dashboard | Node test |
-| `npm run test:config` | config API-key storage/security tests | config | Node test |
-| `npm run test:api-client` | connection-generation/client semantics | API client | Node test |
-| `npm run test:logs` | incremental log merge semantics | logs | Node test |
-| `npm run test:quota` | upstream quota-port semantics | quota | Node test |
+| `npm run test:config` | visual/v8 projection、replacements、auto-model、API-key security、navigation、Codex policy + `test:flow-control` | config | Node test aggregator |
+| `npm run test:flow-control` | local flow-control sidecar unit tests | flow control | Node tests |
+| `npm run test:codex-remote` | Codex remote cloud connect sidecar view-model tests | LTS sidecar | Node test |
+| `npm run test:api-client` | connection-generation/revision、config file/projection、catalog refresh、login proxy tests | API client | Node tests |
+| `npm run test:connections` | multi-instance connection profile storage tests | storage | Node test |
+| `npm run test:logs` | incremental log merge & request log follow-up tests | logs | Node tests |
+| `npm run test:ui` | shared UI、autocomplete、provider switch、theme、shortcut、models、OAuth provider/attempt tests | UI/shared | Node tests |
+| `npm run test:quota` | upstream quota-port & v8 quota compatibility/alignment tests | quota | Node tests |
+| `npm run test:provider-switch` | build + `scripts/guard-provider-switch.py` 页面门禁 | browser guard | 需要 Python Playwright 与浏览器 |
+| `npm run test:config-replacements` | build + `scripts/guard-config-replacements.py` 页面门禁 | browser guard | 需要 Python Playwright 与浏览器 |
 | `npm run check:feature-contract` | 校验 feature registry 的文件/route/API markers | LTS contract | 被 `check:lts` 包含 |
 | `npm run check:lts` | Panel LTS contract guard | repo | 轻量结构门禁，不替代 browser/Core smoke |
-| `npm run validate:lts` | 全部已配置 Node tests + contract + type-check + lint + build | repo | 默认广泛变更/port gate；可能耗时 |
-| `npm run smoke:lts` | build + mock Core browser smoke | local browser | 需要 Python Playwright 与 Chromium |
+| `npm run validate:lts` | 全部已配置 Node/browser gate tests + contract + type-check + lint + build | repo | 默认广泛变更/port gate；需要 Python Playwright 与浏览器 |
+| `npm run smoke:lts` | build + mock Core browser smoke | local browser | 需要 Python Playwright 与浏览器；另有 `smoke:config`、`smoke:connections`、`smoke:pat-accounts`、`smoke:v8-alignment`、`smoke:auth-files`、`smoke:credentials-help` 定向 smoke |
 | `npm run smoke:lts:core` | build + local sibling Core authenticated smoke | Panel + Core | 需要 Go、Core checkout、Python Playwright、Chromium 与 management credentials；可能写临时 smoke config |
 
 没有通用 `npm test`；报告实际运行的 `test:*` 或 `validate:lts`。
@@ -206,6 +213,6 @@ Contract truth 必须保持一致：
 ## Notes for future agents
 
 - 本仓库是单一 Web UI，不是 proxy server；server-side fixes 通常属于 `CPA-Core-LTS`。
-- Panel 通常由 API server 的 `/management.html` 提供，并调用 `/v0/management`；不要用 `file://dist/index.html` 代替 dev/preview browser validation。
+- Panel 通常由 API server 的 `/management.html` 提供，并通过 `/v8/management`（及 LTS 扩展 `/v0/management`）调用 Management API；不要用 `file://dist/index.html` 代替 dev/preview browser validation。
 - Quota/auth-file surfaces 共享 store、components 与 cache；底层模型改变时检查所有消费者。
 - Provider status bar 依赖完整 usage aggregation；usage 变更时一并检查。

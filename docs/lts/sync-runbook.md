@@ -466,7 +466,7 @@ Defer:
 ## Suggested workflow
 
 ```bash
-cd /Users/sky/Github/CPA-Panel-LTS
+cd <repo-parent>/CPA-Panel-LTS
 git fetch origin --prune --tags
 git fetch upstream --prune --tags
 

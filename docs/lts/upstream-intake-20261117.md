@@ -30,4 +30,10 @@
 - 新浏览器门禁接入 `test:config-replacements`、`validate:lts` 和 LTS Panel Contract workflow，复用现有 Python/Playwright 安装步骤。
 - 三组真实浏览器 × 临时 Core 矩阵通过：候选 Panel × 候选 Core、候选 Panel × main Core、main Panel × 候选 Core。主线核验坐标分别为 Panel `f02f39d9`、Core `11195efd5`。
 - 真实候选 Core 验证有序/空替换持久化、非法小数位置返回 422 且原配置不变；真实 main Core 对不支持的 replace 返回 400 且原配置不变。
-- 所有 Core 写入验收只使用临时目录、synthetic credentials 和 localhost。云 CI 结果以 PR 最终 SHA 回读为准；未执行合并、发布或部署。
+- 所有 Core 写入验收只使用临时目录、synthetic credentials 和 localhost。
+
+## 后续合入与演进状态
+
+- 本批作为 Panel PR #157（`9e1dc7f7`）合入 `main`，配套 Core stack `#371`–`#373` 同步合入 Core `main`；独立品牌图标批次作为 PR #156（`d6667322`）合入。
+- 上游后续提交 `55a41a6f`（模型 `display-name` 分离展示与过滤）与 `e5eb4fe6`（增强型 `payload.replace` 规则）已在 PR #159（`cd84199b`）完成 adapt-port。
+- Wave 1 PR #166（`278a69c4`，包含于 `v1-lts-0.2.6`）进一步收敛了配置替换边界：`payload.replace` 与敏感词替换校验统一受 `dirtyFields` 门控、兼容 YAML 锚点/别名与显式 `null`、拒绝全空白 `request-paths`，并在字面量与正则模式切换时原地迁移节点以保留 YAML 注释和锚点。
