@@ -7,6 +7,26 @@ import { createServer } from 'vite';
 // because the reviewed defects were about lock lifetime, not shape:
 // leaving a route must not release an in-flight mutation, coming back must not
 // unlock it early, and a connection switch must drop stale registrations.
+const createMemoryStorage = () => {
+  const values = new Map();
+  return {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, String(value)),
+    removeItem: (key) => values.delete(key),
+    clear: () => values.clear(),
+  };
+};
+const originalLocalStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+const originalSessionStorage = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage');
+Object.defineProperty(globalThis, 'localStorage', {
+  configurable: true,
+  value: createMemoryStorage(),
+});
+Object.defineProperty(globalThis, 'sessionStorage', {
+  configurable: true,
+  value: createMemoryStorage(),
+});
+
 const vite = await createServer({
   appType: 'custom',
   logLevel: 'silent',
@@ -21,7 +41,16 @@ const { waitForPluginState, waitForPluginStoreState } = await vite.ssrLoadModule
   '/src/features/plugins/pluginPolling.ts'
 );
 const { useAuthStore } = await vite.ssrLoadModule('/src/stores/useAuthStore.ts');
-test.after(() => vite.close());
+test.after(async () => {
+  await vite.close();
+  if (originalLocalStorage) Object.defineProperty(globalThis, 'localStorage', originalLocalStorage);
+  else delete globalThis.localStorage;
+  if (originalSessionStorage) {
+    Object.defineProperty(globalThis, 'sessionStorage', originalSessionStorage);
+  } else {
+    delete globalThis.sessionStorage;
+  }
+});
 
 const busy = () => {
   const state = usePluginMutationStore.getState();
