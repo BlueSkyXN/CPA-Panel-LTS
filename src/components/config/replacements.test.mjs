@@ -381,7 +381,7 @@ requests:
   assert.match(converted.output, /\*lk\b[\s\S]*lit-edited/);
   assert.match(converted.output, /\*kp\b[\s\S]*\*vp/);
   assert.match(converted.output, /\*kr\b[\s\S]*rep-edited/);
-  assert.match(converted.output, /\{back-to-lit: &repAnchor "\$2"\}|\{ back-to-lit: &repAnchor "\$2" \}/);
+  assert.match(converted.output, /\{\s*&patAnchor "back-to-lit": &repAnchor "\$2"\s*\}/);
   const parsedReplacements = parse(converted.output).requests.payload.replace[0].replacements;
   assert.deepEqual(parsedReplacements, [
     { pattern: '(?i)lit', replacement: 'v2' },
@@ -391,6 +391,35 @@ requests:
   ]);
   for (const item of parsedReplacements) {
     assert.ok(Object.keys(item).length === 1 || Object.keys(item).length === 2);
+  }
+});
+
+test('changing replacement mode keeps the source and destination anchors bound to their operands', () => {
+  for (const [source, regex, expected] of [
+    ['{&word alpha: &result beta}', true, { pattern: 'alpha', replacement: 'beta' }],
+    ['{pattern: &word alpha, replacement: &result beta}', undefined, { alpha: 'beta' }],
+  ]) {
+    const yaml = `requests:
+  payload:
+    replace:
+      - models: [{name: '*'}]
+        target: {role: user, all: true}
+        replacements:
+          - ${source}
+          - *word : *result
+`;
+    const saved = run(yaml, ({ payloadReplaceRules: [rule] }) => ({
+      payloadReplaceRules: [{
+        ...rule,
+        replacements: [{ ...rule.replacements[0], regex }, rule.replacements[1]],
+      }],
+    }));
+    assert.equal(saved.error, undefined);
+    assert.deepEqual(parse(saved.output).requests.payload.replace[0].replacements, [
+      expected, { alpha: 'beta' },
+    ]);
+    assert.match(saved.output, /\*word\b/);
+    assert.match(saved.output, /\*result\b/);
   }
 });
 

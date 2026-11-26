@@ -1320,6 +1320,22 @@ function setScalarValue(scalar: Scalar, value: unknown): void {
   scalar.value = value;
 }
 
+function replacementTextChanged(node: unknown, previous: string | undefined, next: string): boolean {
+  return previous !== next || (isScalar(node) && typeof node.value !== 'string');
+}
+
+// A regex field disappears when the entry becomes a literal pair. Keep its
+// leading comments with the operand that survives the conversion.
+function replacementFieldOperand(pair: Pair): unknown {
+  const node = pair.value;
+  if (isNode(node) && isNode(pair.key)) {
+    const comments = [pair.key.commentBefore, pair.key.comment, node.commentBefore].filter(Boolean);
+    if (comments.length) node.commentBefore = comments.join('\n');
+    if (pair.key.spaceBefore) node.spaceBefore = true;
+  }
+  return node;
+}
+
 function setPairKey(doc: YamlDocument, pair: Pair, key: string): void {
   if (isScalar(pair.key)) {
     setScalarValue(pair.key, key);
@@ -1710,110 +1726,43 @@ function syncPayloadReplaceSequence(
           const existing = entryNodes.get(entry.id);
           if (isAlias(existing)) throw new VisualConfigApplyError('visual_apply_failed');
           const map = isMap(existing) ? existing : (doc.createNode({}) as YAMLMap);
+          const pattern = mapPair(map, 'pattern', doc);
+          const replacement = mapPair(map, 'replacement', doc);
+          const literal: Pair = map.items[0] ?? doc.createPair(entry.from, entry.to);
+          // Move the operands between literal and regex forms. Their anchors,
+          // aliases and scalar styles belong to the text, not the field names.
           if (entry.regex) {
-            const patternPair = mapPair(map, 'pattern', doc);
-            const replacementPair = mapPair(map, 'replacement', doc);
-            if (patternPair && replacementPair) {
-              if (!priorEntry?.regex || priorEntry.from !== entry.from) {
-                updatePairValue(doc, patternPair, entry.from);
-              }
-              if (!priorEntry?.regex || priorEntry.to !== entry.to) {
-                updatePairValue(doc, replacementPair, entry.to);
-              }
-              map.items = map.items.filter(
-                (pair) => pair === patternPair || pair === replacementPair
-              );
-              return map;
-            }
-
-            const unusedPairs = map.items.filter(
-              (pair) => pair !== patternPair && pair !== replacementPair
-            );
-            let nextPatternPair = patternPair ?? unusedPairs.shift();
-            let nextReplacementPair = replacementPair ?? unusedPairs.shift();
-            const singleLiteralValue =
-              !priorEntry?.regex && map.items.length === 1 ? map.items[0]?.value : undefined;
-            if (nextPatternPair) {
-              setPairKey(doc, nextPatternPair, 'pattern');
-              if (singleLiteralValue !== undefined) {
-                nextPatternPair.value = doc.createNode(entry.from);
-              } else if (!patternPair || !priorEntry?.regex || priorEntry.from !== entry.from) {
-                updatePairValue(doc, nextPatternPair, entry.from);
-              }
+            let from = pattern;
+            let to = replacement;
+            if (!from || !to) {
+              from = doc.createPair('pattern', null);
+              to = doc.createPair('replacement', null);
+              from.value = literal.key;
+              to.value = literal.value;
+              map.items = [from, to];
             } else {
-              nextPatternPair = doc.createPair('pattern', entry.from);
+              map.items = map.items.filter((pair) => pair === from || pair === to);
             }
-            if (nextReplacementPair) {
-              setPairKey(doc, nextReplacementPair, 'replacement');
-              if (!replacementPair || !priorEntry?.regex || priorEntry.to !== entry.to) {
-                updatePairValue(doc, nextReplacementPair, entry.to);
-              }
-            } else {
-              nextReplacementPair = doc.createPair('replacement', entry.to);
-              if (singleLiteralValue && typeof singleLiteralValue === 'object') {
-                if (isAlias(singleLiteralValue)) {
-                  nextReplacementPair.value =
-                    !priorEntry || priorEntry.to === entry.to
-                      ? singleLiteralValue
-                      : preserveNodeComments(
-                          singleLiteralValue as Node,
-                          doc.createNode(entry.to)
-                        );
-                } else {
-                  nextReplacementPair.value = singleLiteralValue;
-                  updatePairValue(doc, nextReplacementPair, entry.to);
-                }
-              }
+            if (replacementTextChanged(from.value, priorEntry?.from, entry.from)) {
+              updatePairValue(doc, from, entry.from);
             }
-            map.items = [nextPatternPair, nextReplacementPair];
-            return map;
-          }
-
-          if (priorEntry?.regex) {
-            const patternPair = mapPair(map, 'pattern', doc);
-            const replacementPair = mapPair(map, 'replacement', doc);
-            const pair = patternPair ?? map.items[0];
-            if (pair) {
-              setPairKey(doc, pair, entry.from);
-              if (
-                replacementPair &&
-                replacementPair !== pair &&
-                replacementPair.value &&
-                typeof replacementPair.value === 'object'
-              ) {
-                if (isAlias(replacementPair.value)) {
-                  pair.value =
-                    priorEntry.to === entry.to
-                      ? replacementPair.value
-                      : preserveNodeComments(
-                          replacementPair.value as Node,
-                          doc.createNode(entry.to)
-                        );
-                } else {
-                  pair.value = replacementPair.value;
-                  updatePairValue(doc, pair, entry.to);
-                }
-              } else {
-                updatePairValue(doc, pair, entry.to);
-              }
-              map.items = [pair];
-            } else {
-              map.items = [doc.createPair(entry.from, entry.to)];
+            if (replacementTextChanged(to.value, priorEntry?.to, entry.to)) {
+              updatePairValue(doc, to, entry.to);
             }
-            return map;
-          }
-
-          const pair = map.items[0];
-          if (pair) {
-            if (!priorEntry || priorEntry.regex || priorEntry.from !== entry.from) {
-              setPairKey(doc, pair, entry.from);
-            }
-            if (!priorEntry || priorEntry.regex || priorEntry.to !== entry.to) {
-              updatePairValue(doc, pair, entry.to);
-            }
-            map.items = [pair];
           } else {
-            map.items = [doc.createPair(entry.from, entry.to)];
+            if (pattern && replacement) {
+              const sourceNode = replacementFieldOperand(pattern);
+              const destinationNode = replacementFieldOperand(replacement);
+              literal.key = sourceNode;
+              literal.value = destinationNode;
+            }
+            if (replacementTextChanged(literal.key, priorEntry?.from, entry.from)) {
+              setPairKey(doc, literal, entry.from);
+            }
+            if (replacementTextChanged(literal.value, priorEntry?.to, entry.to)) {
+              updatePairValue(doc, literal, entry.to);
+            }
+            map.items = [literal];
           }
           return map;
         })
