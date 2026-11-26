@@ -20,6 +20,12 @@ const count = (v: unknown): number | undefined =>
   typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? v : undefined;
 const list = (v: unknown, limit: number): unknown[] => (Array.isArray(v) ? v.slice(0, limit) : []);
 
+export function normalizeDiagnosticsId(value: unknown): string | undefined {
+  if (typeof value !== 'string' || value.length !== 64) return undefined;
+  const digest = value.toLowerCase();
+  return isCacheDigest(digest) ? digest : undefined;
+}
+
 export function readCacheObservation(value: unknown): CacheObservation | undefined {
   const root = object(value);
   if (root?.version !== 1) return undefined;
@@ -84,7 +90,7 @@ export function decodeCacheTrace(value: unknown): CacheTrace | null {
     return null;
   return {
     version: 1,
-    id: text(r.id),
+    id: normalizeDiagnosticsId(r.id) ?? text(r.id),
     instance_id: text(r.instance_id),
     logical_request_id: text(r.logical_request_id),
     session_hash: text(r.session_hash),
@@ -287,7 +293,7 @@ export function decodeTraceLocation(value: unknown): CacheTraceLocation {
   const v = object(value);
   return {
     instance_id: isCacheLookupId(v?.instance_id) ? v.instance_id : undefined,
-    diagnostics_id: isCacheDigest(v?.diagnostics_id) ? v.diagnostics_id : undefined,
+    diagnostics_id: normalizeDiagnosticsId(v?.diagnostics_id),
     trace_id: isCacheLookupId(v?.trace_id) ? v.trace_id : undefined,
     request_id: isCacheLookupId(v?.request_id) ? v.request_id : undefined,
     attempt: count(v?.attempt),

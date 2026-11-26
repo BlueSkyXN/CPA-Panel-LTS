@@ -1,7 +1,7 @@
 import { isRecord } from '@/utils/helpers';
 import { ltsExtensionClient } from './client';
 import type { CacheDiagnosticsCapabilities, CacheTraceQuery } from '@/types/cacheDiagnostics';
-import { decodeCacheSession, decodeCacheTrace, decodeTracePage, isCacheLookupId } from '@/utils/usage/cacheDiagnostics';
+import { decodeCacheSession, decodeCacheTrace, decodeTracePage, isCacheLookupId, normalizeDiagnosticsId } from '@/utils/usage/cacheDiagnostics';
 
 export function captureCacheDiagnosticsClient() {
   const generation = ltsExtensionClient.getConnectionGeneration();
@@ -10,14 +10,14 @@ export function captureCacheDiagnosticsClient() {
   return {
     isCurrent,
     async trace(id: string, signal?: AbortSignal, instanceId?: string) {
-      if (!/^[a-f0-9]{64}$/i.test(id)) throw new Error('Invalid diagnostic id');
-      const normalizedId = id.toLowerCase();
+      const normalizedId = normalizeDiagnosticsId(id);
+      if (!normalizedId) throw new Error('Invalid diagnostic id');
       const value = await client.get<unknown>(
         `/cache-diagnostics/requests/${encodeURIComponent(normalizedId)}`,
         { signal, params: instanceId ? { instance_id: instanceId } : undefined }
       );
       const trace = isCurrent() ? decodeCacheTrace(value) : null;
-      return trace?.id.toLowerCase() === normalizedId && (!instanceId || trace.instance_id === instanceId)
+      return trace?.id === normalizedId && (!instanceId || trace.instance_id === instanceId)
         ? trace
         : null;
     },

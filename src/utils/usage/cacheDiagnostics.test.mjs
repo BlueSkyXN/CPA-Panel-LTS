@@ -153,3 +153,14 @@ test('shortCredentialLabel keeps short names, hex prefixes and named suffixes di
  assert.notEqual(shortCredentialLabel('codex-oauth-1'), shortCredentialLabel('codex-oauth-2'));
  assert.equal(shortCredentialLabel('codex-oauth-1'), 'codex-…th-1');
 });
+test('cache navigation normalizes diagnostic digests and preserves opaque identifiers', async () => {
+  const { readCacheLocation, cacheLocationSearch } = await vite.ssrLoadModule('/src/utils/usage/cacheNavigation.ts');
+  const upper = 'AB'.repeat(32);
+  const query = new URLSearchParams({ diagnostics: upper, execution: upper, instance: 'Instance-A' });
+  const location = readCacheLocation(query);
+  assert.equal(location.diagnostics_id, upper.toLowerCase());
+  assert.equal(location.request_id, upper);
+  assert.equal(location.instance_id, 'Instance-A');
+  assert.equal(new URLSearchParams(cacheLocationSearch(location)).get('diagnostics'), upper.toLowerCase());
+  assert.equal(readCacheLocation(new URLSearchParams({ diagnostics: 'x'.repeat(64) })).diagnostics_id, undefined);
+});

@@ -9,8 +9,8 @@ import { useAuthStore } from '@/stores/useAuthStore';
 import { ltsExtensionClient } from '@/services/api/client';
 import { captureCacheDiagnosticsClient } from '@/services/api/cacheDiagnostics';
 import { isRecord } from '@/utils/helpers';
-import { cacheAttemptFailed, cacheAttemptTransport, cacheFieldSummary, cacheExecutionPath, diffCachePayloads, isCacheLookupId, readRate, shortCredentialLabel } from '@/utils/usage/cacheDiagnostics';
-import { cacheRouteKey, isCacheDigest } from '@/utils/usage/cacheRoute';
+import { cacheAttemptFailed, cacheAttemptTransport, cacheFieldSummary, cacheExecutionPath, diffCachePayloads, isCacheLookupId, normalizeDiagnosticsId, readRate, shortCredentialLabel } from '@/utils/usage/cacheDiagnostics';
+import { cacheRouteKey } from '@/utils/usage/cacheRoute';
 import {
   cacheLocationSearch, cacheTraceRowKey, readCacheLocation, readCacheReturnContext, readCacheUsageRow,
 } from '@/utils/usage/cacheNavigation';
@@ -195,10 +195,11 @@ function CacheAnalysisWorkspace({ connection, connected }: { connection: string;
   const pinned = linkedRows.length === 1 && !records.page?.next_cursor ? linkedRows[0] : undefined;
   const unique = !linkedLookup && q && matches.length === 1 && !records.page?.next_cursor ? matches[0] : null;
   const selected = picked ?? pinned ?? unique ?? linkedUsage;
-  const legacyID = oldCore && (!linkedLookup || linkMatchesInstance) ? (submitted ?? link.diagnostics_id ?? '') : '';
+  const legacyID = oldCore && (!linkedLookup || linkMatchesInstance)
+    ? normalizeDiagnosticsId(submitted ?? link.diagnostics_id) : undefined;
   const directLink = supported && linkedLookup && linkMatchesInstance && !records.loading && !records.error &&
     !records.page?.next_cursor && matches.length === 0 && link.diagnostics_id ? link : null;
-  const target = isCacheDigest(legacyID)
+  const target = legacyID
     ? { diagnostics_id: legacyID, instance_id: (linkedLookup ? link.instance_id : undefined) ?? (instance || undefined) }
     : selected?.available && selected.instance_id === instance ? selected : directLink;
   const detail = useTraceDetail(target, active && Boolean(target), revision);
@@ -424,7 +425,7 @@ function CacheAnalysisWorkspace({ connection, connected }: { connection: string;
       <form className={styles.search} onSubmit={(event) => {
         event.preventDefault();
         const id = draft.trim();
-        const valid = oldCore ? isCacheDigest(id) : isCacheLookupId(id);
+        const valid = oldCore ? Boolean(normalizeDiagnosticsId(id)) : isCacheLookupId(id);
         setFormError(!valid);
         if (!valid) return;
         setPicked(null);

@@ -181,11 +181,16 @@ def main():
             page.goto(app_url + "?route=legacy-cache-analysis#/analytics/cache", wait_until="domcontentloaded")
             page.get_by_text("This Core can open a single diagnostic ID.", exact=True).wait_for()
             field = page.get_by_role("searchbox", name="Diagnostic record ID")
-            field.fill(TRACE)
+            field.fill(TRACE.upper())
             field.press("Enter")
             page.get_by_text("Outbound attempt 2 · WebSocket", exact=False).wait_for()
 
             CacheHandler.mode = "search"
+            state.requests.clear()
+            page.goto(app_url + "?route=cache-diagnostic-link#/analytics/cache?diagnostics=" + TRACE.upper(), wait_until="domcontentloaded")
+            page.get_by_text("Outbound attempt 2 · WebSocket", exact=False).wait_for()
+            if not any(req.startswith("GET /v0/management/cache-diagnostics/traces?") and "q=" + TRACE in req for req in state.requests):
+                raise AssertionError("The diagnostic link did not query its canonical digest")
             state.requests.clear()
             page.goto(app_url + "?route=cache-trace-link#/analytics/cache?trace=shared-log", wait_until="domcontentloaded")
             page.locator("#cache-timeline-heading").wait_for()
