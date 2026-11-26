@@ -25,7 +25,8 @@ export type CodexAbnormalReasoningRetryHedgedRetryMode = 'speed' | 'quality';
 export type PayloadParamValidationErrorCode =
   | 'payload_invalid_number'
   | 'payload_invalid_boolean'
-  | 'payload_invalid_json';
+  | 'payload_invalid_json'
+  | 'payload_invalid_request_paths';
 
 export type VisualConfigFieldPath =
   | 'antigravitySensitiveWordsReplace'
@@ -192,7 +193,6 @@ export type VisualConfigValues = FlowControlValues & {
   routingSessionAffinity: boolean;
   routingSessionAffinityTTL: string;
   wsAuth: boolean;
-  enableGeminiCliEndpoint: boolean;
   antigravitySignatureCacheEnabled: boolean;
   antigravitySensitiveWordsReplace: LiteralReplacementDraft[];
   devinSensitiveWordsReplace: LiteralReplacementDraft[];
@@ -298,7 +298,6 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   routingSessionAffinity: false,
   routingSessionAffinityTTL: '',
   wsAuth: true,
-  enableGeminiCliEndpoint: false,
   antigravitySignatureCacheEnabled: true,
   antigravitySensitiveWordsReplace: [],
   devinSensitiveWordsReplace: [],

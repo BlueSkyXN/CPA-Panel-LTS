@@ -427,7 +427,7 @@ export function BaseProviderForm({
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const v = form.cloak && (serializeLiteralDraft(form.cloak.sensitiveWordsReplace) === null || form.cloak.sensitivePatternsReplace.some((rule) => !rule.pattern))
+    const v = form.cloak && (serializeLiteralDraft(form.cloak.sensitiveWordsReplace) === null || form.cloak.sensitivePatternsReplace.some((rule) => !rule.pattern.trim()))
       ? t('config_management.visual.validation.sensitive_replacements_invalid') : validate();
     if (v) {
       setError(v);

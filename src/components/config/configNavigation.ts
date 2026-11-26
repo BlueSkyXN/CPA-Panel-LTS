@@ -466,11 +466,6 @@ export const CONFIG_FIELDS = {
     yamlKey: 'ws-auth',
     fullWidth: false,
   },
-  enableGeminiCliEndpoint: {
-    labelKey: 'config_management.visual.sections.network.enable_gemini_cli_endpoint',
-    yamlKey: 'enable-gemini-cli-endpoint',
-    fullWidth: false,
-  },
   quotaSwitchProject: {
     labelKey: 'config_management.visual.sections.quota.switch_project',
     yamlKey: 'quota-exceeded.switch-project',
@@ -737,10 +732,6 @@ export const CONFIG_DOMAINS = [
       {
         id: 'devin',
         fields: ['devinSensitiveWords', 'devinSensitiveWordsReplace', 'devinSensitivePatternsReplace'],
-      },
-      {
-        id: 'gemini',
-        fields: ['enableGeminiCliEndpoint'],
       },
       {
         id: 'images',

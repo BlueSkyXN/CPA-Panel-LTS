@@ -1916,7 +1916,6 @@
           },
           "compatibility": {
             "antigravity": "调整 Antigravity 专属兼容行为；额度补偿属于此提供方，不是通用配额回退。",
-            "gemini": "选择 Gemini CLI 使用的端点；建议有明确连通性或兼容性需求时再调整。",
             "images": "设置图像生成模式与基础模型；模式决定请求处理方式，基础模型不等于客户端请求的图像模型名称。",
             "devin": "仅处理 Devin 系统提示词：含配置词的整行会被删除，剩余系统提示词再进行混淆；普通消息和工具参数不会被修改"
           },
@@ -1963,7 +1962,6 @@
         "codex-policy_hedging": "对冲重试",
         "codex-policy_delivery": "交付与用量",
         "compatibility_antigravity": "Antigravity",
-        "compatibility_gemini": "Gemini CLI",
         "compatibility_images": "图像生成",
         "payload_defaults": "默认规则",
         "payload_overrides": "覆盖规则",
@@ -2310,9 +2308,7 @@
           "disable_cooling_desc": "全局禁用认证/模型失败后的冷却窗口",
           "session_affinity": "会话亲和性路由",
           "ws_auth": "WebSocket 认证",
-          "ws_auth_desc": "启用 WebSocket 连接认证 (/v1/ws)",
-          "enable_gemini_cli_endpoint": "启用 Gemini CLI 内部端点",
-          "enable_gemini_cli_endpoint_desc": "启用 /v1internal:* 兼容端点"
+          "ws_auth_desc": "启用 WebSocket 连接认证 (/v1/ws)"
         },
         "quota": {
           "title": "配额回退",
@@ -2437,6 +2433,7 @@
         "payload_invalid_number": "请输入有效数字",
         "payload_invalid_boolean": "请选择 true 或 false",
         "payload_invalid_json": "请输入有效的 JSON",
+        "payload_invalid_request_paths": "请至少输入一个以 / 开头的精确请求路径（不支持通配符、查询参数或空格），或清空此字段以匹配所有路径。",
         "reasoning_effort_rules": "请填写模型范围、选择有效策略，并为缺省或强制策略选择强度。",
         "payload_replace_invalid_target": "目标角色必须为 user、system 或 developer。",
         "payload_replace_invalid_positions": "请选择该角色的所有消息，或输入非空的正整数位置列表，两者不能同时指定。",

@@ -11,13 +11,17 @@ export const literalDraftFromMap = (value: Record<string, string>): LiteralRepla
   Object.entries(value).map(([key, value], index) => ({ id: `literal-${index}`, key, value }));
 
 // Keep incomplete and duplicate rows in the host draft; saving requires a lossless map.
+// Trim keys to match Core NormalizeSensitiveWordsReplace while preserving replacement values verbatim.
 export function serializeLiteralDraft(
   rows: LiteralReplacementDraft[]
 ): Record<string, string> | null {
+  const entries: Array<[string, string]> = [];
   const keys = new Set<string>();
   for (const row of rows) {
-    if (!row.key || keys.has(row.key)) return null;
-    keys.add(row.key);
+    const key = row.key.trim();
+    if (!key || keys.has(key)) return null;
+    keys.add(key);
+    entries.push([key, row.value]);
   }
-  return Object.fromEntries(rows.map(({ key, value }) => [key, value]));
+  return Object.fromEntries(entries);
 }

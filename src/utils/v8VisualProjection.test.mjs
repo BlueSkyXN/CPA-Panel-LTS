@@ -14,7 +14,7 @@ const { useVisualConfig, getVisualConfigValidationErrors } = await vite.ssrLoadM
   '/src/hooks/useVisualConfig.ts'
 );
 const { DEFAULT_VISUAL_VALUES } = await vite.ssrLoadModule('/src/types/visualConfig.ts');
-const { projectConfigForVisual } = await vite.ssrLoadModule('/src/utils/v8VisualProjection.ts');
+const { projectConfigForVisual, applyVisualProjection } = await vite.ssrLoadModule('/src/utils/v8VisualProjection.ts');
 const { assertConfigListsUnchanged } = await vite.ssrLoadModule('/src/utils/configListConflict.ts');
 test.after(() => vite.close());
 
@@ -266,4 +266,40 @@ test('main Codex controls round-trip through shared V8 scope', () => {
   assert.equal(result.oauth?.providers?.codex?.outbound, undefined);
   assert.equal(result.codex, undefined);
   assert.deepEqual(result['api-keys'], parse(grouped)['api-keys']);
+});
+
+test('P1-08: legacy enable-gemini-cli-endpoint loads and survives untouched edits, throwing only on mutation', () => {
+  assert.equal('enableGeminiCliEndpoint' in DEFAULT_VISUAL_VALUES, false);
+
+  for (const rawValue of ['true', 'false', 'off']) {
+    const legacyYaml = `server: {port: 8317}\nenable-gemini-cli-endpoint: ${rawValue}\n`;
+    const output = apply(legacyYaml, () => ({ port: '8318' }));
+    assert.equal(parse(output).server.port, 8318);
+    assert.match(output, new RegExp(`enable-gemini-cli-endpoint: ${rawValue}`));
+  }
+
+  const withField = 'server: {port: 8317}\nenable-gemini-cli-endpoint: true\n';
+  const before = projectConfigForVisual(withField);
+  const toggled = projectConfigForVisual(withField);
+  toggled.setIn(['enable-gemini-cli-endpoint'], false);
+  assert.throws(
+    () => applyVisualProjection(withField, before, toggled),
+    /Unsupported configuration field/
+  );
+
+  const deleted = projectConfigForVisual(withField);
+  deleted.deleteIn(['enable-gemini-cli-endpoint']);
+  assert.throws(
+    () => applyVisualProjection(withField, before, deleted),
+    /Unsupported configuration field/
+  );
+
+  const withoutField = 'server: {port: 8317}\n';
+  const beforeClean = projectConfigForVisual(withoutField);
+  const added = projectConfigForVisual(withoutField);
+  added.setIn(['enable-gemini-cli-endpoint'], true);
+  assert.throws(
+    () => applyVisualProjection(withoutField, beforeClean, added),
+    /Unsupported configuration field/
+  );
 });

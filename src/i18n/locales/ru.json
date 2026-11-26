@@ -1923,7 +1923,6 @@
           },
           "compatibility": {
             "antigravity": "Настройте совместимость Antigravity. Компенсация квоты этого провайдера отличается от общего резервного маршрута.",
-            "gemini": "Выберите конечную точку Gemini CLI. Меняйте её при конкретной проблеме подключения или совместимости.",
             "images": "Настройте режим генерации изображений и базовую модель. Режим задаёт обработку; базовая модель не равна имени модели изображений в запросе клиента.",
             "devin": "Обрабатываются только системные промпты Devin: строка с настроенным словом удаляется целиком, затем оставшийся промпт обфусцируется. Обычные сообщения и аргументы инструментов не изменяются"
           },
@@ -1970,7 +1969,6 @@
         "codex-policy_hedging": "Параллельные повторы",
         "codex-policy_delivery": "Выдача и статистика",
         "compatibility_antigravity": "Antigravity",
-        "compatibility_gemini": "Gemini CLI",
         "compatibility_images": "Генерация изображений",
         "payload_defaults": "Правила по умолчанию",
         "payload_overrides": "Правила замены",
@@ -2317,9 +2315,7 @@
           "disable_cooling_desc": "Глобально отключить окна охлаждения auth/model после ошибок",
           "session_affinity": "Маршрутизация с привязкой к сессии",
           "ws_auth": "Аутентификация WebSocket",
-          "ws_auth_desc": "Включить аутентификацию WebSocket (/v1/ws)",
-          "enable_gemini_cli_endpoint": "Включить внутренний endpoint Gemini CLI",
-          "enable_gemini_cli_endpoint_desc": "Включить совместимые endpoints /v1internal:*"
+          "ws_auth_desc": "Включить аутентификацию WebSocket (/v1/ws)"
         },
         "quota": {
           "title": "Резерв по квоте",
@@ -2444,6 +2440,7 @@
         "payload_invalid_number": "Введите корректное число",
         "payload_invalid_boolean": "Выберите true или false",
         "payload_invalid_json": "Введите корректный JSON",
+        "payload_invalid_request_paths": "Укажите хотя бы один точный путь запроса, начинающийся с / (без подстановок, параметров и пробелов), или очистите поле для всех путей.",
         "reasoning_effort_rules": "Укажите модели, выберите политику и уровень для правил default или force.",
         "payload_replace_invalid_target": "Роль цели должна быть user, system или developer.",
         "payload_replace_invalid_positions": "Выберите все сообщения роли или задайте непустой список положительных номеров позиций, но не оба варианта.",
