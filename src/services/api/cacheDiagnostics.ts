@@ -11,12 +11,15 @@ export function captureCacheDiagnosticsClient() {
     isCurrent,
     async trace(id: string, signal?: AbortSignal, instanceId?: string) {
       if (!/^[a-f0-9]{64}$/i.test(id)) throw new Error('Invalid diagnostic id');
+      const normalizedId = id.toLowerCase();
       const value = await client.get<unknown>(
-        `/cache-diagnostics/requests/${encodeURIComponent(id)}`,
+        `/cache-diagnostics/requests/${encodeURIComponent(normalizedId)}`,
         { signal, params: instanceId ? { instance_id: instanceId } : undefined }
       );
       const trace = isCurrent() ? decodeCacheTrace(value) : null;
-      return trace?.id === id && (!instanceId || trace.instance_id === instanceId) ? trace : null;
+      return trace?.id.toLowerCase() === normalizedId && (!instanceId || trace.instance_id === instanceId)
+        ? trace
+        : null;
     },
     async capabilities(signal?: AbortSignal): Promise<CacheDiagnosticsCapabilities> {
       const raw = await client.get<unknown>('/cache-diagnostics/capabilities', { signal });
@@ -39,13 +42,23 @@ export function captureCacheDiagnosticsClient() {
       const value = await client.get<unknown>('/cache-diagnostics/traces', { params: query, signal });
       return isCurrent() ? decodeTracePage(value) : null;
     },
-    async session(provider: string, model: string, sessionHash: string, diagnosticId: string) {
-      const value = await client.post<unknown>('/cache-diagnostics/session', {
-        provider,
-        model,
-        session_hash: sessionHash,
-        diagnostics_id: diagnosticId,
-      });
+    async session(
+      provider: string,
+      model: string,
+      sessionHash: string,
+      diagnosticId: string,
+      signal?: AbortSignal
+    ) {
+      const value = await client.post<unknown>(
+        '/cache-diagnostics/session',
+        {
+          provider,
+          model,
+          session_hash: sessionHash.toLowerCase(),
+          diagnostics_id: diagnosticId.toLowerCase(),
+        },
+        { signal }
+      );
       return isCurrent() ? decodeCacheSession(value) : null;
     },
   };

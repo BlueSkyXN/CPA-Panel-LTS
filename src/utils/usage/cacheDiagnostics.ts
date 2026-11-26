@@ -29,7 +29,7 @@ export function readCacheObservation(value: unknown): CacheObservation | undefin
     if (state !== 'present' && state !== 'absent' && state !== 'invalid') return undefined;
     const n = count(f?.value);
     if (state === 'present' && n === undefined) return undefined;
-    if (state !== 'present' && f?.value !== undefined) return undefined;
+    if (state !== 'present' && f?.value != null) return undefined;
     if (
       f?.source !== undefined &&
       f.source !== null &&

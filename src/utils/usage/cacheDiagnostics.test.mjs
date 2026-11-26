@@ -16,10 +16,17 @@ const obs = (read) => ({version:1,read,write:absent});
 test('cache provenance distinguishes explicit zero, absence, invalid and legacy', () => {
  assert.equal(readCacheObservation(obs({state:'present',value:0,source:'input_tokens_details.cached_tokens'})).read.value,0);
  assert.equal(readCacheObservation(obs(absent)).read.state,'absent');
+ const absentNull = readCacheObservation(obs({state:'absent',value:null}));
+ assert.equal(absentNull?.read.state,'absent');
+ assert.equal(Object.hasOwn(absentNull.read,'value'),false);
+ const invalidNull = readCacheObservation(obs({state:'invalid',value:null}));
+ assert.equal(invalidNull?.read.state,'invalid');
+ assert.equal(Object.hasOwn(invalidNull.read,'value'),false);
  assert.equal(readCacheObservation(obs({state:'invalid'})).read.state,'invalid');
  assert.equal(readCacheObservation(undefined),undefined);
  for (const value of [-1,0.5,'0',null,Number.MAX_SAFE_INTEGER+1]) assert.equal(readCacheObservation(obs({state:'present',value})),undefined);
  assert.equal(readCacheObservation(obs({state:'absent',value:0})),undefined);
+ assert.equal(readCacheObservation(obs({state:'invalid',value:0})),undefined);
 });
 const field = (char) => ({ digest:char.repeat(64) });
 const body = (fields) => ({known:true,bytes:123,fields});
@@ -77,6 +84,8 @@ test('import preflight rejects contradictory cache evidence without inventing ol
  const detail={timestamp:'2026-01-01T00:00:00Z',source:'synthetic',auth_index:'A',tokens:{input_tokens:100,output_tokens:1,reasoning_tokens:0,cached_tokens:0,cache_read_tokens:0,cache_creation_tokens:0,total_tokens:101},failed:false};
  const envelope=(observation)=>({version:3,usage:{apis:{endpoint:{models:{model:{details:[{...detail,...(observation ? {cache_observation:observation}: {})}]}}}}}});
  assert.equal(analyzeUsageImport(envelope(obs(absent))).valid,true);
+ assert.equal(analyzeUsageImport(envelope({version:1,read:{state:'absent',value:null},write:{state:'present',value:0,source:'cached_tokens'}})).valid,true);
+ assert.equal(analyzeUsageImport(envelope(obs({state:'invalid',value:null}))).valid,true);
  assert.equal(analyzeUsageImport(envelope()).valid,true);
  assert.equal(analyzeUsageImport(envelope(obs({state:'absent',value:0}))).valid,false);
  assert.equal(analyzeUsageImport(envelope(obs({state:'present',value:0,source:'x'.repeat(97)}))).valid,false);

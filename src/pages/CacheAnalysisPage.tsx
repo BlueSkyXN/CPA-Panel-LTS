@@ -114,10 +114,11 @@ function shortTraceID(row: CacheTraceRow) {
 export function CacheAnalysisPage() {
   const connection = useAuthStore((state) => JSON.stringify([state.profileId, state.apiBase]));
   const managementKey = useAuthStore((state) => state.managementKey);
+  const connectionStatus = useAuthStore((state) => state.connectionStatus);
   const generation = ltsExtensionClient.getConnectionGeneration();
   const owner = JSON.stringify([connection, generation]);
   // A key change on the same address re-evaluates the transport generation.
-  const connected = Boolean(managementKey);
+  const connected = Boolean(managementKey) && connectionStatus === 'connected';
   return <CacheAnalysisWorkspace key={owner} connection={owner} connected={connected} />;
 }
 
@@ -182,7 +183,7 @@ function CacheAnalysisWorkspace({ connection, connected }: { connection: string;
   // A usage row needs its recorded instance. A bare log ID is only a search term.
   const linkMatchesInstance = link.instance_id
     ? !instance || link.instance_id === instance
-    : !linkedUsage && Boolean(link.request_id || link.diagnostics_id);
+    : !linkedUsage && Boolean(link.request_id || link.diagnostics_id || link.trace_id);
   const records = useTracePages(supported && active && (!linkedLookup || linkMatchesInstance) ? {
     q: q || undefined, instance_id: linkedLookup ? link.instance_id : undefined,
     focus,
@@ -408,11 +409,12 @@ function CacheAnalysisWorkspace({ connection, connected }: { connection: string;
     </div>
   );
 
-  const showTimeline = supported && (!selected || selected.available);
+  const hasSelectedTrace = Boolean(selected?.available);
+  const showTimeline = supported && (!selected || hasSelectedTrace || matches.length > 0);
   const lookupInDetail = linkedLookup && !showTimeline;
   const mobileRows = showTimeline && narrow && (
-    <details ref={relatedDisclosure} className={styles.timeline} open={!selected} key={selected ? cacheTraceRowKey(selected) : 'recent'}>
-      <summary><span>{t(selected ? 'cache_analysis.related_requests' : q ? 'cache_analysis.matches' : 'cache_analysis.recent')}</span></summary>
+    <details ref={relatedDisclosure} className={styles.timeline} open={!hasSelectedTrace} key={selected?.available ? cacheTraceRowKey(selected) : 'recent'}>
+      <summary><span>{t(hasSelectedTrace ? 'cache_analysis.related_requests' : q ? 'cache_analysis.matches' : 'cache_analysis.recent')}</span></summary>
       {renderRows()}
     </details>
   );
@@ -469,7 +471,7 @@ function CacheAnalysisWorkspace({ connection, connected }: { connection: string;
         <summary><span>{t('cache_analysis.scope_short')}</span></summary>
         <p>{t('cache_analysis.scope_detail')}</p>
       </details>
-      {narrow && selected ? (
+      {narrow && hasSelectedTrace ? (
         <details className={styles.searchDisclosure}>
           <summary><span>{t('cache_analysis.find_other_request')}</span></summary>
           {searchControls}
@@ -482,11 +484,11 @@ function CacheAnalysisWorkspace({ connection, connected }: { connection: string;
       <div className={styles.workspace}>
         {showTimeline && !narrow && (
           <aside className={styles.timeline} aria-labelledby="cache-timeline-heading">
-            <h2 id="cache-timeline-heading">{t(selected ? 'cache_analysis.related_requests' : q ? 'cache_analysis.matches' : 'cache_analysis.recent')}</h2>
+            <h2 id="cache-timeline-heading">{t(hasSelectedTrace ? 'cache_analysis.related_requests' : q ? 'cache_analysis.matches' : 'cache_analysis.recent')}</h2>
             {renderRows()}
           </aside>
         )}
-        {!selected && mobileRows}
+        {!hasSelectedTrace && mobileRows}
         <section className={styles.inspection} aria-labelledby="cache-inspection-heading">
           <div className={styles.conclusion}>
             <h2 ref={detailHeading} tabIndex={-1} id="cache-inspection-heading">
@@ -506,7 +508,7 @@ function CacheAnalysisWorkspace({ connection, connected }: { connection: string;
                   <p>{t(firstPCK.digest === finalPCK.digest
                     ? 'cache_analysis.pck_retained' : 'cache_analysis.pck_changed')}</p>
                 )}
-                {linkedUsage && cap && !records.loading && !records.error && !detail.loading && !trace &&
+                {linkedUsage && cap && !records.loading && !records.error && matches.length === 0 && !detail.loading && !trace &&
                   (!detail.error || detail.error === 'unavailable') && (
                   <p role="status">{t('cache_analysis.history_only')}</p>
                 )}
@@ -532,7 +534,7 @@ function CacheAnalysisWorkspace({ connection, connected }: { connection: string;
               </>
             )}
           </div>
-          {selected && mobileRows}
+          {hasSelectedTrace && mobileRows}
           {(detail.loading || (lookupInDetail && records.loading)) && <p role="status">{t('common.loading')}</p>}
           {lookupInDetail && records.error && <p role="alert" className={styles.alert}>{t(`cache_analysis.${records.error}`)}</p>}
           {detail.error && (!linkedUsage || detail.error !== 'unavailable') && (
@@ -547,7 +549,7 @@ function CacheAnalysisWorkspace({ connection, connected }: { connection: string;
                   <>
                     <p>{t(`cache_analysis.${baselineLabel}`)}
                       {baseline && <code> · #{(baseline.request_id || baseline.diagnostics_id)?.slice(-6)}</code>}
-                      {reference.trace && ` · ${reference.trace.model} · ${dateTime.format(new Date(reference.trace.created_at))}`}
+                      {reference.trace && ` · ${reference.trace.model}${Number.isFinite(Date.parse(reference.trace.created_at)) ? ` · ${dateTime.format(new Date(reference.trace.created_at))}` : ''}`}
                     </p>
                     {reference.loading ? <p role="status">{t('common.loading')}</p> : fieldChanges === null
                       ? <p>{t('cache_diagnostics.unavailable')}</p>

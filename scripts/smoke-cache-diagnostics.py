@@ -25,20 +25,67 @@ def payload(effort="high"):
     return {"known": True, "bytes": 2048, "fields": {"input": {"digest": "1" * 64}, "reasoning.effort": {"digest": ("2" if effort == "high" else "3") * 64, "value": effort}, "prompt_cache_key": {"digest": "4" * 64}}}
 
 def trace(identifier=TRACE):
-    return {"version": 1, "id": identifier, "instance_id": INSTANCE, "logical_request_id": "logical-request", "session_hash": SESSION, "model": "gpt-5.6-sol", "source_format": "openai-response", "created_at": NOW, "updated_at": NOW, "input": payload("low" if identifier == BASELINE else "high"), "truncated": False,
+    created_at = "" if identifier == BASELINE else NOW
+    return {"version": 1, "id": identifier, "instance_id": INSTANCE, "logical_request_id": "logical-request", "session_hash": SESSION, "trace_id": "shared-log", "model": "gpt-5.6-sol", "source_format": "openai-response", "created_at": created_at, "updated_at": NOW, "input": payload("low" if identifier == BASELINE else "high"), "truncated": False,
         "events": [{"sequence": 1, "decision_id": "decision-A", "layer": "account", "method": "lcp", "result": "not_run", "reason": "explicit_identity"}, {"sequence": 2, "decision_id": "decision-B", "layer": "account", "method": "session_binding", "result": "created", "auth_index": "B"}],
         "attempts": [{"number": 1, "decision_id": "decision-A", "execution_id": "execution-A", "provider": "codex", "model": "gpt-5.6-sol", "auth_type": "api_key", "auth_index": "A", "transport": "http", "endpoint": "openai_public", "status": 503, "outcome": "body_consumed", "request": payload(), "comparison_id_sent": "absent", "observation_state": "not_observed", "diagnostic_returned": False, "response_truncated": False},
         {"number": 2, "decision_id": "decision-B", "execution_id": "execution-B", "provider": "codex", "model": "gpt-5.6-sol", "auth_type": "api_key", "auth_index": "B", "transport": "websocket", "endpoint": "openai_public", "outcome": "completed", "request": payload(), "response_id": "resp_synthetic", "response_model": "gpt-5.6-sol", "response_status": "completed", "observation_state": "observed", "comparison_id_sent": "present", "diagnostic_returned": True, "diagnostic": {"type": "comparison_response_not_found"}, "cache_observation": OBS, "response_truncated": False}]}
 
+def trace_search_page():
+    return {
+        "version": 1,
+        "current_instance_id": INSTANCE,
+        "history_included": True,
+        "items": [
+            {
+                "at": NOW,
+                "model": "gpt-5.6-sol",
+                "available": True,
+                "instance_id": INSTANCE,
+                "diagnostics_id": TRACE,
+                "request_id": "execution-B",
+                "trace_id": "shared-log",
+                "auth_index": "B",
+                "matched": ["trace_id"],
+                "input_tokens": 100,
+                "cache_observation": OBS,
+                "attempt_count": 2,
+                "status": 200,
+                "outcome": "completed",
+                "previous": {"instance_id": INSTANCE, "diagnostics_id": BASELINE},
+            },
+            {
+                "at": NOW,
+                "model": "gpt-5.6-sol",
+                "available": True,
+                "instance_id": INSTANCE,
+                "diagnostics_id": BASELINE,
+                "request_id": "execution-baseline",
+                "trace_id": "shared-log",
+                "auth_index": "A",
+                "matched": ["trace_id"],
+                "input_tokens": 90,
+                "cache_observation": OBS,
+                "attempt_count": 1,
+                "status": 200,
+                "outcome": "completed",
+            },
+        ],
+    }
+
 class CacheHandler(smoke.MockCoreHandler):
     mode = "ready"
     def do_GET(self):
-        path = urlparse(self.path).path
+        parsed = urlparse(self.path)
+        path = parsed.path
         prefix = "/v0/management/cache-diagnostics/"
         if path.startswith(prefix):
-            self.state.record("GET", path, "")
+            self.state.record("GET", path, parsed.query)
             if path.endswith("capabilities"):
-                self._send_json({"version": 1}, status=404 if type(self).mode == "unsupported" else 200)
+                payload_caps = {"version": 1, "recording_enabled": True, "trace_search_version": 1, "store": {"instance_id": INSTANCE, "active": 2}} if type(self).mode == "search" else {"version": 1}
+                self._send_json(payload_caps, status=404 if type(self).mode == "unsupported" else 200)
+            elif path.endswith("traces"):
+                self._send_json(trace_search_page())
             elif type(self).mode == "missing":
                 self._send_json({"error": "unavailable"}, status=404)
             else:
@@ -58,7 +105,10 @@ class CacheHandler(smoke.MockCoreHandler):
 
 def main():
     state = smoke.MockCoreState()
-    state.usage_payload = {"usage": {"apis": {"POST /v1/responses": {"models": {"gpt-5.6-sol": {"details": [{"timestamp": NOW, "source": "synthetic", "auth_index": "B", "request_id": "execution-B", "diagnostics_id": TRACE, "diagnostics_instance_id": INSTANCE, "cache_observation": OBS, "tokens": {"input_tokens": 100, "output_tokens": 1, "total_tokens": 101, "cached_tokens": 0}, "failed": False}]}}}}}}
+    state.usage_payload = {"usage": {"apis": {"POST /v1/responses": {"models": {
+        "gpt-5.6-sol": {"details": [{"timestamp": NOW, "source": "synthetic", "auth_index": "B", "request_id": "execution-B", "diagnostics_id": TRACE, "diagnostics_instance_id": INSTANCE, "cache_observation": OBS, "tokens": {"input_tokens": 100, "output_tokens": 1, "total_tokens": 101, "cached_tokens": 0}, "failed": False}]},
+        "gpt-5.6-shared": {"details": [{"timestamp": "2026-11-25T00:00:00Z", "source": "synthetic", "auth_index": "A", "trace_id": "shared-log", "diagnostics_instance_id": INSTANCE, "cache_observation": OBS, "tokens": {"input_tokens": 90, "output_tokens": 1, "total_tokens": 91, "cached_tokens": 0}, "failed": False}]},
+    }}}}}
     app_port, api_port = smoke.find_free_port(), smoke.find_free_port()
     app_url, api_url = f"http://127.0.0.1:{app_port}/management.html", f"http://127.0.0.1:{api_port}"
     artifacts = ROOT / "local/cache-browser"
@@ -99,9 +149,11 @@ def main():
             panel.get_by_text("resp_synthetic", exact=True).wait_for()
             panel.get_by_role("button", name="Query current session binding", exact=True).click()
             panel.get_by_text("Active binding found", exact=False).wait_for()
-            panel.get_by_label("Diagnostic record ID for local comparison").fill(BASELINE)
+            panel.get_by_label("Diagnostic record ID for local comparison").fill(BASELINE.upper())
             panel.get_by_role("button", name="Compare field digests", exact=True).click()
             panel.locator('[role="status"]').filter(has_text="reasoning.effort").wait_for()
+            if f"GET /v0/management/cache-diagnostics/requests/{BASELINE}" not in state.requests:
+                raise AssertionError("Uppercase diagnostic ID was not normalized to lowercase")
             panel.locator('dl').first.scroll_into_view_if_needed()
             page.screenshot(path=str(artifacts / "desktop.png"))
             if panel.bounding_box()["width"] < 600: raise AssertionError("Desktop diagnostics collapsed into a narrow column")
@@ -132,8 +184,44 @@ def main():
             field.fill(TRACE)
             field.press("Enter")
             page.get_by_text("Outbound attempt 2 · WebSocket", exact=False).wait_for()
+
+            CacheHandler.mode = "search"
+            state.requests.clear()
+            page.goto(app_url + "?route=cache-trace-link#/analytics/cache?trace=shared-log", wait_until="domcontentloaded")
+            page.locator("#cache-timeline-heading").wait_for()
+            if page.locator("#cache-timeline-heading").inner_text() != "Matching requests":
+                raise AssertionError(f"Mode A heading mismatch: {page.locator('#cache-timeline-heading').inner_text()!r}")
+            if not any("GET /v0/management/cache-diagnostics/traces?" in req and "q=shared-log" in req for req in state.requests):
+                raise AssertionError(f"Mode A did not query /traces with q=shared-log: {state.requests}")
+            page.locator('[data-testid="cache-trace-candidate"]').first.click()
+            page.get_by_text("Outbound attempt 2 · WebSocket", exact=False).wait_for()
+            page.locator('li[data-kind="changed"]').filter(has_text="reasoning.effort").wait_for()
+
+            page.goto(app_url + "?route=cache-mode-b#/usage/events?range=all", wait_until="domcontentloaded")
+            shared_row = page.locator('tr[data-request-row-expanded]').filter(has_text="gpt-5.6-shared").first
+            shared_row.locator("td").first.get_by_role("button").click()
+            page.get_by_role("button", name="Analyze this request").click()
+            page.locator("#cache-timeline-heading").wait_for()
+            if page.locator("#cache-timeline-heading").inner_text() != "Matching requests":
+                raise AssertionError(f"Mode B desktop heading mismatch: {page.locator('#cache-timeline-heading').inner_text()!r}")
+            if page.locator('[data-testid="cache-trace-candidate"]').count() < 2:
+                raise AssertionError("Mode B expected at least 2 matching candidates")
+            if page.get_by_text("Usage summary available. This instance has no trace for this request.", exact=True).count() != 0:
+                raise AssertionError("Mode B unexpectedly displayed history_only notice while matches exist")
+
+            page.set_viewport_size({"width": 390, "height": 844})
+            mobile_details = page.locator("details").filter(has=page.locator("summary", has_text="Matching requests")).first
+            mobile_details.wait_for()
+            if mobile_details.get_attribute("open") is None:
+                raise AssertionError("Mode B mobile candidate disclosure should default to open")
+            mobile_details.locator('[data-testid="cache-trace-candidate"]').first.click()
+            page.get_by_text("Outbound attempt 2 · WebSocket", exact=False).wait_for()
+            page.set_viewport_size({"width": 1360, "height": 1000})
+            if page.locator("#cache-timeline-heading").inner_text() != "Related requests":
+                raise AssertionError(f"Expected Related requests after candidate selection, got: {page.locator('#cache-timeline-heading').inner_text()!r}")
+
             if errors: raise AssertionError(errors)
-            print("Cache diagnostics browser smoke passed: attempts, field presence, query, comparison, instance mismatch, old Core, desktop and mobile.")
+            print("Cache diagnostics browser smoke passed: attempts, field presence, query, comparison, instance mismatch, old Core, search Mode A/B, uppercase ID, empty created_at, desktop and mobile.")
         except Exception:
             page.screenshot(path=str(artifacts / "failure.png"), full_page=True)
             (artifacts / "failure.html").write_text(page.content())

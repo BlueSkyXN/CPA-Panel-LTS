@@ -65,3 +65,72 @@ test('capabilities preserves valid store active count and ignores invalid values
   const invalid = await captureCacheDiagnosticsClient().capabilities();
   assert.deepEqual(invalid.store, { instance_id: 'instance-one' });
 });
+
+test('trace and session normalize uppercase identifiers to lowercase and forward AbortSignal', async () => {
+  const originalImpl = client.captureConnection;
+  try {
+    client.setConfig({ apiBase: 'https://one.invalid', managementKey: 'synthetic' });
+    const upperDiag = 'A'.repeat(64);
+    const lowerDiag = 'a'.repeat(64);
+    const upperSession = 'B'.repeat(64);
+    const lowerSession = 'b'.repeat(64);
+    const controller = new AbortController();
+    const calls = [];
+
+    client.captureConnection = () => ({
+      get: async (path, config) => {
+        calls.push({ method: 'get', path, config });
+        if (path === '/cache-diagnostics/capabilities') {
+          return { version: 1, trace_search_version: 1, store: { instance_id: 'instance-one' } };
+        }
+        if (path === '/cache-diagnostics/traces') {
+          return { version: 1, current_instance_id: 'instance-one', items: [], history_included: true };
+        }
+        return { version: 1, id: lowerDiag, instance_id: 'instance-one', events: [], attempts: [] };
+      },
+      post: async (path, body, config) => {
+        calls.push({ method: 'post', path, body, config });
+        return { status: 'unbound', bindings: [] };
+      },
+    });
+
+    const api = captureCacheDiagnosticsClient();
+    const trace = await api.trace(upperDiag, controller.signal, 'instance-one');
+    assert.equal(trace?.id, lowerDiag);
+    assert.deepEqual(calls[0], {
+      method: 'get',
+      path: `/cache-diagnostics/requests/${lowerDiag}`,
+      config: { signal: controller.signal, params: { instance_id: 'instance-one' } },
+    });
+
+    await api.capabilities(controller.signal);
+    assert.deepEqual(calls[1], {
+      method: 'get',
+      path: '/cache-diagnostics/capabilities',
+      config: { signal: controller.signal },
+    });
+
+    const query = { instance_id: 'instance-one', q: 'shared-log' };
+    await api.traces(query, controller.signal);
+    assert.deepEqual(calls[2], {
+      method: 'get',
+      path: '/cache-diagnostics/traces',
+      config: { params: query, signal: controller.signal },
+    });
+
+    await api.session('codex', 'model', upperSession, upperDiag, controller.signal);
+    assert.deepEqual(calls[3], {
+      method: 'post',
+      path: '/cache-diagnostics/session',
+      body: {
+        provider: 'codex',
+        model: 'model',
+        session_hash: lowerSession,
+        diagnostics_id: lowerDiag,
+      },
+      config: { signal: controller.signal },
+    });
+  } finally {
+    client.captureConnection = originalImpl;
+  }
+});
