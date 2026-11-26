@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { captureCacheDiagnosticsClient } from '@/services/api/cacheDiagnostics';
@@ -190,17 +190,32 @@ function AttemptStages({ attempt, trace, onFilter, activeKey }: {
 function CurrentBinding({ trace }: { trace: CacheTrace }) {
   const { t } = useTranslation();
   const [state, setState] = useState<{ loading?: boolean; error?: boolean; data?: CacheSessionSnapshot }>({});
+  const controllerRef = useRef<AbortController | null>(null);
+  useEffect(() => () => {
+    controllerRef.current?.abort();
+    controllerRef.current = null;
+  }, []);
   const attempt = trace.attempts[trace.attempts.length - 1];
   if (!trace.session_hash || !attempt) return null;
   const load = async () => {
+    controllerRef.current?.abort();
+    const controller = new AbortController();
+    controllerRef.current = controller;
     const client = captureCacheDiagnosticsClient();
+    const current = () => !controller.signal.aborted && client.isCurrent();
     setState({ loading: true });
     try {
-      const data = await client.session(attempt.provider, trace.model, trace.session_hash!, trace.id);
-      if (!client.isCurrent()) return;
+      const data = await client.session(
+        attempt.provider,
+        trace.model,
+        trace.session_hash!,
+        trace.id,
+        controller.signal
+      );
+      if (!current()) return;
       setState(data?.instance_id === trace.instance_id ? { data } : { error: true });
     } catch {
-      if (client.isCurrent()) setState({ error: true });
+      if (current()) setState({ error: true });
     }
   };
   const snapshot = state.data;

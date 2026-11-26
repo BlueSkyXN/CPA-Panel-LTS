@@ -50,6 +50,8 @@ function CacheDiagnosticsContent({ diagnosticId, instanceId, requestId, observat
   const [comparison, setComparison] = useState<string[] | null>(null);
   const [compareState, setCompareState] = useState('');
   const requestOwner = useRef({ active: true, generation: 0 });
+  const sessionControllerRef = useRef<AbortController | null>(null);
+  const compareControllerRef = useRef<AbortController | null>(null);
   const cache = readCacheObservation(observation);
   const key = (name: string) => `cache_diagnostics.${name}`;
 
@@ -57,19 +59,24 @@ function CacheDiagnosticsContent({ diagnosticId, instanceId, requestId, observat
     const owner = requestOwner.current;
     owner.active = true;
     const generation = ++owner.generation;
+    const controller = new AbortController();
     const client = captureCacheDiagnosticsClient();
-    const current = () => owner.active && owner.generation === generation && client.isCurrent();
+    const current = () =>
+      !controller.signal.aborted &&
+      owner.active &&
+      owner.generation === generation &&
+      client.isCurrent();
     if (diagnosticId && instanceId) {
       void (async () => {
         try {
-          const caps = await client.capabilities();
+          const caps = await client.capabilities(controller.signal);
           if (!current()) return;
           if (caps.version !== 1) {
             setState('unsupported');
             return;
           }
           try {
-            const result = await client.trace(diagnosticId);
+            const result = await client.trace(diagnosticId, controller.signal);
             if (!current()) return;
             const belongs = result?.instance_id === instanceId;
             setTrace(belongs ? result : null);
@@ -86,6 +93,11 @@ function CacheDiagnosticsContent({ diagnosticId, instanceId, requestId, observat
       })();
     }
     return () => {
+      controller.abort();
+      sessionControllerRef.current?.abort();
+      sessionControllerRef.current = null;
+      compareControllerRef.current?.abort();
+      compareControllerRef.current = null;
       owner.active = false;
       owner.generation++;
     };
@@ -99,35 +111,51 @@ function CacheDiagnosticsContent({ diagnosticId, instanceId, requestId, observat
   };
   const querySession = async () => {
     if (!trace?.session_hash || !trace.attempts.length) return;
+    sessionControllerRef.current?.abort();
+    const controller = new AbortController();
+    sessionControllerRef.current = controller;
     const client = captureCacheDiagnosticsClient();
     const owner = requestOwner.current;
     const generation = owner.generation;
+    const current = () =>
+      !controller.signal.aborted &&
+      owner.active &&
+      generation === owner.generation &&
+      client.isCurrent();
     setSnapshotState('loading');
     try {
       const result = await client.session(
         trace.attempts[trace.attempts.length - 1].provider,
         trace.model,
         trace.session_hash,
-        trace.id
+        trace.id,
+        controller.signal
       );
-      if (!owner.active || generation !== owner.generation || !client.isCurrent()) return;
+      if (!current()) return;
       setSnapshot(result?.instance_id === trace.instance_id ? result : null);
       setSnapshotState(result?.instance_id === trace.instance_id ? 'ready' : 'unavailable');
     } catch {
-      if (owner.active && generation === owner.generation && client.isCurrent())
-        setSnapshotState('unavailable');
+      if (current()) setSnapshotState('unavailable');
     }
   };
   const compare = async () => {
     if (!trace) return;
+    compareControllerRef.current?.abort();
+    const controller = new AbortController();
+    compareControllerRef.current = controller;
     const client = captureCacheDiagnosticsClient();
     const owner = requestOwner.current;
     const generation = owner.generation;
+    const current = () =>
+      !controller.signal.aborted &&
+      owner.active &&
+      generation === owner.generation &&
+      client.isCurrent();
     setCompareState('loading');
     setComparison(null);
     try {
-      const baseline = await client.trace(baselineId.trim());
-      if (!owner.active || generation !== owner.generation || !client.isCurrent()) return;
+      const baseline = await client.trace(baselineId.trim(), controller.signal);
+      if (!current()) return;
       const diff =
         baseline?.instance_id === trace.instance_id
           ? compareCachePayloads(baseline.input, trace.input)
@@ -135,8 +163,7 @@ function CacheDiagnosticsContent({ diagnosticId, instanceId, requestId, observat
       setComparison(diff);
       setCompareState(diff ? 'ready' : 'unavailable');
     } catch {
-      if (owner.active && generation === owner.generation && client.isCurrent())
-        setCompareState('unavailable');
+      if (current()) setCompareState('unavailable');
     }
   };
 
