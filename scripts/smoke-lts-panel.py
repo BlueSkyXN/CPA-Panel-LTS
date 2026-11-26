@@ -556,6 +556,11 @@ def build_usage_payload() -> dict[str, Any]:
             "outbound_service_tier": " standard ",
             "reasoning_effort": "xhigh",
             "latency": 150,
+            "cache_observation": {
+                "version": 1,
+                "read": {"state": "present", "value": 0, "source": "input_tokens_details.cached_tokens"},
+                "write": {"state": "present", "value": 7, "source": "cache_creation_input_tokens"},
+            },
             "tokens": {
                 "input_tokens": 20,
                 "output_tokens": 5,
@@ -4671,7 +4676,7 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     priority_row = rows.filter(has_text="12").filter(has_text="FAST").first
     priority_cells = [text.strip() for text in priority_row.locator("td").all_inner_texts()]
     priority_token_values = [cell.splitlines()[0] for cell in priority_cells[-9:-1]]
-    if priority_token_values != ["12", "0", "8", "6", "2", "12", "4", "23"]:
+    if priority_token_values != ["12", "0", "8", "6", "2", "12 · 100%", "4", "23"]:
         raise AssertionError(
             "Combined service-tier/cache row rendered the wrong token values: "
             f"{priority_cells!r}"
@@ -4681,8 +4686,8 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     low_cache_cells = rows.locator(
         'td[data-cache-rate-tone="low"][data-cache-token-count="1"]'
     )
-    if low_cache_cells.count() != 1 or low_cache_cells.first.inner_text().strip() != "1":
-        raise AssertionError("Cache Read Tokens must render as one numeric line")
+    if low_cache_cells.count() != 1 or low_cache_cells.first.inner_text().strip() != "1 · 10%":
+        raise AssertionError("The cache-read cell must show 1 of 10 input tokens (10%)")
     high_cache_cells = rows.locator('td[data-cache-rate-tone="high"]')
     if high_cache_cells.count() == 0:
         raise AssertionError(
@@ -5172,10 +5177,14 @@ def run_usage_service_tier_smoke(page: Any) -> None:
     card.get_by_role("button", name="Clear Filters", exact=True).click()
     wait_for_row_count(8)
 
-    cache_select = card.get_by_label("Cache Status", exact=True)
-    cache_select.click()
-    page.get_by_role("option", name="Has Cached Tokens", exact=True).click()
-    wait_for_row_count(6)
+    card.get_by_label("Cache reads", exact=True).click()
+    page.get_by_role("option", name="Explicit zero reads", exact=True).click()
+    wait_for_row_count(1)
+    card.get_by_label("Cache writes", exact=True).click()
+    page.get_by_role("option", name="Write observed", exact=True).click()
+    wait_for_row_count(1)
+    if rows.first.locator('td[data-cache-token-count="0"]').count() != 1 or "xhigh" not in rows.first.inner_text():
+        raise AssertionError("Cache filters did not keep the observed zero-read, positive-write request")
 
     card.get_by_role("button", name="Clear Filters", exact=True).click()
     wait_for_row_count(8)

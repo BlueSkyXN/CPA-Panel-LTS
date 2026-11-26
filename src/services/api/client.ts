@@ -37,13 +37,17 @@ type ConnectionScopedRequestConfig = AxiosRequestConfig & {
 
 type RequestConfig = AxiosRequestConfig;
 
-// 这些 Management POST 仅查询统计，不属于需要阻止实例切换的写操作。
+// 这些 Management POST 仅执行只读查询、预览或探针检测，不属于需要阻止实例切换的写操作。
 const READ_ONLY_USAGE_POSTS = new Set([
   '/usage/query/summary',
   '/usage/query/details',
   '/usage/query/pricing',
   '/usage/query/analytics',
+  '/usage/query/export',
   '/cache-diagnostics/session',
+  '/flow-control/preview',
+  '/flow-control/migration-preview',
+  '/proxy-url/test',
 ]);
 
 function isMutationRequest(config: AxiosRequestConfig): boolean {
