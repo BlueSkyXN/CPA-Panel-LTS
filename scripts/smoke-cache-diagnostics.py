@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Exercise cache diagnostics in the built Panel against local synthetic Core data."""
 from __future__ import annotations
+import argparse
 import importlib.util
 import json
+import os
 import re
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
@@ -14,6 +17,27 @@ ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("panel_smoke", Path(__file__).with_name("smoke-lts-panel.py"))
 smoke = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(smoke)
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Exercise cache diagnostics in the built Panel against local synthetic Core data.")
+    parser.add_argument("dist_dir", nargs="?", default=None, help="Built dist directory (default: dist)")
+    parser.add_argument("--dist", dest="dist_flag", default=None, help="Built dist directory override")
+    parser.add_argument("--skip-build", action="store_true", help="Reuse an existing dist/index.html build")
+    parser.add_argument(
+        "--artifacts-dir",
+        default=os.environ.get("CPA_SMOKE_ARTIFACTS_DIR", "").strip() or None,
+        help="Directory for browser screenshots (default: CPA_SMOKE_ARTIFACTS_DIR or OS temp dir)",
+    )
+    return parser.parse_args(argv)
+
+
+def resolve_artifacts_dir(configured: str | None) -> Path:
+    if configured:
+        target = Path(configured).expanduser().resolve()
+        target.mkdir(parents=True, exist_ok=True)
+        return target
+    return Path(tempfile.mkdtemp(prefix="cpa-cache-diagnostics-"))
 TRACE = "a" * 64
 BASELINE = "b" * 64
 INSTANCE = "synthetic-cache-instance"
@@ -103,7 +127,13 @@ class CacheHandler(smoke.MockCoreHandler):
             return
         super().do_POST()
 
-def main():
+def main(argv: list[str] | None = None):
+    args = parse_args(argv)
+    dist = Path(args.dist_flag or args.dist_dir).resolve() if (args.dist_flag or args.dist_dir) else ROOT / "dist"
+    smoke.DIST = dist
+    smoke.INDEX_HTML = dist / "index.html"
+    if not smoke.INDEX_HTML.is_file():
+        raise FileNotFoundError(f"Missing built panel at {smoke.INDEX_HTML}; run 'npm run build' first.")
     state = smoke.MockCoreState()
     state.usage_payload = {"usage": {"apis": {"POST /v1/responses": {"models": {
         "gpt-5.6-sol": {"details": [{"timestamp": NOW, "source": "synthetic", "auth_index": "B", "request_id": "execution-B", "diagnostics_id": TRACE, "diagnostics_instance_id": INSTANCE, "cache_observation": OBS, "tokens": {"input_tokens": 100, "output_tokens": 1, "total_tokens": 101, "cached_tokens": 0}, "failed": False}]},
@@ -111,8 +141,7 @@ def main():
     }}}}}
     app_port, api_port = smoke.find_free_port(), smoke.find_free_port()
     app_url, api_url = f"http://127.0.0.1:{app_port}/management.html", f"http://127.0.0.1:{api_port}"
-    artifacts = ROOT / "local/cache-browser"
-    artifacts.mkdir(parents=True, exist_ok=True)
+    artifacts = resolve_artifacts_dir(args.artifacts_dir)
     with smoke.run_server(smoke.StaticPanelHandler, app_port), smoke.run_server(CacheHandler, api_port, state), sync_playwright() as playwright:
         browser = launch_chromium(playwright, headless=True)
         context = browser.new_context(locale="en-US", viewport={"width": 1360, "height": 1000})
@@ -226,6 +255,7 @@ def main():
                 raise AssertionError(f"Expected Related requests after candidate selection, got: {page.locator('#cache-timeline-heading').inner_text()!r}")
 
             if errors: raise AssertionError(errors)
+            print(f"Artifacts written to {artifacts}", flush=True)
             print("Cache diagnostics browser smoke passed: attempts, field presence, query, comparison, instance mismatch, old Core, search Mode A/B, uppercase ID, empty created_at, desktop and mobile.")
         except Exception:
             page.screenshot(path=str(artifacts / "failure.png"), full_page=True)
