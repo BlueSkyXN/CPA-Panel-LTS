@@ -1942,7 +1942,6 @@
           },
           "compatibility": {
             "antigravity": "調整 Antigravity 專屬相容行為；額度補償屬於此提供者，不是一般配額回退。",
-            "gemini": "選擇 Gemini CLI 使用的端點；建議有明確連通性或相容性需求時再調整。",
             "images": "設定圖像生成模式與基礎模型；模式決定請求處理方式，基礎模型不等於用戶端請求的圖像模型名稱。",
             "devin": "僅處理 Devin 系統提示詞：含設定詞的整行會被刪除，剩餘系統提示詞再進行混淆；一般訊息和工具參數不會被修改"
           },
@@ -1989,7 +1988,6 @@
         "codex-policy_hedging": "對沖重試",
         "codex-policy_delivery": "交付與用量",
         "compatibility_antigravity": "Antigravity",
-        "compatibility_gemini": "Gemini CLI",
         "compatibility_images": "影像生成",
         "payload_defaults": "預設規則",
         "payload_overrides": "覆寫規則",
@@ -2336,9 +2334,7 @@
           "disable_cooling_desc": "全域停用驗證/模型失敗後的冷卻視窗",
           "session_affinity": "工作階段親和性路由",
           "ws_auth": "WebSocket 驗證",
-          "ws_auth_desc": "啟用 WebSocket 連線驗證（/v1/ws）",
-          "enable_gemini_cli_endpoint": "啟用 Gemini CLI 內部端點",
-          "enable_gemini_cli_endpoint_desc": "啟用 /v1internal:* 相容端點"
+          "ws_auth_desc": "啟用 WebSocket 連線驗證（/v1/ws）"
         },
         "quota": {
           "title": "配額回退",
@@ -2463,6 +2459,7 @@
         "payload_invalid_number": "請輸入有效數字",
         "payload_invalid_boolean": "請選擇 true 或 false",
         "payload_invalid_json": "請輸入有效的 JSON",
+        "payload_invalid_request_paths": "請至少輸入一個以 / 開頭的精確請求路徑（不支援萬用字元、查詢參數或空白），或清空此欄位以比對所有路徑。",
         "reasoning_effort_rules": "請填寫模型範圍、選擇有效策略，並為預設或強制策略選擇強度。",
         "payload_replace_invalid_target": "目標角色必須為 user、system 或 developer。",
         "payload_replace_invalid_positions": "請選擇該角色的所有訊息，或輸入非空的正整數位置清單，兩者不可同時指定。",

@@ -1918,7 +1918,6 @@
           },
           "compatibility": {
             "antigravity": "Adjust Antigravity-specific compatibility. Its quota compensation is separate from general quota fallback.",
-            "gemini": "Choose the Gemini CLI endpoint. Change it for a specific connectivity or compatibility need.",
             "images": "Set image-generation mode and the base model. The mode controls handling; the base model is not the client-requested image model name.",
             "devin": "In Devin system prompts only, a line containing a configured word is removed in full; the remaining system prompt is then obfuscated. Regular messages and tool arguments are not changed"
           },
@@ -1965,7 +1964,6 @@
         "codex-policy_hedging": "Hedged retries",
         "codex-policy_delivery": "Delivery & usage",
         "compatibility_antigravity": "Antigravity",
-        "compatibility_gemini": "Gemini CLI",
         "compatibility_images": "Image generation",
         "payload_defaults": "Default rules",
         "payload_overrides": "Override rules",
@@ -2312,9 +2310,7 @@
           "disable_cooling_desc": "Globally disable auth/model cooldown windows after failures",
           "session_affinity": "Session Affinity Routing",
           "ws_auth": "WebSocket Authentication",
-          "ws_auth_desc": "Enable WebSocket authentication (/v1/ws)",
-          "enable_gemini_cli_endpoint": "Enable Gemini CLI Internal Endpoint",
-          "enable_gemini_cli_endpoint_desc": "Enable /v1internal:* compatibility endpoints"
+          "ws_auth_desc": "Enable WebSocket authentication (/v1/ws)"
         },
         "quota": {
           "title": "Quota Fallback",
@@ -2439,6 +2435,7 @@
         "payload_invalid_number": "Enter a valid number",
         "payload_invalid_boolean": "Choose true or false",
         "payload_invalid_json": "Enter valid JSON",
+        "payload_invalid_request_paths": "Enter at least one exact request path starting with / (no wildcards, queries, or spaces), or clear the field to match all paths.",
         "reasoning_effort_rules": "Enter model names, choose a policy, and select an effort for default or force rules.",
         "payload_replace_invalid_target": "Use user, system, or developer as the target role.",
         "payload_replace_invalid_positions": "Choose all messages of the selected role or enter a non-empty list of positive integer positions, not both.",

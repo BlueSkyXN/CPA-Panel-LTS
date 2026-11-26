@@ -364,10 +364,13 @@ export function LiteralReplacementEditor({
   const update = onChange;
   const invalidIds = new Set(
     draft.rows
-      .filter(
-        (row) =>
-          row.key === '' || draft.rows.some((other) => other.id !== row.id && other.key === row.key)
-      )
+      .filter((row) => {
+        const trimmedKey = row.key.trim();
+        return (
+          trimmedKey === '' ||
+          draft.rows.some((other) => other.id !== row.id && other.key.trim() === trimmedKey)
+        );
+      })
       .map((row) => row.id)
   );
 

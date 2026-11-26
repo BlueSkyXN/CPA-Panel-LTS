@@ -19,7 +19,7 @@ import { FLOW_FIELDS, flowControlValidation, readFlowControlValues } from '@/lts
 import { writeFlowControlValues } from '@/lts/flowControl/yaml';
 import { useCallback, useMemo, useReducer } from 'react';
 import { isAlias, isMap, isNode, isScalar, isSeq, parseDocument } from 'yaml';
-import type { Node, Pair, YAMLMap, YAMLSeq } from 'yaml';
+import type { Node, Pair, Scalar, YAMLMap, YAMLSeq } from 'yaml';
 import type {
   CodexAbnormalReasoningRetryAction,
   CodexAbnormalReasoningRetryClientUsageAggregation,
@@ -445,10 +445,26 @@ export function getVisualConfigValidationErrors(
 ): VisualConfigValidationErrors {
   return {
     ...flowControlValidation(values, dirtyFields),
-    antigravitySensitiveWordsReplace: serializeLiteralDraft(values.antigravitySensitiveWordsReplace) === null ? 'sensitive_replacements_invalid' : undefined,
-    devinSensitiveWordsReplace: serializeLiteralDraft(values.devinSensitiveWordsReplace) === null ? 'sensitive_replacements_invalid' : undefined,
-    antigravitySensitivePatternsReplace: values.antigravitySensitivePatternsReplace.some((rule) => !rule.pattern) ? 'sensitive_replacements_invalid' : undefined,
-    devinSensitivePatternsReplace: values.devinSensitivePatternsReplace.some((rule) => !rule.pattern) ? 'sensitive_replacements_invalid' : undefined,
+    antigravitySensitiveWordsReplace:
+      dirtyFields.has('antigravitySensitiveWordsReplace') &&
+      serializeLiteralDraft(values.antigravitySensitiveWordsReplace) === null
+        ? 'sensitive_replacements_invalid'
+        : undefined,
+    devinSensitiveWordsReplace:
+      dirtyFields.has('devinSensitiveWordsReplace') &&
+      serializeLiteralDraft(values.devinSensitiveWordsReplace) === null
+        ? 'sensitive_replacements_invalid'
+        : undefined,
+    antigravitySensitivePatternsReplace:
+      dirtyFields.has('antigravitySensitivePatternsReplace') &&
+      values.antigravitySensitivePatternsReplace.some((rule) => !rule.pattern.trim())
+        ? 'sensitive_replacements_invalid'
+        : undefined,
+    devinSensitivePatternsReplace:
+      dirtyFields.has('devinSensitivePatternsReplace') &&
+      values.devinSensitivePatternsReplace.some((rule) => !rule.pattern.trim())
+        ? 'sensitive_replacements_invalid'
+        : undefined,
     reasoningEffortRules:
       dirtyFields.has('reasoningEffortRules') && !validReasoningEffortRules(values.reasoningEffortRules)
         ? 'reasoning_effort_rules'
@@ -516,12 +532,36 @@ export function getPayloadParamValidationError(
   }
 }
 
+function isValidPayloadExecutionPath(value: string): boolean {
+  if (!value.startsWith('/') || value.startsWith('//') || value.includes('//')) return false;
+  if (value.length > 1 && value.endsWith('/')) return false;
+  if (/[*?#%\\\s]/.test(value)) return false;
+  for (let i = 0; i < value.length; i += 1) {
+    const code = value.charCodeAt(i);
+    if (code <= 0x1f || code === 0x7f) return false;
+  }
+  const segments = value.slice(1).split('/');
+  return !segments.some((segment) => segment === '.' || segment === '..');
+}
+
+export function getPayloadRequestPathsValidationError(
+  requestPaths: string[] | undefined
+): 'payload_invalid_request_paths' | undefined {
+  if (requestPaths === undefined) return undefined;
+  const normalized = requestPaths.map((item) => item.trim()).filter(Boolean);
+  if (normalized.length === 0) return 'payload_invalid_request_paths';
+  return normalized.every(isValidPayloadExecutionPath)
+    ? undefined
+    : 'payload_invalid_request_paths';
+}
+
 function hasPayloadParamValidationErrors(rules: PayloadRule[]): boolean {
   return rules.some(
     (rule) =>
       rule.params.some((param) => Boolean(getPayloadParamValidationError(param))) ||
       rule.models.some(
         (model) =>
+          Boolean(getPayloadRequestPathsValidationError(model.requestPaths)) ||
           (model.match ?? []).some((param) => Boolean(getPayloadParamValidationError(param))) ||
           (model.notMatch ?? []).some((param) => Boolean(getPayloadParamValidationError(param)))
       )
@@ -942,6 +982,7 @@ export function getPayloadReplaceValidationError(rule: PayloadReplaceRule): stri
     rule.models.some(
       (model) =>
         !model.name.trim() ||
+        Boolean(getPayloadRequestPathsValidationError(model.requestPaths)) ||
         [...(model.match ?? []), ...(model.notMatch ?? [])].some(
           (entry) => !entry.path.trim() || Boolean(getPayloadParamValidationError(entry))
         )
@@ -958,6 +999,38 @@ export function getPayloadReplaceValidationError(rule: PayloadReplaceRule): stri
   return undefined;
 }
 
+export function hasDirtyPayloadValidationErrors(
+  values: Pick<
+    VisualConfigValues,
+    | 'payloadReplaceRules'
+    | 'payloadDefaultRules'
+    | 'payloadDefaultRawRules'
+    | 'payloadOverrideRules'
+    | 'payloadOverrideRawRules'
+    | 'payloadFilterRules'
+  >,
+  dirtyFields: ReadonlySet<string>
+): boolean {
+  return (
+    (dirtyFields.has('payloadReplaceRules') &&
+      values.payloadReplaceRules.some((rule) =>
+        Boolean(getPayloadReplaceValidationError(rule))
+      )) ||
+    (dirtyFields.has('payloadDefaultRules') &&
+      hasPayloadParamValidationErrors(values.payloadDefaultRules)) ||
+    (dirtyFields.has('payloadDefaultRawRules') &&
+      hasPayloadParamValidationErrors(values.payloadDefaultRawRules)) ||
+    (dirtyFields.has('payloadOverrideRules') &&
+      hasPayloadParamValidationErrors(values.payloadOverrideRules)) ||
+    (dirtyFields.has('payloadOverrideRawRules') &&
+      hasPayloadParamValidationErrors(values.payloadOverrideRawRules)) ||
+    (dirtyFields.has('payloadFilterRules') &&
+      values.payloadFilterRules.some((rule) =>
+        rule.models.some((model) => Boolean(getPayloadRequestPathsValidationError(model.requestPaths)))
+      ))
+  );
+}
+
 // JS object keys and numbers lose YAML source types (e.g. true and 1.0).
 // Match PayloadReplacement.UnmarshalYAML and PayloadReplaceTarget.UnmarshalYAML
 // before accepting the normalized values below.
@@ -968,10 +1041,14 @@ function parsePayloadReplaceRules(raw: unknown, document: YamlDocument): Payload
     return isMap(map) ? resolve(map.get(key, true)) : undefined;
   };
   const rules = get(get(document.contents, 'payload'), 'replace');
-  const isStringOperand = (node: unknown) =>
-    isScalar(node) &&
-    typeof node.value === 'string' &&
-    (!node.tag || node.tag === 'tag:yaml.org,2002:str');
+  const isStringOperand = (node: unknown) => {
+    const scalar = resolve(node);
+    return (
+      isScalar(scalar) &&
+      typeof scalar.value === 'string' &&
+      (!scalar.tag || scalar.tag === 'tag:yaml.org,2002:str')
+    );
+  };
   const isIntegerPosition = (node: unknown) => {
     const scalar = resolve(node);
     if (!isScalar(scalar)) return false;
@@ -988,9 +1065,9 @@ function parsePayloadReplaceRules(raw: unknown, document: YamlDocument): Payload
     const record = asRecord(item);
     const target = asRecord(record?.target);
     let invalid = !Array.isArray(raw) || !record || !target;
-    if (target?.all !== undefined && typeof target.all !== 'boolean') invalid = true;
+    if (target?.all != null && typeof target.all !== 'boolean') invalid = true;
     if (
-      target?.positions !== undefined &&
+      target?.positions != null &&
       (!Array.isArray(target.positions) ||
         target.positions.some((value) => typeof value !== 'number' || !Number.isSafeInteger(value)))
     )
@@ -1002,24 +1079,24 @@ function parsePayloadReplaceRules(raw: unknown, document: YamlDocument): Payload
         const model = asRecord(value);
         if (!model || typeof model.name !== 'string') return true;
         for (const key of ['protocol', 'from-protocol', 'scope', 'auth-kind']) {
-          if (model[key] !== undefined && typeof model[key] !== 'string') return true;
+          if (model[key] != null && typeof model[key] !== 'string') return true;
         }
         for (const key of ['match', 'not-match']) {
           if (
-            model[key] !== undefined &&
+            model[key] != null &&
             (!Array.isArray(model[key]) || model[key].some((condition) => !asRecord(condition)))
           )
             return true;
         }
         for (const key of ['exist', 'not-exist', 'request-paths']) {
           if (
-            model[key] !== undefined &&
+            model[key] != null &&
             (!Array.isArray(model[key]) || model[key].some((path) => typeof path !== 'string'))
           )
             return true;
         }
         return (
-          model.headers !== undefined &&
+          model.headers != null &&
           (!asRecord(model.headers) ||
             Object.values(asRecord(model.headers)!).some((value) => typeof value !== 'string'))
         );
@@ -1039,14 +1116,19 @@ function parsePayloadReplaceRules(raw: unknown, document: YamlDocument): Payload
           return true;
         return (
           entry.items.length !== 1 &&
-          !(entry.items.length === 2 && mapPair(entry, 'pattern') && mapPair(entry, 'replacement'))
+          !(
+            entry.items.length === 2 &&
+            mapPair(entry, 'pattern', document) &&
+            mapPair(entry, 'replacement', document)
+          )
         );
       })
     )
       invalid = true;
     const positionsNode = get(get(ruleNode, 'target'), 'positions');
     if (
-      positionsNode !== undefined &&
+      positionsNode != null &&
+      !(isScalar(positionsNode) && positionsNode.value == null) &&
       (!isSeq(positionsNode) || positionsNode.items.some((node) => !isIntegerPosition(node)))
     ) {
       invalid = true;
@@ -1055,14 +1137,14 @@ function parsePayloadReplaceRules(raw: unknown, document: YamlDocument): Payload
     const rawPaths = target?.paths;
     const paths = Array.isArray(rawPaths)
       ? rawPaths.map((path) => (typeof path === 'string' ? path : ''))
-      : rawPaths === undefined
+      : rawPaths == null
         ? undefined
         : [];
     if (
       paths !== undefined &&
       (!isSeq(pathsNode) ||
-        pathsNode.items.some((node) => !isStringOperand(resolve(node))) ||
-        (target?.role !== undefined && typeof target.role !== 'string') ||
+        pathsNode.items.some((node) => !isStringOperand(node)) ||
+        (target?.role != null && typeof target.role !== 'string') ||
         Boolean(target?.role) ||
         target?.all === true ||
         (Array.isArray(target?.positions) && target.positions.length > 0))
@@ -1078,7 +1160,7 @@ function parsePayloadReplaceRules(raw: unknown, document: YamlDocument): Payload
         all: target?.all === true,
         positions: Array.isArray(target?.positions)
           ? target.positions.map(String).join(', ')
-          : target?.positions === undefined
+          : target?.positions == null
             ? ''
             : String(target.positions),
         ...(paths !== undefined && { paths }),
@@ -1215,8 +1297,11 @@ function serializePluginStoreAuthForYaml(
     .filter((rule): rule is Record<string, unknown> => Boolean(rule));
 }
 
-function mapPair(map: YAMLMap, key: string): Pair | undefined {
-  return map.items.find((pair) => String(isScalar(pair.key) ? pair.key.value : pair.key) === key);
+function mapPair(map: YAMLMap, key: string, doc?: YamlDocument): Pair | undefined {
+  return map.items.find((pair) => {
+    const pairKey = doc && isAlias(pair.key) ? pair.key.resolve(doc) : pair.key;
+    return pairKey !== undefined && String(isScalar(pairKey) ? pairKey.value : pairKey) === key;
+  });
 }
 
 function preserveNodeComments(previous: Node | null | undefined, next: Node): Node {
@@ -1228,9 +1313,41 @@ function preserveNodeComments(previous: Node | null | undefined, next: Node): No
   return next;
 }
 
+function setScalarValue(scalar: Scalar, value: unknown): void {
+  if (scalar.tag && (typeof value !== 'string' || scalar.tag !== 'tag:yaml.org,2002:str')) {
+    delete scalar.tag;
+  }
+  scalar.value = value;
+}
+
+function replacementTextChanged(node: unknown, previous: string | undefined, next: string): boolean {
+  return previous !== next || (isScalar(node) && typeof node.value !== 'string');
+}
+
+// A regex field disappears when the entry becomes a literal pair. Keep its
+// leading comments with the operand that survives the conversion.
+function replacementFieldOperand(pair: Pair): unknown {
+  const node = pair.value;
+  if (isNode(node) && isNode(pair.key)) {
+    const comments = [pair.key.commentBefore, pair.key.comment, node.commentBefore].filter(Boolean);
+    if (comments.length) node.commentBefore = comments.join('\n');
+    if (pair.key.spaceBefore) node.spaceBefore = true;
+  }
+  return node;
+}
+
+function setPairKey(doc: YamlDocument, pair: Pair, key: string): void {
+  if (isScalar(pair.key)) {
+    setScalarValue(pair.key, key);
+    return;
+  }
+  const previous = pair.key && typeof pair.key === 'object' ? (pair.key as Node) : undefined;
+  pair.key = preserveNodeComments(previous, doc.createNode(key));
+}
+
 function updatePairValue(doc: YamlDocument, pair: Pair, value: unknown): void {
   if (isScalar(pair.value) && (value === null || typeof value !== 'object')) {
-    pair.value.value = value;
+    setScalarValue(pair.value, value);
     return;
   }
   const previous = pair.value && typeof pair.value === 'object' ? (pair.value as Node) : undefined;
@@ -1238,7 +1355,7 @@ function updatePairValue(doc: YamlDocument, pair: Pair, value: unknown): void {
 }
 
 function setMapValue(doc: YamlDocument, map: YAMLMap, key: string, value: unknown): void {
-  const pair = mapPair(map, key);
+  const pair = mapPair(map, key, doc);
   if (pair) {
     updatePairValue(doc, pair, value);
   } else {
@@ -1246,13 +1363,13 @@ function setMapValue(doc: YamlDocument, map: YAMLMap, key: string, value: unknow
   }
 }
 
-function deleteMapValue(map: YAMLMap, key: string): void {
-  const pair = mapPair(map, key);
+function deleteMapValue(map: YAMLMap, key: string, doc?: YamlDocument): void {
+  const pair = mapPair(map, key, doc);
   if (pair) map.items.splice(map.items.indexOf(pair), 1);
 }
 
 function ensureMapValue(doc: YamlDocument, map: YAMLMap, key: string): YAMLMap {
-  const pair = mapPair(map, key);
+  const pair = mapPair(map, key, doc);
   if (isAlias(pair?.value)) throw new VisualConfigApplyError('visual_apply_failed');
   if (pair && isMap(pair.value)) return pair.value;
   const next = doc.createNode({});
@@ -1269,7 +1386,7 @@ function ensureMapValue(doc: YamlDocument, map: YAMLMap, key: string): YAMLMap {
 }
 
 function ensureSeqValue(doc: YamlDocument, map: YAMLMap, key: string): YAMLSeq {
-  const pair = mapPair(map, key);
+  const pair = mapPair(map, key, doc);
   if (isAlias(pair?.value)) throw new VisualConfigApplyError('visual_apply_failed');
   if (pair && isSeq(pair.value)) return pair.value;
   const next = doc.createNode([]);
@@ -1289,7 +1406,11 @@ function replaceSequenceItems(seq: YAMLSeq, items: Node[]): void {
   const originalItems = [...seq.items] as Node[];
   const comments = new Map<Node, string | null | undefined>();
   originalItems.forEach((item, index) => {
-    comments.set(item, index === 0 ? seq.commentBefore : item.commentBefore);
+    const comment =
+      index === 0
+        ? [seq.commentBefore, item.commentBefore].filter(Boolean).join('\n') || undefined
+        : item.commentBefore;
+    comments.set(item, comment);
   });
 
   items.forEach((item) => {
@@ -1310,7 +1431,7 @@ function syncStringSequence(
 ): void {
   const values = (desired ?? []).map(normalize).filter(Boolean);
   if (values.length === 0) {
-    deleteMapValue(map, key);
+    deleteMapValue(map, key, doc);
     return;
   }
 
@@ -1398,7 +1519,7 @@ function syncConditionSequence(
 
   const entries = (desired ?? []).filter((entry) => entry.path.trim());
   if (entries.length === 0) {
-    deleteMapValue(modelMap, key);
+    deleteMapValue(modelMap, key, doc);
     return;
   }
   const seq = ensureSeqValue(doc, modelMap, key);
@@ -1410,7 +1531,7 @@ function syncConditionSequence(
       // Every map field is a condition, not an unknown extension field. The backend
       // ANDs all fields across all maps, so singleton maps preserve its semantics.
       Object.keys(node.toJSON()).forEach((path) => {
-        const pair = mapPair(node, path);
+        const pair = mapPair(node, path, doc);
         if (!pair) return;
         const item = doc.createNode({}) as YAMLMap;
         item.flow = node.flow;
@@ -1470,19 +1591,25 @@ function syncPayloadModels(
     const prior = baseline.find((candidate) => candidate.id === model.id);
     setMapValue(doc, modelMap, 'name', model.name.trim());
     if (model.protocol) setMapValue(doc, modelMap, 'protocol', model.protocol);
-    else deleteMapValue(modelMap, 'protocol');
+    else deleteMapValue(modelMap, 'protocol', doc);
     if (model.scope?.trim()) setMapValue(doc, modelMap, 'scope', model.scope.trim());
-    else deleteMapValue(modelMap, 'scope');
+    else deleteMapValue(modelMap, 'scope', doc);
     if (model.authKind !== prior?.authKind) {
       if (model.authKind) setMapValue(doc, modelMap, 'auth-kind', model.authKind);
-      else deleteMapValue(modelMap, 'auth-kind');
+      else deleteMapValue(modelMap, 'auth-kind', doc);
     }
     if (JSON.stringify(model.requestPaths) !== JSON.stringify(prior?.requestPaths)) {
-      if (model.requestPaths !== undefined) setMapValue(doc, modelMap, 'request-paths', model.requestPaths);
-      else deleteMapValue(modelMap, 'request-paths');
+      if (model.requestPaths === undefined) {
+        deleteMapValue(modelMap, 'request-paths', doc);
+      } else {
+        if (getPayloadRequestPathsValidationError(model.requestPaths)) {
+          throw new VisualConfigApplyError('visual_apply_failed');
+        }
+        syncStringSequence(doc, modelMap, 'request-paths', prior?.requestPaths, model.requestPaths);
+      }
     }
     if (model.fromProtocol) setMapValue(doc, modelMap, 'from-protocol', model.fromProtocol);
-    else deleteMapValue(modelMap, 'from-protocol');
+    else deleteMapValue(modelMap, 'from-protocol', doc);
 
     const headers = model.headers?.filter((header) => header.name.trim()) ?? [];
     if (headers.length) {
@@ -1495,7 +1622,7 @@ function syncPayloadModels(
         (header) => header.name,
         (header) => header.value
       );
-    } else deleteMapValue(modelMap, 'headers');
+    } else deleteMapValue(modelMap, 'headers', doc);
 
     syncConditionSequence(doc, modelMap, 'match', prior?.match, model.match);
     syncConditionSequence(doc, modelMap, 'not-match', prior?.notMatch, model.notMatch);
@@ -1551,7 +1678,7 @@ function syncPayloadReplaceSequence(
   const payload = doc.getIn(['payload'], true);
   if (!isMap(payload)) throw new Error('Expected payload map');
   if (!desired.length) {
-    deleteMapValue(payload, 'replace');
+    deleteMapValue(payload, 'replace', doc);
     return;
   }
   const seq = ensureSeqValue(doc, payload, 'replace');
@@ -1567,45 +1694,76 @@ function syncPayloadReplaceSequence(
       const target = ensureMapValue(doc, node, 'target');
       const { paths, role, all, positions } = rule.target;
       if (paths !== undefined) {
-        for (const key of ['role', 'all', 'positions']) deleteMapValue(target, key);
+        for (const key of ['role', 'all', 'positions']) deleteMapValue(target, key, doc);
         if (
-          !mapPair(target, 'paths') ||
+          !mapPair(target, 'paths', doc) ||
           JSON.stringify(prior?.target.paths) !== JSON.stringify(paths)
         ) {
           syncStringSequence(doc, target, 'paths', prior?.target.paths, paths, (path) => path);
         }
       } else {
-        deleteMapValue(target, 'paths');
-        setMapValue(doc, target, 'role', role);
-        setMapValue(doc, target, 'all', all);
-        if (all) deleteMapValue(target, 'positions');
-        else if (prior?.target.positions !== positions || !mapPair(target, 'positions')) {
+        deleteMapValue(target, 'paths', doc);
+        if (!prior || prior.target.paths !== undefined || prior.target.role !== role) {
+          setMapValue(doc, target, 'role', role);
+        }
+        if (!prior || prior.target.paths !== undefined || prior.target.all !== all) {
+          setMapValue(doc, target, 'all', all);
+        }
+        if (all) deleteMapValue(target, 'positions', doc);
+        else if (prior?.target.positions !== positions || !mapPair(target, 'positions', doc)) {
           setMapValue(doc, target, 'positions', positions.split(',').map(Number));
         }
       }
       const replacements = ensureSeqValue(doc, node, 'replacements');
+      const priorEntries = new Map((prior?.replacements ?? []).map((entry) => [entry.id, entry]));
       const entryNodes = new Map(
         (prior?.replacements ?? []).map((entry, index) => [entry.id, replacements.items[index]])
       );
       replaceSequenceItems(
         replacements,
         rule.replacements.map((entry) => {
+          const priorEntry = priorEntries.get(entry.id);
           const existing = entryNodes.get(entry.id);
           if (isAlias(existing)) throw new VisualConfigApplyError('visual_apply_failed');
           const map = isMap(existing) ? existing : (doc.createNode({}) as YAMLMap);
+          const pattern = mapPair(map, 'pattern', doc);
+          const replacement = mapPair(map, 'replacement', doc);
+          const literal: Pair = map.items[0] ?? doc.createPair(entry.from, entry.to);
+          // Move the operands between literal and regex forms. Their anchors,
+          // aliases and scalar styles belong to the text, not the field names.
           if (entry.regex) {
-            if (map.items.length !== 2) map.items = [];
-            setMapValue(doc, map, 'pattern', entry.from);
-            setMapValue(doc, map, 'replacement', entry.to);
-            return map;
+            let from = pattern;
+            let to = replacement;
+            if (!from || !to) {
+              from = doc.createPair('pattern', null);
+              to = doc.createPair('replacement', null);
+              from.value = literal.key;
+              to.value = literal.value;
+              map.items = [from, to];
+            } else {
+              map.items = map.items.filter((pair) => pair === from || pair === to);
+            }
+            if (replacementTextChanged(from.value, priorEntry?.from, entry.from)) {
+              updatePairValue(doc, from, entry.from);
+            }
+            if (replacementTextChanged(to.value, priorEntry?.to, entry.to)) {
+              updatePairValue(doc, to, entry.to);
+            }
+          } else {
+            if (pattern && replacement) {
+              const sourceNode = replacementFieldOperand(pattern);
+              const destinationNode = replacementFieldOperand(replacement);
+              literal.key = sourceNode;
+              literal.value = destinationNode;
+            }
+            if (replacementTextChanged(literal.key, priorEntry?.from, entry.from)) {
+              setPairKey(doc, literal, entry.from);
+            }
+            if (replacementTextChanged(literal.value, priorEntry?.to, entry.to)) {
+              updatePairValue(doc, literal, entry.to);
+            }
+            map.items = [literal];
           }
-          const pair = map.items[0];
-          if (pair) {
-            if (isScalar(pair.key)) pair.key.value = entry.from;
-            else pair.key = doc.createNode(entry.from);
-            updatePairValue(doc, pair, entry.to);
-            map.items = [pair];
-          } else map.items.push(doc.createPair(entry.from, entry.to));
           return map;
         })
       );
@@ -1718,7 +1876,6 @@ function getNextDirtyFields(
       'disableImageGeneration',
       'gptImage2BaseModel',
       'authAutoRefreshWorkers',
-      'enableGeminiCliEndpoint',
       'antigravitySignatureCacheEnabled',
       'antigravitySignatureBypassStrict',
       'claudeHeaderUserAgent',
@@ -1987,19 +2144,35 @@ export function useVisualConfig() {
     () => getVisualConfigValidationErrors(visualValues, dirtyFields),
     [visualValues, dirtyFields]
   );
+  const {
+    payloadReplaceRules,
+    payloadDefaultRules,
+    payloadDefaultRawRules,
+    payloadOverrideRules,
+    payloadOverrideRawRules,
+    payloadFilterRules,
+  } = visualValues;
   const visualHasPayloadValidationErrors = useMemo(
     () =>
-      visualValues.payloadReplaceRules.some((rule) => Boolean(getPayloadReplaceValidationError(rule))) ||
-      hasPayloadParamValidationErrors(visualValues.payloadDefaultRules) ||
-      hasPayloadParamValidationErrors(visualValues.payloadDefaultRawRules) ||
-      hasPayloadParamValidationErrors(visualValues.payloadOverrideRules) ||
-      hasPayloadParamValidationErrors(visualValues.payloadOverrideRawRules),
+      hasDirtyPayloadValidationErrors(
+        {
+          payloadReplaceRules,
+          payloadDefaultRules,
+          payloadDefaultRawRules,
+          payloadOverrideRules,
+          payloadOverrideRawRules,
+          payloadFilterRules,
+        },
+        dirtyFields
+      ),
     [
-      visualValues.payloadReplaceRules,
-      visualValues.payloadDefaultRules,
-      visualValues.payloadDefaultRawRules,
-      visualValues.payloadOverrideRules,
-      visualValues.payloadOverrideRawRules,
+      dirtyFields,
+      payloadReplaceRules,
+      payloadDefaultRules,
+      payloadDefaultRawRules,
+      payloadOverrideRules,
+      payloadOverrideRawRules,
+      payloadFilterRules,
     ]
   );
 
@@ -2090,7 +2263,6 @@ export function useVisualConfig() {
             : '',
         authAutoRefreshWorkers: String(parsed['auth-auto-refresh-workers'] ?? ''),
         wsAuth: readConfigBoolean(parsed['ws-auth'], true),
-        enableGeminiCliEndpoint: readConfigBoolean(parsed['enable-gemini-cli-endpoint']),
         antigravitySignatureCacheEnabled: readConfigBoolean(
           parsed['antigravity-signature-cache-enabled'],
           true
@@ -2263,8 +2435,13 @@ export function useVisualConfig() {
 
   const applyVisualChangesToYaml = useCallback(
     (currentYaml: string): string => {
-      if (visualValues.payloadReplaceRules.some(getPayloadReplaceValidationError) ||
-          SENSITIVE_REPLACEMENT_FIELDS.some(([field]) => getVisualConfigValidationErrors(visualValues)[field]))
+      if (
+        hasDirtyPayloadValidationErrors(visualValues, dirtyFields) ||
+        SENSITIVE_REPLACEMENT_FIELDS.some(
+          ([field]) =>
+            dirtyFields.has(field) && getVisualConfigValidationErrors(visualValues, dirtyFields)[field]
+        )
+      )
         throw new VisualConfigApplyError('visual_apply_failed');
       try {
         const doc = projectConfigForVisual(currentYaml);
@@ -2446,9 +2623,6 @@ export function useVisualConfig() {
           setIntFromStringInDoc(doc, ['auth-auto-refresh-workers'], values.authAutoRefreshWorkers);
         }
         if (dirtyFields.has('wsAuth')) setBooleanInDoc(doc, ['ws-auth'], values.wsAuth);
-        if (dirtyFields.has('enableGeminiCliEndpoint')) {
-          setBooleanInDoc(doc, ['enable-gemini-cli-endpoint'], values.enableGeminiCliEndpoint);
-        }
         if (dirtyFields.has('antigravitySignatureCacheEnabled')) {
           if (
             docHas(doc, ['antigravity-signature-cache-enabled']) ||
