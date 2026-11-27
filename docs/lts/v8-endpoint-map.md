@@ -25,7 +25,7 @@ re-reads before every write. Panel never writes configuration through `/v0/manag
 | Provider families (Workbench) | `GET` / `PUT /config/api-keys/{family}` | ETag of the same family read; explicit group updates also read back |
 | Source / visual YAML editor, Flow page | `GET` / `PUT /config.yaml` | ETag of the editor's `GET /config.yaml` |
 | Client API keys | `GET` / `PUT /config/access/api-keys` | ETag of the same node read |
-| OAuth channel model policy | `GET` / `PUT /config/oauth` | Original OAuth snapshot ETag; policy changes and moving excluded rules use one PUT |
+| OAuth channel model policy | `GET` / `PUT /config.yaml` (`oauth.model-policy` subtree after probing `/v0/management/oauth-model-policy`) | ETag of the `GET /config.yaml` snapshot; policy changes and moving excluded rules use one PUT |
 | OAuth excluded models / model alias | `GET` / `PUT /config/oauth/excluded-models`, `/config/oauth/model-alias` | ETag of the same node read (writes serialized per map) |
 | Ampcode (LTS) | `GET` / `PUT /config/ampcode` (single PUT of the whole node) | ETag of the editor's node read |
 | Plugin enabled / plugin config | `PUT /config/plugins/configs/{id}/enabled`, `GET` / `PUT /config/plugins/configs/{id}` | node read (config) / fresh revision (independent scalar) |
@@ -35,25 +35,31 @@ re-reads before every write. Panel never writes configuration through `/v0/manag
 Response-only `auth_index` / `auth-index` are stripped from groups and keys before every write
 (Core strips them too).
 
-## Operational routes moved to v8 (same Core handler)
+## Operational routes moved to v8 (same Core handler or v8 counterpart)
 
 | v0 (old Panel) | v8 (Panel now) | Handler |
 |---|---|---|
-| `/auth-files` GET/POST/DELETE | `/credentials` | List/Upload/DeleteAuthFile |
-| `/auth-files/models`, `/download`, `/status`, `/fields` | `/credentials/models`, `/download`, `/status`, `/fields` | same |
-| `/model-definitions/:channel` | `/routing/model-definitions/:channel` | GetStaticModelDefinitions |
-| `/{provider}-auth-url` | `/oauth/auth-url?provider=` (`anthropic` → `claude`; plugin providers via ServePluginAuthURL) | StartOAuthV8 → same per-provider handlers |
-| `/get-auth-status` | `/oauth/status` | GetAuthStatus |
-| `/oauth-callback` POST | `/oauth/callback` | PostOAuthCallback |
-| `/vertex/import` | `/oauth/import?provider=vertex` | ImportOAuthV8 → ImportVertexCredential |
-| `/logs` GET/DELETE | `/observability/logs` | GetLogs/DeleteLogs |
-| `/request-error-logs`, `/:name` | `/observability/logs/errors`, `/:name` | same |
-| `/request-log-by-id/:id` | `/observability/logs/requests/:id` | GetRequestLogByID |
-| `/api-key-usage` | `/observability/usage/api-keys` | GetAPIKeyUsage |
-| `/api-call` | `/requests/api-call` | APICall |
-| `/latest-version` | `/server/latest-version` | GetLatestVersion |
-| `/plugins` GET, `/plugins/:id` DELETE | same paths under v8 | ListPlugins/DeletePlugin |
-| `/plugin-store`, `/plugin-store/:id/install` | `/plugins/store`, `/plugins/store/:id/install` | ListPluginStore/InstallPluginFromStore |
+| `/auth-files` GET/POST/DELETE | `/credentials` | `ListAuthFiles` / `UploadAuthFileV8` / `DeleteAuthFileV8` |
+| `/auth-files/models`, `/download`, `/status`, `/fields` | `/credentials/models`, `/download`, `/status`, `/fields` | `GetAuthFileModels` / `DownloadAuthFile` / `PatchAuthFileStatus` / `PatchAuthFileFields` |
+| `/auth-files/refresh` POST | `POST /credentials/refresh` | `RefreshAuthFiles` |
+| `/reset-quota` POST | `POST /routing/cooldown/reset` | `ResetQuota` |
+| `/model-definitions/:channel` | `GET /routing/model-definitions/:channel` | `GetStaticModelDefinitions` |
+| — (v8 catalog sync) | `POST /models/refresh` (Core also aliases `/routing/model-definitions/refresh`) | `RefreshModelDefinitions` |
+| `/{provider}-auth-url` | `GET` / `POST /oauth/auth-url` (`?provider=` on GET; JSON `{ provider, is_webui, proxy_url }` on POST when login proxy is set; `project_id` in query; `anthropic` → `claude`; plugin providers via `ServePluginAuthURL`) | `StartOAuthV8` |
+| — (v8 Codex SIWC) | `POST /oauth/siwc/bind` | `StartSIWCBind` |
+| `/get-auth-status` | `GET /oauth/status` | `GetAuthStatus` |
+| `/oauth-session` DELETE | `DELETE /oauth/session` (exempted from session-write freeze during connection switch) | `CancelAuthSession` |
+| `/oauth-callback` POST | `POST /oauth/callback` | `PostOAuthCallbackV8` |
+| `/vertex/import` | `POST /oauth/import?provider=vertex` | `ImportOAuthV8` → `ImportVertexCredential` |
+| `/logs` GET/DELETE | `/observability/logs` | `GetLogs` / `DeleteLogs` |
+| `/request-error-logs`, `/:name` | `/observability/logs/errors`, `/:name` | `GetRequestErrorLogs` / `DownloadRequestErrorLog` |
+| `/request-log-by-id/:id` | `/observability/logs/requests/:id` | `GetRequestLogByID` |
+| `/api-key-usage` | `GET /observability/usage/api-keys` | `GetAPIKeyUsage` |
+| `/api-call` | `POST /requests/api-call` | `APICall` |
+| `/latest-version` | `GET /server/latest-version` | `GetLatestVersion` |
+| `/plugins` GET, `/plugins/:id` DELETE | same paths under v8 | `ListPlugins` / `DeletePlugin` |
+| `/plugin-store`, `/plugin-store/:id/install` | `GET /plugins/store`, `POST /plugins/store/:id/install` | `ListPluginStore` / `InstallPluginFromStore` |
+| `/plugins/:id/quota` POST | `POST /plugins/:id/quota` (Core v8 also registers GET/DELETE) | `FetchPluginQuota` |
 | scalar setters (`/debug`, `/proxy-url`, …) | removed from Panel; edited through `/config.yaml` or `/config/{path}` | — |
 
 ## LTS extensions kept on `ltsExtensionClient` (`/v0/management`)
@@ -62,15 +68,18 @@ Response-only `auth_index` / `auth-index` are stripped from groups and keys befo
 |---|---|---|
 | Full usage statistics | `/usage`, `/usage/export`, `/usage/import` | LTS protected; no v8 route |
 | Usage query workspace | `/usage/query/capabilities`, `/summary`, `/details`, `/pricing`, `/analytics`, `/export` | no v8 route |
+| Cache & request diagnostics | `GET /cache-diagnostics/capabilities`, `GET /cache-diagnostics/traces`, `GET /cache-diagnostics/requests/:id`, `POST /cache-diagnostics/session` | LTS-only bounded diagnostics and session affinity lookup; no v8 route |
 | Old-Core usage probe | `GET /usage-statistics-enabled` (read only) | probe only; no write |
 | Flow control V3 | `/flow-control`, `/events` (raw SSE `fetch` via `computeLtsExtensionApiUrl`), `/explain`, `/summary`, `/details`, `/preview`, `/migration-preview` | no v8 route |
-| Plugin readiness | `/plugins/:id/readiness` | no v8 route |
-| Plugin-owned management routes | `/plugins/copilot/login-info`, `/plugins/{pat}/summary` | pluginhost serves only under `/v0/management` |
+| Plugin readiness | `GET /plugins/:id/readiness` | no v8 route |
+| Plugin-owned management routes | `GET /plugins/copilot/login-info`, `GET /plugins/{pat}/summary` | pluginhost serves only under `/v0/management` |
 | Model policy capability probe and preview | `GET /oauth-model-policy`, `GET /auth-files/models/policy-preview` | Existing LTS read-only operations; configuration writes use v8 |
 | Proxy probe | `POST /proxy-url/test` | Read-only probe; no v8 route |
 | Per-credential model refresh | `POST /auth-files/models/refresh` | no v8 route |
 | Home runtime probe | `GET /nodes` | Home control-plane, not a Core v8 route |
 | Legacy-backend diagnosis | `GET /v0/management/config` via a bare axios call | only after v8 `/config.yaml` returns 404; never used as data |
+
+Read-only `POST` endpoints in `src/services/api/client.ts` (`READ_ONLY_USAGE_POSTS`: `/usage/query/{summary,details,pricing,analytics,export}`, `/cache-diagnostics/session`, `/flow-control/{preview,migration-preview}`, `/proxy-url/test`) do not count as active mutations during instance switching.
 
 ## Known gaps / risks
 

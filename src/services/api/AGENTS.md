@@ -1,15 +1,15 @@
 # src/services/api navigation card
 
-Browser clients, transforms, and errors for the Core `/v0/management` API.
-Read before changing endpoints, headers, request/response shapes, connection lifecycle, `/api-call`, usage/config/auth/plugin clients, or exports.
+Browser clients, transforms, and errors for the Core `/v8/management` (`apiClient`) and LTS extension `/v0/management` (`ltsExtensionClient`) APIs.
+Read before changing endpoints, headers, request/response shapes, connection lifecycle, `/requests/api-call`, usage/config/auth/plugin clients, or exports; cross-check `docs/lts/v8-endpoint-map.md`.
 Key files: `client.ts`, `apiError.ts`, `transformers.ts`, `apiCall.ts`, `index.ts`, domain client, matching `src/types/` and stores.
 
 ## Local invariants
 
-- `apiClient` owns base URL, Bearer header, timeout, connection generation, capability headers, and 401 signaling.
+- `apiClient` and `ltsExtensionClient` share one `ManagementTransport` owning base URL, Bearer header, timeout, connection generation, session-write freeze, capability headers, and 401 signaling.
 - Responses from an obsolete connection generation must not mutate current connection state.
 - Domain clients return stable Panel-facing shapes; external `unknown` data is narrowed/transformed at the boundary.
-- `/api-call` is the managed proxy for supported outbound calls; direct browser calls require an explicit contract.
+- `/requests/api-call` is the managed proxy for supported outbound calls; direct browser calls require an explicit contract.
 - Endpoint and schema truth comes from current `CPA-Core-LTS` source or live endpoint, not neighboring APIs or memory.
 
 ## Local rules
