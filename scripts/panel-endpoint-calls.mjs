@@ -14,6 +14,7 @@ const requestMethods = new Set([
 ]);
 const segment = '{segment}';
 const ltsBase = '{lts-base}';
+const absentUrl = Symbol('object has no url');
 
 function visit(node, handle) {
   handle(node);
@@ -92,6 +93,37 @@ function writtenUrlObject(node) {
   }
 }
 
+// Only branches without a url retain the preceding object's value.
+function overlayUrls(previous, overrides) {
+  if (!overrides.includes(absentUrl)) return overrides;
+  return [...new Set([...previous, ...overrides.filter((entry) => entry !== absentUrl)])];
+}
+
+function staticPropertyName(name) {
+  if (!ts.isComputedPropertyName(name)) return name.text;
+  if (ts.isStringLiteralLike(name.expression)) return name.expression.text;
+}
+
+function mayAssignUrl(source) {
+  if (!ts.isObjectLiteralExpression(source)) return true;
+  return source.properties.some((prop) => {
+    if (ts.isSpreadAssignment(prop)) return true;
+    const name = staticPropertyName(prop.name);
+    return name === undefined || name === 'url';
+  });
+}
+
+function returnedExpressions(fn) {
+  if (!ts.isBlock(fn.body)) return [fn.body];
+  const returns = [];
+  const collect = (node) => {
+    if (ts.isReturnStatement(node)) returns.push(node.expression);
+    else if (!ts.isFunctionLike(node)) ts.forEachChild(node, collect);
+  };
+  collect(fn.body);
+  return returns;
+}
+
 // Follow runtime initializers across lexical scopes and imported endpoint tables.
 function collectCalls(program, file, bindings) {
   const checker = program.getTypeChecker();
@@ -99,6 +131,7 @@ function collectCalls(program, file, bindings) {
   const callers = new Map();
   const endpoints = new Set();
   const modifiedConfigs = new Set();
+  const writes = [];
   const declarationOf = (expr) => {
     const symbol = ts.isShorthandPropertyAssignment(expr.parent) && expr === expr.parent.name
       ? checker.getShorthandAssignmentValueSymbol(expr.parent)
@@ -119,12 +152,8 @@ function collectCalls(program, file, bindings) {
   };
 
   visit(file, (node) => {
-    // A config object can be mutated even if its variable is const.
-    let object = writtenUrlObject(node);
-    while (object && !modifiedConfigs.has(object)) {
-      modifiedConfigs.add(object);
-      object = wrappedExpression(object) ?? constInitializer(declarationOf(object));
-    }
+    const written = writtenUrlObject(node);
+    if (written) writes.push(written);
     if (!ts.isCallExpression(node)) return;
     calls.push(node);
     const fn = localFunction(node.expression);
@@ -134,9 +163,84 @@ function collectCalls(program, file, bindings) {
     }
   });
 
+  function bindCall(fn, call, outer) {
+    const bound = new Map(outer);
+    fn.parameters.forEach((param, index) => bound.set(param, call.arguments[index] ?? param.initializer));
+    return bound;
+  }
+
+  // Keep all parameters from one invocation together, including through forwarding helpers.
+  function invocationBindings(node, seen = new Set()) {
+    const fn = ts.findAncestor(node, ts.isFunctionLike);
+    if (!fn || seen.has(fn)) return [new Map()];
+    const sites = callers.get(fn);
+    if (!sites) return invocationBindings(fn.parent, seen);
+    const next = new Set(seen).add(fn);
+    return sites.flatMap((site) => invocationBindings(site, next).map((outer) => bindCall(fn, site, outer)));
+  }
+
+  function markMutation(expr) {
+    if (!expr || modifiedConfigs.has(expr)) return;
+    modifiedConfigs.add(expr);
+    const wrapped = wrappedExpression(expr);
+    if (wrapped) return markMutation(wrapped);
+    if (ts.isConditionalExpression(expr)) {
+      markMutation(expr.whenTrue);
+      markMutation(expr.whenFalse);
+      return;
+    }
+    if (ts.isCallExpression(expr)) {
+      if (isObjectAssign(expr)) {
+        markMutation(expr.arguments[0]); // Object.assign returns the target itself.
+      } else {
+        const fn = localFunction(expr.expression);
+        if (fn?.body) returnedExpressions(fn).forEach(markMutation);
+      }
+      return;
+    }
+    const decl = declarationOf(expr);
+    if (decl && ts.isParameter(decl)) {
+      const index = decl.parent.parameters.indexOf(decl);
+      for (const site of callers.get(decl.parent) ?? []) {
+        markMutation(site.arguments[index] ?? decl.initializer);
+      }
+    } else if (decl && ts.isShorthandPropertyAssignment(decl)) {
+      markMutation(decl.name);
+    } else {
+      markMutation(decl && ts.isPropertyAssignment(decl) ? decl.initializer : constInitializer(decl));
+    }
+  }
+
+  function isObjectAssign(call) {
+    const member = call.expression;
+    if (
+      !ts.isPropertyAccessExpression(member) || member.name.text !== 'assign' ||
+      !ts.isIdentifier(member.expression) || member.expression.text !== 'Object'
+    ) return false;
+    const object = declarationOf(member.expression);
+    return !object || object.getSourceFile().isDeclarationFile;
+  }
+
+  if (calls.some(({ expression }) => ts.isPropertyAccessExpression(expression) && expression.name.text === 'requestRaw')) {
+    writes.forEach(markMutation);
+    for (const call of calls) {
+      const target = call.expression;
+      if (localFunction(target)) continue; // Its writes are traced back to the actual arguments.
+      if (ts.isPropertyAccessExpression(target) && requestMethods.has(target.name.text) && clientScope(target.expression)) continue;
+      if (isObjectAssign(call)) {
+        if (call.arguments.slice(1).some(mayAssignUrl)) markMutation(call.arguments[0]);
+      } else {
+        // An opaque helper receiving the config may change it before the transport reads it.
+        call.arguments.forEach(markMutation);
+      }
+    }
+  }
+
   function clientScope(expr, seen = new Set()) {
     if (seen.has(expr)) return undefined;
     seen.add(expr);
+    const wrapped = wrappedExpression(expr);
+    if (wrapped) return clientScope(wrapped, seen);
     if (
       ts.isCallExpression(expr) &&
       ts.isPropertyAccessExpression(expr.expression) &&
@@ -151,30 +255,43 @@ function collectCalls(program, file, bindings) {
     if (init) return clientScope(init, seen);
   }
 
+  function knownBoolean(expr, args, seen = new Set()) {
+    if (!expr || seen.has(expr)) return undefined;
+    seen.add(expr);
+    if (expr.kind === ts.SyntaxKind.TrueKeyword) return true;
+    if (expr.kind === ts.SyntaxKind.FalseKeyword) return false;
+    const wrapped = wrappedExpression(expr);
+    if (wrapped) return knownBoolean(wrapped, args, seen);
+    if (ts.isPrefixUnaryExpression(expr) && expr.operator === ts.SyntaxKind.ExclamationToken) {
+      const value = knownBoolean(expr.operand, args, seen);
+      return value === undefined ? undefined : !value;
+    }
+    if (ts.isIdentifier(expr)) {
+      const decl = declarationOf(expr);
+      return knownBoolean(constInitializer(decl) ?? args.get(decl), args, seen);
+    }
+  }
+
   function urlValues(expr, fromConfig = false, seen = new Set(), args = new Map()) {
     if (!expr || seen.has(expr) || (fromConfig && modifiedConfigs.has(expr))) return [segment];
     const next = new Set(seen).add(expr);
     const resolve = (child, config = fromConfig) => urlValues(child, config, next, args);
     if (fromConfig && ts.isObjectLiteralExpression(expr)) {
-      // A later spread can replace url. An empty result means a known object without that field.
-      for (let index = expr.properties.length - 1; index >= 0; index--) {
-        const prop = expr.properties[index];
+      let urls = [absentUrl];
+      for (const prop of expr.properties) {
         if (ts.isSpreadAssignment(prop)) {
-          const urls = resolve(prop.expression);
-          if (urls.length) return urls;
+          urls = overlayUrls(urls, resolve(prop.expression));
           continue;
         }
-        let name = prop.name;
-        if (ts.isComputedPropertyName(name)) {
-          if (!ts.isStringLiteralLike(name.expression)) return [segment];
-          name = name.expression;
-        }
-        if (name.text === 'url') {
-          if (ts.isShorthandPropertyAssignment(prop)) return resolve(prop.name, false);
-          return ts.isPropertyAssignment(prop) ? resolve(prop.initializer, false) : [segment];
+        const name = staticPropertyName(prop.name);
+        if (name === undefined) {
+          urls = [segment];
+        } else if (name === 'url') {
+          const value = ts.isShorthandPropertyAssignment(prop) ? prop.name : prop.initializer;
+          urls = resolve(value, false);
         }
       }
-      return [];
+      return urls;
     }
     if (!fromConfig && ts.isStringLiteralLike(expr)) return [expr.text];
     if (!fromConfig && ts.isTemplateExpression(expr)) {
@@ -187,39 +304,40 @@ function collectCalls(program, file, bindings) {
       }
       return paths;
     }
-    if (ts.isConditionalExpression(expr))
+    if (ts.isConditionalExpression(expr)) {
+      const condition = knownBoolean(expr.condition, args);
+      if (condition !== undefined) return resolve(condition ? expr.whenTrue : expr.whenFalse);
       return [...resolve(expr.whenTrue), ...resolve(expr.whenFalse)];
+    }
+    if (fromConfig && ts.isBinaryExpression(expr) && expr.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken) {
+      const condition = knownBoolean(expr.left, args);
+      if (condition === false) return [absentUrl];
+      const present = resolve(expr.right);
+      return condition === true ? present : [absentUrl, ...present];
+    }
+    if (fromConfig && (expr.kind === ts.SyntaxKind.FalseKeyword || expr.kind === ts.SyntaxKind.NullKeyword)) {
+      return [absentUrl];
+    }
     const wrapped = wrappedExpression(expr);
     if (wrapped) return resolve(wrapped);
     if (ts.isIdentifier(expr) || ts.isPropertyAccessExpression(expr)) {
       const decl = declarationOf(expr);
       if (decl && ts.isPropertyAssignment(decl)) return resolve(decl.initializer);
+      if (decl && ts.isShorthandPropertyAssignment(decl)) return resolve(decl.name);
       const init = constInitializer(decl);
       if (init) return resolve(init);
-      if (decl && ts.isParameter(decl)) {
-        if (args.has(decl)) return resolve(args.get(decl));
-        const sites = callers.get(decl.parent);
-        if (sites) {
-          const index = decl.parent.parameters.indexOf(decl);
-          return sites.flatMap((site) => resolve(site.arguments[index]));
-        }
-      }
+      if (decl && args.has(decl)) return resolve(args.get(decl));
     }
     if (ts.isCallExpression(expr)) {
+      if (fromConfig && isObjectAssign(expr)) {
+        return expr.arguments.reduce((urls, arg) => overlayUrls(urls, resolve(arg)), [absentUrl]);
+      }
       if (!fromConfig && bindings.get(declarationOf(expr.expression)) === 'ltsBase')
         return [ltsBase];
       const fn = localFunction(expr.expression);
       if (fn?.body) {
-        const bound = new Map(args);
-        fn.parameters.forEach((param, index) => bound.set(param, expr.arguments[index]));
-        const returns = [];
-        const collectReturns = (node) => {
-          if (ts.isReturnStatement(node)) returns.push(node.expression);
-          else if (!ts.isFunctionLike(node)) ts.forEachChild(node, collectReturns);
-        };
-        if (ts.isBlock(fn.body)) collectReturns(fn.body);
-        else returns.push(fn.body);
-        return returns.flatMap((value) => urlValues(value, fromConfig, next, bound));
+        const bound = bindCall(fn, expr, args);
+        return returnedExpressions(fn).flatMap((value) => urlValues(value, fromConfig, next, bound));
       }
     }
     return [segment];
@@ -240,7 +358,9 @@ function collectCalls(program, file, bindings) {
     }
     if (!scope) continue;
     const fromConfig = ts.isPropertyAccessExpression(target) && target.name.text === 'requestRaw';
-    for (const value of urlValues(url, fromConfig)) {
+    const values = invocationBindings(call).flatMap((args) => urlValues(url, fromConfig, new Set(), args));
+    for (const value of values) {
+      if (value === absentUrl) continue;
       const route = canonicalPath(value.split('?')[0]);
       if (scope !== 'raw') endpoints.add(scope + ':' + route);
       else if (route.startsWith(ltsBase + '/')) endpoints.add('lts:' + route.slice(ltsBase.length));

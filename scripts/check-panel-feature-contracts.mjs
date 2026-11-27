@@ -357,6 +357,32 @@ function testRepositoryEndpointResolution() {
       const alias = changed;
       alias.url = '/later';
       export const mutable = () => usage.requestRaw(changed);
+      const merged = { url: '/before-merge' };
+      Object.assign(merged, { url: '/after-merge' });
+      export const mergedRequest = () => usage.requestRaw(merged);
+      function changeRoute(options, path) { options.url = path; }
+      const delegated = { url: '/before-helper' };
+      changeRoute(delegated, '/after-helper');
+      export const delegatedRequest = () => usage.requestRaw(delegated);
+      const original = { url: '/before-alias-write' };
+      const identity = (options) => options;
+      const returned = identity(Object.assign(original, { timeout: 100 }));
+      changeRoute(returned, '/after-alias-write');
+      export const aliasedRequest = () => usage.requestRaw(original);
+      export const conditional = (summary) => usage.requestRaw({
+        url: '/default-report', ...(summary ? { url: '/summary-report' } : {}),
+      });
+      const override = true;
+      export const fixed = () => usage.requestRaw({
+        url: '/never-sent', ...(override ? { url: '/fixed-report' } : {}),
+      });
+      export const optional = (summary) => usage.requestRaw({
+        url: '/base-report', ...(summary && { url: '/optional-report' }),
+      });
+      function fetchReport(section, action) { return usage.get(\`/\${section}/\${action}\`); }
+      const forwardReport = (section, action) => fetchReport(section, action);
+      export const paired = (summary) => summary
+        ? forwardReport('reports', 'query/summary') : forwardReport('reports/query', 'export');
     `);
     const check = (endpoints) => {
       write(contractPath, JSON.stringify({ features: [{
@@ -367,8 +393,14 @@ function testRepositoryEndpointResolution() {
     assert.deepEqual(check([
       '/v0/management/usage', '/v0/management/usage/export', '/v0/management/usage/query',
       '/v8/management/probe', '/v0/management/report',
+      '/v0/management/default-report', '/v0/management/summary-report',
+      '/v0/management/fixed-report', '/v0/management/base-report', '/v0/management/optional-report',
+      '/v0/management/reports/query/summary', '/v0/management/reports/query/export',
     ]), []);
-    const absent = ['/probe', '/unused', '/overridden', '/initial'].map((url) => '/v0/management' + url);
+    const absent = [
+      '/probe', '/unused', '/overridden', '/initial', '/before-merge', '/before-helper',
+      '/before-alias-write', '/never-sent', '/reports/export', '/reports/query/query/summary',
+    ].map((url) => '/v0/management' + url);
     assert.deepEqual(check(absent), absent.map((url) =>
       'usage-fixture: no request to ' + url + ' in the listed lts clients'
     ));
