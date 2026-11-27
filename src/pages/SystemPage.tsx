@@ -300,6 +300,8 @@ export function SystemPage() {
     };
   }, []);
 
+  const connectionRevision = apiClient.getConnectionRevision();
+
   useEffect(() => {
     // 新连接不继承上一连接的刷新状态：把在途请求的序号作废，并清掉 loading。
     setCatalogRefreshing(false);
@@ -309,7 +311,7 @@ export function SystemPage() {
       catalogRequestId.current += 1;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [auth.connectionStatus, auth.apiBase]);
+  }, [auth.connectionStatus, auth.apiBase, auth.managementKey, connectionRevision]);
 
   return (
     <div className={styles.container}>

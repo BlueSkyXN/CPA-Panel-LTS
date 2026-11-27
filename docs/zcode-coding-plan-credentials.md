@@ -1,8 +1,8 @@
 # ZCode Coding Plan 凭据提取工具
 
-`scripts/zcode-credentials.mjs` 是独立 Node.js 命令行工具，用于读取本机 ZCode 保存的凭据、解密 `enc:v1` 与 macOS 系统钥匙串加密的 `enc:v2:os:` 字段，以及按需查询已有的个人或团队项目 key。它没有接入 Panel 网页，不会自动填写账号表单。
+`scripts/zcode-credentials.mjs` 是独立 Node.js 命令行工具，用于读取本机 ZCode 保存的凭据、解密 `enc:v1`、macOS 系统钥匙串加密的 `enc:v2:os:` 与受管密钥加密的 `enc:v2:env:` 字段，以及按需查询已有的个人或团队项目 key。它没有接入 Panel 网页，不会自动填写账号表单。
 
-新版 ZCode 客户端把凭据升级为 `enc:v2:os:` 格式：每个数据目录一把随机 32 字节密钥，存放在 macOS 钥匙串（服务名 `ZCode Credential Encryption`，条目按 `credentials.json` 绝对路径的 SHA-256 寻址），值内嵌密钥指纹自校验。脚本在 macOS 上自动读取钥匙串解密；无需任何参数。Linux/Windows 或无头环境由官方改用 Secret Service / 系统凭据管理器或 `credential-secret` 文件，此类目录脚本目前不尝试解密并按字段报告 `os_keychain_unavailable`。指纹不匹配（钥匙串里是另一路径的密钥）报告 `os_keychain_fingerprint_mismatch`，不会回落到 v1 误读。
+新版 ZCode 客户端把凭据升级为 `enc:v2:{os|env}:` 格式并内嵌密钥指纹自校验：`enc:v2:os:` 每个数据目录一把随机 32 字节密钥，macOS 上存放在系统钥匙串（服务名 `ZCode Credential Encryption`，条目按 `credentials.json` 绝对路径的 SHA-256 寻址），脚本在 macOS 上自动读取钥匙串解密，Linux/Windows 的 Secret Service 或系统凭据管理器暂不读取并按字段报告 `os_keychain_unavailable`（钥匙串条目损坏报告 `os_keychain_invalid_key`）；无头环境的 `enc:v2:env:` 支持从 `ZCODE_CREDENTIAL_SECRET`、`ZCODE_CREDENTIAL_SECRET_FILE` 或数据目录内 `credential-secret` 普通文件（32–4096 UTF-8 字节，取 SHA-256 派生）解密，缺失或超限报告 `managed_secret_unavailable`，同时设置环境变量与密钥文件报告 `managed_secret_conflict`。指纹不匹配分别报告 `os_keychain_fingerprint_mismatch` 或 `managed_secret_fingerprint_mismatch`，单条解密失败写入 `errors` 且不中断其余 `enc:v1`/`enc:v2` 凭据提取，也不会回落到 v1 误读。
 
 需要 Node.js 20 或更新版本，无额外依赖。**正常运行会向终端输出完整明文凭据，包括 OAuth token、API key 和派生材料；`--v4` 还会输出签名私钥。请在自己的终端使用，不要把输出粘贴到日志、Issue 或截图中。**
 

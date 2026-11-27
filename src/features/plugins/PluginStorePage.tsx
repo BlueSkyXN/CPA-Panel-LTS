@@ -18,7 +18,7 @@ import {
   IconShield,
 } from '@/components/ui/icons';
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
-import { pluginStoreApi } from '@/services/api';
+import { apiClient, pluginStoreApi } from '@/services/api';
 import { useAuthStore, useConfigStore, useNotificationStore } from '@/stores';
 import {
   useInstalledPluginBusy,
@@ -470,6 +470,7 @@ export function PluginStorePage() {
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
   const apiBase = useAuthStore((state) => state.apiBase);
   const profileId = useAuthStore((state) => state.profileId);
+  const managementKey = useAuthStore((state) => state.managementKey);
   const clearConfigCache = useConfigStore((state) => state.clearCache);
   const showNotification = useNotificationStore((state) => state.showNotification);
 
@@ -484,11 +485,13 @@ export function PluginStorePage() {
   const syncPluginMutationConnection = usePluginMutationStore((state) => state.syncConnection);
   const tryBeginStoreMutation = usePluginMutationStore((state) => state.tryBeginStoreMutation);
   const endStoreMutation = usePluginMutationStore((state) => state.endStoreMutation);
-  // 与 /plugins 共用同一连接标识：切连接即作废两侧在途登记。
-  const connectionKey = `${profileId}:${apiBase}`;
+  const connectionGeneration = apiClient.getConnectionGeneration();
+  // 与 /plugins 共用同一连接标识（含连接世代）：401 重登或切连接即作废两侧在途登记。
+  const connectionKey = `${connectionGeneration}:${profileId}:${apiBase}`;
   useEffect(() => {
     syncPluginMutationConnection(connectionKey);
-  }, [connectionKey, syncPluginMutationConnection]);
+    setInstallingKey('');
+  }, [connectionKey, managementKey, connectionStatus, syncPluginMutationConnection]);
   const [restartRequiredKeys, setRestartRequiredKeys] = useState<string[]>([]);
   const [expandedDescriptionKeys, setExpandedDescriptionKeys] = useState<string[]>([]);
   const [overflowingDescriptionKeys, setOverflowingDescriptionKeys] = useState<string[]>([]);
@@ -674,21 +677,29 @@ export function PluginStorePage() {
   }, []);
 
   const runInstall = useCallback(
-    async (entry: PluginStoreEntry, isUpdate: boolean, requestedVersion = '') => {
-      // 单一入口兜底：检查与取得锁同步完成，同一任务内第二笔拿不到锁、不发请求。
-      if (installBlocked) return;
+    async (
+      entry: PluginStoreEntry,
+      isUpdate: boolean,
+      requestedVersion = ''
+    ): Promise<boolean> => {
+      // 单一入口兜底：检查与取得锁同步完成，同一任务内第二笔拿不到锁、不发请求、也不提前关窗。
+      if (installBlocked) return false;
       const mutationToken = tryBeginStoreMutation();
-      if (!mutationToken) return;
+      if (!mutationToken) return false;
+      const requestGeneration = apiClient.getConnectionGeneration();
       const entryKey = getStoreEntryKey(entry);
       const failedKey = isUpdate ? 'plugin_store.update_failed' : 'plugin_store.install_failed';
       const version = requestedVersion.trim();
       setInstallingKey(entryKey);
-      // 锁覆盖到轮询 settle 结束；组件卸载或路由切换都不释放，只有这里能放。
+      // 锁覆盖到轮询 settle 结束；组件卸载或路由切换都不释放，只有这里或连接切换能放。
       try {
         const result = await pluginStoreApi.install(entry.id, {
           sourceId: entry.sourceId || undefined,
           version: version || undefined,
         });
+        if (!apiClient.isCurrentConnection(requestGeneration)) {
+          return false;
+        }
         clearConfigCache();
         const sourceId = result.sourceId || entry.sourceId;
         const installedState = await waitForPluginStoreState(
@@ -697,8 +708,14 @@ export function PluginStorePage() {
           (plugin) =>
             plugin.installed &&
             plugin.configured &&
-            (!version || pluginVersionMatches(plugin.installedVersion, version))
+            (!version || pluginVersionMatches(plugin.installedVersion, version)),
+          undefined,
+          undefined,
+          requestGeneration
         );
+        if (installedState.stale || !apiClient.isCurrentConnection(requestGeneration)) {
+          return false;
+        }
         setData(installedState.response);
         if (
           installedState.timedOut ||
@@ -706,7 +723,7 @@ export function PluginStorePage() {
           !installedState.plugin.configured
         ) {
           showNotification(t('plugin_store.status_pending'), 'warning');
-          return;
+          return true;
         }
 
         if (result.restartRequired) {
@@ -718,7 +735,7 @@ export function PluginStorePage() {
             'success'
           );
           showNotification(t('plugin_store.restart_required_notice'), 'warning');
-          return;
+          return true;
         }
 
         if (!installedState.response.pluginsEnabled) {
@@ -727,15 +744,21 @@ export function PluginStorePage() {
             'success'
           );
           showNotification(t('plugin_store.global_disabled_hint'), 'warning');
-          return;
+          return true;
         }
 
         if (installedState.plugin.enabled) {
           const registeredState = await waitForPluginStoreState(
             entry.id,
             sourceId,
-            (plugin) => plugin.registered && plugin.effectiveEnabled
+            (plugin) => plugin.registered && plugin.effectiveEnabled,
+            undefined,
+            undefined,
+            requestGeneration
           );
+          if (registeredState.stale || !apiClient.isCurrentConnection(requestGeneration)) {
+            return false;
+          }
           setData(registeredState.response);
           if (
             registeredState.timedOut ||
@@ -743,7 +766,7 @@ export function PluginStorePage() {
             !registeredState.plugin.effectiveEnabled
           ) {
             showNotification(t('plugin_store.registration_pending'), 'warning');
-            return;
+            return true;
           }
           notifyPluginResourcesChanged();
         }
@@ -752,12 +775,18 @@ export function PluginStorePage() {
           isUpdate ? t('plugin_store.update_success') : t('plugin_store.install_success'),
           'success'
         );
+        return true;
       } catch (err: unknown) {
+        if (!apiClient.isCurrentConnection(requestGeneration)) {
+          return false;
+        }
         showNotification(`${t(failedKey)}: ${getErrorMessage(err, t(failedKey))}`, 'error');
         throw err;
       } finally {
         endStoreMutation(mutationToken);
-        setInstallingKey('');
+        if (apiClient.isCurrentConnection(requestGeneration)) {
+          setInstallingKey('');
+        }
       }
     },
     [clearConfigCache, endStoreMutation, installBlocked, showNotification, t, tryBeginStoreMutation]
@@ -793,7 +822,12 @@ export function PluginStorePage() {
     }
 
     try {
-      await runInstall(installOptionsEntry, installOptionsIsUpdate, requestedVersion);
+      const completed = await runInstall(
+        installOptionsEntry,
+        installOptionsIsUpdate,
+        requestedVersion
+      );
+      if (!completed) return;
       setInstallOptionsEntry(null);
       setInstallVersion('');
     } catch {
@@ -803,15 +837,17 @@ export function PluginStorePage() {
 
   const handleGateConfirm = useCallback(async () => {
     if (installBlocked || !gateEntry) return;
-    await runInstall(gateEntry, gateIsUpdate, gateRequestedVersion);
+    const completed = await runInstall(gateEntry, gateIsUpdate, gateRequestedVersion);
+    if (!completed) return;
     setGateOpen(false);
     setGateRequestedVersion('');
   }, [gateEntry, gateIsUpdate, gateRequestedVersion, installBlocked, runInstall]);
 
   const handleGateClose = useCallback(() => {
+    if (installingKey || storeBusy) return;
     setGateOpen(false);
     setGateRequestedVersion('');
-  }, []);
+  }, [installingKey, storeBusy]);
 
   const renderCard = (entry: PluginStoreEntry) => {
     const entryKey = getStoreEntryKey(entry);

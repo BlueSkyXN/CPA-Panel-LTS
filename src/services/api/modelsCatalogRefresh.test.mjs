@@ -117,4 +117,9 @@ test('the caller drops its success path for a stale refresh', async () => {
     /requestId === catalogRequestId\.current && revision === apiClient\.getConnectionRevision\(\)/,
     'the catalog refresh must be guarded by both request id and connection revision'
   );
+  assert.match(
+    page,
+    /\[auth\.connectionStatus,\s*auth\.apiBase,\s*auth\.managementKey,\s*connectionRevision\]/,
+    'SystemPage reset effect must track managementKey and connectionRevision'
+  );
 });

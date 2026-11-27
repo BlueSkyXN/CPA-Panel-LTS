@@ -191,9 +191,10 @@ export function useConnectivityTest(
 
   const requests = useRef(createProbeRequestGuard());
   useEffect(() => {
-    requests.current.invalidate();
+    const requestGuard = requests.current;
+    requestGuard.invalidate();
     setInFlight(0);
-    return () => requests.current.invalidate();
+    return () => requestGuard.invalidate();
   }, [signature, entrySignatures, brand]);
 
   const lastSignatureRef = useRef(signature);
