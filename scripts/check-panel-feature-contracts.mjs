@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import {
+  existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
@@ -321,6 +324,59 @@ export const validateRepositoryContracts = (repoRoot) => {
   return { failures, warnings };
 };
 
+function testRepositoryEndpointResolution() {
+  const root = mkdtempSync(path.join(tmpdir(), 'panel-endpoint-test-'));
+  const store = 'src/stores/usage.ts';
+  const write = (name, text) => {
+    const filename = path.join(root, name);
+    mkdirSync(path.dirname(filename), { recursive: true });
+    writeFileSync(filename, text);
+  };
+  try {
+    write('tsconfig.json', JSON.stringify({
+      compilerOptions: { module: 'esnext', moduleResolution: 'bundler', paths: { '@/*': ['./src/*'] } },
+    }));
+    write('src/services/api/client.ts', 'export declare const apiClient: any, ltsExtensionClient: any;');
+    write('src/services/api/index.ts', "export * from './client';");
+    write('src/stores/client.ts', "export { apiClient as ltsExtensionClient } from '@/services/api';");
+    write(store, `
+      import { ltsExtensionClient as usage } from '../services/api/client';
+      import { ltsExtensionClient as native } from './client';
+      const url = '/usage/export';
+      const request = { url, method: 'GET' } as const;
+      export const load = () => usage.requestRaw(request);
+      export const summary = () => usage.requestRaw({ url: '/usage' });
+      export const direct = () => { const url = '/usage/query'; return usage.requestRaw({ url }); };
+      export const probe = () => native.get('/probe');
+      const previous = { url: '/unused' };
+      const options = { timeout: 100 };
+      const send = (config) => usage.requestRaw(config);
+      export const report = () => send({ ...previous, url: '/report', ...options });
+      export const variable = (config) => usage.requestRaw({ url: '/overridden', ...config });
+      const changed = { url: '/initial' };
+      const alias = changed;
+      alias.url = '/later';
+      export const mutable = () => usage.requestRaw(changed);
+    `);
+    const check = (endpoints) => {
+      write(contractPath, JSON.stringify({ features: [{
+        id: 'usage-fixture', status: 'protected', panel_files: [store], core_endpoints: endpoints,
+      }] }));
+      return validateRepositoryContracts(root).failures;
+    };
+    assert.deepEqual(check([
+      '/v0/management/usage', '/v0/management/usage/export', '/v0/management/usage/query',
+      '/v8/management/probe', '/v0/management/report',
+    ]), []);
+    const absent = ['/probe', '/unused', '/overridden', '/initial'].map((url) => '/v0/management' + url);
+    assert.deepEqual(check(absent), absent.map((url) =>
+      'usage-fixture: no request to ' + url + ' in the listed lts clients'
+    ));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 const runSelfTest = (repoRoot) => {
   // 1. Route boundary matching rejects prefix/substring spoofing and comments.
   const routerFixture = `
@@ -489,6 +545,7 @@ const runSelfTest = (repoRoot) => {
   assert.equal(hasTokenBoundaryMatch("const H = 'x-cpa-support-plugin-extra';", 'x-cpa-support-plugin'), false);
   assert.equal(hasTokenBoundaryMatch("const H = 'x-cpa-support-plugin';", 'x-cpa-support-plugin'), true);
 
+  testRepositoryEndpointResolution();
   // 7. Real repository contract registry passes cleanly under tightened rules.
   const { failures } = validateRepositoryContracts(repoRoot);
   assert.deepEqual(failures, []);
