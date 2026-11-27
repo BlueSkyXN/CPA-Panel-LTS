@@ -5,10 +5,13 @@ Run after building dist: python3 scripts/guard-config-replacements.py
 No production connections or credentials are used.
 """
 from __future__ import annotations
+import argparse
 import importlib.util
 import json
+import os
 import re
 import subprocess
+import tempfile
 from pathlib import Path
 from urllib.parse import urlparse
 from playwright.sync_api import expect, sync_playwright
@@ -18,6 +21,27 @@ ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('replacement_smoke', ROOT / 'scripts/smoke-lts-panel.py')
 smoke = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(smoke)
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description='Exercise replacement editors against synthetic local Core instances.')
+    parser.add_argument('dist_dir', nargs='?', default=None, help='Built dist directory (default: dist)')
+    parser.add_argument('--dist', dest='dist_flag', default=None, help='Built dist directory override')
+    parser.add_argument('--skip-build', action='store_true', help='Reuse an existing dist/index.html build')
+    parser.add_argument(
+        '--artifacts-dir',
+        default=os.environ.get('CPA_SMOKE_ARTIFACTS_DIR', '').strip() or None,
+        help='Directory for browser screenshots (default: CPA_SMOKE_ARTIFACTS_DIR or OS temp dir)',
+    )
+    return parser.parse_args(argv)
+
+
+def resolve_artifacts_dir(configured: str | None) -> Path:
+    if configured:
+        target = Path(configured).expanduser().resolve()
+        target.mkdir(parents=True, exist_ok=True)
+        return target
+    return Path(tempfile.mkdtemp(prefix='cpa-config-replacements-'))
 
 
 def yaml_json(value, encode=False):
@@ -69,7 +93,14 @@ def fixture(marker):
     return state
 
 
-def main():
+def main(argv: list[str] | None = None):
+    args = parse_args(argv)
+    dist = Path(args.dist_flag or args.dist_dir).resolve() if (args.dist_flag or args.dist_dir) else ROOT / 'dist'
+    smoke.DIST = dist
+    smoke.INDEX_HTML = dist / 'index.html'
+    if not smoke.INDEX_HTML.is_file():
+        raise FileNotFoundError(f"Missing built panel at {smoke.INDEX_HTML}; run 'npm run build' first.")
+    artifacts_dir = resolve_artifacts_dir(args.artifacts_dir)
     app_port, a_port, b_port = [smoke.find_free_port() for _ in range(3)]
     a, b = fixture('core-a'), fixture('core-b')
     passed = []
@@ -204,9 +235,7 @@ def main():
         page.evaluate("async () => { await Promise.all(document.getAnimations().filter(a => a.effect?.getComputedTiming().iterations !== Infinity).map(a => a.finished.catch(() => {}))); }")
         rect = payload.bounding_box()
         check('replacement editor fits a mobile viewport', page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1') and rect['x'] >= 0 and rect['x'] + rect['width'] <= 391)
-        output = ROOT / 'local/config-replacements-browser'
-        output.mkdir(parents=True, exist_ok=True)
-        raw.screenshot(path=str(output / 'mobile.png'))
+        raw.screenshot(path=str(artifacts_dir / 'mobile.png'))
         raw.set_viewport_size({'width': 1440, 'height': 1000})
         payload.get_by_role('radio', name='All messages of this role', exact=True).check()
         save()
@@ -266,6 +295,7 @@ def main():
         sheet.get_by_role('button', name='Cancel', exact=True).click()
         check('no browser runtime errors', not errors)
         browser.close()
+    print(f'Artifacts written to {artifacts_dir}', flush=True)
     print(f'{len(passed)} PASS; 0 FAIL', flush=True)
 
 

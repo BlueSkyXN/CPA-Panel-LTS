@@ -14,6 +14,7 @@ side effects. It fails (non-zero) when the production wiring regresses:
 
 Run: python3 scripts/guard-provider-switch.py [dist-dir]   (default: dist)
 """
+import argparse
 import importlib.util
 import re
 import sys
@@ -23,14 +24,19 @@ from urllib.parse import urlparse
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
-DIST = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / 'dist'
 sys.path.insert(0, str(ROOT / 'scripts'))
 spec = importlib.util.spec_from_file_location('panel_smoke', ROOT / 'scripts/smoke-lts-panel.py')
 smoke = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(smoke)
-smoke.DIST = DIST
-smoke.INDEX_HTML = DIST / 'index.html'
 from panel_browser import PanelBrowser, launch_chromium  # noqa: E402
+
+
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(description='Real-page behavior gate for draft-safe provider switching.')
+    parser.add_argument('dist_dir', nargs='?', default=None, help='Built dist directory (default: dist)')
+    parser.add_argument('--dist', dest='dist_flag', default=None, help='Built dist directory override')
+    parser.add_argument('--skip-build', action='store_true', help='Reuse an existing dist/index.html build')
+    return parser.parse_args(argv)
 
 
 class Handler(smoke.MockCoreHandler):
@@ -48,7 +54,13 @@ PAGES = [
 ]
 
 
-def main():
+def main(argv=None):
+    args = parse_args(argv)
+    dist = Path(args.dist_flag or args.dist_dir).resolve() if (args.dist_flag or args.dist_dir) else ROOT / 'dist'
+    smoke.DIST = dist
+    smoke.INDEX_HTML = dist / 'index.html'
+    if not smoke.INDEX_HTML.is_file():
+        raise FileNotFoundError(f"Missing built panel at {smoke.INDEX_HTML}; run 'npm run build' first.")
     app_port, api_port = smoke.find_free_port(), smoke.find_free_port()
     mock_state = smoke.MockCoreState()
     with smoke.run_server(smoke.StaticPanelHandler, app_port), smoke.run_server(Handler, api_port, mock_state), sync_playwright() as p:

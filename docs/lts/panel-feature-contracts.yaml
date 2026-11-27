@@ -1,5 +1,4 @@
 version: 1
-generated_from: local/20260616/lts-maintenance-plan.md
 maintenance_model: protected-selective-port-with-minimal-shared-file-delta
 
 status_definitions:
@@ -49,7 +48,7 @@ features:
       - src/utils/v8VisualProjection.ts
       - docs/lts/reasoning-effort-policy.md
     core_endpoints:
-      - /v0/management/config.yaml
+      - /v8/management/config.yaml
     required_markers:
       - reasoning-effort
       - x-cpa-reasoning-effort-policy
@@ -75,7 +74,7 @@ features:
       - src/components/config/configNavigation.ts
       - scripts/smoke-config-editor.py
     core_endpoints:
-      - /v0/management/config.yaml
+      - /v8/management/config.yaml
     required_markers:
       - codexZcodeContextUsage
       - zcode-context-usage
@@ -105,7 +104,7 @@ features:
       - scripts/smoke-lts-panel-core.py
       - docs/lts/codex-cache-affinity.md
     core_endpoints:
-      - /v0/management/config.yaml
+      - /v8/management/config.yaml
     required_markers:
       - codexCacheAffinityStrategy
       - cache-affinity
@@ -134,7 +133,7 @@ features:
       - src/types/visualConfig.ts
       - src/components/config/configNavigation.ts
     core_endpoints:
-      - /v0/management/config.yaml
+      - /v8/management/config.yaml
     required_markers:
       - codexOutboundTransport
       - codexOutboundWebsocketThresholdBytes
@@ -169,7 +168,7 @@ features:
       - src/components/usage/RequestSizeDistributionCard.tsx
       - src/components/usage/UsageAnalyticsCharts.tsx
     core_endpoints:
-      - /usage/query/analytics
+      - /v0/management/usage/query/analytics
     required_markers:
       - size_version
       - upstream_transport
@@ -488,8 +487,8 @@ features:
       - scripts/smoke-lts-panel.py
       - scripts/smoke-lts-panel-core.py
     core_endpoints:
-      - /v0/management/config
-      - /v0/management/auth-files
+      - /v8/management/config
+      - /v8/management/credentials
       - /v8/management/observability/usage/api-keys
       - /v1/models
     required_markers:
@@ -524,6 +523,7 @@ features:
       - src/components/providers/
       - src/components/providers/hooks/useProviderStats.ts
       - src/components/providers/ProviderStatusBar.tsx
+      - src/services/api/config.ts
       - src/services/api/providers.ts
       - src/services/api/usage.ts
       - src/utils/usage.ts
@@ -948,7 +948,7 @@ features:
       - src/i18n/locales/
       - scripts/check-lts-panel-contract.sh
     core_endpoints:
-      - /v0/management/config.yaml
+      - /v8/management/config.yaml
     required_markers:
       - codexAbnormalReasoningRetryAction
       - codexAbnormalReasoningRetryEnabled
@@ -1181,7 +1181,7 @@ features:
       - scripts/codex-quota-compass.user.js
       - scripts/smoke-lts-panel.py
     core_endpoints:
-      - /v0/management/api-call
+      - /v8/management/requests/api-call
       - /v8/management/plugins/:id/quota
     required_markers:
       - DEVIN_CONFIG
