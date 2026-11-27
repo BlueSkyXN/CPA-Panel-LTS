@@ -1,7 +1,7 @@
 import { isRecord } from '@/utils/helpers';
 import { ltsExtensionClient } from './client';
 import type { CacheDiagnosticsCapabilities, CacheTraceQuery } from '@/types/cacheDiagnostics';
-import { decodeCacheSession, decodeCacheTrace, decodeTracePage, isCacheLookupId, normalizeDiagnosticsId } from '@/utils/usage/cacheDiagnostics';
+import { decodeCacheSession, decodeCacheTrace, decodeTracePage, isCacheLookupId, normalizeDiagnosticsId } from '@/lts/cacheDiagnostics/cacheDiagnostics';
 
 export function captureCacheDiagnosticsClient() {
   const generation = ltsExtensionClient.getConnectionGeneration();

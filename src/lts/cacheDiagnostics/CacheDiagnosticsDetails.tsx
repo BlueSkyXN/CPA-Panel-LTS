@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/Button';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { ltsExtensionClient } from '@/services/api/client';
 import { captureCacheDiagnosticsClient } from '@/services/api/cacheDiagnostics';
-import { compareCachePayloads, readCacheObservation } from '@/utils/usage/cacheDiagnostics';
+import { compareCachePayloads, readCacheObservation } from './cacheDiagnostics';
 import type { CacheObservation, CacheSessionSnapshot, CacheTrace } from '@/types/cacheDiagnostics';
 import styles from './CacheDiagnosticsDetails.module.scss';
 

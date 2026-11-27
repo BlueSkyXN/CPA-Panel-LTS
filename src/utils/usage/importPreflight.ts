@@ -1,4 +1,4 @@
-import { readCacheObservation } from './cacheDiagnostics';
+import { readCacheObservation } from '@/lts/cacheDiagnostics/cacheDiagnostics';
 import { normalizeTokenAccounting, tokenAccountingMatches } from './tokenAccounting';
 import { normalizeOutputTiming } from './performance';
 export type UsageImportPreflightIssue =

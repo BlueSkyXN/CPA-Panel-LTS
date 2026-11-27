@@ -4,7 +4,7 @@
  */
 
 import type { ScriptableContext } from 'chart.js';
-import { extractCacheDiagnosticFields } from './usage/cacheDiagnostics';
+import { extractCacheDiagnosticFields } from '@/lts/cacheDiagnostics/cacheDiagnostics';
 import type { LatencyAccumulator, LatencyStats } from './usage/latency';
 import type { UsageOutputTiming } from './usage/performance';
 import { normalizeTokenAccounting, type UsageTokenAccounting } from './usage/tokenAccounting';

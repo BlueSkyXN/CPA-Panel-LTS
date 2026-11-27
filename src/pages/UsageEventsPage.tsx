@@ -1,6 +1,6 @@
 import { decodeUsageQuerySession } from '@/services/api/usageQuery';
 import { ltsExtensionClient } from '@/services/api/client';
-import { cacheEventsView, cacheLocationSearch, readCacheReturnContext, rememberCacheEvents, type CacheEventsView, type CacheUsageRow } from '@/utils/usage/cacheNavigation';
+import { cacheEventsView, cacheLocationSearch, readCacheReturnContext, rememberCacheEvents, type CacheEventsView, type CacheUsageRow } from '@/lts/cacheDiagnostics/cacheNavigation';
 import { isCacheValueState } from '@/utils/usage/cacheAnalytics';
 import { isRecord } from '@/utils/helpers';
 import { useEffect, useMemo, useState } from 'react';

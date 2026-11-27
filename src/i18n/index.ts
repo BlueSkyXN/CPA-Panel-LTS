@@ -8,8 +8,8 @@ import zhCN from './locales/zh-CN.json';
 import zhTW from './locales/zh-TW.json';
 import en from './locales/en.json';
 import ru from './locales/ru.json';
-// LTS overlay: codex quota + remote cloud connect locales live in src/lts/i18n,
-// isolated from the upstream-shared locale files and layered on at init.
+// LTS overlay: downstream LTS-owned locales (Codex quota, remote cloud connect,
+// flow control, cache analysis/diagnostics, etc.) live in src/lts/i18n and are layered at init.
 import enLts from '@/lts/i18n/en.lts.json';
 import zhCNLts from '@/lts/i18n/zh-CN.lts.json';
 import zhTWLts from '@/lts/i18n/zh-TW.lts.json';
@@ -33,8 +33,9 @@ i18n.use(initReactI18next).init({
   }
 });
 
-// Layer the LTS-owned codex bundles on top (deep merge, overwrite) so codex_quota and
-// auth_files.codex_remote_cloud_connect* resolve at runtime while staying out of shared locales.
+// Layer the LTS-owned bundles on top (deep merge, overwrite) so codex_quota,
+// auth_files.codex_remote_cloud_connect*, cache_analysis, and cache_diagnostics resolve at runtime
+// while staying out of shared upstream locale files.
 i18n.addResourceBundle('en', 'translation', enLts, true, true);
 i18n.addResourceBundle('zh-CN', 'translation', zhCNLts, true, true);
 i18n.addResourceBundle('zh-TW', 'translation', zhTWLts, true, true);

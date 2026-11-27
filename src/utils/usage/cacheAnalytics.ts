@@ -1,5 +1,5 @@
 import type { CacheObservation } from '@/types/cacheDiagnostics';
-import { readCacheObservation } from './cacheDiagnostics';
+import { readCacheObservation } from '@/lts/cacheDiagnostics/cacheDiagnostics';
 import { buildAnalyticsBuckets, type AnalyticsGrain, type AnalyticsTimeWindow } from './analyticsBuckets';
 
 export const CACHE_STATES = ['positive', 'zero', 'unknown'] as const;
