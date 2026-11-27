@@ -1364,6 +1364,7 @@ features:
     panel_files:
       - src/lts/flowControl/
       - src/services/api/flowControl.ts
+      - src/lts/flowControl/useStatus.ts
       - src/types/visualConfig.ts
       - src/hooks/useVisualConfig.ts
       - src/pages/FlowControlPage.tsx
@@ -1384,7 +1385,6 @@ features:
     core_endpoints:
       - /v0/management/flow-control
       - /v0/management/flow-control/events
-      - /v0/management/flow-control/explain
       - /v0/management/flow-control/summary
       - /v0/management/flow-control/details
       - /v0/management/flow-control/preview

@@ -256,20 +256,28 @@ def main(argv: list[str] | None = None):
         save()
         check('clearing replacement rules removes only their section', 'replace' not in yaml_json(a.config_yaml).get('requests', {}).get('payload', {}))
 
+        writes_before_draft = len(a.config_yaml_puts)
         literal = field('antigravitySensitiveWordsReplace', 'sensitive-words-replace')
-        literal.get_by_label('Literal replacement, row 1', exact=True).fill('A-only draft')
+        match = literal.get_by_label('Literal text, row 1', exact=True)
+        replacement = literal.get_by_label('Literal replacement, row 1', exact=True)
+        replacement.fill('A-only draft')
+        check('draft changes only the replacement before switching',
+              match.input_value() == 'core-a' and replacement.input_value() == 'A-only draft')
         open_connections()
         choose('Core B')
         config()
         other = field('antigravitySensitiveWordsReplace', 'sensitive-words-replace')
         check('connection B shows its own values', other.get_by_label('Literal text, row 1', exact=True).input_value() == 'core-b' and other.get_by_label('Literal replacement, row 1', exact=True).input_value() == 'original')
-        check('draft did not write to either Core', len(b.config_yaml_puts) == 0 and 'A-only draft' not in a.config_yaml)
         open_connections()
         choose('Core A')
         literal = field('antigravitySensitiveWordsReplace', 'sensitive-words-replace')
-        check('returning to A preserves its draft', literal.get_by_label('Literal replacement, row 1', exact=True).input_value() == 'A-only draft')
+        check('returning to A preserves its draft',
+              literal.get_by_label('Literal text, row 1', exact=True).input_value() == 'core-a'
+              and literal.get_by_label('Literal replacement, row 1', exact=True).input_value() == 'A-only draft')
         literal.get_by_label('Literal replacement, row 1', exact=True).fill('original')
         expect(page.locator('button[aria-label="Save"]')).to_be_disabled()
+        check('draft did not write to either Core',
+              len(a.config_yaml_puts) == writes_before_draft and len(b.config_yaml_puts) == 0)
 
         page.evaluate("location.hash = '#/ai-providers'")
         page.get_by_role('button', name=re.compile(r'^Claude(?:\s|$)', re.I)).click()

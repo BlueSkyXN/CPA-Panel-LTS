@@ -40,6 +40,25 @@ test.after(async () => {
   else globalThis.localStorage = originalStorage;
 });
 
+test('usage snapshot export sends one GET to the LTS export endpoint', async (t) => {
+  const { usageApi } = await vite.ssrLoadModule('/src/services/api/usage.ts');
+  const instance = apiClient.instance;
+  const previousAdapter = instance.defaults.adapter;
+  t.after(() => {
+    instance.defaults.adapter = previousAdapter;
+    apiClient.clearConfig();
+  });
+  apiClient.setConfig({ apiBase: 'https://usage.example.test/prefix', managementKey: 'synthetic' });
+  const calls = [];
+  const snapshot = { version: 3, usage: {} };
+  instance.defaults.adapter = async (config) => {
+    calls.push([config.method, instance.getUri(config)]);
+    return { status: 200, statusText: 'OK', data: snapshot, headers: {}, config };
+  };
+  assert.deepEqual(await usageApi.exportUsage(), snapshot);
+  assert.deepEqual(calls, [['get', 'https://usage.example.test/prefix/v0/management/usage/export']]);
+});
+
 test('capabilities require the supported version and a fixed boundary', () => {
   assert.deepEqual(api.decodeUsageQuerySession(session), session);
   assert.throws(() => api.decodeUsageQuerySession({ ...session, version: 2 }));

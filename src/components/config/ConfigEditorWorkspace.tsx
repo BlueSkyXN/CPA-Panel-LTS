@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
@@ -76,7 +76,7 @@ export function VisualConfigEditor({
     () => new Set([`${requested.section}/${requested.subsection}`])
   );
   const [query, setQuery] = useState('');
-  const [focusField, setFocusField] = useState<ConfigFieldId | undefined>(requested.field);
+  const [focusRequest, setFocusRequest] = useState<ConfigLocation | undefined>(requested);
   const controls = useConfigFieldControls(props);
   const issues = useMemo(
     () => getConfigIssueFields(props.values, props.validationErrors),
@@ -89,26 +89,24 @@ export function VisualConfigEditor({
     setLastRequested(requested);
     setLocation(requested);
     setVisited((current) => new Set([...current, `${requested.section}/${requested.subsection}`]));
-    setFocusField(query.trim() ? undefined : requested.field);
+    // 本地导航已定位过目标字段，路由回传时保留用户随后选择的输入框。
+    if (requested.field !== location.field) {
+      setFocusRequest(query.trim() ? undefined : requested);
+    }
   }
   useEffect(() => {
     lastPages.current[requested.section] = requested.subsection;
   }, [requested]);
-  useEffect(() => {
-    if (!focusField) return;
-    const frame = requestAnimationFrame(() => {
-      focusConfigField(focusField);
-      setFocusField(undefined);
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [focusField, location]);
+  useLayoutEffect(() => {
+    if (focusRequest?.field) focusConfigField(focusRequest.field);
+  }, [focusRequest]);
 
   const navigate = (next: ConfigLocation) => {
     setLocation(next);
     lastPages.current[next.section] = next.subsection;
     setVisited((current) => new Set([...current, `${next.section}/${next.subsection}`]));
     setQuery('');
-    setFocusField(next.field);
+    setFocusRequest(next);
     onNavigate?.(next);
     if (!next.field)
       requestAnimationFrame(() =>
@@ -143,7 +141,7 @@ export function VisualConfigEditor({
         <Input
           value={query}
           onChange={(event) => {
-            setFocusField(undefined);
+            setFocusRequest(undefined);
             setQuery(event.target.value);
           }}
           aria-label={t('config_management.editor.search')}

@@ -1,10 +1,16 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import {
+  existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
+import { hasScopedEndpointMatch, repositoryEndpointMatcher } from './panel-endpoint-calls.mjs';
+
+export { hasScopedEndpointMatch };
 
 const contractPath = 'docs/lts/panel-feature-contracts.yaml';
 const strictStatuses = new Set(['protected', 'lts-maintained', 'coexist', 'shared']);
@@ -95,29 +101,6 @@ export const parseContractEndpoint = (endpoint) => {
   return null;
 };
 
-export const endpointPathToRegex = (relativePath, scope = 'v8', flags = '') => {
-  const rawParts = relativePath.split('/');
-  if (rawParts.length < 2 || rawParts[0] !== '' || rawParts.slice(1).some((part) => !part)) {
-    throw new Error(`Invalid relative endpoint path: ${relativePath}`);
-  }
-
-  const body = rawParts
-    .map((part, index) => {
-      if (index === 0) return '';
-      if (part.startsWith(':')) {
-        return "(?::[A-Za-z0-9_]+|\\$\\{[^}'\"`]+\\})";
-      }
-      return escapeRegex(part);
-    })
-    .join('\\/');
-
-  if (scope === 'proxy') {
-    return new RegExp(`(?:(['"\`])${body}(?=\\1|\\?)|\\}${body}(?=[\\\`?]))`, flags);
-  }
-
-  return new RegExp(`(['"\`])${body}(?=\\1|\\?)`, flags);
-};
-
 export const hasRouteRegistration = (routerSource, route) => {
   if (typeof route !== 'string' || !route.startsWith('/') || route !== route.trim() || /\s/.test(route)) {
     return false;
@@ -136,90 +119,19 @@ export const hasTokenBoundaryMatch = (source, token) => {
   return pattern.test(uncommented);
 };
 
-const collectLtsClientAliases = (uncommentedSource) => {
-  const aliases = new Set(['ltsExtensionClient']);
-  const captureRegex = /\b(?:const|let)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*ltsExtensionClient\.captureConnection\s*\(\s*\)/g;
-  for (const match of uncommentedSource.matchAll(captureRegex)) {
-    aliases.add(match[1]);
-  }
-  return Array.from(aliases);
-};
-
-const isLtsCallPrefix = (prefix, ltsAliases) => {
-  const aliasAlternation = ltsAliases.map(escapeRegex).join('|');
-  const callPattern = new RegExp(
-    `\\b(?:${aliasAlternation})\\s*\\.\\s*(?:get|post|put|patch|delete|getRaw|postForm|requestRaw)\\b(?:\\s*<[^;()]*>)?\\s*\\(\\s*$`
-  );
-  return callPattern.test(prefix);
-};
-
-const isConstantPassedToLtsClient = (uncommentedSource, constName, ltsAliases) => {
-  const aliasAlternation = ltsAliases.map(escapeRegex).join('|');
-  const usagePattern = new RegExp(
-    `\\b(?:${aliasAlternation})\\s*\\.\\s*(?:get|post|put|patch|delete|getRaw|postForm|requestRaw)\\b(?:\\s*<[^;()]*>)?\\s*\\(\\s*(?:\\\`\\$\\{\\s*)?${escapeRegex(constName)}\\b`
-  );
-  return usagePattern.test(uncommentedSource);
-};
-
-export const hasScopedEndpointMatch = (rawSource, parsed) => {
-  if (!parsed) return false;
-  const source = stripCodeComments(rawSource);
-
-  const hasV8Client =
-    /\b(?:apiClient|getConfigValue|readConfigSnapshot|putConfigValue|deleteConfigValue)\b/.test(
-      source
-    );
-  const hasLtsClient = /\bltsExtensionClient\b/.test(source);
-  const hasProxyClient = /\b(?:axios|fetch)\b/.test(source);
-
-  if (parsed.scope === 'proxy') {
-    if (!hasProxyClient) return false;
-    return endpointPathToRegex(parsed.relativePath, 'proxy').test(source);
-  }
-
-  if (parsed.scope === 'v8' && !hasV8Client) return false;
-  if (parsed.scope === 'lts' && !hasLtsClient) return false;
-
-  const matches = Array.from(
-    source.matchAll(endpointPathToRegex(parsed.relativePath, parsed.scope, 'g'))
-  );
-  if (matches.length === 0) return false;
-
-  // Single-scope client module: every bounded endpoint literal in this module targets that scope.
-  if (parsed.scope === 'v8' && !hasLtsClient) return true;
-  if (parsed.scope === 'lts' && !hasV8Client) return true;
-
-  // Dual-client module (imports both apiClient/configValue and ltsExtensionClient):
-  // attribute each literal occurrence to lts vs v8 by its enclosing call or constant binding.
-  const ltsAliases = collectLtsClientAliases(source);
-  return matches.some((match) => {
-    const start = match.index ?? 0;
-    const prefix = source.slice(Math.max(0, start - 200), start);
-    let matchIsLts = isLtsCallPrefix(prefix, ltsAliases);
-
-    if (!matchIsLts) {
-      const constBind = prefix.match(/\b(?:const|let)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*$/);
-      if (constBind && isConstantPassedToLtsClient(source, constBind[1], ltsAliases)) {
-        matchIsLts = true;
-      }
-    }
-
-    return parsed.scope === 'lts' ? matchIsLts : !matchIsLts;
-  });
-};
-
 export const isServiceClientCandidate = (panelPath) => {
   if (typeof panelPath !== 'string') return false;
   if (
-    panelPath.endsWith('.test.mjs') ||
-    panelPath.endsWith('.test.ts') ||
-    panelPath.endsWith('.test.tsx') ||
+    /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(panelPath) ||
     panelPath.includes('/testing/') ||
     panelPath === 'src/services/api/client.ts'
   ) {
     return false;
   }
-  return panelPath.startsWith('src/services/api/') || panelPath.startsWith('src/stores/');
+  return (
+    ['src/services/api/', 'src/stores/', 'src/lts/'].some((prefix) => panelPath.startsWith(prefix)) &&
+    /\.[cm]?[jt]sx?$/.test(panelPath)
+  );
 };
 
 const normalizeList = (value) => (Array.isArray(value) ? value : []);
@@ -293,6 +205,9 @@ export const validateRepositoryContracts = (repoRoot) => {
 
   const contract = parse(readText(contractPath));
   const features = normalizeList(contract?.features);
+  const clientFiles = (feature) => normalizeList(feature?.panel_files)
+    .filter((file) => isServiceClientCandidate(file) && isFile(file));
+  const callsEndpoint = repositoryEndpointMatcher(repoRoot, new Set(features.flatMap(clientFiles)));
   const routerSource = exists('src/router/MainRoutes.tsx')
     ? readText('src/router/MainRoutes.tsx')
     : '';
@@ -356,9 +271,7 @@ export const validateRepositoryContracts = (repoRoot) => {
       }
     });
 
-    const serviceFiles = normalizeList(feature.panel_files)
-      .filter((panelPath) => isServiceClientCandidate(panelPath) && isFile(panelPath))
-      .map((panelPath) => ({ path: panelPath, content: readText(panelPath) }));
+    const serviceFiles = clientFiles(feature);
     const featureSource = buildFeatureSearchSource(feature);
 
     normalizeList(feature.core_endpoints).forEach((endpoint) => {
@@ -381,11 +294,11 @@ export const validateRepositoryContracts = (repoRoot) => {
         return;
       }
 
-      const matched = serviceFiles.some(({ content }) => hasScopedEndpointMatch(content, parsed));
+      const matched = serviceFiles.some((file) => callsEndpoint(file, parsed));
       if (!matched) {
         reportFeatureIssue(
           feature,
-          `endpoint marker not found in listed ${parsed.scope} service clients: ${endpoint}`
+          `no request to ${endpoint} in the listed ${parsed.scope} clients`
         );
       }
     });
@@ -410,6 +323,91 @@ export const validateRepositoryContracts = (repoRoot) => {
 
   return { failures, warnings };
 };
+
+function testRepositoryEndpointResolution() {
+  const root = mkdtempSync(path.join(tmpdir(), 'panel-endpoint-test-'));
+  const store = 'src/stores/usage.ts';
+  const write = (name, text) => {
+    const filename = path.join(root, name);
+    mkdirSync(path.dirname(filename), { recursive: true });
+    writeFileSync(filename, text);
+  };
+  try {
+    write('tsconfig.json', JSON.stringify({
+      compilerOptions: { module: 'esnext', moduleResolution: 'bundler', paths: { '@/*': ['./src/*'] } },
+    }));
+    write('src/services/api/client.ts', 'export declare const apiClient: any, ltsExtensionClient: any;');
+    write('src/services/api/index.ts', "export * from './client';");
+    write('src/stores/client.ts', "export { apiClient as ltsExtensionClient } from '@/services/api';");
+    write(store, `
+      import { ltsExtensionClient as usage } from '../services/api/client';
+      import { ltsExtensionClient as native } from './client';
+      const url = '/usage/export';
+      const request = { url, method: 'GET' } as const;
+      export const load = () => usage.requestRaw(request);
+      export const summary = () => usage.requestRaw({ url: '/usage' });
+      export const direct = () => { const url = '/usage/query'; return usage.requestRaw({ url }); };
+      export const probe = () => native.get('/probe');
+      const previous = { url: '/unused' };
+      const options = { timeout: 100 };
+      const send = (config) => usage.requestRaw(config);
+      export const report = () => send({ ...previous, url: '/report', ...options });
+      export const variable = (config) => usage.requestRaw({ url: '/overridden', ...config });
+      const changed = { url: '/initial' };
+      const alias = changed;
+      alias.url = '/later';
+      export const mutable = () => usage.requestRaw(changed);
+      const merged = { url: '/before-merge' };
+      Object.assign(merged, { url: '/after-merge' });
+      export const mergedRequest = () => usage.requestRaw(merged);
+      function changeRoute(options, path) { options.url = path; }
+      const delegated = { url: '/before-helper' };
+      changeRoute(delegated, '/after-helper');
+      export const delegatedRequest = () => usage.requestRaw(delegated);
+      const original = { url: '/before-alias-write' };
+      const identity = (options) => options;
+      const returned = identity(Object.assign(original, { timeout: 100 }));
+      changeRoute(returned, '/after-alias-write');
+      export const aliasedRequest = () => usage.requestRaw(original);
+      export const conditional = (summary) => usage.requestRaw({
+        url: '/default-report', ...(summary ? { url: '/summary-report' } : {}),
+      });
+      const override = true;
+      export const fixed = () => usage.requestRaw({
+        url: '/never-sent', ...(override ? { url: '/fixed-report' } : {}),
+      });
+      export const optional = (summary) => usage.requestRaw({
+        url: '/base-report', ...(summary && { url: '/optional-report' }),
+      });
+      function fetchReport(section, action) { return usage.get(\`/\${section}/\${action}\`); }
+      const forwardReport = (section, action) => fetchReport(section, action);
+      export const paired = (summary) => summary
+        ? forwardReport('reports', 'query/summary') : forwardReport('reports/query', 'export');
+    `);
+    const check = (endpoints) => {
+      write(contractPath, JSON.stringify({ features: [{
+        id: 'usage-fixture', status: 'protected', panel_files: [store], core_endpoints: endpoints,
+      }] }));
+      return validateRepositoryContracts(root).failures;
+    };
+    assert.deepEqual(check([
+      '/v0/management/usage', '/v0/management/usage/export', '/v0/management/usage/query',
+      '/v8/management/probe', '/v0/management/report',
+      '/v0/management/default-report', '/v0/management/summary-report',
+      '/v0/management/fixed-report', '/v0/management/base-report', '/v0/management/optional-report',
+      '/v0/management/reports/query/summary', '/v0/management/reports/query/export',
+    ]), []);
+    const absent = [
+      '/probe', '/unused', '/overridden', '/initial', '/before-merge', '/before-helper',
+      '/before-alias-write', '/never-sent', '/reports/export', '/reports/query/query/summary',
+    ].map((url) => '/v0/management' + url);
+    assert.deepEqual(check(absent), absent.map((url) =>
+      'usage-fixture: no request to ' + url + ' in the listed lts clients'
+    ));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
 
 const runSelfTest = (repoRoot) => {
   // 1. Route boundary matching rejects prefix/substring spoofing and comments.
@@ -491,6 +489,25 @@ const runSelfTest = (repoRoot) => {
     export const getExport = () => ltsExtensionClient.get('/usage/export');
     export const getFlag = () => ltsExtensionClient.get('/usage-statistics-enabled');
   `;
+  const unrelatedCall = `
+    import { ltsExtensionClient } from './client';
+    const exportPath = '/usage/export';
+    export const load = () => ltsExtensionClient.get('/usage', { label: exportPath });
+    export const helpText = "ltsExtensionClient.get('/usage/export')";
+  `;
+  const usageExport = parseContractEndpoint('/v0/management/usage/export');
+  assert.equal(hasScopedEndpointMatch(unrelatedCall, usageExport), false);
+  assert.equal(hasScopedEndpointMatch(unrelatedCall + `
+    export function otherClient(ltsExtensionClient) { return ltsExtensionClient.get(exportPath); }
+  `, usageExport), false);
+  assert.equal(hasScopedEndpointMatch(unrelatedCall + `
+    const reader = ltsExtensionClient.captureConnection();
+    export const run = () => reader.get(exportPath);
+  `, usageExport), true);
+  assert.equal(hasScopedEndpointMatch(unrelatedCall + `
+    const typedPath = '/usage' as '/usage/export';
+    export const run = () => ltsExtensionClient.get(typedPath);
+  `, usageExport), false, 'a type assertion does not change the request URL');
   assert.equal(
     hasScopedEndpointMatch(ltsUsageClient, parseContractEndpoint('/v0/management/usage')),
     false,
@@ -544,6 +561,10 @@ const runSelfTest = (repoRoot) => {
     import axios from 'axios';
     export const fetchModels = (trimmed) => axios.get(\`\${trimmed}/v1/models\`);
   `;
+  assert.equal(
+    hasScopedEndpointMatch(modelsProxy + "const unused = '/v1/export';", parseContractEndpoint('/v1/export')),
+    false
+  );
   assert.equal(hasScopedEndpointMatch(modelsProxy, parseContractEndpoint('/v1/models')), true);
   assert.equal(hasScopedEndpointMatch(modelsProxy, parseContractEndpoint('/v1/model')), false);
   assert.equal(isServiceClientCandidate('src/services/api/client.ts'), false);
@@ -556,6 +577,7 @@ const runSelfTest = (repoRoot) => {
   assert.equal(hasTokenBoundaryMatch("const H = 'x-cpa-support-plugin-extra';", 'x-cpa-support-plugin'), false);
   assert.equal(hasTokenBoundaryMatch("const H = 'x-cpa-support-plugin';", 'x-cpa-support-plugin'), true);
 
+  testRepositoryEndpointResolution();
   // 7. Real repository contract registry passes cleanly under tightened rules.
   const { failures } = validateRepositoryContracts(repoRoot);
   assert.deepEqual(failures, []);

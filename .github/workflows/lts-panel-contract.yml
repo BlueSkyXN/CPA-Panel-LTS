@@ -48,7 +48,7 @@ jobs:
         run: npm run test:codex-remote && npm run test:ui
 
       - name: Check LTS panel contract
-        run: npm run check:lts
+        run: npm run test:feature-contract && npm run check:lts
 
       - name: Type-check
         run: npm run type-check
@@ -67,11 +67,17 @@ jobs:
           python3 -m pip install playwright
           python3 -m playwright install --with-deps chromium
 
+      - name: Test Codex quota helpers
+        run: npm run test:codex-quota-compass && npm run test:codex-quota-monitor
+
       - name: Real-page provider-switch gate (draft-safe switching)
         run: python3 scripts/guard-provider-switch.py
 
       - name: Real-page replacement configuration gate
         run: python3 scripts/guard-config-replacements.py
+
+      - name: Check cache diagnostics in the built panel
+        run: python3 scripts/smoke-cache-diagnostics.py --skip-build
 
       - name: Lint
         run: npm run lint
