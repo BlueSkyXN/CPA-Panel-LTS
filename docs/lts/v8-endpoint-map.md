@@ -70,7 +70,7 @@ Response-only `auth_index` / `auth-index` are stripped from groups and keys befo
 | Usage query workspace | `/usage/query/capabilities`, `/summary`, `/details`, `/pricing`, `/analytics`, `/export` | no v8 route |
 | Cache & request diagnostics | `GET /cache-diagnostics/capabilities`, `GET /cache-diagnostics/traces`, `GET /cache-diagnostics/requests/:id`, `POST /cache-diagnostics/session` | LTS-only bounded diagnostics and session affinity lookup; no v8 route |
 | Old-Core usage probe | `GET /usage-statistics-enabled` (read only) | probe only; no write |
-| Flow control V3 | `/flow-control`, `/events` (raw SSE `fetch` via `computeLtsExtensionApiUrl`), `/explain`, `/summary`, `/details`, `/preview`, `/migration-preview` | no v8 route |
+| Flow control V3 | `/flow-control` and its `/events`, `/summary`, `/details`, `/preview`, `/migration-preview` subroutes | The Panel reads SSE events with `fetch` via `computeLtsExtensionApiUrl` and requests rule explanations through `/preview`. Core also exposes `GET /flow-control/explain` for other clients. |
 | Plugin readiness | `GET /plugins/:id/readiness` | no v8 route |
 | Plugin-owned management routes | `GET /plugins/copilot/login-info`, `GET /plugins/{pat}/summary` | pluginhost serves only under `/v0/management` |
 | Model policy capability probe and preview | `GET /oauth-model-policy`, `GET /auth-files/models/policy-preview` | Existing LTS read-only operations; configuration writes use v8 |

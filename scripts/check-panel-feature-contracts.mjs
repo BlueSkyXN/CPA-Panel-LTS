@@ -5,6 +5,9 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
+import { hasScopedEndpointMatch, repositoryEndpointMatcher } from './panel-endpoint-calls.mjs';
+
+export { hasScopedEndpointMatch };
 
 const contractPath = 'docs/lts/panel-feature-contracts.yaml';
 const strictStatuses = new Set(['protected', 'lts-maintained', 'coexist', 'shared']);
@@ -95,29 +98,6 @@ export const parseContractEndpoint = (endpoint) => {
   return null;
 };
 
-export const endpointPathToRegex = (relativePath, scope = 'v8', flags = '') => {
-  const rawParts = relativePath.split('/');
-  if (rawParts.length < 2 || rawParts[0] !== '' || rawParts.slice(1).some((part) => !part)) {
-    throw new Error(`Invalid relative endpoint path: ${relativePath}`);
-  }
-
-  const body = rawParts
-    .map((part, index) => {
-      if (index === 0) return '';
-      if (part.startsWith(':')) {
-        return "(?::[A-Za-z0-9_]+|\\$\\{[^}'\"`]+\\})";
-      }
-      return escapeRegex(part);
-    })
-    .join('\\/');
-
-  if (scope === 'proxy') {
-    return new RegExp(`(?:(['"\`])${body}(?=\\1|\\?)|\\}${body}(?=[\\\`?]))`, flags);
-  }
-
-  return new RegExp(`(['"\`])${body}(?=\\1|\\?)`, flags);
-};
-
 export const hasRouteRegistration = (routerSource, route) => {
   if (typeof route !== 'string' || !route.startsWith('/') || route !== route.trim() || /\s/.test(route)) {
     return false;
@@ -136,90 +116,19 @@ export const hasTokenBoundaryMatch = (source, token) => {
   return pattern.test(uncommented);
 };
 
-const collectLtsClientAliases = (uncommentedSource) => {
-  const aliases = new Set(['ltsExtensionClient']);
-  const captureRegex = /\b(?:const|let)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*ltsExtensionClient\.captureConnection\s*\(\s*\)/g;
-  for (const match of uncommentedSource.matchAll(captureRegex)) {
-    aliases.add(match[1]);
-  }
-  return Array.from(aliases);
-};
-
-const isLtsCallPrefix = (prefix, ltsAliases) => {
-  const aliasAlternation = ltsAliases.map(escapeRegex).join('|');
-  const callPattern = new RegExp(
-    `\\b(?:${aliasAlternation})\\s*\\.\\s*(?:get|post|put|patch|delete|getRaw|postForm|requestRaw)\\b(?:\\s*<[^;()]*>)?\\s*\\(\\s*$`
-  );
-  return callPattern.test(prefix);
-};
-
-const isConstantPassedToLtsClient = (uncommentedSource, constName, ltsAliases) => {
-  const aliasAlternation = ltsAliases.map(escapeRegex).join('|');
-  const usagePattern = new RegExp(
-    `\\b(?:${aliasAlternation})\\s*\\.\\s*(?:get|post|put|patch|delete|getRaw|postForm|requestRaw)\\b(?:\\s*<[^;()]*>)?\\s*\\(\\s*(?:\\\`\\$\\{\\s*)?${escapeRegex(constName)}\\b`
-  );
-  return usagePattern.test(uncommentedSource);
-};
-
-export const hasScopedEndpointMatch = (rawSource, parsed) => {
-  if (!parsed) return false;
-  const source = stripCodeComments(rawSource);
-
-  const hasV8Client =
-    /\b(?:apiClient|getConfigValue|readConfigSnapshot|putConfigValue|deleteConfigValue)\b/.test(
-      source
-    );
-  const hasLtsClient = /\bltsExtensionClient\b/.test(source);
-  const hasProxyClient = /\b(?:axios|fetch)\b/.test(source);
-
-  if (parsed.scope === 'proxy') {
-    if (!hasProxyClient) return false;
-    return endpointPathToRegex(parsed.relativePath, 'proxy').test(source);
-  }
-
-  if (parsed.scope === 'v8' && !hasV8Client) return false;
-  if (parsed.scope === 'lts' && !hasLtsClient) return false;
-
-  const matches = Array.from(
-    source.matchAll(endpointPathToRegex(parsed.relativePath, parsed.scope, 'g'))
-  );
-  if (matches.length === 0) return false;
-
-  // Single-scope client module: every bounded endpoint literal in this module targets that scope.
-  if (parsed.scope === 'v8' && !hasLtsClient) return true;
-  if (parsed.scope === 'lts' && !hasV8Client) return true;
-
-  // Dual-client module (imports both apiClient/configValue and ltsExtensionClient):
-  // attribute each literal occurrence to lts vs v8 by its enclosing call or constant binding.
-  const ltsAliases = collectLtsClientAliases(source);
-  return matches.some((match) => {
-    const start = match.index ?? 0;
-    const prefix = source.slice(Math.max(0, start - 200), start);
-    let matchIsLts = isLtsCallPrefix(prefix, ltsAliases);
-
-    if (!matchIsLts) {
-      const constBind = prefix.match(/\b(?:const|let)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*$/);
-      if (constBind && isConstantPassedToLtsClient(source, constBind[1], ltsAliases)) {
-        matchIsLts = true;
-      }
-    }
-
-    return parsed.scope === 'lts' ? matchIsLts : !matchIsLts;
-  });
-};
-
 export const isServiceClientCandidate = (panelPath) => {
   if (typeof panelPath !== 'string') return false;
   if (
-    panelPath.endsWith('.test.mjs') ||
-    panelPath.endsWith('.test.ts') ||
-    panelPath.endsWith('.test.tsx') ||
+    /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(panelPath) ||
     panelPath.includes('/testing/') ||
     panelPath === 'src/services/api/client.ts'
   ) {
     return false;
   }
-  return panelPath.startsWith('src/services/api/') || panelPath.startsWith('src/stores/');
+  return (
+    ['src/services/api/', 'src/stores/', 'src/lts/'].some((prefix) => panelPath.startsWith(prefix)) &&
+    /\.[cm]?[jt]sx?$/.test(panelPath)
+  );
 };
 
 const normalizeList = (value) => (Array.isArray(value) ? value : []);
@@ -293,6 +202,9 @@ export const validateRepositoryContracts = (repoRoot) => {
 
   const contract = parse(readText(contractPath));
   const features = normalizeList(contract?.features);
+  const clientFiles = (feature) => normalizeList(feature?.panel_files)
+    .filter((file) => isServiceClientCandidate(file) && isFile(file));
+  const callsEndpoint = repositoryEndpointMatcher(repoRoot, new Set(features.flatMap(clientFiles)));
   const routerSource = exists('src/router/MainRoutes.tsx')
     ? readText('src/router/MainRoutes.tsx')
     : '';
@@ -356,9 +268,7 @@ export const validateRepositoryContracts = (repoRoot) => {
       }
     });
 
-    const serviceFiles = normalizeList(feature.panel_files)
-      .filter((panelPath) => isServiceClientCandidate(panelPath) && isFile(panelPath))
-      .map((panelPath) => ({ path: panelPath, content: readText(panelPath) }));
+    const serviceFiles = clientFiles(feature);
     const featureSource = buildFeatureSearchSource(feature);
 
     normalizeList(feature.core_endpoints).forEach((endpoint) => {
@@ -381,11 +291,11 @@ export const validateRepositoryContracts = (repoRoot) => {
         return;
       }
 
-      const matched = serviceFiles.some(({ content }) => hasScopedEndpointMatch(content, parsed));
+      const matched = serviceFiles.some((file) => callsEndpoint(file, parsed));
       if (!matched) {
         reportFeatureIssue(
           feature,
-          `endpoint marker not found in listed ${parsed.scope} service clients: ${endpoint}`
+          `no request to ${endpoint} in the listed ${parsed.scope} clients`
         );
       }
     });
@@ -491,6 +401,25 @@ const runSelfTest = (repoRoot) => {
     export const getExport = () => ltsExtensionClient.get('/usage/export');
     export const getFlag = () => ltsExtensionClient.get('/usage-statistics-enabled');
   `;
+  const unrelatedCall = `
+    import { ltsExtensionClient } from './client';
+    const exportPath = '/usage/export';
+    export const load = () => ltsExtensionClient.get('/usage', { label: exportPath });
+    export const helpText = "ltsExtensionClient.get('/usage/export')";
+  `;
+  const usageExport = parseContractEndpoint('/v0/management/usage/export');
+  assert.equal(hasScopedEndpointMatch(unrelatedCall, usageExport), false);
+  assert.equal(hasScopedEndpointMatch(unrelatedCall + `
+    export function otherClient(ltsExtensionClient) { return ltsExtensionClient.get(exportPath); }
+  `, usageExport), false);
+  assert.equal(hasScopedEndpointMatch(unrelatedCall + `
+    const reader = ltsExtensionClient.captureConnection();
+    export const run = () => reader.get(exportPath);
+  `, usageExport), true);
+  assert.equal(hasScopedEndpointMatch(unrelatedCall + `
+    const typedPath = '/usage' as '/usage/export';
+    export const run = () => ltsExtensionClient.get(typedPath);
+  `, usageExport), false, 'a type assertion does not change the request URL');
   assert.equal(
     hasScopedEndpointMatch(ltsUsageClient, parseContractEndpoint('/v0/management/usage')),
     false,
@@ -544,6 +473,10 @@ const runSelfTest = (repoRoot) => {
     import axios from 'axios';
     export const fetchModels = (trimmed) => axios.get(\`\${trimmed}/v1/models\`);
   `;
+  assert.equal(
+    hasScopedEndpointMatch(modelsProxy + "const unused = '/v1/export';", parseContractEndpoint('/v1/export')),
+    false
+  );
   assert.equal(hasScopedEndpointMatch(modelsProxy, parseContractEndpoint('/v1/models')), true);
   assert.equal(hasScopedEndpointMatch(modelsProxy, parseContractEndpoint('/v1/model')), false);
   assert.equal(isServiceClientCandidate('src/services/api/client.ts'), false);
